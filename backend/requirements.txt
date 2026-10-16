@@ -21,11 +21,12 @@ openai>=1.57.0
 ag-ui-protocol>=0.1.0
 ag-ui-langgraph>=0.0.1
 
-# Databases & Storage Drivers
+# Databases, ORM & Migrations
 psycopg[binary,pool]>=3.2.3
 psycopg-pool>=3.2.4
+sqlalchemy>=2.0.36
+alembic>=1.14.0
 
 # UI / Dev Tools
 streamlit>=1.41.0
 typing-extensions>=4.12.2
-

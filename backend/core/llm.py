@@ -5,7 +5,7 @@ from functools import cache
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import SecretStr
-from schema.models import AllModelEnum
+from agents.schema.models import AllModelEnum
 
 from core.settings import settings
 

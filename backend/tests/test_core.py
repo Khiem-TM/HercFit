@@ -14,8 +14,8 @@ with (
     patch("pydantic_settings.sources.DotEnvSettingsSource.__call__", return_value={}),
 ):
     import core
+    from agents.schema import ServiceMetadata, UserInput
     from core.settings import Settings
-    from schema import ServiceMetadata, UserInput
 
 llm = importlib.import_module("core.llm")
 database = importlib.import_module("core.database")
@@ -235,7 +235,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
 
 class MemoryTests(unittest.IsolatedAsyncioTestCase):
     async def test_postgres_only_imports_and_optional_vector_index(self):
-        memory = importlib.import_module("memory.postgres")
+        memory = importlib.import_module("agents.memory.postgres")
 
         @asynccontextmanager
         async def pool(_component):

@@ -1,4 +1,4 @@
-"""Shared PostgreSQL configuration and transactional CRUD connection lifecycle."""
+"""Shared PostgreSQL configuration, SQLAlchemy 2.0 Async ORM, and connection lifecycle."""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -7,10 +7,24 @@ from psycopg import AsyncConnection
 from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
+from sqlalchemy.engine import URL
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import DeclarativeBase
 
 from core.settings import settings
 
 _crud_pool: AsyncConnectionPool | None = None
+_async_engine: AsyncEngine | None = None
+_session_factory: async_sessionmaker[AsyncSession] | None = None
+
+
+class Base(DeclarativeBase):
+    """Declarative base class for all SQLAlchemy 2.0 ORM models."""
 
 
 def validate_postgres_config() -> None:
@@ -28,6 +42,49 @@ def get_postgres_connection_string() -> str:
         dbname=settings.POSTGRES_DB,
         connect_timeout=settings.POSTGRES_CONNECT_TIMEOUT,
     )
+
+
+def get_sqlalchemy_url() -> URL:
+    """Build SQLAlchemy URL using psycopg v3 dialect."""
+    return URL.create(
+        drivername="postgresql+psycopg",
+        username=settings.POSTGRES_USER,
+        password=settings.POSTGRES_PASSWORD.get_secret_value(),
+        host=settings.POSTGRES_HOST,
+        port=settings.POSTGRES_PORT,
+        database=settings.POSTGRES_DB,
+    )
+
+
+def get_async_engine() -> AsyncEngine:
+    """Lazily initialize and return the shared SQLAlchemy AsyncEngine."""
+    global _async_engine
+    if _async_engine is None:
+        _async_engine = create_async_engine(
+            get_sqlalchemy_url(),
+            pool_pre_ping=True,
+            pool_size=settings.POSTGRES_MIN_CONNECTIONS_PER_POOL,
+            max_overflow=max(
+                0,
+                settings.POSTGRES_MAX_CONNECTIONS_PER_POOL
+                - settings.POSTGRES_MIN_CONNECTIONS_PER_POOL,
+            ),
+            pool_timeout=settings.POSTGRES_POOL_TIMEOUT,
+        )
+    return _async_engine
+
+
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Return the shared async_sessionmaker bound to the AsyncEngine."""
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = async_sessionmaker(
+            bind=get_async_engine(),
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+        )
+    return _session_factory
 
 
 async def init_crud_db_pool() -> None:
@@ -60,11 +117,15 @@ async def init_crud_db_pool() -> None:
 
 
 async def close_crud_db_pool() -> None:
-    """Close and reset the pool on shutdown."""
-    global _crud_pool
+    """Close and reset the pool and SQLAlchemy engine on shutdown."""
+    global _crud_pool, _async_engine, _session_factory
     if _crud_pool is not None:
         await _crud_pool.close()
         _crud_pool = None
+    if _async_engine is not None:
+        await _async_engine.dispose()
+        _async_engine = None
+        _session_factory = None
 
 
 @asynccontextmanager
@@ -76,7 +137,20 @@ async def get_db_connection() -> AsyncIterator[AsyncConnection]:
         yield conn
 
 
-async def get_db() -> AsyncIterator[AsyncConnection]:
-    """FastAPI dependency using the shared PostgreSQL pool."""
-    async with get_db_connection() as conn:
-        yield conn
+@asynccontextmanager
+async def get_db_session() -> AsyncIterator[AsyncSession]:
+    """Context manager yielding a transactional SQLAlchemy AsyncSession (for services/tools)."""
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+async def get_db() -> AsyncIterator[AsyncSession]:
+    """FastAPI dependency yielding a SQLAlchemy AsyncSession."""
+    async with get_db_session() as session:
+        yield session
