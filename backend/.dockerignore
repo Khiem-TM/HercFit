@@ -1,0 +1,32 @@
+# Git & OS
+.git
+.gitignore
+.DS_Store
+
+# Python caches & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Environment & Local DB files
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+postgres_data/
+mongo_data/
+logs/
+*.log
+

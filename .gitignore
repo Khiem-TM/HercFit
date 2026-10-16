@@ -1,0 +1,122 @@
+# =============================================================================
+# HercFit - Root .gitignore
+# =============================================================================
+
+# --- Operating System & Editor Files ---
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# --- Environment Variables & Secrets ---
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+*.pem
+*.key
+credentials.json
+service-account*.json
+
+# --- Python / Backend ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments & Package Managers
+.venv/
+venv/
+env/
+ENV/
+.uv/
+.python-version
+
+# Testing, Linting & Type Checking
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# --- Databases & Local Persistence ---
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+checkpoints.db*
+postgres_data/
+pgdata/
+mongo_data/
+
+# --- Frontend / Node.js ---
+node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-store/
+*.tsbuildinfo
+
+# --- Docker & Runtime Logs ---
+docker-compose.override.yml
+*.log
+logs/
+pids/
+*.pid
+*.seed
+*.pid.lock
+

@@ -1,0 +1,95 @@
+name: hercfit-backend
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: hercfit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hercfit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hercfit_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-hercfit_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/01-init-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hercfit} -d ${POSTGRES_DB:-hercfit_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hercfit-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    container_name: hercfit-backend-api
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MODE: ${MODE:-dev}
+      HOST: 0.0.0.0
+      PORT: ${PORT:-8080}
+      DATABASE_TYPE: postgres
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-hercfit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hercfit_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-hercfit_db}
+      POSTGRES_APPLICATION_NAME: ${POSTGRES_APPLICATION_NAME:-hercfit-backend}
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - hercfit-network
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: streamlit
+    container_name: hercfit-streamlit
+    restart: unless-stopped
+    profiles:
+      - ui
+      - full
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      AGENT_URL: http://backend:8080
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    volumes:
+      - .:/app
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - hercfit-network
+
+volumes:
+  postgres_data:
+    name: hercfit_postgres_data
+
+networks:
+  hercfit-network:
+    name: hercfit-network
+    driver: bridge
+
