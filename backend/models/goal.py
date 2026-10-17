@@ -1,9 +1,3 @@
-"""Combined body, health and performance goals with optional numeric targets.
-
-Use scoped methods for account-facing writes; inherited CRUD is internal only.
-JSON fields are replaced as a whole, not merged or tracked through nested edits.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -28,10 +22,7 @@ if TYPE_CHECKING:
 
 
 class Goal(BaseModel):
-    """goal_types uses open labels, e.g. WEIGHT_LOSS, WEIGHT_GAIN, MUSCLE_GAIN,
-    BODY_RECOMPOSITION, SPORT_PERFORMANCE, RECOVERY, MAINTENANCE, GENERAL_HEALTH.
-    Targets may be empty; description/context preserve qualitative user intent.
-    """
+    # Dữ liệu Goal là linh động, không có schema cố định. Các trường dữ liệu được lưu trong cột JSONB.
     __tablename__ = "goals"
     __table_args__ = (
         CheckConstraint("title ~ '[^[:space:]]'", name="ck_goals_title"),
@@ -54,6 +45,12 @@ class Goal(BaseModel):
     goal_types: Mapped[list[str]] = mapped_column(
         JSONB(none_as_null=True), default=list, server_default=text("'[]'::jsonb"), nullable=False,
     )
+    # Đa số trường hợp người dung sẽ đặt mục tiêu giảm cân, tăng cơ, hoặc chạy bộ. Tuy nhiên, để linh hoạt hơn, chúng ta có thể cho phép người dùng tạo các loại mục tiêu khác nhau, ví dụ: "weight_loss", "muscle_gain", "running_distance", v.v.
+    weight_kg_target: Mapped[float | None] = mapped_column(
+        CheckConstraint("weight_kg_target IS NULL OR (weight_kg_target > 0 AND weight_kg_target < 1000)", name="ck_goals_weight_kg"),
+        nullable=True,
+    )
+    # Xử lý khéo léo ở bên Frontend để người dùng có thể tạo các loại mục tiêu khác nhau, ví dụ: "weight_loss", "muscle_gain", "running_distance", v.v.
     targets: Mapped[dict[str, Any]] = mapped_column(
         JSONB(none_as_null=True), default=dict, server_default=text("'{}'::jsonb"), nullable=False,
     )

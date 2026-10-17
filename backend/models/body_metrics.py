@@ -1,5 +1,3 @@
-"""Immutable measurement snapshots; scoped methods leave transactions to callers."""
-
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -44,7 +42,7 @@ class BodyMetric(BaseModel):
         DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False,
     )
     weight_kg: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False)
-    height_cm: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
+    height_cm: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=False)
     body_fat_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     muscle_mass_kg: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
     additional_metrics: Mapped[dict[str, Any]] = mapped_column(
@@ -52,6 +50,7 @@ class BodyMetric(BaseModel):
     )
     user: Mapped[User] = relationship("User", back_populates="body_metrics")
 
+    # User-scoped operations
     @classmethod
     def _user_query(cls, user_id: PyUUID, *, include_inactive: bool = False) -> Select:
         user_id = UserScope(user_id=user_id).user_id

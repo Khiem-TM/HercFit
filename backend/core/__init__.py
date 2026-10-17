@@ -5,6 +5,7 @@ from core.database import (
     get_db_connection,
     get_db_session,
     init_crud_db_pool,
+    transaction,
 )
 from core.llm import get_model
 from core.security import get_current_user_id, verify_bearer
@@ -21,4 +22,5 @@ __all__ = [
     "get_db_session",
     "verify_bearer",
     "get_current_user_id",
+    "transaction",
 ]

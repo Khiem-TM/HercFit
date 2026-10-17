@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from core.settings import settings
+from core.transaction import transaction
 
 _crud_pool: AsyncConnectionPool | None = None
 _async_engine: AsyncEngine | None = None
