@@ -3,7 +3,6 @@ from __future__ import annotations
 import unicodedata
 from collections.abc import Mapping
 from decimal import Decimal
-from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import UUID as PyUUID
 
@@ -17,30 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from models.basemodel import BaseModel, uuid7
+from schemas.common import UserScope
+from schemas.enums import FoodItemType, FoodServingUnit, FoodSourceType
+from schemas.foods import FoodCreate, FoodQuery, FoodUpdate, SystemFoodCreate
 
 if TYPE_CHECKING:
     from models.user import User
-
-# Thực phẩm được chia ra thành 2 nguồn dữ liệu 
-## Nguồn dữ liệu hệ thống (SYSTEM): là những thực phẩm được cung cấp sẵn bởi hệ thống, không thể chỉnh sửa bởi người dùng.
-## Nguồn dữ liệu người dùng (CUSTOM): là những thực phẩm do người dùng tạo hoặc yêu cầu ghi nhận nằm ngoài data dữ liệu --> Agent thực thị web search và bổ sung dựa trên yêu cầu và chấp thuân từ người dùng
-
-class FoodSourceType(StrEnum):
-    SYSTEM = "SYSTEM"
-    CUSTOM = "CUSTOM"
-
-# Thực phẩm được chia ra thành 2 loại chính
-## Loại thực phẩm (FOOD): là những thực phẩm đơn lẻ hoặc sản phẩm đóng hộp
-## Loại món ăn (DISH): là những món ăn được chế biến từ nhiều thực phẩm khác nhau, có thể có công thức chế biến và thành phần dinh dưỡng khác nhau
-class FoodItemType(StrEnum):
-    FOOD = "FOOD"
-    DISH = "DISH"
-
-# đơn vị đo lường 
-class FoodServingUnit(StrEnum):
-    G = "G"
-    ML = "ML"
-
 
 def normalize_food_text(value: str) -> str:
     value = unicodedata.normalize("NFD", value.lower().replace("đ", "d"))
@@ -119,18 +100,8 @@ class FoodItem(BaseModel):
     owner: Mapped[User | None] = relationship("User", back_populates="custom_foods")
 
     @classmethod
-    def _food_payload(cls, payload: Mapping[str, Any]) -> dict[str, Any]:
-        allowed_fields = {
-            "code", "name_vi", "name_en", "category_vi", "category_en", "item_type",
-            "serving_size", "serving_unit", "energy_kcal", "protein_g",
-            "carbohydrate_g", "fat_g", "fiber_g", "nutrition_information", "data_quality",
-        }
-        return {key: value for key, value in payload.items() if key in allowed_fields}
-
-    @classmethod
     def _custom_scope(cls, user_id: PyUUID) -> Any:
-        if user_id is None:
-            raise ValueError("user_id is required")
+        user_id = UserScope(user_id=user_id).user_id
         return and_(
             cls.source_type == FoodSourceType.CUSTOM,
             cls.owner_user_id == user_id,
@@ -159,18 +130,20 @@ class FoodItem(BaseModel):
         source_type: FoodSourceType | None = None, item_type: FoodItemType | None = None,
         offset: int = 0, limit: int = 50, include_inactive: bool = False,
     ) -> list[FoodItem]:
-        if not 1 <= limit <= 200 or offset < 0:
-            raise ValueError("limit must be between 1 and 200; offset must be non-negative")
-        query = cls._visible_query(user_id, include_inactive=include_inactive)
-        if search and (normalized_search := normalize_food_text(search)):
+        options = FoodQuery(
+            search=search, source_type=source_type, item_type=item_type,
+            offset=offset, limit=limit, include_inactive=include_inactive,
+        )
+        query = cls._visible_query(user_id, include_inactive=options.include_inactive)
+        if options.search and (normalized_search := normalize_food_text(options.search)):
             query = query.where(
                 cls.normalized_search_text.contains(normalized_search, autoescape=True)
             )
-        if source_type is not None:
-            query = query.where(cls.source_type == FoodSourceType(source_type))
-        if item_type is not None:
-            query = query.where(cls.item_type == FoodItemType(item_type))
-        query = query.order_by(cls.normalized_name_vi, cls.id).offset(offset).limit(limit)
+        if options.source_type is not None:
+            query = query.where(cls.source_type == options.source_type)
+        if options.item_type is not None:
+            query = query.where(cls.item_type == options.item_type)
+        query = query.order_by(cls.normalized_name_vi, cls.id).offset(options.offset).limit(options.limit)
         result = await session.execute(query)
         return list(result.scalars().all())
 
@@ -178,9 +151,8 @@ class FoodItem(BaseModel):
     async def create_custom(
         cls, session: AsyncSession, *, user_id: PyUUID, payload: Mapping[str, Any],
     ) -> FoodItem:
-        if user_id is None:
-            raise ValueError("user_id is required")
-        values = cls._food_payload(payload)
+        user_id = UserScope(user_id=user_id).user_id
+        values = FoodCreate.model_validate(payload).to_payload()
         if values.get("code") is None:
             values["code"] = str(uuid7())
         values.update(source_type=FoodSourceType.CUSTOM, owner_user_id=user_id)
@@ -190,7 +162,7 @@ class FoodItem(BaseModel):
     async def create_system(
         cls, session: AsyncSession, *, payload: Mapping[str, Any],
     ) -> FoodItem:
-        values = cls._food_payload(payload)
+        values = SystemFoodCreate.model_validate(payload).to_payload()
         values.update(source_type=FoodSourceType.SYSTEM, owner_user_id=None)
         return await cls.create(session, values)
 
@@ -219,10 +191,11 @@ class FoodItem(BaseModel):
         cls, session: AsyncSession, food_id: PyUUID, *, user_id: PyUUID,
         payload: Mapping[str, Any],
     ) -> FoodItem | None:
+        values = FoodUpdate.model_validate(payload).to_payload()
         food = await cls._get_custom_for_update(session, food_id, user_id=user_id)
         if food is None:
             return None
-        for key, value in cls._food_payload(payload).items():
+        for key, value in values.items():
             setattr(food, key, value)
         await session.flush()
         await session.refresh(food)

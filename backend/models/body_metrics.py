@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID as PyUUID
 
@@ -15,32 +15,14 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship, validates
+from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from models.basemodel import BaseModel, utc_now
+from schemas.body_metrics import BodyMetricCreate, BodyMetricQuery
+from schemas.common import UserScope
 
 if TYPE_CHECKING:
     from models.user import User
-
-
-def measurement_decimal(value: Any, *, field: str, percentage: bool = False) -> Decimal:
-    """Validate before database rounding, including NaN and infinities."""
-    try:
-        number = Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        raise ValueError(f"{field} must be a finite number") from None
-    valid = number.is_finite() and (
-        0 <= number <= 100 if percentage else 0 < number < 10000000
-    )
-    if not valid:
-        raise ValueError(f"{field} is outside its valid range")
-    return number
-
-
-def require_aware_time(value: datetime) -> datetime:
-    if not isinstance(value, datetime) or value.utcoffset() is None:
-        raise ValueError("Measurement times must include a timezone")
-    return value
 
 
 class BodyMetric(BaseModel):
@@ -70,40 +52,19 @@ class BodyMetric(BaseModel):
     )
     user: Mapped[User] = relationship("User", back_populates="body_metrics")
 
-    @validates("weight_kg", "height_cm", "body_fat_pct", "muscle_mass_kg")
-    def _validate_measurement(self, key: str, value: Any) -> Decimal | None:
-        if value is None and key != "weight_kg":
-            return None
-        return measurement_decimal(value, field=key, percentage=key == "body_fat_pct")
-
-    @validates("recorded_at")
-    def _validate_recorded_at(self, _key: str, value: datetime) -> datetime:
-        return require_aware_time(value)
-
-    @validates("additional_metrics")
-    def _validate_additional_metrics(self, _key: str, value: Any) -> dict[str, Any]:
-        if not isinstance(value, dict):
-            raise ValueError("additional_metrics must be an object")
-        return value
-
     @classmethod
     def _user_query(cls, user_id: PyUUID, *, include_inactive: bool = False) -> Select:
-        if user_id is None:
-            raise ValueError("user_id is required")
+        user_id = UserScope(user_id=user_id).user_id
         return cls.apply_active_scope(
             select(cls).where(cls.user_id == user_id), include_inactive=include_inactive,
         )
 
     @classmethod
     async def create_snapshot(
-        cls, session: AsyncSession, *, user_id: PyUUID, payload: Mapping[str, Any],
+        cls, session: AsyncSession, *, user_id: PyUUID, payload: BodyMetricCreate | Mapping[str, Any],
     ) -> BodyMetric:
-        if user_id is None:
-            raise ValueError("user_id is required")
-        allowed = {"recorded_at", "weight_kg", "height_cm", "body_fat_pct", "muscle_mass_kg", "additional_metrics"}
-        values = {key: value for key, value in payload.items() if key in allowed}
-        if "weight_kg" not in values:
-            raise ValueError("weight_kg is required")
+        user_id = UserScope(user_id=user_id).user_id
+        values = BodyMetricCreate.model_validate(payload).to_payload()
         return await cls.create(session, {**values, "user_id": user_id})
 
     @classmethod
@@ -122,17 +83,17 @@ class BodyMetric(BaseModel):
         recorded_from: datetime | None = None, recorded_to: datetime | None = None,
         offset: int = 0, limit: int = 50, include_inactive: bool = False,
     ) -> list[BodyMetric]:
-        if not 1 <= limit <= 200 or offset < 0:
-            raise ValueError("limit must be between 1 and 200; offset must be non-negative")
-        query = cls._user_query(user_id, include_inactive=include_inactive)
-        if recorded_from is not None:
-            query = query.where(cls.recorded_at >= require_aware_time(recorded_from))
-        if recorded_to is not None:
-            query = query.where(cls.recorded_at <= require_aware_time(recorded_to))
-        if recorded_from is not None and recorded_to is not None and recorded_from > recorded_to:
-            raise ValueError("recorded_from must not be after recorded_to")
+        options = BodyMetricQuery(
+            recorded_from=recorded_from, recorded_to=recorded_to,
+            offset=offset, limit=limit, include_inactive=include_inactive,
+        )
+        query = cls._user_query(user_id, include_inactive=options.include_inactive)
+        if options.recorded_from is not None:
+            query = query.where(cls.recorded_at >= options.recorded_from)
+        if options.recorded_to is not None:
+            query = query.where(cls.recorded_at <= options.recorded_to)
         result = await session.execute(
-            query.order_by(cls.recorded_at.desc(), cls.id.desc()).offset(offset).limit(limit)
+            query.order_by(cls.recorded_at.desc(), cls.id.desc()).offset(options.offset).limit(options.limit)
         )
         return list(result.scalars().all())
 
@@ -158,9 +119,10 @@ class BodyMetric(BaseModel):
     @classmethod
     async def replace_for_user(
         cls, session: AsyncSession, metric_id: PyUUID, *, user_id: PyUUID,
-        payload: Mapping[str, Any],
+        payload: BodyMetricCreate | Mapping[str, Any],
     ) -> BodyMetric | None:
         """Replace an active snapshot with a complete new payload, atomically."""
+        values = BodyMetricCreate.model_validate(payload).to_payload()
         async with session.begin_nested():
             result = await session.execute(
                 cls._user_query(user_id).where(cls.id == metric_id).with_for_update()
@@ -171,7 +133,7 @@ class BodyMetric(BaseModel):
             # A correction keeps the measurement time unless explicitly supplied.
             replacement = await cls.create_snapshot(
                 session, user_id=user_id,
-                payload={"recorded_at": original.recorded_at, **payload},
+                payload={"recorded_at": original.recorded_at, **values},
             )
             original.is_active = False
             await session.flush()

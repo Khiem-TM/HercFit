@@ -17,6 +17,7 @@ from models.basemodel import (
     BaseModel,
     utc_now,
 )
+from schemas.oauth_account import OAuthAccountCreate, OAuthTokenUpdate
 
 class OAuthAccount(BaseModel):
     __tablename__ = "oauth_accounts"
@@ -65,11 +66,9 @@ class OAuthAccount(BaseModel):
     ) -> "OAuthAccount | None":
         return await cls.get_one(
             session,
-            where=(
-                cls.provider == provider,
-                cls.provider_user_id == provider_user_id,
-                cls.is_active if not include_inactive else True,
-            ),
+            provider=provider,
+            provider_user_id=provider_user_id,
+            include_inactive=include_inactive,
         )
 
     @classmethod
@@ -96,29 +95,32 @@ class OAuthAccount(BaseModel):
         provider_user_id: str,
         token_data: dict[str, Any],
     ) -> "OAuthAccount":
+        account_data = OAuthAccountCreate(user_id=user_id, provider_user_id=provider_user_id)
+        token_data = OAuthTokenUpdate.model_validate(token_data)
         oauth_account = await cls.get_by_provider_user_id(
             session,
             provider="google",
-            provider_user_id=provider_user_id,
+            provider_user_id=account_data.provider_user_id,
         )
         if oauth_account is None: 
             oauth_account = cls(
-                user_id=user_id,
+                user_id=account_data.user_id,
                 provider="google",
-                provider_user_id=provider_user_id,
+                provider_user_id=account_data.provider_user_id,
             )
             session.add(oauth_account)
 
         oauth_account.update_tokens(token_data)
         return oauth_account
 
-    def update_tokens(self, token_data: dict[str, Any]) -> None:
-        access_token = token_data.get("access_token")
+    def update_tokens(self, token_data: OAuthTokenUpdate | dict[str, Any]) -> None:
+        tokens = OAuthTokenUpdate.model_validate(token_data)
+        access_token = tokens.access_token
         if access_token:
-            self.access_token = access_token
-        refresh_token = token_data.get("refresh_token")
+            self.access_token = access_token.get_secret_value()
+        refresh_token = tokens.refresh_token
         if refresh_token:
-            self.refresh_token = refresh_token
-        expires_in = token_data.get("expires_in")
+            self.refresh_token = refresh_token.get_secret_value()
+        expires_in = tokens.expires_in
         if expires_in is not None:
             self.token_expires_at = utc_now() + timedelta(seconds=expires_in)

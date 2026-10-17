@@ -7,11 +7,7 @@ JSON fields are replaced as a whole, not merged or tracked through nested edits.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from copy import deepcopy
 from datetime import date
-from enum import StrEnum
-import json
-import math
 from typing import TYPE_CHECKING, Any
 from uuid import UUID as PyUUID
 
@@ -20,70 +16,15 @@ from sqlalchemy import CheckConstraint, Date, Enum, ForeignKey, Index, Select, S
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship, validates
+from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from models.basemodel import BaseModel
+from schemas.common import Pagination, UserScope, VersionCheck
+from schemas.enums import GoalStatus
+from schemas.goal import GoalCreate, GoalUpdate
 
 if TYPE_CHECKING:
     from models.user import User
-
-
-class GoalStatus(StrEnum):
-    IN_PROGRESS = "IN_PROGRESS"
-    COMPLETED = "COMPLETED"
-    CANCELLED = "CANCELLED"
-
-
-def _validate_json(value: Any, expected_type: type, field: str) -> Any:
-    if not isinstance(value, expected_type):
-        raise ValueError(f"{field} must be a JSON {'array' if expected_type is list else 'object'}")
-    try:
-        json.dumps(value, allow_nan=False)
-    except (TypeError, ValueError, OverflowError):
-        raise ValueError(f"{field} must contain JSON-serializable, finite values") from None
-    return deepcopy(value)
-
-
-def _validate_target_number(value: Any, field: str) -> None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{field} must be a finite JSON number")
-    if isinstance(value, float) and not math.isfinite(value):
-        raise ValueError(f"{field} must be a finite JSON number")
-
-
-def _validate_content(key: str, value: Any) -> Any:
-    if key == "title":
-        if not isinstance(value, str) or not value.strip() or len(value) > 255:
-            raise ValueError("title must be a non-blank string of at most 255 characters")
-    elif key == "description":
-        if value is not None and not isinstance(value, str):
-            raise ValueError("description must be a string or None")
-    elif key == "goal_types":
-        value = _validate_json(value, list, key)
-        if any(not isinstance(label, str) or not label.strip() for label in value):
-            raise ValueError("goal_types must contain non-blank string labels")
-    elif key == "context":
-        value = _validate_json(value, dict, key)
-    elif key == "targets":
-        value = _validate_json(value, dict, key)
-        for code, target in value.items():
-            if not isinstance(code, str) or not code.strip() or not isinstance(target, dict):
-                raise ValueError("Each target needs a non-blank metric code and an object")
-            unit = target.get("unit")
-            if not isinstance(unit, str) or not unit.strip():
-                raise ValueError(f"targets.{code}.unit is required")
-            operator = target.get("operator")
-            if not isinstance(operator, str) or operator not in {"eq", "gte", "lte", "range"}:
-                raise ValueError(f"targets.{code}.operator must be eq, gte, lte or range")
-            numeric_fields = {"min", "max"} if operator == "range" else {"value"}
-            allowed = {"unit", "operator", "baseline"} | numeric_fields
-            if set(target) - allowed:
-                raise ValueError(f"targets.{code} contains unsupported fields for {operator}")
-            for field in numeric_fields | ({"baseline"} if "baseline" in target else set()):
-                _validate_target_number(target.get(field), f"targets.{code}.{field}")
-            if operator == "range" and target["min"] > target["max"]:
-                raise ValueError(f"targets.{code}.min must not exceed max")
-    return value
 
 
 class Goal(BaseModel):
@@ -127,24 +68,9 @@ class Goal(BaseModel):
     )
     user: Mapped[User] = relationship("User", back_populates="goals")
 
-    @validates("title", "description", "goal_types", "targets", "context")
-    def _validate_content(self, key: str, value: Any) -> Any:
-        return _validate_content(key, value)
-
-    @classmethod
-    def _goal_payload(cls, payload: Mapping[str, Any]) -> dict[str, Any]:
-        if not isinstance(payload, Mapping):
-            raise ValueError("Goal payload must be an object")
-        if {"start_weight_kg", "target_weight_kg"}.intersection(payload):
-            raise ValueError("Legacy weight fields are no longer supported; use targets.weight_kg")
-        allowed = {"title", "description", "goal_types", "targets", "context", "start_date", "target_date"}
-        # Validate the complete patch before changing any persistent attributes.
-        return {key: _validate_content(key, value) for key, value in payload.items() if key in allowed}
-
     @classmethod
     def _user_query(cls, user_id: PyUUID, *, include_inactive: bool = False) -> Select:
-        if user_id is None:
-            raise ValueError("user_id is required")
+        user_id = UserScope(user_id=user_id).user_id
         return cls.apply_active_scope(
             select(cls).where(cls.user_id == user_id), include_inactive=include_inactive,
         )
@@ -153,8 +79,7 @@ class Goal(BaseModel):
     async def _lock_user(cls, session: AsyncSession, user_id: PyUUID) -> bool:
         from models.user import User
 
-        if user_id is None:
-            raise ValueError("user_id is required")
+        user_id = UserScope(user_id=user_id).user_id
         result = await session.execute(
             select(User.id).where(User.id == user_id, User.is_active.is_(True)).with_for_update()
         )
@@ -162,11 +87,9 @@ class Goal(BaseModel):
 
     @classmethod
     async def create_for_user(
-        cls, session: AsyncSession, *, user_id: PyUUID, payload: Mapping[str, Any],
+        cls, session: AsyncSession, *, user_id: PyUUID, payload: GoalCreate | Mapping[str, Any],
     ) -> Goal:
-        values = cls._goal_payload(payload)
-        if "title" not in values or values.get("start_date") is None:
-            raise ValueError("title and start_date are required")
+        values = GoalCreate.model_validate(payload).to_payload()
         if not await cls._lock_user(session, user_id):
             raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="User not found")
         if await cls.get_current_for_user(session, user_id=user_id) is not None:
@@ -178,12 +101,11 @@ class Goal(BaseModel):
     @classmethod
     async def update_for_user(
         cls, session: AsyncSession, goal_id: PyUUID, *, user_id: PyUUID,
-        payload: Mapping[str, Any], expected_version_id: int,
+        payload: GoalUpdate | Mapping[str, Any], expected_version_id: int,
     ) -> Goal | None:
         """Replace supplied fields; reject stale edits without committing caller work."""
-        if type(expected_version_id) is not int or expected_version_id < 1:
-            raise ValueError("expected_version_id must be a positive integer")
-        values = cls._goal_payload(payload)
+        expected_version_id = VersionCheck(expected_version_id=expected_version_id).expected_version_id
+        values = GoalUpdate.model_validate(payload).to_payload()
         async with session.begin_nested():
             if not await cls._lock_user(session, user_id):
                 return None
@@ -198,6 +120,11 @@ class Goal(BaseModel):
                 raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="Goal has already ended")
             if goal.version_id != expected_version_id:
                 raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="Goal version has changed; reload before editing")
+            # Validate dates against the stored counterpart when PATCH supplies only one.
+            GoalCreate.model_validate({
+                "title": goal.title, "start_date": goal.start_date,
+                "target_date": goal.target_date, **values,
+            })
             for key, value in values.items():
                 setattr(goal, key, value)
             await session.flush()
@@ -226,11 +153,10 @@ class Goal(BaseModel):
         cls, session: AsyncSession, *, user_id: PyUUID, offset: int = 0, limit: int = 50,
         include_inactive: bool = False,
     ) -> list[Goal]:
-        if not 1 <= limit <= 200 or offset < 0:
-            raise ValueError("limit must be between 1 and 200; offset must be non-negative")
+        options = Pagination(offset=offset, limit=limit, include_inactive=include_inactive)
         result = await session.execute(
-            cls._user_query(user_id, include_inactive=include_inactive)
-            .order_by(cls.created_at.desc(), cls.id.desc()).offset(offset).limit(limit)
+            cls._user_query(user_id, include_inactive=options.include_inactive)
+            .order_by(cls.created_at.desc(), cls.id.desc()).offset(options.offset).limit(options.limit)
         )
         return list(result.scalars().all())
 

@@ -121,3 +121,5 @@ pids/
 *.seed
 *.pid.lock
 
+backend/docs
+

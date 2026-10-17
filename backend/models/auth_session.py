@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.basemodel import BaseModel, utc_now
+from schemas.auth_session import AuthSessionCreate, AuthSessionRevoke
 
 if TYPE_CHECKING:
     from models.user import User
@@ -78,6 +80,12 @@ class AuthSession(BaseModel):
         )
 
     @classmethod
+    async def create_session(
+        cls, session: AsyncSession, payload: AuthSessionCreate | Mapping[str, Any],
+    ) -> AuthSession:
+        return await cls.create(session, AuthSessionCreate.model_validate(payload).to_payload())
+
+    @classmethod
     async def get_by_refresh_token_hash(
         cls,
         session: AsyncSession,
@@ -93,8 +101,9 @@ class AuthSession(BaseModel):
         session: AsyncSession,
         replaced_by_session_id: uuid.UUID | None = None,
     ) -> None:
+        replacement = AuthSessionRevoke(replaced_by_session_id=replaced_by_session_id)
         self.revoked_at = utc_now()
-        self.replaced_by_session_id = replaced_by_session_id
+        self.replaced_by_session_id = replacement.replaced_by_session_id
         session.add(self)
 
     @classmethod

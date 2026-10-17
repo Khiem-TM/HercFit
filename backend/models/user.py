@@ -19,9 +19,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.basemodel import BaseModel, utc_now
+from schemas.common import JsonObjectInput, UserScope
+from schemas.user import GoogleProfile, OnboardingInput, UserCreate, UserUpdate
 
 if TYPE_CHECKING:
     from models.auth_session import AuthSession
@@ -123,6 +125,7 @@ class User(BaseModel):
         return result.scalar_one_or_none()
 
     def apply_google_profile(self, userinfo: dict[str, Any]) -> None:
+        userinfo = GoogleProfile.model_validate(userinfo).model_dump(mode="python", exclude_unset=True)
         email = userinfo.get("email") or self.email
         self.fullname = userinfo.get("name") or self.fullname or email
         self.avatar_url = userinfo.get("picture") or self.avatar_url
@@ -136,6 +139,7 @@ class User(BaseModel):
         session: AsyncSession,
         userinfo: dict[str, Any],
     ) -> User:
+        userinfo = GoogleProfile.model_validate(userinfo).model_dump(mode="python")
         email = userinfo["email"]
         fullname = userinfo.get("name") or email
         avatar_url = userinfo.get("picture")
@@ -161,18 +165,11 @@ class User(BaseModel):
 
         return user
 
-    @validates("personal_info")
-    def _validate_personal_info(self, _key: str, value: Any) -> dict[str, Any]:
-        if not isinstance(value, dict):
-            raise ValueError("personal_info must be an object")
-        return value
-
     @classmethod
     async def _get_profile_for_update(
         cls, session: AsyncSession, user_id: uuid.UUID,
     ) -> User | None:
-        if user_id is None:
-            raise ValueError("user_id is required")
+        user_id = UserScope(user_id=user_id).user_id
         # Persist pending work before refreshing a potentially cached User.
         await session.flush()
         result = await session.execute(
@@ -186,8 +183,7 @@ class User(BaseModel):
         cls, session: AsyncSession, user_id: uuid.UUID, values: Mapping[str, Any],
     ) -> User | None:
         """Merge top-level groups, replacing each supplied group's entire value."""
-        if not isinstance(values, Mapping):
-            raise ValueError("personal_info must be an object")
+        values = JsonObjectInput.model_validate(values).root
         user = await cls._get_profile_for_update(session, user_id)
         if user is None:
             return None
@@ -197,11 +193,32 @@ class User(BaseModel):
         return user
 
     @classmethod
+    async def create_profile(
+        cls, session: AsyncSession, payload: UserCreate | Mapping[str, Any],
+    ) -> User:
+        return await cls.create(session, UserCreate.model_validate(payload).to_payload())
+
+    @classmethod
+    async def update_profile(
+        cls, session: AsyncSession, user_id: uuid.UUID,
+        payload: UserUpdate | Mapping[str, Any],
+    ) -> User | None:
+        values = UserUpdate.model_validate(payload).to_payload()
+        user = await cls._get_profile_for_update(session, user_id)
+        if user is None:
+            return None
+        for key, value in values.items():
+            setattr(user, key, value)
+        await session.flush()
+        await session.refresh(user)
+        return user
+
+    @classmethod
     async def complete_onboarding(
         cls,
         session: AsyncSession,
         user_id: uuid.UUID,
-        values: Mapping[str, Any],
+        values: OnboardingInput | Mapping[str, Any],
     ) -> User | None:
         """Save profile, optional initial measurement and goal in one savepoint.
 
@@ -212,11 +229,7 @@ class User(BaseModel):
         from models.body_metrics import BodyMetric
         from models.goal import Goal
 
-        if {"height_cm", "fitness_goal"}.intersection(values):
-            raise ValueError("Use body_metric.height_cm and a goal object for onboarding")
-        for key in ("personal_info", "body_metric", "goal"):
-            if key in values and not isinstance(values[key], Mapping):
-                raise ValueError(f"{key} must be an object when supplied")
+        values = OnboardingInput.model_validate(values).to_payload()
 
         async with session.begin_nested():
             user = await cls._get_profile_for_update(session, user_id)

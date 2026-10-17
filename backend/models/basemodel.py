@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
+from schemas.common import BulkWrite, OrderBy
 
 
 def utc_now() -> datetime:
@@ -142,9 +143,7 @@ class BaseModel(Base):
 
     @classmethod
     def handle_order(cls, query: Select, **kwargs: Any) -> Select:
-        order_by = kwargs.get("order_by") or {"id": "asc"}
-        if not isinstance(order_by, dict):
-            raise ValueError("order_by must be a dictionary")
+        order_by = OrderBy.model_validate(kwargs.get("order_by") or {"id": "asc"}).root
 
         clauses = []
         for column_name, direction in order_by.items():
@@ -154,13 +153,7 @@ class BaseModel(Base):
                     f"Column '{column_name}' does not exist in {cls.__name__}"
                 )
 
-            normalized_direction = direction.lower()
-            if normalized_direction == "asc":
-                clauses.append(asc(column))
-            elif normalized_direction == "desc":
-                clauses.append(desc(column))
-            else:
-                raise ValueError("Order direction must be 'asc' or 'desc'")
+            clauses.append(asc(column) if direction == "asc" else desc(column))
 
         return query.order_by(*clauses)
 
@@ -269,11 +262,7 @@ class BaseModel(Base):
         session: AsyncSession,
         data: Sequence[Mapping[str, Any]],
     ) -> list[Self]:
-        if not data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Data must not be empty",
-            )
+        data = BulkWrite(data=data).data
 
         entities: list[Self] = []
         for item in data:
