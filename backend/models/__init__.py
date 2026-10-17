@@ -1,19 +1,15 @@
-"""Centralized SQLAlchemy 2.0 ORM models registry (used by Alembic and Repositories)."""
+"""Centralized SQLAlchemy 2.0 ORM models registry."""
 
 from core.database import Base
-from models.habit import Habit, HabitCheckIn
-from models.nutrition import Meal
-from models.user import BodyMetric, User
-from models.workout import WorkoutPlan, WorkoutSession
+from models.auth_session import AuthSession
+from models.basemodel import BaseModel
+from models.oauth_account import OAuthAccount
+from models.user import User
 
 __all__ = [
     "Base",
+    "BaseModel",
     "User",
-    "BodyMetric",
-    "Meal",
-    "WorkoutPlan",
-    "WorkoutSession",
-    "Habit",
-    "HabitCheckIn",
+    "OAuthAccount",
+    "AuthSession",
 ]
-

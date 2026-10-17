@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from models.basemodel import BaseModel, utc_now
+
+if TYPE_CHECKING:
+    from models.user import User
+
+
+class AuthSession(BaseModel):
+    __tablename__ = "auth_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "replaced_by_session_id IS NULL OR replaced_by_session_id <> id",
+            name="ck_auth_sessions_replacement_not_self",
+        ),
+        UniqueConstraint(
+            "replaced_by_session_id",
+            name="uq_auth_sessions_replaced_by_session_id",
+        ),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    refresh_token_hash: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    replaced_by_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("auth_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="auth_sessions")
+    replaced_by: Mapped["AuthSession | None"] = relationship(
+        "AuthSession",
+        remote_side="AuthSession.id",
+        foreign_keys=[replaced_by_session_id],
+        back_populates="replaces",
+        uselist=False,
+    )
+    replaces: Mapped["AuthSession | None"] = relationship(
+        "AuthSession",
+        foreign_keys=[replaced_by_session_id],
+        back_populates="replaced_by",
+        uselist=False,
+    )
+
+    @property
+    def is_refresh_valid(self) -> bool:
+        return bool(
+            self.is_active
+            and self.revoked_at is None
+            and self.expires_at > utc_now()
+        )
+
+    @classmethod
+    async def get_by_refresh_token_hash(
+        cls,
+        session: AsyncSession,
+        refresh_token_hash: str,
+    ) -> AuthSession | None:
+        return await cls.get_one(
+            session,
+            refresh_token_hash=refresh_token_hash,
+        )
+
+    async def revoke(
+        self,
+        session: AsyncSession,
+        replaced_by_session_id: uuid.UUID | None = None,
+    ) -> None:
+        self.revoked_at = utc_now()
+        self.replaced_by_session_id = replaced_by_session_id
+        session.add(self)
+
+    @classmethod
+    async def revoke_replacement_chain(
+        cls,
+        session: AsyncSession,
+        session_id: uuid.UUID | None,
+    ) -> None:
+        while session_id:
+            auth_session = await cls.get_by_id(session, session_id)
+            if auth_session is None:
+                return
+
+            next_session_id = auth_session.replaced_by_session_id
+            if auth_session.revoked_at is None:
+                await auth_session.revoke(session)
+
+            session_id = next_session_id
