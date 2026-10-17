@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
-    Float,
     Index,
     Integer,
     String,
@@ -17,13 +17,17 @@ from sqlalchemy import (
     select,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from models.basemodel import BaseModel, utc_now
 
 if TYPE_CHECKING:
     from models.auth_session import AuthSession
+    from models.body_metrics import BodyMetric
+    from models.foods import FoodItem
+    from models.goal import Goal
     from models.oauth_account import OAuthAccount
 
 
@@ -31,6 +35,7 @@ class User(BaseModel):
     __tablename__ = "users"
     __table_args__ = (
         Index("uq_users_email_ci", text("lower(email)"), unique=True),
+        CheckConstraint("jsonb_typeof(personal_info) = 'object'", name="ck_users_personal_info_object"),
     )
 
     email: Mapped[str] = mapped_column(
@@ -57,12 +62,31 @@ class User(BaseModel):
         nullable=False,
     )
 
-    # Fitness profile fields (HercFit)
+    # Stable personal information. Measurements and goals have their own history.
     age: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    height_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
-    fitness_goal: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    personal_info: Mapped[dict[str, Any]] = mapped_column(
+        JSONB(none_as_null=True), default=dict, server_default=text("'{}'::jsonb"), nullable=False,
+    )
 
     # Relationships
+    body_metrics: Mapped[list[BodyMetric]] = relationship(
+        "BodyMetric",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    goals: Mapped[list[Goal]] = relationship(
+        "Goal",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    custom_foods: Mapped[list[FoodItem]] = relationship(
+        "FoodItem",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
         "OAuthAccount",
         back_populates="user",
@@ -137,6 +161,41 @@ class User(BaseModel):
 
         return user
 
+    @validates("personal_info")
+    def _validate_personal_info(self, _key: str, value: Any) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            raise ValueError("personal_info must be an object")
+        return value
+
+    @classmethod
+    async def _get_profile_for_update(
+        cls, session: AsyncSession, user_id: uuid.UUID,
+    ) -> User | None:
+        if user_id is None:
+            raise ValueError("user_id is required")
+        # Persist pending work before refreshing a potentially cached User.
+        await session.flush()
+        result = await session.execute(
+            select(cls).where(cls.id == user_id, cls.is_active.is_(True))
+            .with_for_update().execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def update_personal_info(
+        cls, session: AsyncSession, user_id: uuid.UUID, values: Mapping[str, Any],
+    ) -> User | None:
+        """Merge top-level groups, replacing each supplied group's entire value."""
+        if not isinstance(values, Mapping):
+            raise ValueError("personal_info must be an object")
+        user = await cls._get_profile_for_update(session, user_id)
+        if user is None:
+            return None
+        user.personal_info = {**user.personal_info, **values}
+        await session.flush()
+        await session.refresh(user)
+        return user
+
     @classmethod
     async def complete_onboarding(
         cls,
@@ -144,19 +203,35 @@ class User(BaseModel):
         user_id: uuid.UUID,
         values: Mapping[str, Any],
     ) -> User | None:
-        allowed_fields = {
-            "fullname",
-            "nick_name",
-            "avatar_url",
-            "age",
-            "height_cm",
-            "fitness_goal",
-        }
-        payload = {
-            key: value
-            for key, value in values.items()
-            if key in allowed_fields
-        }
-        payload["is_onboarding"] = True
+        """Save profile, optional initial measurement and goal in one savepoint.
 
-        return await cls.update_one(session, user_id, payload)
+        body_metric and goal accept their corresponding scoped creation payloads.
+        goal requires title/start_date and can include free-form context and targets.
+        The caller still owns the outer transaction and must commit on success.
+        """
+        from models.body_metrics import BodyMetric
+        from models.goal import Goal
+
+        if {"height_cm", "fitness_goal"}.intersection(values):
+            raise ValueError("Use body_metric.height_cm and a goal object for onboarding")
+        for key in ("personal_info", "body_metric", "goal"):
+            if key in values and not isinstance(values[key], Mapping):
+                raise ValueError(f"{key} must be an object when supplied")
+
+        async with session.begin_nested():
+            user = await cls._get_profile_for_update(session, user_id)
+            if user is None:
+                return None
+            if "personal_info" in values:
+                user.personal_info = {**user.personal_info, **values["personal_info"]}
+            for key in ("fullname", "nick_name", "avatar_url", "age"):
+                if key in values:
+                    setattr(user, key, values[key])
+            if "body_metric" in values:
+                await BodyMetric.create_snapshot(session, user_id=user_id, payload=values["body_metric"])
+            if "goal" in values:
+                await Goal.create_for_user(session, user_id=user_id, payload=values["goal"])
+            user.is_onboarding = True
+            await session.flush()
+            await session.refresh(user)
+        return user

@@ -29,4 +29,4 @@ postgres_data/
 mongo_data/
 logs/
 *.log
-
+tests
