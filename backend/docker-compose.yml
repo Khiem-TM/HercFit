@@ -35,6 +35,7 @@ services:
       MODE: ${MODE:-dev}
       HOST: 0.0.0.0
       PORT: ${PORT:-8080}
+      DATABASE_TYPE: postgres
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: ${POSTGRES_USER:-hercfit}
@@ -54,46 +55,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
-    networks:
-      - hercfit-network
-
-  agentic:
-    build:
-      context: ./agentic
-      dockerfile: Dockerfile
-    container_name: hercfit-agentic-api
-    restart: unless-stopped
-    env_file:
-      - path: ./agentic/.env
-        required: false
-    environment:
-      MODE: ${MODE:-dev}
-      AGENT_HOST: 0.0.0.0
-      AGENT_PORT: ${AGENT_PORT:-8081}
-      BACKEND_BASE_URL: http://backend:8080
-      USE_FAKE_MODEL: ${USE_FAKE_MODEL:-true}
-      CHECKPOINT_BACKEND: ${CHECKPOINT_BACKEND:-memory}
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER:-hercfit}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hercfit_secret}
-      POSTGRES_DB: ${POSTGRES_DB:-hercfit_db}
-      POSTGRES_APPLICATION_NAME: ${POSTGRES_APPLICATION_NAME:-hercfit-agentic}
-    ports:
-      - "${AGENT_PORT:-8081}:8081"
-    volumes:
-      - ./agentic:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
     networks:
       - hercfit-network
 
@@ -118,8 +79,6 @@ services:
       - .:/app
     depends_on:
       backend:
-        condition: service_healthy
-      agentic:
         condition: service_healthy
     networks:
       - hercfit-network

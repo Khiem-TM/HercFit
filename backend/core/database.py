@@ -28,16 +28,11 @@ class Base(DeclarativeBase):
     """Declarative base class for all SQLAlchemy 2.0 ORM models."""
 
 
-def validate_postgres_config() -> None:
-    """Validate settings again for callers of the legacy memory helpers."""
-    settings.validate_configuration()
-
-
 def get_postgres_connection_string() -> str:
     """Let libpq escape credentials, including passwords containing URI characters."""
     return make_conninfo(
         user=settings.POSTGRES_USER,
-        password=settings.POSTGRES_PASSWORD.get_secret_value(),
+        password=settings.POSTGRES_PASSWORD.get_secret_value() if settings.POSTGRES_PASSWORD else None,
         host=settings.POSTGRES_HOST,
         port=settings.POSTGRES_PORT,
         dbname=settings.POSTGRES_DB,
@@ -50,7 +45,7 @@ def get_sqlalchemy_url() -> URL:
     return URL.create(
         drivername="postgresql+psycopg",
         username=settings.POSTGRES_USER,
-        password=settings.POSTGRES_PASSWORD.get_secret_value(),
+        password=settings.POSTGRES_PASSWORD.get_secret_value() if settings.POSTGRES_PASSWORD else None,
         host=settings.POSTGRES_HOST,
         port=settings.POSTGRES_PORT,
         database=settings.POSTGRES_DB,
@@ -89,7 +84,7 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 async def init_crud_db_pool() -> None:
-    """Wait for PostgreSQL readiness and prepare pgvector before serving requests."""
+    """Wait for PostgreSQL readiness before serving requests."""
     global _crud_pool
     if _crud_pool is not None:
         return
@@ -108,9 +103,6 @@ async def init_crud_db_pool() -> None:
     )
     try:
         await pool.open(wait=True, timeout=settings.POSTGRES_POOL_TIMEOUT)
-        if settings.PGVECTOR_ENABLED:
-            async with pool.connection() as conn:
-                await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
     except BaseException:
         await pool.close()
         raise
