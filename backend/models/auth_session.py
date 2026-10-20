@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from collections.abc import Mapping
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -91,10 +91,11 @@ class AuthSession(BaseModel):
         session: AsyncSession,
         refresh_token_hash: str,
     ) -> AuthSession | None:
-        return await cls.get_one(
-            session,
-            refresh_token_hash=refresh_token_hash,
-        )
+        # Serialize rotation/revocation of the same refresh token.
+        return (await session.execute(
+            select(cls).where(cls.refresh_token_hash == refresh_token_hash, cls.is_active.is_(True))
+            .with_for_update().execution_options(populate_existing=True)
+        )).scalar_one_or_none()
 
     async def revoke(
         self,
@@ -113,7 +114,10 @@ class AuthSession(BaseModel):
         session_id: uuid.UUID | None,
     ) -> None:
         while session_id:
-            auth_session = await cls.get_by_id(session, session_id)
+            auth_session = (await session.execute(
+                select(cls).where(cls.id == session_id).with_for_update()
+                .execution_options(populate_existing=True)
+            )).scalar_one_or_none()
             if auth_session is None:
                 return
 

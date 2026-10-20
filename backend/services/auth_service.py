@@ -113,6 +113,8 @@ class AuthService:
 
         # 1. Upsert User in database
         user = await User.upsert_from_google(self.session, userinfo)
+        if not user.is_active:
+            raise HTTPException(401, "User account is inactive")
 
         # 2. Upsert OAuthAccount in database
         await OAuthAccount.upsert_google_account(
@@ -206,6 +208,8 @@ class AuthService:
                     self.session,
                     auth_session.replaced_by_session_id,
                 )
+                # This security revocation must survive the expected 401 response.
+                await self.session.commit()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh token has been revoked or reused",

@@ -1,12 +1,13 @@
 """Authentication router for Google OAuth login, refresh token, and logout."""
 
-from fastapi import APIRouter, Cookie, Query
+from fastapi import APIRouter, Cookie, HTTPException, Query
 
 from core.database import transaction
 from core.security import (
     BearerCredentials,
     RefreshTokenCookie,
     STATE_COOKIE_NAME,
+    decode_access_token,
 )
 from schemas.auth_session import LogoutResponse
 from services.auth_service import AuthServiceDep
@@ -29,6 +30,8 @@ async def login(
     state: str | None = Query(default=None),
     oauth_state: str | None = Cookie(default=None, alias=STATE_COOKIE_NAME),
 ):
+    if (code is None) != (state is None):
+        raise HTTPException(400, "OAuth code and state must be supplied together")
     if code and state:
         return await auth_service.handle_google_callback(code, state, oauth_state)
 
@@ -47,5 +50,6 @@ async def logout(
     auth_service: AuthServiceDep,
     _credentials: BearerCredentials,
 ):
+    decode_access_token(_credentials.credentials)
     return await auth_service.logout(refresh_token)
 

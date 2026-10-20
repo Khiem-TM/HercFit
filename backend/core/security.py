@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
@@ -56,6 +57,8 @@ def _b64decode(data: str) -> bytes:
 
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
     """Create a signed HS256 JWT access token."""
+    if settings.JWT_ALGORITHM != "HS256":
+        raise ValueError("Only HS256 is supported")
     claims = dict(data)
     now = datetime.now(timezone.utc)
     iat = int(now.timestamp())
@@ -87,6 +90,9 @@ def decode_access_token(token: str) -> dict[str, Any]:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         header_b64, payload_b64, signature_b64 = parts
+        header = json.loads(_b64decode(header_b64).decode("utf-8"))
+        if header.get("alg") != "HS256" or settings.JWT_ALGORITHM != "HS256":
+            raise HTTPException(401, "Invalid token algorithm", headers={"WWW-Authenticate": "Bearer"})
         signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
         secret = settings.jwt_secret_value.encode("utf-8")
         expected_sig = _b64encode(hmac.new(secret, signing_input, hashlib.sha256).digest())
@@ -98,7 +104,9 @@ def decode_access_token(token: str) -> dict[str, Any]:
             )
         payload = json.loads(_b64decode(payload_b64).decode("utf-8"))
         exp = payload.get("exp")
-        if exp is not None and time.time() > exp:
+        if isinstance(exp, bool) or not isinstance(exp, (int, float)) or not math.isfinite(exp):
+            raise HTTPException(401, "Invalid token expiry", headers={"WWW-Authenticate": "Bearer"})
+        if time.time() >= exp:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has expired",
@@ -110,7 +118,7 @@ def decode_access_token(token: str) -> dict[str, Any]:
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Could not validate credentials: {e}",
+            detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -155,7 +163,7 @@ async def get_current_user(
         )
     try:
         user_uuid = UUID(user_id_str)
-    except ValueError:
+    except (ValueError, TypeError, AttributeError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid user ID format in token",
