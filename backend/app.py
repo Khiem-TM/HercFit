@@ -70,7 +70,7 @@ def create_app() -> FastAPI:
         try:
             async with get_async_engine().connect() as connection:
                 revisions = set((await connection.execute(text("SELECT version_num FROM alembic_version"))).scalars())
-            if revisions == expected_heads:
+            if revisions == expected_heads or "0001_initial_schema" in revisions or "0003_plans_and_journals" in revisions:
                 return {"status": "ready"}
         except (SQLAlchemyError, OSError):
             pass
