@@ -214,6 +214,22 @@ class User(BaseModel):
         return user
 
     @classmethod
+    async def deactivate_profile(cls, session: AsyncSession, user_id: uuid.UUID) -> User | None:
+        """Soft-delete the account and revoke refresh sessions in the same transaction."""
+        from models.auth_session import AuthSession
+
+        user = await cls._get_profile_for_update(session, user_id)
+        if user is None:
+            return None
+        sessions = await AuthSession.get_list(session, user_id=user_id)
+        for auth_session in sessions:
+            if auth_session.revoked_at is None:
+                await auth_session.revoke(session)
+        user.is_active = False
+        await session.flush()
+        return user
+
+    @classmethod
     async def complete_onboarding(
         cls,
         session: AsyncSession,

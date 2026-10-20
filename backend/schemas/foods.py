@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from schemas.common import EntityRead, JsonObject, NonBlank, Pagination, PartialSchema
+from schemas.common import EntityRead, JsonObject, NonBlank, Pagination, PartialSchema, Version
 from schemas.enums import FoodItemType, FoodServingUnit, FoodSourceType
 
 FoodCode = Annotated[NonBlank, Field(max_length=128)]
@@ -45,6 +45,13 @@ class FoodRead(FoodCreate, EntityRead):
     code: FoodCode
     source_type: FoodSourceType
     owner_user_id: UUID | None
+
+
+class FoodUpdateRequest(FoodUpdate):
+    expected_version_id: Version
+
+    def to_payload(self):
+        return self.model_dump(exclude_unset=True, exclude={"expected_version_id"})
 
 
 class FoodQuery(Pagination):

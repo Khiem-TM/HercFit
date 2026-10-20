@@ -8,6 +8,9 @@ from models.foods import FoodItem, FoodItemType, FoodServingUnit, FoodSourceType
 from models.goal import Goal, GoalStatus
 from models.oauth_account import OAuthAccount
 from models.user import User
+from models.exercises import Exercise
+from models.plans import Plan, MealPlan, MealPlanEntry, MealPlanItem, TrainingPlan, TrainingPlanEntry, TrainingPlanItem
+from models.journals import Meal, MealItem, Training, TrainingItem
 
 __all__ = [
     "Base",
@@ -22,4 +25,7 @@ __all__ = [
     "FoodItemType",
     "FoodServingUnit",
     "FoodSourceType",
+    "Exercise", "Plan", "MealPlan", "MealPlanEntry", "MealPlanItem",
+    "TrainingPlan", "TrainingPlanEntry", "TrainingPlanItem",
+    "Meal", "MealItem", "Training", "TrainingItem",
 ]

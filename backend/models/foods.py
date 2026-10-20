@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from models.basemodel import BaseModel, uuid7
+from models.domain import require_version
 from schemas.common import UserScope
 from schemas.enums import FoodItemType, FoodServingUnit, FoodSourceType
 from schemas.foods import FoodCreate, FoodQuery, FoodUpdate, SystemFoodCreate
@@ -183,18 +184,21 @@ class FoodItem(BaseModel):
     ) -> FoodItem | None:
         query = select(cls).where(cls.id == food_id, cls._custom_scope(user_id))
         query = cls.apply_active_scope(query, include_inactive=include_inactive)
-        result = await session.execute(query.with_for_update())
+        result = await session.execute(query.with_for_update().execution_options(populate_existing=True))
         return result.scalar_one_or_none()
 
     @classmethod
     async def update_custom(
         cls, session: AsyncSession, food_id: PyUUID, *, user_id: PyUUID,
         payload: Mapping[str, Any],
+        expected_version_id: int | None = None,
     ) -> FoodItem | None:
         values = FoodUpdate.model_validate(payload).to_payload()
         food = await cls._get_custom_for_update(session, food_id, user_id=user_id)
         if food is None:
             return None
+        if expected_version_id is not None:
+            require_version(food, expected_version_id)
         for key, value in values.items():
             setattr(food, key, value)
         await session.flush()
@@ -204,10 +208,13 @@ class FoodItem(BaseModel):
     @classmethod
     async def _set_custom_active(
         cls, session: AsyncSession, food_id: PyUUID, *, user_id: PyUUID, active: bool,
+        expected_version_id: int | None = None,
     ) -> FoodItem | None:
         food = await cls._get_custom_for_update(
             session, food_id, user_id=user_id, include_inactive=True,
         )
+        if food is not None and expected_version_id is not None:
+            require_version(food, expected_version_id)
         if food is not None and food.is_active != active:
             food.is_active = active
             await session.flush()
@@ -217,14 +224,16 @@ class FoodItem(BaseModel):
     @classmethod
     async def soft_delete_custom(
         cls, session: AsyncSession, food_id: PyUUID, *, user_id: PyUUID,
+        expected_version_id: int | None = None,
     ) -> FoodItem | None:
-        return await cls._set_custom_active(session, food_id, user_id=user_id, active=False)
+        return await cls._set_custom_active(session, food_id, user_id=user_id, active=False, expected_version_id=expected_version_id)
 
     @classmethod
     async def restore_custom(
         cls, session: AsyncSession, food_id: PyUUID, *, user_id: PyUUID,
+        expected_version_id: int | None = None,
     ) -> FoodItem | None:
-        return await cls._set_custom_active(session, food_id, user_id=user_id, active=True)
+        return await cls._set_custom_active(session, food_id, user_id=user_id, active=True, expected_version_id=expected_version_id)
 
 
 @event.listens_for(FoodItem, "before_insert")

@@ -13,6 +13,11 @@ existing model modules, but their definitions live in `schemas.enums`.
 | Goal | `GoalCreate`, `GoalUpdate`, `GoalUpdateRequest` | `GoalRead` |
 | OAuthAccount | `OAuthAccountCreate`, `OAuthTokenUpdate` | `OAuthAccountRead` |
 | AuthSession | `AuthSessionCreate`, `AuthSessionRevoke` | `AuthSessionRead` |
+| Exercise | `ExerciseCreate`, `SystemExerciseCreate`, `ExerciseUpdateRequest`, `ExerciseQuery` | `ExerciseRead` |
+| Plan | `PlanCreate`, `PlanReplace`, `PlanEnd`, `PlanQuery` | `PlanRead` |
+| MealPlan / TrainingPlan | Corresponding `Create` / `Replace` contracts | Corresponding `Read` contracts |
+| Meal / Training | Corresponding `Create` / `Replace`, `JournalQuery` | Corresponding `Read` contracts |
+| Progress | Explicit plan ID and date bounds | `PlanProgressRead`, `DailyProgressRead` |
 
 Use scoped model methods for backend business operations. They accept a mapping
 or the corresponding schema and delegate validation to Pydantic before writing:
@@ -46,6 +51,18 @@ snapshot immutability, row locks, optimistic version checks and transaction logi
 Generic inherited `BaseModel` CRUD is trusted internal persistence; it does not
 automatically choose a domain schema. Raw ORM assignment bypasses input validation
 and still obeys database constraints and business-invariant hooks.
+
+New plan and journal replacements are complete payloads, not PATCH. Their
+`to_payload()` excludes `expected_version_id`; pass that version separately to
+the scoped replacement method. Journal replacement timestamps may be omitted
+to retain the original activity time. See [the API guide](../API.md)
+for snapshots, performance unions, unknown nutrition and timezone semantics.
+
+HTTP manual plans use `PlanInput` / `ManualPlanReplace`; provenance is server-owned.
+`PlanCreate` remains the internal contract with explicit source metadata for future
+Agent integration. `FoodUpdateRequest` requires a version; `FoodUpdate` remains
+available for trusted internal callers. Date filters use `ScheduleEntryQuery`,
+`JournalQuery` and `ProgressRangeQuery`. Independent progress uses `ProgressRead`.
 
 Install `backend/requirements.txt` (includes `pydantic[email]`). Run offline schema
 tests with `PYTHONPATH=backend python -m unittest discover -s backend/tests -p test_schemas.py`.

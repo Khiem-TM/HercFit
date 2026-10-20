@@ -161,23 +161,27 @@ class Goal(BaseModel):
     async def _finish_for_user(
         cls, session: AsyncSession, goal_id: PyUUID, *, user_id: PyUUID, target: GoalStatus,
     ) -> Goal | None:
-        if not await cls._lock_user(session, user_id):
-            return None
-        result = await session.execute(
-            cls._user_query(user_id).where(cls.id == goal_id).with_for_update()
-        )
-        goal = result.scalar_one_or_none()
-        if goal is None:
-            return None
-        # Refresh cached state after waiting for another transaction's User lock.
-        await session.refresh(goal)
-        if goal.status == target:
-            return goal
-        if goal.status != GoalStatus.IN_PROGRESS:
-            raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="Goal has already ended")
-        goal.status = target
-        await session.flush()
-        await session.refresh(goal)
+        from models.plans import Plan
+
+        async with session.begin_nested():
+            if not await cls._lock_user(session, user_id):
+                return None
+            result = await session.execute(
+                cls._user_query(user_id).where(cls.id == goal_id).with_for_update()
+            )
+            goal = result.scalar_one_or_none()
+            if goal is None:
+                return None
+            # Refresh cached state after waiting for another transaction's User lock.
+            await session.refresh(goal)
+            if goal.status == target:
+                return goal
+            if goal.status != GoalStatus.IN_PROGRESS:
+                raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="Goal has already ended")
+            await Plan.end_for_goal(session, user_id=user_id, goal_id=goal.id, reason=f"GOAL_{target.value}")
+            goal.status = target
+            await session.flush()
+            await session.refresh(goal)
         return goal
 
     @classmethod
@@ -191,6 +195,28 @@ class Goal(BaseModel):
         cls, session: AsyncSession, goal_id: PyUUID, *, user_id: PyUUID,
     ) -> Goal | None:
         return await cls._finish_for_user(session, goal_id, user_id=user_id, target=GoalStatus.CANCELLED)
+
+    @classmethod
+    async def soft_delete_for_user(
+        cls, session: AsyncSession, goal_id: PyUUID, *, user_id: PyUUID,
+    ) -> Goal | None:
+        """Serialize with confirmation so deleting a current goal frees its slot."""
+        from models.plans import Plan
+
+        async with session.begin_nested():
+            if not await cls._lock_user(session, user_id):
+                return None
+            result = await session.execute(
+                cls._user_query(user_id, include_inactive=True).where(cls.id == goal_id)
+                .with_for_update().execution_options(populate_existing=True)
+            )
+            goal = result.scalar_one_or_none()
+            if goal is not None and goal.is_active:
+                await Plan.end_for_goal(session, user_id=user_id, goal_id=goal.id, reason="GOAL_DELETED")
+                goal.is_active = False
+                await session.flush()
+                await session.refresh(goal)
+        return goal
 
 
 @event.listens_for(Goal, "before_update")
