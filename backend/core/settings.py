@@ -55,7 +55,11 @@ class Settings(BaseSettings):
     # Google OAuth
     GOOGLE_OAUTH_CLIENT_ID: str | None = None
     GOOGLE_OAUTH_CLIENT_SECRET: SecretStr | None = None
-    GOOGLE_OAUTH_REDIRECT_URI: str = "http://localhost:8080/api/auth/login"
+    GOOGLE_OAUTH_REDIRECT_URI: str = "http://localhost:5173/auth/callback"
+    OAUTH_ALLOWED_REDIRECT_URIS: list[str] = [
+        "http://localhost:5173/auth/callback",
+        "http://localhost:5174/auth/callback",
+    ]
     FRONTEND_URL: str = "http://localhost:5173"
 
     # PostgreSQL Configuration
@@ -90,6 +94,43 @@ class Settings(BaseSettings):
 
     def is_dev(self) -> bool:
         return self.MODE == "dev"
+
+    def resolve_oauth_redirect_uri(
+        self,
+        requested_uri: str | None = None,
+        referer: str | None = None,
+    ) -> str:
+        from urllib.parse import urlparse
+        from fastapi import HTTPException
+
+        allowed = list(dict.fromkeys([
+            *(self.OAUTH_ALLOWED_REDIRECT_URIS or []),
+            self.GOOGLE_OAUTH_REDIRECT_URI,
+        ]))
+
+        if requested_uri:
+            if requested_uri in allowed:
+                return requested_uri
+            raise HTTPException(
+                status_code=400,
+                detail=f"Redirect URI '{requested_uri}' is not in OAUTH_ALLOWED_REDIRECT_URIS",
+            )
+
+        if referer:
+            parsed = urlparse(referer)
+            if parsed.scheme and parsed.netloc:
+                host = parsed.hostname or ""
+                if host == "127.0.0.1":
+                    netloc = f"localhost:{parsed.port}" if parsed.port else "localhost"
+                else:
+                    netloc = parsed.netloc
+                candidate = f"{parsed.scheme}://{netloc}/auth/callback"
+                if candidate in allowed:
+                    return candidate
+
+        if self.OAUTH_ALLOWED_REDIRECT_URIS:
+            return self.OAUTH_ALLOWED_REDIRECT_URIS[0]
+        return self.GOOGLE_OAUTH_REDIRECT_URI
 
 
 settings = Settings()

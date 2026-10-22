@@ -29,15 +29,18 @@ from schemas.user import UserRead
 class AuthService:
     """Handles Google OAuth callbacks, refresh token rotation, and session logout."""
 
+    REDIRECT_URI_COOKIE_NAME = "oauth_redirect_uri"
+
     def __init__(self, session: AsyncSession, response: Response | None = None) -> None:
         self.session = session
         self.response = response
 
-    def build_google_auth_url(self, state: str) -> str:
+    def build_google_auth_url(self, state: str, redirect_uri: str | None = None) -> str:
         """Construct the Google OAuth 2.0 authorization consent URL."""
+        target_redirect_uri = redirect_uri or settings.resolve_oauth_redirect_uri()
         params = {
             "client_id": settings.GOOGLE_OAUTH_CLIENT_ID or "",
-            "redirect_uri": settings.GOOGLE_OAUTH_REDIRECT_URI,
+            "redirect_uri": target_redirect_uri,
             "response_type": "code",
             "scope": "openid email profile",
             "access_type": "offline",
@@ -46,15 +49,20 @@ class AuthService:
         }
         return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
-    async def _exchange_google_code(self, code: str) -> dict[str, Any]:
+    async def _exchange_google_code(
+        self,
+        code: str,
+        redirect_uri: str | None = None,
+    ) -> dict[str, Any]:
         """Exchange authorization code with Google token endpoint."""
         token_endpoint = "https://oauth2.googleapis.com/token"
+        target_redirect_uri = redirect_uri or settings.resolve_oauth_redirect_uri()
         payload = {
             "client_id": settings.GOOGLE_OAUTH_CLIENT_ID,
             "client_secret": settings.google_client_secret_value,
             "code": code,
             "grant_type": "authorization_code",
-            "redirect_uri": settings.GOOGLE_OAUTH_REDIRECT_URI,
+            "redirect_uri": target_redirect_uri,
         }
         async with httpx.AsyncClient() as client:
             resp = await client.post(token_endpoint, data=payload, timeout=15.0)
@@ -95,6 +103,9 @@ class AuthService:
         code: str,
         state: str,
         oauth_state: str | None,
+        *,
+        redirect_uri: str | None = None,
+        redirect_to_frontend: bool = False,
     ) -> Response:
         """Verify CSRF state, exchange code, upsert user and issue HercFit session tokens."""
         if not state or not oauth_state or state != oauth_state:
@@ -103,7 +114,10 @@ class AuthService:
                 detail="Invalid or missing OAuth state parameter (CSRF verification failed)",
             )
 
-        token_data = await self._exchange_google_code(code)
+        if redirect_uri:
+            token_data = await self._exchange_google_code(code, redirect_uri=redirect_uri)
+        else:
+            token_data = await self._exchange_google_code(code)
         google_access_token = token_data.get("access_token", "")
         google_refresh_token = token_data.get("refresh_token")
         google_expires_in = token_data.get("expires_in")
@@ -152,26 +166,38 @@ class AuthService:
         )
 
         user_read = UserRead.model_validate(user)
-        response = JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "access_token": access_token,
-                "token_type": "bearer",
-                "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-                "user": user_read.model_dump(mode="json"),
-            },
-        )
+        if redirect_to_frontend:
+            response: Response = RedirectResponse(
+                url=f"{settings.FRONTEND_URL.rstrip('/')}/chat",
+                status_code=status.HTTP_302_FOUND,
+            )
+        else:
+            response = JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "access_token": access_token,
+                    "token_type": "bearer",
+                    "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+                    "user": user_read.model_dump(mode="json"),
+                },
+            )
 
         self._set_refresh_cookie(response, raw_refresh_token)
         response.delete_cookie(key=STATE_COOKIE_NAME, path="/")
+        response.delete_cookie(key=self.REDIRECT_URI_COOKIE_NAME, path="/")
         return response
 
-    async def refresh_with_cookie(self, refresh_token: str | None) -> Response:
+    async def refresh_with_cookie(
+        self,
+        refresh_token: str | None,
+        *,
+        redirect_uri: str | None = None,
+    ) -> Response:
         """Start OAuth flow if refresh_token is missing, or rotate session if valid."""
         # Case A: No refresh token -> Initiate Google OAuth flow
         if not refresh_token:
             state = generate_secure_token(32)
-            auth_url = self.build_google_auth_url(state)
+            auth_url = self.build_google_auth_url(state, redirect_uri=redirect_uri)
             redirect_resp = RedirectResponse(
                 url=auth_url,
                 status_code=status.HTTP_307_TEMPORARY_REDIRECT,
@@ -185,6 +211,16 @@ class AuthService:
                 max_age=300,
                 path="/",
             )
+            if redirect_uri:
+                redirect_resp.set_cookie(
+                    key=self.REDIRECT_URI_COOKIE_NAME,
+                    value=redirect_uri,
+                    httponly=True,
+                    secure=not settings.is_dev(),
+                    samesite="lax",
+                    max_age=300,
+                    path="/",
+                )
             return redirect_resp
 
         # Case B: Refresh token provided -> Validate & rotate
