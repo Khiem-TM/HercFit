@@ -1,91 +1,71 @@
-"""Entry point for starting the HercFit Agentic API Server."""
-
+"""Run from backend/: python -m uvicorn agentic.main:app --port 8081."""
 from contextlib import asynccontextmanager
-import sys
+import asyncio
+import logging
 from pathlib import Path
+import sys
 
-_CURRENT_DIR = str(Path(__file__).resolve().parent)
-if _CURRENT_DIR not in sys.path:
-    sys.path.insert(0, _CURRENT_DIR)
+_BACKEND_ROOT = str(Path(__file__).resolve().parents[1])
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import uvicorn
+from agentic.api.v1.chat_router import router
+from agentic.config.settings import agent_settings
+from agentic.core.llm import Models
+from agentic.clients.backend_client import BackendClient
+from agentic.clients.tavily import TavilyClient
+from agentic.graph.checkpoints import persistence
+from agentic.graph.workflow import build_workflow
+from agentic.runtime import Runtime
+from knowledge_graph.service import GraphContextService
 
-from api.dependencies import get_backend_client, get_checkpoint_manager
-from api.v1.chat_router import router as chat_router
-from config.settings import agent_settings
-from core.exceptions import AgenticBaseError
-from graph.workflow import compile_agent_workflow
-from schemas.response import AgentHealthResponse
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    agent_settings.validate_agent_configuration()
-    backend_client = get_backend_client()
-    checkpoint_mgr = get_checkpoint_manager()
-    async with checkpoint_mgr.lifespan_saver() as saver:
-        app.state.workflow_graph = compile_agent_workflow(
-            checkpointer=saver,
-            backend_client=backend_client,
-        )
+def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=None):
+    @asynccontextmanager
+    async def lifespan(app):
+        settings.check()
+        backend=BackendClient(settings.BACKEND_BASE_URL,settings.BACKEND_TIMEOUT_SECONDS)
+        tavily_key=settings.TAVILY_API_KEY.get_secret_value() if settings.TAVILY_API_KEY else ''
+        tavily=tavily_client or TavilyClient(tavily_key)
         try:
-            yield
+            async with persistence(settings) as (store,saver):
+                app.state.backend=backend
+                graph_context=GraphContextService(settings,store)
+                app.state.graph_context=graph_context
+                app.state.runtime=Runtime(build_workflow(models or Models(settings),store,saver,tavily,settings,
+                                                        graph_context=graph_context),store,saver,settings)
+                reconciler=asyncio.create_task(app.state.runtime.reconcile_forever())
+                try:
+                    yield
+                finally:
+                    reconciler.cancel()
+                    await asyncio.gather(reconciler,return_exceptions=True)
+                    await graph_context.close()
         finally:
-            await backend_client.close()
-
-
-def create_agentic_app() -> FastAPI:
-    app = FastAPI(
-        title="HercFit Agentic Service",
-        version="1.0.0",
-        description="Multi-Agent AI Orchestration Service for HercFit Fitness & Nutrition.",
-        lifespan=lifespan,
-    )
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=agent_settings.CORS_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
-    )
-
-    @app.exception_handler(AgenticBaseError)
-    async def handle_agentic_error(_request: Request, exc: AgenticBaseError):
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "error": exc.code,
-                "message": exc.message,
-                "details": exc.details,
-            },
-        )
-
-    @app.get("/health", response_model=AgentHealthResponse, tags=["health"])
-    async def health() -> AgentHealthResponse:
-        return AgentHealthResponse(
-            status="ok",
-            service="hercfit-agentic",
-            default_model=agent_settings.DEFAULT_MODEL,
-            fake_model_enabled=agent_settings.USE_FAKE_MODEL,
-            checkpoint_backend=str(agent_settings.CHECKPOINT_BACKEND),
-        )
-
-    app.include_router(chat_router, prefix="/api/v1")
+            await backend.close()
+            await tavily.close()
+    app=FastAPI(title='HercFit Agentic',version='2.0.0',lifespan=lifespan)
+    app.add_middleware(CORSMiddleware,allow_origins=settings.CORS_ORIGINS,allow_credentials=True,
+                       allow_methods=['GET','POST','DELETE'],allow_headers=['Authorization','Content-Type'])
+    app.include_router(router,prefix='/api/v1')
+    @app.get('/health')
+    async def health(): return {'status':'ok','service':'hercfit-agentic'}
+    @app.get('/health/ready')
+    async def ready():
+        try:
+            await app.state.runtime.store.ready()
+            r=await app.state.backend.http.get('/health/ready')
+            r.raise_for_status()
+            return {'status':'ready','knowledge_graph_mode':settings.KG_MODE}
+        except Exception:
+            return JSONResponse({'status':'not_ready'},status_code=503)
     return app
 
+app=create_agentic_app()
 
-app = create_agentic_app()
-
-if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host=agent_settings.AGENT_HOST,
-        port=agent_settings.AGENT_PORT,
-        reload=agent_settings.is_dev(),
-        timeout_graceful_shutdown=agent_settings.GRACEFUL_SHUTDOWN_TIMEOUT,
-    )
-
+if __name__ == '__main__':
+    import uvicorn
+    uvicorn.run('agentic.main:app', host='0.0.0.0', port=agent_settings.AGENT_PORT, reload=agent_settings.MODE == 'dev')

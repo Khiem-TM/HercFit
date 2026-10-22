@@ -1,94 +1,59 @@
-"""SDK wrapper interacting directly with internal HercFit CRUD Backend API endpoints."""
+import asyncio
+import httpx
+from pydantic import TypeAdapter
+from agentic.tools.registry import REGISTRY
+from schemas.user import UserRead
 
-from typing import Any
+class BackendError(Exception):
+    def __init__(self, status, detail):
+        self.status, self.detail = status, detail
+        super().__init__(str(detail))
 
-from clients.base_http import BaseHTTPClient
-from clients.schemas import (
-    BodyMetricDTO,
-    CatalogItemDTO,
-    GoalDTO,
-    ProgressOverviewDTO,
-    UserProfileDTO,
-)
+class BackendClient:
+    def __init__(self, base_url, timeout=15, transport=None):
+        self.http = httpx.AsyncClient(base_url=base_url, timeout=timeout, transport=transport)
 
+    async def close(self):
+        await self.http.aclose()
 
-class BackendClient(BaseHTTPClient):
-    """High-level async SDK client for HercFit CRUD Backend routes."""
+    async def request(self, method, path, token, *, params=None, body=None, key=None):
+        headers = {'Authorization': 'Bearer ' + token}
+        if key:
+            headers['Idempotency-Key'] = key
+        attempts = 3 if method == 'GET' or key else 1
+        for attempt in range(attempts):
+            try:
+                response = await self.http.request(method, path, headers=headers, params=params, json=body)
+                if response.status_code >= 500 and attempt + 1 < attempts:
+                    await asyncio.sleep(.1 * 2**attempt)
+                    continue
+                if response.is_error:
+                    # Preserve structured field errors, never request headers/tokens.
+                    try:
+                        detail = response.json().get('detail', 'Backend request failed')
+                    except ValueError:
+                        detail = 'Backend request failed'
+                    raise BackendError(response.status_code, detail)
+                return response.json() if response.content else None
+            except httpx.TransportError:
+                if attempt + 1 == attempts:
+                    raise BackendError(503, 'Backend unavailable; write outcome may be unknown') from None
+                await asyncio.sleep(.1 * 2**attempt)
 
-    async def check_health(self) -> dict[str, Any]:
-        return await self.request("GET", "/health")
+    async def identity(self, token):
+        data = await self.request('GET', '/api/profile', token)
+        return UserRead.model_validate(data)
 
-    async def get_user_profile(self, *, auth_token: str | None = None) -> UserProfileDTO:
-        data = await self.request("GET", "/api/profile", auth_token=auth_token)
-        return UserProfileDTO.model_validate(data)
-
-    async def update_user_profile(
-        self, payload: dict[str, Any], *, auth_token: str | None = None
-    ) -> UserProfileDTO:
-        data = await self.request(
-            "PATCH", "/api/profile", json_body=payload, auth_token=auth_token
-        )
-        return UserProfileDTO.model_validate(data)
-
-    async def get_current_goal(self, *, auth_token: str | None = None) -> GoalDTO | None:
-        data = await self.request("GET", "/api/goals/current", auth_token=auth_token)
-        if not data:
+    async def call(self, name, args, token, key=None):
+        spec = REGISTRY[name]
+        if spec.write and not key:
+            raise RuntimeError('A write requires an approved action idempotency key')
+        args = spec.normalize(args)
+        path, params, body = spec.request_parts(args)
+        if name == 'merge_personal_info':
+            body = body['personal_info']
+        data = await self.request(spec.method, path, token, params=params, body=body, key=key)
+        if spec.output is None:
             return None
-        return GoalDTO.model_validate(data)
-
-    async def get_latest_body_metrics(
-        self, *, auth_token: str | None = None
-    ) -> BodyMetricDTO | None:
-        data = await self.request(
-            "GET", "/api/body-metrics/latest", auth_token=auth_token
-        )
-        if not data:
-            return None
-        return BodyMetricDTO.model_validate(data)
-
-    async def create_body_metric(
-        self, payload: dict[str, Any], *, auth_token: str | None = None
-    ) -> BodyMetricDTO:
-        data = await self.request(
-            "POST", "/api/body-metrics", json_body=payload, auth_token=auth_token
-        )
-        return BodyMetricDTO.model_validate(data)
-
-    async def get_progress_overview(
-        self, *, auth_token: str | None = None
-    ) -> ProgressOverviewDTO:
-        data = await self.request("GET", "/api/progress", auth_token=auth_token)
-        return ProgressOverviewDTO.model_validate(data)
-
-    async def search_foods(
-        self,
-        *,
-        search: str | None = None,
-        limit: int = 10,
-        auth_token: str | None = None,
-    ) -> list[CatalogItemDTO]:
-        params: dict[str, Any] = {"limit": limit}
-        if search:
-            params["search"] = search
-        data = await self.request(
-            "GET", "/api/foods", params=params, auth_token=auth_token
-        )
-        items = data.get("items", data) if isinstance(data, dict) else data
-        return [CatalogItemDTO.model_validate(item) for item in (items or [])]
-
-    async def search_exercises(
-        self,
-        *,
-        search: str | None = None,
-        limit: int = 10,
-        auth_token: str | None = None,
-    ) -> list[CatalogItemDTO]:
-        params: dict[str, Any] = {"limit": limit}
-        if search:
-            params["search"] = search
-        data = await self.request(
-            "GET", "/api/exercises", params=params, auth_token=auth_token
-        )
-        items = data.get("items", data) if isinstance(data, dict) else data
-        return [CatalogItemDTO.model_validate(item) for item in (items or [])]
-
+        adapter = TypeAdapter(spec.output)
+        return adapter.dump_python(adapter.validate_python(data), mode='json')

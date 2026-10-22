@@ -1,46 +1,17 @@
-"""API Request DTOs for external clients interacting with the HercFit Agentic Service."""
-
-from typing import Any
+from typing import Literal
 from uuid import uuid4
-
-from pydantic import BaseModel, Field
-
+from pydantic import BaseModel, ConfigDict, Field
 
 class ChatRequest(BaseModel):
-    """Input payload for invoking or streaming the Multi-Agent chat endpoint."""
+    model_config = ConfigDict(extra='forbid')
+    message: str = Field(min_length=1, max_length=8000)
+    session_id: str = Field(default_factory=lambda: str(uuid4()), min_length=1, max_length=128, pattern=r'^[A-Za-z0-9_-]+$')
+    # Accepted for backwards compatibility, never used as identity.
+    user_id: str | None = None
 
-    message: str = Field(
-        min_length=1,
-        max_length=8000,
-        description="User message or query sent to the Agent system.",
-        examples=["Tính giúp tôi BMI và TDEE cho nam 72kg, cao 175cm, 26 tuổi"],
-    )
-    session_id: str = Field(
-        default_factory=lambda: str(uuid4()),
-        description="Conversation session/thread ID used to persist context.",
-    )
-    user_id: str | None = Field(
-        default=None,
-        description="Optional user ID for cross-session personalization.",
-    )
-    model: str | None = Field(
-        default=None,
-        description="Optional LLM model override.",
-    )
-    stream: bool = Field(
-        default=False,
-        description="Whether to stream response chunks via Server-Sent Events.",
-    )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Arbitrary client context metadata.",
-    )
-
-
-class MemoryStoreRequest(BaseModel):
-    """Request DTO to explicitly store a long-term user fact."""
-
-    user_id: str = Field(min_length=1)
-    content: str = Field(min_length=1, max_length=2000)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
+class ConfirmationRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    session_id: str = Field(min_length=1, max_length=128)
+    action_id: str
+    revision: int = Field(ge=1)
+    decision: Literal['approve', 'reject']

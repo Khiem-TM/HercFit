@@ -1,55 +1,43 @@
-"""Shared State definitions passed between agents in the LangGraph workflow."""
-
 from typing import Annotated, Any, Literal
 from typing_extensions import TypedDict
+from pydantic import BaseModel, ConfigDict, Field
+from langchain_core.messages import AnyMessage
+from langgraph.graph.message import add_messages
 
-from pydantic import BaseModel, Field
-
-from core.llm import AnyMessage
-
-try:
-    from langgraph.graph.message import add_messages
-except ImportError:
-
-    def add_messages(left: list[Any], right: list[Any]) -> list[Any]:  # type: ignore[misc]
-        return [*(left or []), *(right or [])]
-
-
-IntentType = Literal["data_analysis", "backend_action", "general_chat", "finish"]
-AgentNodeName = Literal["router", "data_analyst", "backend_executor", "FINISH"]
-
+Domain = Literal['profile', 'metrics', 'goals', 'meals', 'trainings', 'foods', 'exercises', 'progress']
 
 class RouteDecision(BaseModel):
-    """Structured routing decision emitted by the Router/Supervisor Agent."""
-
-    intent: IntentType = Field(
-        description="Classified intent of the user's message."
-    )
-    next_agent: Literal["data_analyst", "backend_executor", "FINISH"] = Field(
-        description="Target specialist agent node or FINISH if ready to respond directly."
-    )
-    reasoning: str = Field(
-        default="",
-        description="Brief explanation for selecting this route.",
-    )
-    direct_reply: str | None = Field(
-        default=None,
-        description="Direct response when next_agent is FINISH and no specialist agent is required.",
-    )
-
+    model_config = ConfigDict(extra='forbid')
+    intent: str
+    next_agent: Literal['tool', 'research', 'orchestrator']
+    domain: Domain | None = None
+    action: Literal['answer', 'clarify', 'tool', 'research', 'finish']
+    instruction: str = Field(description='Concrete next task, not private reasoning')
+    missing_fields: list[str] = Field(default_factory=list)
+    research_query: str | None = Field(default=None, description='Only public food/exercise name, no personal details')
+    explicit_web_request: bool = False
 
 class AgentState(TypedDict, total=False):
-    """Unified state object shared across all nodes in the Multi-Agent StateGraph."""
-
     messages: Annotated[list[AnyMessage], add_messages]
-    user_id: str | None
-    session_id: str | None
-    auth_token: str | None
-    intent: IntentType | None
-    next_agent: str | None
-    reasoning: str | None
-    context: dict[str, Any]
+    user_id: str
+    session_id: str
+    session_generation: int
+    run_id: str
+    decision: dict[str, Any]
     tool_outputs: list[dict[str, Any]]
-    iteration_count: int
+    pending_action: dict[str, Any] | None
+    approved: bool
+    status: str
+    reply: str
+    tool_count: int
+    research_count: int
+    sources: list[dict[str, Any]]
+    candidate: dict[str, Any] | None
     error: str | None
-
+    graph_context: dict[str, Any] | None
+    graph_retrieval_attempted: bool
+    graph_context_run_id: str | None
+    fast_read_plan: dict[str, Any] | None
+    fast_read_complete: bool
+    telemetry: dict[str, Any]
+    execution_records: list[dict[str, Any]]
