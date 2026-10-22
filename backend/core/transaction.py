@@ -2,6 +2,7 @@
 
 from functools import wraps
 from typing import Any, Callable
+from core.idempotency import active_request, execute_idempotent
 
 
 def transaction(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -17,7 +18,14 @@ def transaction(func: Callable[..., Any]) -> Callable[..., Any]:
 
         if session is not None and getattr(session, "is_active", False):
             try:
-                result = await func(*args, **kwargs)
+                request = active_request.get()
+                service = kwargs.get("service")
+                if request is not None and service is not None:
+                    result = await execute_idempotent(
+                        request, service, lambda: func(*args, **kwargs), kwargs.get("response")
+                    )
+                else:
+                    result = await func(*args, **kwargs)
                 await session.commit()
                 return result
             except Exception:

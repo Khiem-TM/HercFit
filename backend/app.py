@@ -35,7 +35,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware, allow_origins=settings.CORS_ORIGINS, allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type"], expose_headers=["Location"],
+        allow_headers=["Authorization", "Content-Type", "Idempotency-Key"], expose_headers=["Location"],
     )
     app.include_router(api_router, prefix="/api")
 
@@ -70,7 +70,7 @@ def create_app() -> FastAPI:
         try:
             async with get_async_engine().connect() as connection:
                 revisions = set((await connection.execute(text("SELECT version_num FROM alembic_version"))).scalars())
-            if revisions == expected_heads or "0001_initial_schema" in revisions or "0003_plans_and_journals" in revisions:
+            if revisions == expected_heads:
                 return {"status": "ready"}
         except (SQLAlchemyError, OSError):
             pass

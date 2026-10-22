@@ -4,11 +4,12 @@ from fastapi import APIRouter, Response, status
 
 from core.security import REFRESH_TOKEN_COOKIE_NAME, STATE_COOKIE_NAME
 from core.transaction import transaction
+from core.idempotency import IdempotentRoute
 from routers.dependencies import UserDataServiceDep
 from schemas.common import JsonObjectInput
 from schemas.user import OnboardingInput, UserRead, UserUpdate
 
-router = APIRouter(prefix="/profile", tags=["profile"])
+router = APIRouter(route_class=IdempotentRoute, prefix="/profile", tags=["profile"])
 
 
 @router.get("", response_model=UserRead)

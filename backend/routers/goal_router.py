@@ -5,10 +5,11 @@ from uuid import UUID
 from fastapi import APIRouter, Response, status
 
 from core.transaction import transaction
+from core.idempotency import IdempotentRoute
 from routers.dependencies import PaginationDep, UserDataServiceDep
 from schemas.goal import GoalCreate, GoalRead, GoalUpdateRequest
 
-router = APIRouter(prefix="/goals", tags=["goals"])
+router = APIRouter(route_class=IdempotentRoute, prefix="/goals", tags=["goals"])
 
 
 @router.post("/confirm", response_model=GoalRead, status_code=status.HTTP_201_CREATED)

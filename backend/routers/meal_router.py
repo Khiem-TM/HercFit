@@ -3,12 +3,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Response
 from core.transaction import transaction
+from core.idempotency import IdempotentRoute
 from models.journals import Meal
 from schemas.journals import MealCreate, MealReplace, MealRead
 from routers.dependencies import JournalServiceDep, JournalQueryDep, VersionQuery
 from routers.responses import created
 
-router = APIRouter(prefix="/meals", tags=["meals"])
+router = APIRouter(route_class=IdempotentRoute, prefix="/meals", tags=["meals"])
 
 
 @router.post("", response_model=MealRead, status_code=201)

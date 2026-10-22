@@ -3,12 +3,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Response
 from core.transaction import transaction
+from core.idempotency import IdempotentRoute
 from models.journals import Training
 from schemas.journals import TrainingCreate, TrainingReplace, TrainingRead
 from routers.dependencies import JournalServiceDep, JournalQueryDep, VersionQuery
 from routers.responses import created
 
-router = APIRouter(prefix="/trainings", tags=["trainings"])
+router = APIRouter(route_class=IdempotentRoute, prefix="/trainings", tags=["trainings"])
 
 
 @router.post("", response_model=TrainingRead, status_code=201)

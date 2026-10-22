@@ -5,10 +5,11 @@ from uuid import UUID
 from fastapi import APIRouter, Response, status
 
 from core.transaction import transaction
+from core.idempotency import IdempotentRoute
 from routers.dependencies import BodyMetricQueryDep, UserDataServiceDep
 from schemas.body_metrics import BodyMetricCreate, BodyMetricRead, BodyMetricReplace
 
-router = APIRouter(prefix="/body-metrics", tags=["body-metrics"])
+router = APIRouter(route_class=IdempotentRoute, prefix="/body-metrics", tags=["body-metrics"])
 
 
 @router.post("", response_model=BodyMetricRead, status_code=status.HTTP_201_CREATED)

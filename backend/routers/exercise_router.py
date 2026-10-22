@@ -3,13 +3,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Response
 from core.transaction import transaction
+from core.idempotency import IdempotentRoute
 from models.exercises import Exercise
 from schemas.exercises import ExerciseCreate, ExerciseRead, ExerciseUpdateRequest
 from schemas.tracking import VersionedRequest
 from routers.dependencies import CatalogServiceDep, ExerciseQueryDep, VersionQuery
 from routers.responses import created
 
-router = APIRouter(prefix="/exercises", tags=["exercises"])
+router = APIRouter(route_class=IdempotentRoute, prefix="/exercises", tags=["exercises"])
 
 
 @router.post("", response_model=ExerciseRead, status_code=201)
