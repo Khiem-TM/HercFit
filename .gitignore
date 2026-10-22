@@ -122,4 +122,6 @@ pids/
 *.pid.lock
 
 backend/docs
-
+design/
+backend/tests/
+backend/agentic/tests

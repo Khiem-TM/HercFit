@@ -58,6 +58,92 @@ services:
     networks:
       - hercfit-network
 
+  agentic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: agentic
+    container_name: hercfit-agentic-api
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+      - path: agentic/.env
+        required: false
+    environment:
+      MODE: ${MODE:-dev}
+      AGENT_PORT: ${AGENT_PORT:-8081}
+      BACKEND_BASE_URL: http://backend:8080
+      AGENT_DATABASE_URL: postgresql://${POSTGRES_USER:-hercfit}:${POSTGRES_PASSWORD:-hercfit_secret}@postgres:5432/${POSTGRES_DB:-hercfit_db}
+      DEFAULT_PROVIDER: fpt
+      DEFAULT_MODEL: DeepSeek-V4-Flash
+      KG_MODE: ${KG_MODE:-off}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-hercfit-graph-dev}
+    ports:
+      - "${AGENT_PORT:-8081}:8081"
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - hercfit-network
+
+  neo4j:
+    image: neo4j:2026.10.0
+    profiles: [kg]
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-hercfit-graph-dev}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-hercfit-graph-dev}
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+    ports:
+      - "127.0.0.1:${NEO4J_HTTP_PORT:-7474}:7474"
+      - "127.0.0.1:${NEO4J_BOLT_PORT:-7687}:7687"
+    volumes: [neo4j_data:/data]
+    healthcheck:
+      test: [CMD-SHELL, 'cypher-shell -u neo4j -p "$$NEO4J_PASSWORD" "RETURN 1" >/dev/null 2>&1']
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    networks: [hercfit-network]
+
+  kg-worker:
+    profiles: [kg]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: agentic
+    restart: unless-stopped
+    command: [python, -m, knowledge_graph.worker, run]
+    environment:
+      AGENT_DATABASE_URL: postgresql://${POSTGRES_USER:-hercfit}:${POSTGRES_PASSWORD:-hercfit_secret}@postgres:5432/${POSTGRES_DB:-hercfit_db}
+      KG_BACKEND_DATABASE_URL: postgresql://${POSTGRES_USER:-hercfit}:${POSTGRES_PASSWORD:-hercfit_secret}@postgres:5432/${POSTGRES_DB:-hercfit_db}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-hercfit-graph-dev}
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      agentic:
+        condition: service_healthy
+    networks: [hercfit-network]
+    healthcheck:
+      disable: true
+
   streamlit:
     build:
       context: .
@@ -84,6 +170,7 @@ services:
       - hercfit-network
 
 volumes:
+  neo4j_data:
   postgres_data:
     name: hercfit_postgres_data
 

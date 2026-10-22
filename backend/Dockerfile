@@ -35,12 +35,22 @@ EXPOSE 8501
 CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
 
 # =============================================================================
-# Target: backend (Default FastAPI + LangGraph Agent Service)
+# Target: backend (Default FastAPI CRUD & OAuth Service)
 # =============================================================================
 FROM base AS backend
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:${PORT:-8080}/health || exit 1
 
-CMD ["python", "run_service.py"]
+CMD ["sh", "-c", "alembic upgrade head && python run_service.py"]
+
+# =============================================================================
+# Target: agentic (LangGraph Multi-Agent Service)
+# =============================================================================
+FROM base AS agentic
+EXPOSE 8081
+HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -fsS http://localhost:${AGENT_PORT:-8081}/health || exit 1
+
+CMD ["python", "-m", "uvicorn", "agentic.main:app", "--host", "0.0.0.0", "--port", "8081", "--reload"]
 

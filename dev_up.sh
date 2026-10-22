@@ -11,6 +11,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="${ROOT_DIR}/backend"
 FRONTEND_DIR="${ROOT_DIR}/frontend"
 COMPOSE_FILE="${BACKEND_DIR}/docker-compose.yml"
+FRONTEND_PID_FILE="${ROOT_DIR}/pids/frontend.pid"
+FRONTEND_LOG="${ROOT_DIR}/frontend.log"
+FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+VITE_ENTRY="${FRONTEND_DIR}/node_modules/vite/bin/vite.js"
 
 # Colors for terminal output
 RED='\033[0;31m'
@@ -62,20 +66,30 @@ ${BOLD}Commands:${NC}
   logs        Xem logs trực tiếp từ hạ tầng Docker
   status      Kiểm tra trạng thái các dịch vụ
 
-${BOLD}Options (cho lệnh 'up'):${NC}
+${BOLD}Options:${NC}
   -d, --detach      Chạy ngầm (detached mode)
   --ui, --streamlit Khởi chạy kèm giao diện Streamlit UI (port 8501)
   --db-only         Chỉ khởi chạy PostgreSQL database trong Docker
+  --frontend-only   Chỉ chạy landing page, không cần Docker hoặc Backend
   --local           Chạy PostgreSQL trên Docker, còn Backend & Frontend chạy trực tiếp trên máy host
+  --kg              Khởi chạy thêm Neo4j và worker Knowledge Graph (KG_MODE mặc định off)
   --no-build        Không build lại Docker image khi khởi chạy
-  -h, --help        Hiển thị hướng dẫn này"
+  -h, --help        Hiển thị hướng dẫn này
+
+${BOLD}Chạy nhanh landing page:${NC}
+  ./dev_up.sh --frontend-only
+  ./dev_up.sh --frontend-only -d
+  ./dev_up.sh down --frontend-only
+  FRONTEND_PORT=5174 ./dev_up.sh --frontend-only"
 }
 
 # Parse arguments
 COMMAND="up"
 DETACH=false
 WITH_UI=false
+WITH_KG=false
 DB_ONLY=false
+FRONTEND_ONLY=false
 LOCAL_MODE=false
 BUILD_FLAG="--build"
 
@@ -95,6 +109,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --db-only)
             DB_ONLY=true
+            shift
+            ;;
+        --kg)
+            WITH_KG=true
+            shift
+            ;;
+        --frontend-only)
+            FRONTEND_ONLY=true
             shift
             ;;
         --local)
@@ -117,15 +139,43 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-COMPOSE_CMD="$(get_compose_cmd)"
+if [[ "${FRONTEND_ONLY}" == true ]] && { [[ "${DB_ONLY}" == true ]] || [[ "${LOCAL_MODE}" == true ]] || [[ "${WITH_UI}" == true ]] || [[ "${WITH_KG}" == true ]]; }; then
+    log_error "--frontend-only không kết hợp với --db-only, --local, --ui hoặc --kg."
+    exit 1
+fi
+
+COMPOSE_CMD=""
+if [[ "${FRONTEND_ONLY}" == false ]]; then
+    COMPOSE_CMD="$(get_compose_cmd)"
+fi
 FRONTEND_PID=""
 BACKEND_PID=""
+KG_WORKER_PID=""
+
+frontend_is_running() {
+    [[ -f "${FRONTEND_PID_FILE}" ]] || return 1
+    local pid command_line
+    pid="$(cat "${FRONTEND_PID_FILE}")"
+    [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
+    kill -0 "${pid}" 2>/dev/null || return 1
+    command_line="$(ps -p "${pid}" -o args= 2>/dev/null)" || return 1
+    [[ "${command_line}" == *"${VITE_ENTRY}"* ]]
+}
+
+stop_frontend() {
+    if frontend_is_running; then
+        log_info "Đang dừng Frontend dev server..."
+        kill "$(cat "${FRONTEND_PID_FILE}")" 2>/dev/null || true
+    fi
+    rm -f "${FRONTEND_PID_FILE}"
+}
 
 cleanup() {
     local exit_code=$?
     if [[ -n "${FRONTEND_PID}" ]] && kill -0 "${FRONTEND_PID}" 2>/dev/null; then
         log_info "Đang dừng Frontend dev server (PID ${FRONTEND_PID})..."
         kill "${FRONTEND_PID}" 2>/dev/null || true
+        rm -f "${FRONTEND_PID_FILE}"
     fi
     if [[ -n "${BACKEND_PID}" ]] && kill -0 "${BACKEND_PID}" 2>/dev/null; then
         log_info "Đang dừng Local Backend server (PID ${BACKEND_PID})..."
@@ -133,33 +183,59 @@ cleanup() {
     fi
     exit "${exit_code}"
 }
-trap cleanup INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 start_frontend_if_available() {
     if [[ -f "${FRONTEND_DIR}/package.json" ]]; then
+        if frontend_is_running; then
+            log_success "Frontend đã chạy (PID: $(cat "${FRONTEND_PID_FILE}"))."
+            return
+        fi
+        if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+            log_error "Cần Node.js và npm để chạy landing page."
+            return 1
+        fi
         log_info "Phát hiện mã nguồn Frontend tại ${FRONTEND_DIR}. Đang chuẩn bị khởi chạy..."
         (
             cd "${FRONTEND_DIR}"
-            if [[ ! -d "node_modules" ]]; then
+            if [[ ! -f "${VITE_ENTRY}" ]]; then
                 log_info "Đang cài đặt dependencies cho Frontend..."
-                if command -v pnpm >/dev/null 2>&1 && [[ -f "pnpm-lock.yaml" ]]; then
-                    pnpm install
-                elif command -v yarn >/dev/null 2>&1 && [[ -f "yarn.lock" ]]; then
-                    yarn install
-                else
-                    npm install
-                fi
-            fi
-
-            if [[ "${DETACH}" == true ]]; then
-                nohup npm run dev > "${ROOT_DIR}/frontend.log" 2>&1 &
-                log_success "Frontend đang chạy ngầm (logs: ${ROOT_DIR}/frontend.log)"
-            else
-                npm run dev &
-                FRONTEND_PID=$!
-                log_success "Frontend dev server đã khởi chạy (PID: ${FRONTEND_PID})"
+                npm ci
             fi
         )
+        mkdir -p "$(dirname "${FRONTEND_PID_FILE}")"
+        # exec giữ đúng PID của Vite để Ctrl+C và down dừng đúng server.
+        (
+            cd "${FRONTEND_DIR}"
+            exec nohup node "${VITE_ENTRY}" --host 127.0.0.1 --port "${FRONTEND_PORT}" --strictPort
+        ) > "${FRONTEND_LOG}" 2>&1 < /dev/null &
+        FRONTEND_PID=$!
+        echo "${FRONTEND_PID}" > "${FRONTEND_PID_FILE}"
+        local attempt
+        for ((attempt=1; attempt<=30; attempt++)); do
+            if ! kill -0 "${FRONTEND_PID}" 2>/dev/null; then
+                log_error "Không khởi chạy được Frontend. Xem ${FRONTEND_LOG}."
+                return 1
+            fi
+            if curl -fsS --max-time 1 "http://127.0.0.1:${FRONTEND_PORT}/" >/dev/null 2>&1; then
+                # Không báo thành công nếu cổng đang thuộc một server khác.
+                sleep 1
+                kill -0 "${FRONTEND_PID}" 2>/dev/null || {
+                    log_error "Frontend đã thoát. Kiểm tra cổng ${FRONTEND_PORT} và ${FRONTEND_LOG}."
+                    return 1
+                }
+                log_success "Landing page: http://localhost:${FRONTEND_PORT} (logs: ${FRONTEND_LOG})"
+                if [[ "${DETACH}" == true ]]; then
+                    FRONTEND_PID=""
+                fi
+                return
+            fi
+            sleep 1
+        done
+        log_error "Frontend chưa sẵn sàng. Xem ${FRONTEND_LOG}."
+        return 1
     else
         log_warn "Thư mục /frontend chưa có package.json — bỏ qua bước khởi chạy Frontend."
     fi
@@ -193,33 +269,77 @@ print_summary() {
     if [[ "${WITH_UI}" == true ]]; then
         echo -e "  • ${BOLD}Streamlit UI:${NC}     http://localhost:${STREAMLIT_PORT:-8501}"
     fi
-    if [[ -f "${FRONTEND_DIR}/package.json" ]]; then
-        echo -e "  • ${BOLD}Frontend App:${NC}     http://localhost:5173"
+    if [[ "${WITH_KG}" == true ]]; then
+        echo -e "  • ${BOLD}Neo4j Browser:${NC}    http://localhost:${NEO4J_HTTP_PORT:-7474} (KG_MODE=${KG_MODE:-off})"
+    fi
+    if [[ "${DB_ONLY}" == false ]] && [[ -f "${FRONTEND_DIR}/package.json" ]]; then
+        echo -e "  • ${BOLD}Frontend App:${NC}     http://localhost:${FRONTEND_PORT}"
     fi
     echo -e "${CYAN}=================================================================${NC}"
     echo -e "  Lệnh hữu ích: ${YELLOW}./dev_up.sh logs${NC} | ${YELLOW}./dev_up.sh status${NC} | ${YELLOW}./dev_up.sh down${NC}"
     echo ""
 }
 
+if [[ "${FRONTEND_ONLY}" == true ]]; then
+    case "${COMMAND}" in
+        down|stop) stop_frontend ;;
+        status)
+            if frontend_is_running; then
+                log_success "Frontend đang chạy (PID: $(cat "${FRONTEND_PID_FILE}"))."
+            else
+                log_info "Frontend chưa chạy."
+            fi
+            ;;
+        logs)
+            [[ -f "${FRONTEND_LOG}" ]] || { log_error "Chưa có log Frontend."; exit 1; }
+            tail -n 50 -f "${FRONTEND_LOG}"
+            ;;
+        up|restart)
+            if [[ "${COMMAND}" == restart ]]; then
+                stop_frontend
+                sleep 1
+            fi
+            start_frontend_if_available
+            if [[ -n "${FRONTEND_PID}" ]]; then
+                log_info "Nhấn Ctrl+C để dừng landing page."
+                wait "${FRONTEND_PID}"
+            fi
+            ;;
+    esac
+    exit 0
+fi
+
 case "${COMMAND}" in
     down|stop)
         log_info "Đang dừng toàn bộ dịch vụ HercFit..."
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full down
+        stop_frontend
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg down
         log_success "Đã dừng toàn bộ hệ thống."
         ;;
 
     restart)
         log_info "Đang khởi động lại hệ thống HercFit..."
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full down
-        exec "$0" up
+        stop_frontend
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg down
+        RESTART_ARGS=(up)
+        [[ "${WITH_KG}" == true ]] && RESTART_ARGS+=(--kg)
+        [[ "${LOCAL_MODE}" == true ]] && RESTART_ARGS+=(--local)
+        [[ "${WITH_UI}" == true ]] && RESTART_ARGS+=(--ui)
+        [[ "${DETACH}" == true ]] && RESTART_ARGS+=(--detach)
+        exec "$0" "${RESTART_ARGS[@]}"
         ;;
 
     logs)
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full logs -f
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg logs -f
         ;;
 
     status)
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full ps
+        if frontend_is_running; then
+            log_success "Frontend đang chạy (PID: $(cat "${FRONTEND_PID_FILE}"))."
+        else
+            log_info "Frontend chưa chạy."
+        fi
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg ps
         ;;
 
     up)
@@ -233,6 +353,9 @@ case "${COMMAND}" in
         if [[ "${DB_ONLY}" == true ]]; then
             log_info "Đang khởi tạo PostgreSQL Database qua Docker..."
             ${COMPOSE_CMD} -f "${COMPOSE_FILE}" up -d postgres
+            if [[ "${WITH_KG}" == true ]]; then
+                ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile kg up -d neo4j
+            fi
             print_summary
             exit 0
         fi
@@ -240,6 +363,27 @@ case "${COMMAND}" in
         if [[ "${LOCAL_MODE}" == true ]]; then
             log_info "Chế độ LOCAL: Khởi chạy PostgreSQL trong Docker + Backend/Frontend trực tiếp trên máy..."
             ${COMPOSE_CMD} -f "${COMPOSE_FILE}" up -d postgres
+
+            if [[ "${WITH_KG}" == true ]]; then
+                ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile kg up -d neo4j
+                log_info "Chuẩn bị migrations và worker KG bằng Python môi trường dự án..."
+                KG_PYTHON="${ROOT_DIR}/.venv/bin/python"
+                [[ -x "${KG_PYTHON}" ]] || KG_PYTHON="$(command -v python3)"
+                (
+                    cd "${BACKEND_DIR}"
+                    export POSTGRES_HOST=localhost
+                    "${KG_PYTHON}" -m alembic upgrade head
+                    "${KG_PYTHON}" -m agentic.migrate
+                )
+                (
+                    cd "${BACKEND_DIR}"
+                    export NEO4J_URI="bolt://localhost:${NEO4J_BOLT_PORT:-7687}"
+                    export NEO4J_PASSWORD="${NEO4J_PASSWORD:-hercfit-graph-dev}"
+                    exec "${KG_PYTHON}" -m knowledge_graph.worker run
+                ) &
+                KG_WORKER_PID=$!
+                trap '[[ -z "${KG_WORKER_PID}" ]] || kill "${KG_WORKER_PID}" 2>/dev/null || true' EXIT
+            fi
 
             log_info "Đang khởi chạy Backend FastAPI server tại ${BACKEND_DIR}..."
             (
@@ -260,7 +404,10 @@ case "${COMMAND}" in
         # Standard Docker mode for Backend + Database
         PROFILE_ARGS=()
         if [[ "${WITH_UI}" == true ]]; then
-            PROFILE_ARGS=(--profile ui)
+            PROFILE_ARGS+=(--profile ui)
+        fi
+        if [[ "${WITH_KG}" == true ]]; then
+            PROFILE_ARGS+=(--profile kg)
         fi
 
         log_info "Đang khởi chạy hạ tầng Backend & Database qua Docker Compose..."
