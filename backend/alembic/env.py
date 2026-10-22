@@ -23,7 +23,7 @@ def migration_url() -> str:
     return (
         config.get_main_option("sqlalchemy.url")
         or os.getenv("MIGRATION_DATABASE_URL")
-        or str(get_sqlalchemy_url())
+        or get_sqlalchemy_url().render_as_string(hide_password=False)
     )
 
 
@@ -79,7 +79,9 @@ async def run_async_migrations() -> None:
     """Create an AsyncEngine and run migrations in online mode."""
     connectable = create_async_engine(migration_url(), poolclass=pool.NullPool)
     try:
-        async with connectable.connect() as connection:
+        # Reflection/version alignment above starts a transaction before Alembic
+        # configures its context. Own that outer transaction so upgrades commit.
+        async with connectable.begin() as connection:
             await connection.run_sync(do_run_migrations)
     finally:
         await connectable.dispose()

@@ -19,7 +19,7 @@ from schemas.common import UserScope
 from schemas.journals import MealCreate, TrainingCreate
 from schemas.tracking import JournalQuery
 
-
+# Lớp cơ sở cho các nhật ký hoạt động thực tế (Training và Meal) --> Đều có tính chất ghi và kế thừa lại Object này
 class Journal(BaseModel):
     __abstract__ = True
     TIME_FIELD: ClassVar[str]
