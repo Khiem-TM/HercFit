@@ -8,23 +8,19 @@ httpx>=0.27.2
 pyjwt>=2.9.0
 
 # LangChain & LangGraph Core
-langchain-core>=0.3.25
-langgraph>=0.2.60
-langgraph-supervisor>=0.0.8
-langgraph-checkpoint-postgres>=2.0.9
+langchain-core==1.6.12
+langgraph==1.2.16
+langgraph-checkpoint-postgres==3.2.0
 langsmith>=0.2.3
 
 # Single OpenAI-compatible model endpoint
-langchain-openai>=0.2.12
+langchain-openai==1.7.2
 openai>=1.57.0
-
-# AG-UI Protocol
-ag-ui-protocol>=0.1.0
-ag-ui-langgraph>=0.0.1
 
 # Databases, ORM & Migrations
 psycopg[binary,pool]>=3.2.3
 psycopg-pool>=3.2.4
+neo4j==6.4.0
 sqlalchemy[asyncio]>=2.0.36
 alembic>=1.14.0
 uuid6>=2024.7.12
