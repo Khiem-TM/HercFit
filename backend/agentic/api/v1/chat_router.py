@@ -57,3 +57,8 @@ async def history(session_id:str,request:Request,ctx=Depends(authenticated)):
 @router.delete('/history/{session_id}')
 async def clear(session_id:str,request:Request,ctx=Depends(authenticated)):
     return await request.app.state.runtime.clear(session_id,ctx.user_id)
+
+@router.get('/knowledge-graph')
+async def knowledge_graph(request:Request,ctx=Depends(authenticated)):
+    from knowledge_graph.visualization import personal_graph
+    return await personal_graph(request.app.state.graph_context,ctx.user_id)

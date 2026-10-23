@@ -174,6 +174,16 @@ class EndurancePerformance(InputSchema):
 
 
 class EndurancePerformanceRead(EndurancePerformance):
+    @model_validator(mode='before')
+    @classmethod
+    def accept_serialized_pace(cls, value):
+        # Responses include this computed field; derive it again from validated
+        # duration/distance when reading a response or idempotency replay.
+        if isinstance(value, dict):
+            value = dict(value)
+            value.pop('pace_seconds_per_km', None)
+        return value
+
     @computed_field
     @property
     def pace_seconds_per_km(self) -> float:

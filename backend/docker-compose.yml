@@ -105,7 +105,7 @@ services:
     restart: unless-stopped
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-hercfit-graph-dev}
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-hercfit-graph-dev}
+      KG_HEALTH_PASSWORD: ${NEO4J_PASSWORD:-hercfit-graph-dev}
       NEO4J_server_memory_heap_initial__size: 256m
       NEO4J_server_memory_heap_max__size: 512m
       NEO4J_server_memory_pagecache_size: 256m
@@ -114,7 +114,7 @@ services:
       - "127.0.0.1:${NEO4J_BOLT_PORT:-7687}:7687"
     volumes: [neo4j_data:/data]
     healthcheck:
-      test: [CMD-SHELL, 'cypher-shell -u neo4j -p "$$NEO4J_PASSWORD" "RETURN 1" >/dev/null 2>&1']
+      test: [CMD-SHELL, 'cypher-shell -u neo4j -p "$$KG_HEALTH_PASSWORD" "RETURN 1" >/dev/null 2>&1']
       interval: 10s
       timeout: 5s
       retries: 15

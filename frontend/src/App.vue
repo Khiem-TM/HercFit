@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { Loader2 } from "lucide-vue-next";
 import SiteHeader from "./components/landing/SiteHeader.vue";
 import HeroSection from "./components/landing/HeroSection.vue";
@@ -11,9 +11,11 @@ import SiteFooter from "./components/landing/SiteFooter.vue";
 import ChatPage from "./views/ChatPage.vue";
 import { useAuth } from "./composables/useAuth";
 
+import { authenticatedDestination } from './features/onboarding/model';
+const OnboardingPage = defineAsyncComponent(() => import('./views/OnboardingPage.vue'));
 const selectedAgent = shallowRef("");
 const currentPath = ref(window.location.pathname);
-const { isAuthenticated, isLoading, error, bootstrapAuth, loginWithGoogle } = useAuth();
+const { user, isAuthenticated, isLoading, error, bootstrapAuth, loginWithGoogle } = useAuth();
 
 function syncPath(): void {
   currentPath.value = window.location.pathname;
@@ -26,24 +28,25 @@ function navigateTo(path: string): void {
   currentPath.value = path;
 }
 
-const isChatOrCallbackRoute = computed(
+const isProtectedRoute = computed(
   () =>
     currentPath.value.startsWith("/chat") ||
+    currentPath.value.startsWith("/onboarding") ||
     currentPath.value.startsWith("/auth/callback"),
 );
 
-watch(isAuthenticated, (authed) => {
-  if (authed && !currentPath.value.startsWith("/chat")) {
-    navigateTo("/chat");
+watch([isAuthenticated, isLoading, () => user.value?.is_onboarding, currentPath], () => {
+  if (!isAuthenticated.value || isLoading.value) return;
+  const destination = authenticatedDestination(currentPath.value, user.value?.is_onboarding === true);
+  if (destination !== currentPath.value) {
+    window.history.replaceState({}, '', destination);
+    currentPath.value = destination;
   }
-});
+}, { immediate: true });
 
 onMounted(async () => {
   window.addEventListener("popstate", syncPath);
-  const authed = await bootstrapAuth();
-  if (authed && !currentPath.value.startsWith("/chat")) {
-    navigateTo("/chat");
-  }
+  await bootstrapAuth();
 });
 
 onBeforeUnmount(() => {
@@ -53,11 +56,12 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- Authenticated Chat Workspace -->
-  <ChatPage v-if="isAuthenticated" />
+  <OnboardingPage v-if="isAuthenticated && !isLoading && !user?.is_onboarding" />
+  <ChatPage v-else-if="isAuthenticated && !isLoading" />
 
   <!-- Loading Auth Session / Exchanging Google OAuth Code -->
   <div
-    v-else-if="isChatOrCallbackRoute && isLoading"
+    v-else-if="(isProtectedRoute || isAuthenticated) && isLoading"
     class="flex h-screen w-screen flex-col items-center justify-center bg-background text-primary"
   >
     <Loader2 class="h-7 w-7 animate-spin text-primary" />
@@ -68,7 +72,7 @@ onBeforeUnmount(() => {
 
   <!-- Unauthenticated Gate on /chat or Failed Callback -->
   <div
-    v-else-if="isChatOrCallbackRoute && !isAuthenticated"
+    v-else-if="isProtectedRoute && !isAuthenticated"
     class="relative flex h-screen w-screen flex-col items-center justify-center bg-background px-4 text-primary"
   >
     <div class="grain-overlay pointer-events-none" aria-hidden="true" />

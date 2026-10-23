@@ -3,6 +3,7 @@ import type {
   BodyMetricCreatePayload,
   BodyMetricRead,
   GoalRead,
+  OnboardingPayload,
   UserProfile,
   UserUpdatePayload,
 } from '@/types/api'
@@ -214,6 +215,29 @@ export function useAuth() {
     return created
   }
 
+  async function completeOnboarding(payload: OnboardingPayload, idempotencyKey: string): Promise<void> {
+    const resp = await authFetch('/api/profile/onboarding', {
+      method: 'POST',
+      signal: AbortSignal.timeout(30000),
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify(payload),
+    })
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}))
+      let message = 'Không thể lưu thông tin. Vui lòng thử lại.'
+      if (resp.status === 409) message = 'Hồ sơ hoặc mục tiêu đã thay đổi. Vui lòng tải lại trang để kiểm tra trước khi tiếp tục.'
+      else if (Array.isArray(data.detail)) message = 'Một số thông tin chưa hợp lệ. Vui lòng kiểm tra lại họ tên, số đo và ngày mục tiêu.'
+      else if (typeof data.detail === 'string') message = data.detail
+      const failure = new Error(message) as Error & { status: number }
+      failure.status = resp.status
+      throw failure
+    }
+    const profile: UserProfile = await resp.json()
+    // Refresh auxiliary facts before routing away from onboarding.
+    await fetchProfileDetails()
+    user.value = profile
+  }
+
   async function logout(): Promise<void> {
     try {
       if (accessToken.value) {
@@ -241,6 +265,7 @@ export function useAuth() {
     bootstrapAuth,
     loginWithGoogle,
     fetchProfileDetails,
+    completeOnboarding,
     updateProfile,
     recordBodyMetric,
     logout,

@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Định nghĩa cấu hình cho Agentic Service
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(str(Path(__file__).parents[2] / '.env'), str(Path(__file__).parents[1] / '.env')), extra='ignore', env_ignore_empty=True)
     MODE: str = 'dev'

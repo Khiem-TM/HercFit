@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { defineAsyncComponent, onMounted, ref } from 'vue'
 import { Plus, Sparkles } from 'lucide-vue-next'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmptyState from '@/components/chat/ChatEmptyState.vue'
@@ -28,6 +28,8 @@ const {
   confirmAction,
 } = useChat()
 
+const KnowledgePanel = defineAsyncComponent(() => import('@/components/knowledge/KnowledgePanel.vue'))
+const isKnowledgeOpen = ref(false)
 const isUserModalOpen = ref(false)
 
 onMounted(async () => {
@@ -83,6 +85,7 @@ function handleSelectPrompt(prompt: string): void {
           </span>
         </div>
 
+        <button type="button" class="ml-auto mr-3 rounded-full border border-[#d4b77d]/25 px-3 py-1.5 text-xs text-[#d4b77d] hover:bg-[#d4b77d]/10" :aria-expanded="isKnowledgeOpen" @click="isKnowledgeOpen = !isKnowledgeOpen">✧ Tri thức của tôi</button>
         <button
           v-if="hasMessages"
           type="button"
@@ -149,6 +152,8 @@ function handleSelectPrompt(prompt: string): void {
         </div>
       </template>
     </main>
+
+    <KnowledgePanel v-if="isKnowledgeOpen" :busy="isStreaming || isConfirming" :activity="activeNodeLabel" :revision="messages.length + Number(isStreaming) + Number(isConfirming) + sessions.length" @close="isKnowledgeOpen = false" />
 
     <!-- User Profile, Metrics & Settings Modal -->
     <UserSettingsModal

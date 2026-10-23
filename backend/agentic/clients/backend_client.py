@@ -19,7 +19,7 @@ class BackendClient:
     async def request(self, method, path, token, *, params=None, body=None, key=None):
         headers = {'Authorization': 'Bearer ' + token}
         if key:
-            headers['Idempotency-Key'] = key
+            headers['Idempotency-Key'] = key # Trống trùng lặp
         attempts = 3 if method == 'GET' or key else 1
         for attempt in range(attempts):
             try:

@@ -13,13 +13,16 @@ class Runtime:
     def __init__(self,graph,store,saver,settings):
         self.graph,self.store,self.saver,self.settings=graph,store,saver,settings
 
+    # cấu hình cho 1 lượt chạy (thread_id) 
     def config(self,thread_id):
         return {'configurable':{'thread_id':thread_id},'recursion_limit':self.settings.MAX_GRAPH_STEPS}
 
-    async def state(self,thread_id):
+    # Truy xuất state của graph runner 
+    async def state(self,thread_id): #thread_id -- định danh 1 lượt chạy trong 1 session_id (Graph Runner)
         if not thread_id: return None
         return await self.graph.aget_state(self.config(thread_id))
 
+    # Đọc lại data từ checkpoint
     async def journal_snapshot(self, snapshot):
         if not snapshot or not snapshot.values:
             return
@@ -27,10 +30,9 @@ class Runtime:
             checkpoint_id = (snapshot.config or {}).get('configurable',{}).get('checkpoint_id')
             await self.store.record_execution_state(snapshot.values, checkpoint_id)
         except Exception as exc:
-            # Checkpoints remain the recovery source. A delayed graph projection
-            # must not change the result of an accepted business operation.
             logger.warning('kg_journal_deferred error_type=%s', type(exc).__name__)
 
+    # Chạy reconcile_forever() để đồng bộ các checkpoint với backend
     async def reconcile_forever(self):
         from agentic.memory.reconcile import reconcile_checkpoints
         while True:
@@ -40,6 +42,7 @@ class Runtime:
                 logger.warning('kg_reconcile_deferred error_type=%s', type(exc).__name__)
             await asyncio.sleep(getattr(self.settings,'KG_RECONCILE_SECONDS',5))
 
+    # Trả response --> frontend
     def response(self,state):
         pending=state.get('pending_action')
         is_pending=state.get('status')=='pending_confirmation'
@@ -50,18 +53,16 @@ class Runtime:
             sources=state.get('sources',[]),tool_outputs=state.get('tool_outputs',[]))
 
     async def run(self,input,thread_id,emit=None):
-        config=self.config(thread_id)
+        config=self.config(thread_id) # Lấy cấu hình
         try:
             async with asyncio.timeout(self.settings.RUN_TIMEOUT_SECONDS):
-                async for update in self.graph.astream(input,config,stream_mode='updates'):
+                async for update in self.graph.astream(input,config,stream_mode='updates'): #loop liên tục --> Phát hiện update node --> cập nhật state
                     for node,values in update.items():
                         if node=='__interrupt__': continue
                         logger.info('agent_step',extra={'thread_id':thread_id,'node':node,'status':(values or {}).get('status')})
                         if emit:
                             await emit({'type':'progress','node':node})
         except Exception as exc:
-            # The last checkpoint remains recoverable; don't replace an unknown
-            # write outcome with a new action/key.
             logger.warning('agent_run_failed',extra={'thread_id':thread_id,'error_type':type(exc).__name__})
             snapshot=await self.state(thread_id)
             await self.journal_snapshot(snapshot)

@@ -38,3 +38,27 @@ build time; no Tailwind CDN script is required.
 
 The previous dashboard, views, router, stores, API service and related
 application dependencies have been removed. Backend work is separate.
+
+## Onboarding
+
+New authenticated users (`is_onboarding=false`) are routed to `/onboarding`.
+The four steps collect profile/activity notes, optional initial measurements,
+optional goal, and explicit confirmation. Completed users (`is_onboarding=true`)
+are routed to `/chat`, including when visiting `/onboarding` directly.
+
+The screen submits one `POST /api/profile/onboarding` using the existing atomic
+backend contract. Omitted measurement/goal sections are left out of the payload.
+Activity and user-provided notes use `personal_info.activity` and
+`personal_info.preferences`; other fields in those groups are preserved.
+Measurements use backend precision, and numeric goal targets use the `eq`
+discriminator with `kg` units. An existing active goal is kept.
+
+Drafts stay in component memory; nothing is saved before final confirmation.
+Uncertain network outcomes retain the same request and idempotency key for retry.
+Editing is unlocked after a definitive validation failure. A successful save
+refreshes profile data and enters the chat workspace.
+
+Run `npm run test:onboarding` inside `frontend` (Node 22.18+ for native TypeScript
+support). Tests cover routing, validation, duplicate-submit prevention, retry,
+rendered fields and payload compatibility with the backend Pydantic schema when
+`.venv/bin/python` is available.

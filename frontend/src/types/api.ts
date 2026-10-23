@@ -106,3 +106,15 @@ export interface SessionSummary {
   created_at: string
 }
 
+
+export interface GoalCreatePayload {
+  title: string
+  start_date: string
+  target_date?: string
+  goal_types: string[]
+  targets: Record<string, { unit: string; operator: 'eq'; value: number; baseline?: number }>
+}
+export interface OnboardingPayload extends UserUpdatePayload {
+  body_metric?: BodyMetricCreatePayload
+  goal?: GoalCreatePayload
+}

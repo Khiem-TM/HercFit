@@ -5,6 +5,7 @@ from agentic.core.context import RequestContext, request_context
 
 bearer=HTTPBearer(auto_error=False)
 
+# Xác thực User thông qua Bearer JWT
 async def authenticated(request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(bearer)):
     if not credentials:
         raise HTTPException(401,'Bearer JWT required')
