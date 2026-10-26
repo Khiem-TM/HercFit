@@ -3,9 +3,11 @@ import { reactive, ref, watch } from 'vue'
 import {
   Activity,
   Check,
+  Download,
   Loader2,
   LogOut,
   Settings,
+  Trash2,
   User as UserIcon,
   X,
 } from 'lucide-vue-next'
@@ -25,8 +27,14 @@ const {
   currentGoal,
   updateProfile,
   recordBodyMetric,
+  exportData,
+  eraseAccount,
   logout,
 } = useAuth()
+
+const isExporting = ref(false)
+const isErasing = ref(false)
+const eraseEmail = ref('')
 
 const activeTab = ref<'profile' | 'metrics' | 'settings'>('profile')
 const isSavingProfile = ref(false)
@@ -38,6 +46,7 @@ const profileForm = reactive({
   fullname: '',
   nick_name: '',
   age: '' as string | number,
+  sex: '' as '' | 'MALE' | 'FEMALE',
 })
 
 const metricForm = reactive({
@@ -56,6 +65,8 @@ watch(
       profileForm.fullname = user.value?.fullname || ''
       profileForm.nick_name = user.value?.nick_name || ''
       profileForm.age = user.value?.age ?? ''
+      profileForm.sex = user.value?.sex ?? ''
+      eraseEmail.value = ''
 
       metricForm.weight_kg = latestBodyMetric.value?.weight_kg ?? ''
       metricForm.height_cm = latestBodyMetric.value?.height_cm ?? ''
@@ -83,6 +94,7 @@ async function handleSaveProfile(): Promise<void> {
       fullname: profileForm.fullname.trim(),
       nick_name: profileForm.nick_name.trim() || null,
       age: Number.isFinite(parsedAge) ? parsedAge : null,
+      sex: profileForm.sex || null,
     })
     feedbackMessage.value = 'Đã lưu thông tin hồ sơ cá nhân.'
   } catch (err) {
@@ -95,8 +107,13 @@ async function handleSaveProfile(): Promise<void> {
 
 async function handleSaveMetric(): Promise<void> {
   const weight = Number(metricForm.weight_kg)
-  if (!Number.isFinite(weight) || weight <= 0) {
-    errorMessage.value = 'Vui lòng nhập cân nặng hợp lệ (kg).'
+  if (!Number.isFinite(weight) || weight < 20 || weight > 400) {
+    errorMessage.value = 'Cân nặng cần nằm trong khoảng 20–400 kg.'
+    return
+  }
+  const heightValue = metricForm.height_cm !== '' ? Number(metricForm.height_cm) : null
+  if (heightValue !== null && (!Number.isFinite(heightValue) || heightValue < 50 || heightValue > 260)) {
+    errorMessage.value = 'Chiều cao cần nằm trong khoảng 50–260 cm.'
     return
   }
   isSavingMetric.value = true
@@ -128,6 +145,36 @@ async function handleSaveMetric(): Promise<void> {
 async function handleLogout(): Promise<void> {
   emit('close')
   await logout()
+}
+
+async function handleExport(): Promise<void> {
+  isExporting.value = true
+  errorMessage.value = null
+  try {
+    await exportData()
+    feedbackMessage.value = 'Đã tải xuống bản sao dữ liệu của bạn.'
+  } catch (err) {
+    errorMessage.value = err instanceof Error ? err.message : 'Xuất dữ liệu thất bại.'
+  } finally {
+    isExporting.value = false
+  }
+}
+
+async function handleErase(): Promise<void> {
+  if (eraseEmail.value.trim().toLowerCase() !== (user.value?.email || '').toLowerCase()) {
+    errorMessage.value = 'Nhập đúng email tài khoản để xác nhận xoá vĩnh viễn.'
+    return
+  }
+  isErasing.value = true
+  errorMessage.value = null
+  try {
+    await eraseAccount(eraseEmail.value.trim())
+    emit('close')
+  } catch (err) {
+    errorMessage.value = err instanceof Error ? err.message : 'Xoá tài khoản thất bại.'
+  } finally {
+    isErasing.value = false
+  }
 }
 </script>
 
@@ -290,6 +337,22 @@ async function handleLogout(): Promise<void> {
                   placeholder="25"
                 />
               </div>
+
+              <div>
+                <label for="profile-sex" class="mb-1.5 block font-label-telemetry text-[11px] uppercase tracking-wider text-outline">
+                  Giới tính sinh học
+                </label>
+                <select
+                  id="profile-sex"
+                  v-model="profileForm.sex"
+                  class="w-full rounded-xl border border-white/10 bg-[#181818] px-3.5 py-2.5 text-sm text-primary focus:border-white/30 focus:outline-none"
+                >
+                  <option value="">Không cung cấp</option>
+                  <option value="MALE">Nam</option>
+                  <option value="FEMALE">Nữ</option>
+                </select>
+                <p class="mt-1 text-[11px] text-outline">Chỉ dùng để tính năng lượng nền (BMR).</p>
+              </div>
             </div>
 
             <div class="flex justify-end pt-2">
@@ -421,6 +484,55 @@ async function handleLogout(): Promise<void> {
               <div class="flex items-center justify-between text-xs">
                 <span class="text-outline">Giao diện</span>
                 <span class="font-label-code text-primary">Olympus Kinetic Obsidian</span>
+              </div>
+            </div>
+
+            <div class="space-y-3 rounded-2xl border border-white/[0.08] bg-[#161616] p-4">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <h4 class="text-sm font-medium text-primary">Xuất dữ liệu cá nhân</h4>
+                  <p class="mt-0.5 text-xs text-outline">Tải toàn bộ hồ sơ, số đo, nhật ký và kế hoạch dưới dạng JSON.</p>
+                </div>
+                <button
+                  type="button"
+                  :disabled="isExporting"
+                  class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold text-primary transition-colors hover:bg-white/10 disabled:opacity-50"
+                  @click="handleExport"
+                >
+                  <Loader2 v-if="isExporting" class="h-3.5 w-3.5 animate-spin" />
+                  <Download v-else class="h-3.5 w-3.5" />
+                  <span>Xuất dữ liệu</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="space-y-3 rounded-2xl border border-error/25 bg-error/[0.06] p-4">
+              <div>
+                <h4 class="text-sm font-medium text-primary">Xoá vĩnh viễn tài khoản</h4>
+                <p class="mt-0.5 text-xs text-outline">
+                  Xoá hội thoại, nhật ký, số đo, mục tiêu và ảnh. Không thể hoàn tác. Nhập email tài khoản để xác nhận.
+                </p>
+              </div>
+              <div class="flex flex-col gap-2 sm:flex-row">
+                <label for="erase-email" class="sr-only">Email xác nhận</label>
+                <input
+                  id="erase-email"
+                  v-model="eraseEmail"
+                  type="email"
+                  autocomplete="off"
+                  :placeholder="user?.email || 'email@example.com'"
+                  class="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#181818] px-3.5 py-2 text-sm text-primary focus:border-white/30 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  :disabled="isErasing || !eraseEmail.trim()"
+                  class="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-error/40 bg-error/15 px-4 py-2 text-xs font-semibold text-error transition-colors hover:bg-error/25 disabled:opacity-50"
+                  @click="handleErase"
+                >
+                  <Loader2 v-if="isErasing" class="h-3.5 w-3.5 animate-spin" />
+                  <Trash2 v-else class="h-3.5 w-3.5" />
+                  <span>Xoá vĩnh viễn</span>
+                </button>
               </div>
             </div>
 

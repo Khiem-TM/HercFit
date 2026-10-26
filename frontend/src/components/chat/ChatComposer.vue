@@ -4,8 +4,8 @@ import {
   Activity,
   ArrowUp,
   Dumbbell,
-  Loader2,
   Sparkles,
+  Square,
   Utensils,
 } from 'lucide-vue-next'
 
@@ -18,6 +18,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'send', message: string): void
+  (e: 'stop'): void
 }>()
 
 const draft = ref(props.modelValue || '')
@@ -145,16 +146,27 @@ function insertQuickPrefix(prefix: string): void {
           </button>
         </div>
 
-        <!-- Circular Send Button -->
+        <!-- Circular Send / Stop Button -->
         <button
+          v-if="isStreaming"
           type="button"
-          :disabled="!draft.trim() || disabled || isStreaming"
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/30 bg-white/10 text-primary transition-all duration-200 hover:scale-105 hover:bg-white/20"
+          title="Dừng trả lời"
+          aria-label="Dừng trả lời"
+          @click="emit('stop')"
+        >
+          <Square class="h-3.5 w-3.5 fill-current" />
+        </button>
+        <button
+          v-else
+          type="button"
+          :disabled="!draft.trim() || disabled"
           class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#0e0e0e] shadow-[0_0_20px_rgba(255,255,255,0.25)] transition-all duration-200 hover:scale-105 disabled:cursor-not-allowed disabled:bg-white/15 disabled:text-outline disabled:shadow-none"
           title="Gửi tin nhắn"
+          aria-label="Gửi tin nhắn"
           @click="handleSend"
         >
-          <Loader2 v-if="isStreaming" class="h-4 w-4 animate-spin" />
-          <ArrowUp v-else class="h-4 w-4 stroke-[2.5]" />
+          <ArrowUp class="h-4 w-4 stroke-[2.5]" />
         </button>
       </div>
     </div>

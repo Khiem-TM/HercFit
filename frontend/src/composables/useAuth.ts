@@ -15,6 +15,10 @@ const currentGoal = ref<GoalRead | null>(null)
 const isLoading = ref<boolean>(true)
 const error = ref<string | null>(null)
 let bootstrapPromise: Promise<boolean> | null = null
+// One refresh at a time: parallel 401s share it, and other tabs wait on a Web Lock.
+// The backend rotates refresh tokens and treats reuse of an old one as theft.
+let refreshPromise: Promise<boolean> | null = null
+const REFRESH_LOCK = 'hercfit-auth-refresh'
 
 function getCanonicalOrigin(): string {
   const { protocol, hostname, port } = window.location
@@ -61,10 +65,10 @@ export function useAuth() {
     }
   }
 
-  async function refreshSession(): Promise<boolean> {
+  async function requestRefresh(): Promise<boolean> {
     try {
-      const resp = await fetch('/api/auth/login?mode=refresh', {
-        method: 'GET',
+      const resp = await fetch('/api/auth/refresh', {
+        method: 'POST',
         credentials: 'include',
         headers: {
           Accept: 'application/json',
@@ -84,6 +88,19 @@ export function useAuth() {
       user.value = null
       return false
     }
+  }
+
+  function refreshSession(): Promise<boolean> {
+    if (refreshPromise) return refreshPromise
+    refreshPromise = (async () => {
+      try {
+        const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
+        return locks?.request ? await locks.request(REFRESH_LOCK, () => requestRefresh()) : await requestRefresh()
+      } finally {
+        refreshPromise = null
+      }
+    })()
+    return refreshPromise
   }
 
   async function authFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
@@ -238,6 +255,44 @@ export function useAuth() {
     user.value = profile
   }
 
+  /** Download every record the backend holds for this account (JSON). */
+  async function exportData(): Promise<void> {
+    const resp = await authFetch('/api/profile/export')
+    if (!resp.ok) throw new Error('Không xuất được dữ liệu. Vui lòng thử lại.')
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `hercfit-export-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  /** Permanently erase conversations (agent) and then the account (backend). */
+  async function eraseAccount(confirmEmail: string): Promise<void> {
+    const conversations = await authFetch('/api/v1/chat/me', { method: 'DELETE' })
+    if (!conversations.ok) {
+      throw new Error('Chưa xoá được lịch sử trò chuyện nên tài khoản chưa bị xoá. Vui lòng thử lại.')
+    }
+    const resp = await authFetch('/api/profile/erase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm_email: confirmEmail }),
+    })
+    if (!resp.ok) {
+      const detail = await resp.json().catch(() => ({}))
+      throw new Error(typeof detail?.detail === 'string' ? detail.detail : 'Không xoá được tài khoản.')
+    }
+    accessToken.value = null
+    user.value = null
+    latestBodyMetric.value = null
+    currentGoal.value = null
+    bootstrapPromise = null
+    refreshPromise = null
+    window.history.pushState({}, '', '/')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }
+
   async function logout(): Promise<void> {
     try {
       if (accessToken.value) {
@@ -249,6 +304,7 @@ export function useAuth() {
       latestBodyMetric.value = null
       currentGoal.value = null
       bootstrapPromise = null
+      refreshPromise = null
       window.history.pushState({}, '', '/')
       window.dispatchEvent(new PopStateEvent('popstate'))
     }
@@ -268,6 +324,8 @@ export function useAuth() {
     completeOnboarding,
     updateProfile,
     recordBodyMetric,
+    exportData,
+    eraseAccount,
     logout,
     authFetch,
   }

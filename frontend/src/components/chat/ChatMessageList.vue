@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import {
-  Check,
   ExternalLink,
   Loader2,
-  ShieldAlert,
   Sparkles,
-  X,
 } from 'lucide-vue-next'
 import type { ChatMessage, PendingAction } from '@/types/api'
+import CatalogImage from '@/components/chat/cards/CatalogImage.vue'
+import ClarificationCard from '@/components/chat/cards/ClarificationCard.vue'
+import ConfirmationCard, { type ConfirmExtras } from '@/components/chat/cards/ConfirmationCard.vue'
+import { renderMarkdown } from '@/features/chat/markdown'
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -19,7 +20,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'confirm', decision: 'approve' | 'reject'): void
+  (e: 'confirm', decision: 'approve' | 'reject', extras: ConfirmExtras): void
+  (e: 'send', text: string): void
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -39,34 +41,16 @@ watch(
   { deep: true },
 )
 
-const TOOL_LABELS: Record<string, string> = {
-  create_food: 'Thêm món ăn mới',
-  create_exercise: 'Thêm bài tập mới',
-  log_meal: 'Ghi nhận nhật ký bữa ăn',
-  log_training: 'Ghi nhận buổi tập luyện',
-  create_meal_plan: 'Tạo kế hoạch thực đơn',
-  create_training_plan: 'Tạo giáo án tập luyện',
-  confirm_goal: 'Thiết lập mục tiêu thể hình',
-  update_goal: 'Cập nhật mục tiêu',
-  record_body_metric: 'Ghi nhận chỉ số cơ thể',
-  update_profile: 'Cập nhật hồ sơ cá nhân',
+// Options stay answerable only on the latest agent turn.
+const lastMessageId = computed(() => props.messages[props.messages.length - 1]?.id)
+
+// While the form is open the bubble shows its intro; the questions themselves are in the form.
+function asksForm(msg: ChatMessage): boolean {
+  return Boolean(msg.clarification?.questions.length) && msg.status === 'needs_input' && msg.id === lastMessageId.value
 }
 
-function formatToolName(tool: string): string {
-  return TOOL_LABELS[tool] || tool
-}
-
-function formatPreviewEntries(action: PendingAction): Array<{ key: string; value: string }> {
-  const source =
-    action.preview && Object.keys(action.preview).length > 0
-      ? action.preview
-      : action.payload || {}
-  return Object.entries(source)
-    .filter(([, v]) => v !== null && v !== undefined && v !== '')
-    .map(([k, v]) => ({
-      key: k,
-      value: typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v),
-    }))
+function host(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url }
 }
 </script>
 
@@ -91,7 +75,7 @@ function formatPreviewEntries(action: PendingAction): Array<{ key: string; value
         </div>
 
         <!-- AI Agent Message Block -->
-        <div v-else class="flex w-full max-w-[92%] items-start gap-3.5">
+        <div v-else class="msg-enter flex w-full max-w-[92%] items-start gap-3.5">
           <!-- Mini Kinetic Orb Avatar -->
           <div
             class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/20 shadow-inner"
@@ -116,9 +100,32 @@ function formatPreviewEntries(action: PendingAction): Array<{ key: string; value
             <!-- Message Text -->
             <div
               class="rounded-2xl rounded-tl-sm border border-white/[0.08] bg-[#161616]/90 px-5 py-4 text-sm leading-relaxed text-on-surface"
+              :aria-busy="msg.status === 'streaming'"
             >
-              <p class="whitespace-pre-wrap">{{ msg.content }}</p>
+              <!-- renderMarkdown escapes all HTML first and emits a fixed tag allowlist. -->
+              <div
+                class="md"
+                v-html="renderMarkdown(asksForm(msg) && msg.clarification?.intro ? msg.clarification.intro : msg.content)"
+              />
+              <span v-if="msg.status === 'streaming'" class="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-white/70 align-middle" aria-hidden="true" />
+              <p v-if="msg.status === 'stopped'" class="mt-2 text-xs text-outline">Đã dừng theo yêu cầu.</p>
             </div>
+
+            <!-- Research illustration (web picture; stored only after a confirmed import) -->
+            <figure v-if="msg.illustrations && msg.illustrations.length" class="max-w-xs overflow-hidden rounded-xl border border-white/[0.08] bg-[#141414]">
+              <CatalogImage :src="msg.illustrations[0].url" :alt="msg.illustrations[0].description || 'Ảnh minh hoạ'" rounded="rounded-none" class="aspect-[4/3] w-full" />
+              <figcaption class="px-3 py-2 text-[11px] text-outline">Ảnh minh hoạ · {{ host(msg.illustrations[0].url) }}</figcaption>
+            </figure>
+
+            <!-- Human-in-the-loop options -->
+            <Transition appear enter-active-class="transition duration-200 ease-out motion-reduce:transition-none" enter-from-class="translate-y-1 opacity-0">
+              <ClarificationCard
+                v-if="asksForm(msg) && msg.clarification"
+                :clarification="msg.clarification"
+                :disabled="isStreaming || isConfirming"
+                @send="text => emit('send', text)"
+              />
+            </Transition>
 
             <!-- Research Sources -->
             <div
@@ -142,69 +149,18 @@ function formatPreviewEntries(action: PendingAction): Array<{ key: string; value
       </div>
 
       <!-- Active Pending Confirmation Card -->
-      <div
-        v-if="pendingAction"
-        class="ml-11 rounded-2xl border border-white/20 bg-[#181818] p-5 shadow-[0_20px_50px_rgba(0,0,0,0.65)]"
-      >
-        <div class="flex items-start justify-between gap-3 border-b border-white/[0.08] pb-3.5">
-          <div class="flex items-center gap-2.5">
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-white/[0.06] text-primary"
-            >
-              <ShieldAlert class="h-4 w-4" />
-            </div>
-            <div>
-              <p class="font-label-telemetry text-[10px] uppercase tracking-[0.18em] text-outline">
-                XÁC NHẬN GHI DỮ LIỆU // REV #{{ pendingAction.revision }}
-              </p>
-              <h4 class="text-sm font-semibold text-primary">
-                {{ formatToolName(pendingAction.tool) }}
-              </h4>
-            </div>
-          </div>
+      <Transition appear enter-active-class="transition duration-200 ease-out motion-reduce:transition-none" enter-from-class="translate-y-1 opacity-0">
+        <div v-if="pendingAction" :key="pendingAction.action_id" class="ml-11">
+          <ConfirmationCard
+            :action="pendingAction"
+            :busy="isConfirming"
+            @confirm="(decision, extras) => emit('confirm', decision, extras)"
+          />
         </div>
+      </Transition>
 
-        <!-- Preview Key-Value Grid -->
-        <div class="my-4 space-y-2 rounded-xl border border-white/[0.06] bg-[#111111] p-3.5">
-          <div
-            v-for="entry in formatPreviewEntries(pendingAction)"
-            :key="entry.key"
-            class="flex flex-col justify-between gap-1 border-b border-white/[0.04] pb-2 last:border-b-0 last:pb-0 sm:flex-row sm:items-start"
-          >
-            <span class="font-label-code text-xs text-outline">{{ entry.key }}</span>
-            <pre
-              class="max-w-full overflow-x-auto whitespace-pre-wrap font-body-sm text-xs text-primary sm:text-right"
-            >{{ entry.value }}</pre>
-          </div>
-        </div>
-
-        <!-- Approve / Reject Actions -->
-        <div class="flex items-center justify-end gap-2.5">
-          <button
-            type="button"
-            :disabled="isConfirming"
-            class="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2 text-xs font-medium text-on-surface-variant transition-colors hover:border-white/30 hover:bg-white/[0.08] hover:text-primary disabled:opacity-50"
-            @click="emit('confirm', 'reject')"
-          >
-            <X class="h-3.5 w-3.5" />
-            <span>Huỷ bỏ</span>
-          </button>
-
-          <button
-            type="button"
-            :disabled="isConfirming"
-            class="inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2 text-xs font-semibold text-[#0e0e0e] shadow-[0_0_20px_rgba(255,255,255,0.2)] transition-transform hover:scale-[1.02] disabled:opacity-50"
-            @click="emit('confirm', 'approve')"
-          >
-            <Loader2 v-if="isConfirming" class="h-3.5 w-3.5 animate-spin" />
-            <Check v-else class="h-3.5 w-3.5" />
-            <span>Xác nhận &amp; Lưu</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Streaming Progress Indicator -->
-      <div v-if="isStreaming" class="flex items-center gap-3.5">
+      <!-- Streaming Progress Indicator (hidden once answer tokens are visible) -->
+      <div v-if="isStreaming && messages[messages.length - 1]?.status !== 'streaming'" class="flex items-center gap-3.5">
         <div
           class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/20 bg-[#181818]"
         >
@@ -221,3 +177,18 @@ function formatPreviewEntries(action: PendingAction): Array<{ key: string; value
   </div>
 </template>
 
+
+<style scoped>
+/* New replies fade in once; an updated (streamed -> final) bubble keeps its node and does not replay this. */
+.msg-enter { animation: msg-enter 180ms ease-out; }
+@keyframes msg-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .msg-enter { animation: none; } }
+.md :deep(p) { margin: 0 0 0.6rem; }
+.md :deep(p:last-child) { margin-bottom: 0; }
+.md :deep(ul) { list-style: disc; padding-left: 1.25rem; margin: 0.25rem 0 0.6rem; }
+.md :deep(ol) { list-style: decimal; padding-left: 1.4rem; margin: 0.25rem 0 0.6rem; }
+.md :deep(li) { margin: 0.15rem 0; }
+.md :deep(strong) { color: rgb(255 255 255 / 0.95); font-weight: 600; }
+.md :deep(code) { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; background: rgb(255 255 255 / 0.08); padding: 0.05rem 0.3rem; border-radius: 0.3rem; }
+.md :deep(a) { text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
+</style>

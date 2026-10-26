@@ -58,7 +58,3 @@ Uncertain network outcomes retain the same request and idempotency key for retry
 Editing is unlocked after a definitive validation failure. A successful save
 refreshes profile data and enters the chat workspace.
 
-Run `npm run test:onboarding` inside `frontend` (Node 22.18+ for native TypeScript
-support). Tests cover routing, validation, duplicate-submit prevention, retry,
-rendered fields and payload compatibility with the backend Pydantic schema when
-`.venv/bin/python` is available.

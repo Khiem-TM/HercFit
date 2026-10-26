@@ -125,7 +125,8 @@ const suggestionCards = [
     </div>
 
     <!-- 3 Quick-Action Suggestion Cards -->
-    <div class="mt-4 grid w-full grid-cols-1 gap-3.5 md:grid-cols-3">
+    <!-- Sized by the chat column, which narrows when the knowledge panel is dragged wider. -->
+    <div class="mt-4 grid w-full grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3.5">
       <button
         v-for="card in suggestionCards"
         :key="card.title"

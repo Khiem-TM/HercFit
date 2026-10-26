@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { defineAsyncComponent, onMounted, ref } from 'vue'
-import { Plus, Sparkles } from 'lucide-vue-next'
+import { defineAsyncComponent, nextTick, onMounted, ref, shallowRef, useTemplateRef } from 'vue'
+import { PanelLeftOpen, Plus, Sparkles } from 'lucide-vue-next'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmptyState from '@/components/chat/ChatEmptyState.vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
@@ -25,12 +25,30 @@ const {
   selectSession,
   deleteSession,
   sendMessage,
+  stopStreaming,
   confirmAction,
 } = useChat()
 
 const KnowledgePanel = defineAsyncComponent(() => import('@/components/knowledge/KnowledgePanel.vue'))
+const ImageLibraryModal = defineAsyncComponent(() => import('@/components/media/ImageLibraryModal.vue'))
+const isImageLibraryOpen = ref(false)
 const isKnowledgeOpen = ref(false)
 const isUserModalOpen = ref(false)
+const isSidebarCollapsed = shallowRef(false)
+const sidebar = useTemplateRef<InstanceType<typeof ChatSidebar>>('sidebar')
+const openSidebarButton = useTemplateRef<HTMLButtonElement>('openSidebarButton')
+
+async function hideSidebar(): Promise<void> {
+  isSidebarCollapsed.value = true
+  await nextTick()
+  openSidebarButton.value?.focus()
+}
+
+async function showSidebar(): Promise<void> {
+  isSidebarCollapsed.value = false
+  await nextTick()
+  sidebar.value?.focusToggle()
+}
 
 onMounted(async () => {
   if (!activeSessionId.value) {
@@ -59,6 +77,8 @@ function handleSelectPrompt(prompt: string): void {
 
     <!-- Left Sidebar (History + New Chat + User Avatar ONLY) -->
     <ChatSidebar
+      v-if="!isSidebarCollapsed"
+      ref="sidebar"
       :sessions="sessions"
       :active-session-id="activeSessionId"
       :user="user"
@@ -67,6 +87,7 @@ function handleSelectPrompt(prompt: string): void {
       @select-session="selectSession"
       @delete-session="deleteSession"
       @open-user-modal="isUserModalOpen = true"
+      @collapse="hideSidebar"
     />
 
     <!-- Right Main Workspace -->
@@ -75,22 +96,36 @@ function handleSelectPrompt(prompt: string): void {
       <header
         class="flex h-14 shrink-0 items-center justify-between border-b border-white/[0.05] px-6"
       >
-        <div class="flex items-center gap-2.5">
-          <Sparkles class="h-4 w-4 text-outline" />
+        <div class="flex min-w-0 items-center gap-2.5 overflow-hidden whitespace-nowrap">
+          <button
+            v-if="isSidebarCollapsed"
+            ref="openSidebarButton"
+            type="button"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-outline transition-colors hover:bg-white/[0.06] hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/60"
+            title="Mở thanh bên"
+            aria-label="Mở thanh bên"
+            aria-controls="chat-sidebar"
+            aria-expanded="false"
+            @click="showSidebar"
+          >
+            <PanelLeftOpen class="h-4 w-4" aria-hidden="true" />
+          </button>
+          <Sparkles class="h-4 w-4 shrink-0 text-outline" />
           <span class="text-xs font-medium text-on-surface-variant">
             HercFit Kinetic AI
           </span>
-          <span class="font-label-telemetry text-[10px] text-outline">
+          <span class="truncate font-label-telemetry text-[10px] text-outline">
             // OLYMPUS CORE
           </span>
         </div>
 
-        <button type="button" class="ml-auto mr-3 rounded-full border border-[#d4b77d]/25 px-3 py-1.5 text-xs text-[#d4b77d] hover:bg-[#d4b77d]/10" :aria-expanded="isKnowledgeOpen" @click="isKnowledgeOpen = !isKnowledgeOpen">✧ Tri thức của tôi</button>
+        <button type="button" class="ml-auto mr-2 shrink-0 whitespace-nowrap rounded-full border border-white/10 px-3 py-1.5 text-xs text-on-surface-variant hover:bg-white/10" aria-haspopup="dialog" @click="isImageLibraryOpen = true">Ảnh</button>
+        <button type="button" class="mr-3 shrink-0 whitespace-nowrap rounded-full border border-[#d4b77d]/25 px-3 py-1.5 text-xs text-[#d4b77d] hover:bg-[#d4b77d]/10" :aria-expanded="isKnowledgeOpen" @click="isKnowledgeOpen = !isKnowledgeOpen">✧ Tri thức của tôi</button>
         <button
           v-if="hasMessages"
           type="button"
           :disabled="isStreaming"
-          class="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-on-surface-variant transition-colors hover:border-white/25 hover:text-primary disabled:opacity-50"
+          class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-on-surface-variant transition-colors hover:border-white/25 hover:text-primary disabled:opacity-50"
           @click="createNewSession"
         >
           <Plus class="h-3.5 w-3.5" />
@@ -124,6 +159,7 @@ function handleSelectPrompt(prompt: string): void {
               :is-streaming="isStreaming"
               :active-node-label="activeNodeLabel"
               @send="sendMessage"
+              @stop="stopStreaming"
             />
           </template>
         </ChatEmptyState>
@@ -138,6 +174,7 @@ function handleSelectPrompt(prompt: string): void {
           :active-node-label="activeNodeLabel"
           :pending-action="pendingAction"
           @confirm="confirmAction"
+          @send="sendMessage"
         />
 
         <!-- Bottom Pinned Composer -->
@@ -147,6 +184,7 @@ function handleSelectPrompt(prompt: string): void {
               :is-streaming="isStreaming"
               :active-node-label="activeNodeLabel"
               @send="sendMessage"
+              @stop="stopStreaming"
             />
           </div>
         </div>
@@ -154,6 +192,7 @@ function handleSelectPrompt(prompt: string): void {
     </main>
 
     <KnowledgePanel v-if="isKnowledgeOpen" :busy="isStreaming || isConfirming" :activity="activeNodeLabel" :revision="messages.length + Number(isStreaming) + Number(isConfirming) + sessions.length" @close="isKnowledgeOpen = false" />
+    <ImageLibraryModal v-if="isImageLibraryOpen" @close="isImageLibraryOpen = false" />
 
     <!-- User Profile, Metrics & Settings Modal -->
     <UserSettingsModal
