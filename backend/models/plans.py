@@ -20,12 +20,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 
 from models.activity import (
-    ExerciseActivityMixin, FoodPortionMixin, build_exercise_item, build_food_item,
-    exercise_item_constraints, food_item_constraints,
+    ExercisePlanMixin, FoodPortionMixin, build_food_item, build_prescription_item,
+    food_item_constraints, prescription_item_constraints,
 )
 from models.basemodel import BaseModel, utc_now
 from models.domain import guard_immutable, lock_user, require_version
-from schemas.common import UserScope
 from schemas.enums import GoalStatus
 from schemas.plans import MealPlanCreate, PlanCreate, PlanQuery, TrainingPlanCreate
 
@@ -59,16 +58,10 @@ class PlanLifecycleMixin:
 
     @classmethod
     def _user_query(cls, user_id: PyUUID, *, include_inactive: bool = False):
-        user_id = UserScope(user_id=user_id).user_id
-        query = cls.apply_active_scope(select(cls).where(cls.user_id == user_id), include_inactive=include_inactive)
+        query = super()._user_query(user_id, include_inactive=include_inactive)
         if hasattr(cls, "entries"):
             query = query.options(selectinload(cls.entries).selectinload(cls._entry_model.items))
         return query
-
-    @classmethod
-    async def get_for_user(cls, session: AsyncSession, plan_id: PyUUID, *, user_id: PyUUID, include_inactive: bool = False):
-        result = await session.execute(cls._user_query(user_id, include_inactive=include_inactive).where(cls.id == plan_id))
-        return result.scalar_one_or_none()
 
     @classmethod
     async def list_for_user(
@@ -141,20 +134,8 @@ class PlanLifecycleMixin:
             await session.flush()
         return entity
 
-    @classmethod
-    async def soft_delete_for_user(
-        cls, session: AsyncSession, plan_id: PyUUID, *, user_id: PyUUID, expected_version_id: int,
-    ):
-        async with session.begin_nested():
-            await lock_user(session, user_id)
-            entity = await cls._locked(session, plan_id, user_id=user_id, include_inactive=True)
-            if entity is None:
-                return None
-            require_version(entity, expected_version_id)
-            await entity._end(session, "DELETED")
-            entity.is_active = False
-            await session.flush()
-        return entity
+    async def _before_deactivate(self, session: AsyncSession) -> None:
+        await self._end(session, "DELETED")
 
 
 class Plan(PlanLifecycleMixin, BaseModel):
@@ -262,14 +243,6 @@ class Plan(PlanLifecycleMixin, BaseModel):
             # Flush the master cascade before selecting active detail schedules.
             await session.flush()
         return count
-
-    @classmethod
-    async def expire_for_user(cls, session: AsyncSession, *, user_id: PyUUID, now: datetime | None = None):
-        if now is not None and (now.tzinfo is None or now.utcoffset() is None):
-            raise ValueError("now must be timezone-aware")
-        async with session.begin_nested():
-            await lock_user(session, user_id)
-            return await cls._expire_locked(session, user_id=user_id, now=now)
 
     @classmethod
     async def end_for_goal(cls, session: AsyncSession, *, user_id: PyUUID, goal_id: PyUUID, reason: str):
@@ -427,16 +400,16 @@ class MealPlanItem(FoodPortionMixin, BaseModel):
     entry_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("meal_plan_entries.id", ondelete="CASCADE"), nullable=False)
 
 
-class TrainingPlanItem(ExerciseActivityMixin, BaseModel):
+class TrainingPlanItem(ExercisePlanMixin, BaseModel):
     __tablename__ = "training_plan_items"
-    __table_args__ = (*exercise_item_constraints("training_plan_items"), Index("uq_training_plan_items_position", "entry_id", "position", unique=True))
+    __table_args__ = (*prescription_item_constraints("training_plan_items"), Index("uq_training_plan_items_position", "entry_id", "position", unique=True))
     entry_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("training_plan_entries.id", ondelete="CASCADE"), nullable=False)
 
 
 MealPlan._create_schema, MealPlan._entry_model, MealPlan._item_model = MealPlanCreate, MealPlanEntry, MealPlanItem
 TrainingPlan._create_schema, TrainingPlan._entry_model, TrainingPlan._item_model = TrainingPlanCreate, TrainingPlanEntry, TrainingPlanItem
 MealPlan._item_builder = staticmethod(build_food_item)
-TrainingPlan._item_builder = staticmethod(build_exercise_item)
+TrainingPlan._item_builder = staticmethod(build_prescription_item)
 for _model in (Plan, MealPlan, TrainingPlan):
     guard_immutable(_model, allowed={"status", "ended_at", "end_reason"})
 for _model in (MealPlanEntry, TrainingPlanEntry, MealPlanItem, TrainingPlanItem):

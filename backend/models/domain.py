@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from schemas.common import UserScope, VersionCheck
 
 
-async def lock_user(session: AsyncSession, user_id: UUID):
+async def try_lock_user(session: AsyncSession, user_id: UUID):
+    """Lock the active User row for this transaction; None when it does not exist."""
     from models.user import User
 
     user_id = UserScope(user_id=user_id).user_id
@@ -18,7 +19,11 @@ async def lock_user(session: AsyncSession, user_id: UUID):
         select(User).where(User.id == user_id, User.is_active.is_(True))
         .with_for_update().execution_options(populate_existing=True)
     )
-    user = result.scalar_one_or_none()
+    return result.scalar_one_or_none()
+
+
+async def lock_user(session: AsyncSession, user_id: UUID):
+    user = await try_lock_user(session, user_id)
     if user is None:
         raise HTTPException(404, "User not found")
     return user

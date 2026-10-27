@@ -11,13 +11,13 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 
-from models.activity import FoodPortionMixin, ExerciseActivityMixin, NutrientColumns, build_food_item, build_exercise_item, food_item_constraints, exercise_item_constraints, nutrient_constraints, sum_known
+from models.activity import FoodPortionMixin, ExerciseActualMixin, NutrientColumns, build_food_item, build_exercise_item, food_item_constraints, exercise_item_constraints, nutrient_constraints, sum_known
 from models.basemodel import BaseModel
 from models.domain import guard_immutable, lock_user, require_version
 from schemas.activity import NutritionTotals
-from schemas.common import UserScope
 from schemas.journals import MealCreate, TrainingCreate
 from schemas.tracking import JournalQuery
+from services.training_metrics import allocate_session_time, session_load
 
 # Lớp cơ sở cho các nhật ký hoạt động thực tế (Training và Meal) --> Đều có tính chất ghi và kế thừa lại Object này
 class Journal(BaseModel):
@@ -29,27 +29,22 @@ class Journal(BaseModel):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     timezone: Mapped[str] = mapped_column(String(100), nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Images are mutable presentation metadata, separate from activity facts.
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_public_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(20), default="USER", server_default="USER", nullable=False)
     detail_status: Mapped[str] = mapped_column(String(20), default="DETAILED", server_default="DETAILED", nullable=False)
 
     @classmethod
-    def _query(cls, user_id, *, include_inactive=False):
-        user_id = UserScope(user_id=user_id).user_id
-        return cls.apply_active_scope(
-            select(cls).where(cls.user_id == user_id).options(selectinload(cls.items)),
-            include_inactive=include_inactive,
-        )
-
-    @classmethod
-    async def get_for_user(cls, session: AsyncSession, entity_id: PyUUID, *, user_id: PyUUID, include_inactive=False):
-        return (await session.execute(cls._query(user_id, include_inactive=include_inactive).where(cls.id == entity_id))).scalar_one_or_none()
+    def _user_query(cls, user_id, *, include_inactive=False):
+        return super()._user_query(user_id, include_inactive=include_inactive).options(selectinload(cls.items))
 
     @classmethod
     async def list_for_user(cls, session: AsyncSession, *, user_id: PyUUID, query: JournalQuery | None = None):
         options = JournalQuery.model_validate(query or {})
         lower, upper = options.utc_bounds()
         timestamp = getattr(cls, cls.TIME_FIELD)
-        statement = cls._query(user_id, include_inactive=options.include_inactive)
+        statement = cls._user_query(user_id, include_inactive=options.include_inactive)
         if lower is not None:
             statement = statement.where(timestamp >= lower)
         if upper is not None:
@@ -68,7 +63,7 @@ class Journal(BaseModel):
         values = payload.to_payload() if hasattr(payload, "to_payload") else dict(payload)
         async with session.begin_nested():
             await lock_user(session, user_id)
-            original = (await session.execute(cls._query(user_id, include_inactive=True).where(cls.id == entity_id).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
+            original = (await session.execute(cls._user_query(user_id, include_inactive=True).where(cls.id == entity_id).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
             if original is None:
                 return None
             require_version(original, expected_version_id)
@@ -78,22 +73,12 @@ class Journal(BaseModel):
             values.setdefault(cls.TIME_FIELD, getattr(original, cls.TIME_FIELD))
             data = cls.CREATE_SCHEMA.model_validate(values)
             replacement = await cls._insert_snapshot(session, user_id=user_id, data=data, replaces_id=original.id)
+            # The image follows the active snapshot, where media updates and cleanup can reach it.
+            replacement.image_url, replacement.image_public_id = original.image_url, original.image_public_id
+            original.image_url = original.image_public_id = None
             original.is_active = False
             await session.flush()
             return replacement
-
-    @classmethod
-    async def soft_delete_for_user(cls, session: AsyncSession, entity_id: PyUUID, *, user_id: PyUUID, expected_version_id: int):
-        async with session.begin_nested():
-            await lock_user(session, user_id)
-            entity = (await session.execute(cls._query(user_id, include_inactive=True).where(cls.id == entity_id).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
-            if entity is None:
-                return None
-            require_version(entity, expected_version_id)
-            if entity.is_active:
-                entity.is_active = False
-                await session.flush()
-            return entity
 
     @classmethod
     async def _check_entry(cls, session, user_id, entry_id):
@@ -164,7 +149,11 @@ class Training(Journal):
         CheckConstraint("ended_at IS NULL OR ended_at > started_at", name="ck_trainings_dates"),
         CheckConstraint("duration_seconds IS NULL OR (duration_seconds > 0 AND duration_seconds < 1000000000)", name="ck_trainings_duration"),
         CheckConstraint("energy_kcal IS NULL OR (energy_kcal >= 0 AND energy_kcal < 1000000000000)", name="ck_trainings_energy"),
+        CheckConstraint("discipline IN ('STRENGTH', 'ENDURANCE', 'SPORT', 'MIXED')", name="ck_trainings_discipline"),
+        CheckConstraint("session_rpe IS NULL OR (session_rpe >= 0 AND session_rpe <= 10)", name="ck_trainings_session_rpe"),
+        CheckConstraint("training_load IS NULL OR training_load >= 0", name="ck_trainings_load"),
         Index("ix_trainings_user_started", "user_id", "started_at", "id"),
+        Index("ix_trainings_user_discipline", "user_id", "discipline", "started_at"),
         UniqueConstraint("replaces_id", name="uq_trainings_replaces"),
     )
     TIME_FIELD = "started_at"
@@ -175,18 +164,36 @@ class Training(Journal):
     duration_seconds: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     energy_kcal: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
     calories_incomplete: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    discipline: Mapped[str] = mapped_column(String(10), nullable=False)
+    session_rpe: Mapped[Decimal | None] = mapped_column(Numeric(4, 2), nullable=True)
+    training_load: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     replaces_id: Mapped[PyUUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("trainings.id", ondelete="RESTRICT"), nullable=True)
     source_entry_id: Mapped[PyUUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("training_plan_entries.id", ondelete="SET NULL"), nullable=True)
     items: Mapped[list["TrainingItem"]] = relationship(back_populates="training", cascade="all, delete-orphan", passive_deletes=True, lazy="selectin", order_by="TrainingItem.position")
 
     @classmethod
     async def _insert_snapshot(cls, session, *, user_id, data, replaces_id=None):
+        from models.body_metrics import BodyMetric
+
         await cls._check_entry(session, user_id, data.source_entry_id)
-        items = [await build_exercise_item(session, user_id, item) for item in data.items]
+        latest = await BodyMetric.get_latest_for_user(session, user_id=user_id)
+        bodyweight = float(latest.weight_kg) if latest is not None and latest.weight_kg is not None else None
+        items = [await build_exercise_item(session, user_id, item, bodyweight_kg=bodyweight) for item in data.items]
+        allocate_session_time(items, float(data.duration_seconds) if data.duration_seconds else None)
+        for item in items:
+            kcal = item["calorie_estimate"].get("kcal")
+            item["energy_kcal"] = None if kcal is None else Decimal(str(kcal))
+            if item["duration_seconds"] is not None:
+                item["duration_seconds"] = Decimal(str(item["duration_seconds"]))
         totals = NutritionTotals.model_validate(sum_known(items, ("energy_kcal",)))
+        kinds = {item["kind"] for item in items}
+        # sRPE uses the whole session (incl. transitions); fall back to summed item time.
+        duration = data.duration_seconds or sum((item["duration_seconds"] or Decimal(0) for item in items), Decimal(0)) or None
         entity = cls(
             **data.model_dump(exclude={"items"}), user_id=user_id, replaces_id=replaces_id,
             energy_kcal=totals.energy_kcal, calories_incomplete=totals.energy_kcal is None,
+            discipline=kinds.pop().value if len(kinds) == 1 else "MIXED",
+            training_load=session_load(data.session_rpe, float(duration) if duration else None),
             items=[TrainingItem(**item, position=position) for position, item in enumerate(items)],
         )
         session.add(entity)
@@ -194,12 +201,15 @@ class Training(Journal):
         return entity
 
 
-class TrainingItem(ExerciseActivityMixin, BaseModel):
+class TrainingItem(ExerciseActualMixin, BaseModel):
     __tablename__ = "training_items"
-    __table_args__ = (*exercise_item_constraints("training_items"), UniqueConstraint("training_id", "position", name="uq_training_items_position"))
+    __table_args__ = (
+        *exercise_item_constraints("training_items"), UniqueConstraint("training_id", "position", name="uq_training_items_position"),
+        Index("ix_training_items_exercise", "exercise_id"),
+    )
     training_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("trainings.id", ondelete="CASCADE"), nullable=False)
     training: Mapped[Training] = relationship(back_populates="items")
 
 
 for _model in (Meal, MealItem, Training, TrainingItem):
-    guard_immutable(_model)
+    guard_immutable(_model, allowed=("image_url", "image_public_id") if _model in (Meal, Training) else ())

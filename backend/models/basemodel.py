@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
-from schemas.common import BulkWrite, OrderBy
+from models.domain import require_version, try_lock_user
+from schemas.common import OrderBy, Pagination, UserScope
 
 
 def utc_now() -> datetime:
@@ -158,27 +159,15 @@ class BaseModel(Base):
         return query.order_by(*clauses)
 
     @classmethod
-    def handle_group(cls, query: Select, **kwargs: Any) -> Select:
-        return query
-
-    @classmethod
-    def handle_result(cls, result: Any, **kwargs: Any) -> Any:
-        return result
-
-    @classmethod
     async def get_list(cls, session: AsyncSession, **kwargs: Any) -> list[Any]:
         query = cls.handle_select(**kwargs)
         query = cls.handle_find(query, **kwargs)
-        query = cls.handle_group(query, **kwargs)
         query = cls.handle_order(query, **kwargs)
 
         result = await session.execute(query)
-        records = (
-            list(result.mappings().all())
-            if kwargs.get("fields")
-            else list(result.scalars().unique().all())
-        )
-        return cls.handle_result(records, **kwargs)
+        if kwargs.get("fields"):
+            return list(result.mappings().all())
+        return list(result.scalars().unique().all())
 
     @classmethod
     async def get_one(cls, session: AsyncSession, **kwargs: Any) -> Any | None:
@@ -197,7 +186,7 @@ class BaseModel(Base):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"{cls.__tablename__} not found",
             )
-        return cls.handle_result(record, **kwargs)
+        return record
 
     @classmethod
     async def get_by_id(
@@ -228,116 +217,83 @@ class BaseModel(Base):
         await session.refresh(entity)
         return entity
 
+    # ------------------------------------------------------------------
+    # Dữ liệu thuộc về một người dùng (model có cột user_id)
+    # ------------------------------------------------------------------
     @classmethod
-    async def update_one(
+    def _user_query(cls, user_id: uuid.UUID, *, include_inactive: bool = False) -> Select:
+        user_id = UserScope(user_id=user_id).user_id
+        return cls.apply_active_scope(
+            select(cls).where(cls.user_id == user_id), include_inactive=include_inactive,
+        )
+
+    @classmethod
+    async def get_for_user(
         cls,
         session: AsyncSession,
         entity_id: uuid.UUID,
-        payload: Mapping[str, Any] | None = None,
-        **kwargs: Any,
+        *,
+        user_id: uuid.UUID,
+        include_inactive: bool = False,
     ) -> Self | None:
-        entity = await cls.get_by_id(session, entity_id)
-        if entity is None:
-            return None
-
-        values = cls._column_values({**(payload or {}), **kwargs})
-        immutable_fields = {
-            "id",
-            "created_at",
-            "updated_at",
-            "version_id",
-            "is_active",
-        }
-        for key, value in values.items():
-            if key not in immutable_fields:
-                setattr(entity, key, value)
-
-        await session.flush()
-        await session.refresh(entity)
-        return entity
+        result = await session.execute(
+            cls._user_query(user_id, include_inactive=include_inactive).where(cls.id == entity_id)
+        )
+        return result.scalar_one_or_none()
 
     @classmethod
-    async def update_many(
+    async def list_for_user(
         cls,
         session: AsyncSession,
-        data: Sequence[Mapping[str, Any]],
+        *,
+        user_id: uuid.UUID,
+        offset: int = 0,
+        limit: int = 50,
+        include_inactive: bool = False,
     ) -> list[Self]:
-        data = BulkWrite(data=data).data
+        options = Pagination(offset=offset, limit=limit, include_inactive=include_inactive)
+        result = await session.execute(
+            cls._user_query(user_id, include_inactive=options.include_inactive)
+            .order_by(cls.created_at.desc(), cls.id.desc())
+            .offset(options.offset).limit(options.limit)
+        )
+        return list(result.scalars().all())
 
-        entities: list[Self] = []
-        for item in data:
-            values = cls._column_values(item)
-            entity_id = values.get("id")
-            entity = (
-                await cls.get_by_id(
-                    session,
-                    entity_id,
-                    include_inactive=True,
-                )
-                if entity_id
-                else None
+    # ------------------------------------------------------------------
+    # Xóa mềm
+    # ------------------------------------------------------------------
+    @classmethod
+    async def _set_active(cls, session: AsyncSession, entity: Self, active: bool) -> None:
+        if entity.is_active != active:
+            entity.is_active = active
+            await session.flush()
+            await session.refresh(entity)
+
+    async def _before_deactivate(self, session: AsyncSession) -> None:
+        """Hook cho lớp con cần dọn dẹp (kết thúc kế hoạch, ...) trước khi xóa mềm."""
+
+    @classmethod
+    async def soft_delete_for_user(
+        cls,
+        session: AsyncSession,
+        entity_id: uuid.UUID,
+        *,
+        user_id: uuid.UUID,
+        expected_version_id: int | None = None,
+    ) -> Self | None:
+        async with session.begin_nested():
+            if await try_lock_user(session, user_id) is None:
+                return None
+            result = await session.execute(
+                cls._user_query(user_id, include_inactive=True).where(cls.id == entity_id)
+                .with_for_update().execution_options(populate_existing=True)
             )
-
+            entity = result.scalar_one_or_none()
             if entity is None:
-                values["is_active"] = True
-                entity = cls(**values)
-                session.add(entity)
-            elif not entity.is_active:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Inactive {cls.__tablename__} cannot be updated",
-                )
-            else:
-                for key, value in values.items():
-                    if key not in {
-                        "id",
-                        "created_at",
-                        "updated_at",
-                        "version_id",
-                        "is_active",
-                    }:
-                        setattr(entity, key, value)
-            entities.append(entity)
-
-        await session.flush()
-        return entities
-
-    @classmethod
-    async def soft_delete(
-        cls,
-        session: AsyncSession,
-        entity_id: uuid.UUID,
-    ) -> Self | None:
-        query = select(cls).where(cls.id == entity_id).with_for_update()
-        result = await session.execute(query)
-        entity = result.scalar_one_or_none()
-        if entity is None:
-            return None
-
-        if entity.is_active:
-            entity.is_active = False
-            await session.flush()
-            await session.refresh(entity)
+                return None
+            if expected_version_id is not None:
+                require_version(entity, expected_version_id)
+            if entity.is_active:
+                await entity._before_deactivate(session)
+                await cls._set_active(session, entity, False)
         return entity
-
-    @classmethod
-    async def restore(
-        cls,
-        session: AsyncSession,
-        entity_id: uuid.UUID,
-    ) -> Self | None:
-        query = select(cls).where(cls.id == entity_id).with_for_update()
-        result = await session.execute(query)
-        entity = result.scalar_one_or_none()
-        if entity is None:
-            return None
-
-        if not entity.is_active:
-            entity.is_active = True
-            await session.flush()
-            await session.refresh(entity)
-        return entity
-
-    @staticmethod
-    def get_first_or_none(items: Sequence[Any]) -> Any | None:
-        return items[0] if items else None

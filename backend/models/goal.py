@@ -6,14 +6,14 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID as PyUUID
 
 from fastapi import HTTPException, status as http_status
-from sqlalchemy import CheckConstraint, Date, Enum, ForeignKey, Index, Select, String, Text, event, inspect, select, text
+from sqlalchemy import CheckConstraint, Date, Enum, ForeignKey, Index, String, Text, event, inspect, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from models.basemodel import BaseModel
-from schemas.common import Pagination, UserScope, VersionCheck
+from models.domain import require_version, try_lock_user
 from schemas.enums import GoalStatus
 from schemas.goal import GoalCreate, GoalUpdate
 
@@ -66,28 +66,11 @@ class Goal(BaseModel):
     user: Mapped[User] = relationship("User", back_populates="goals")
 
     @classmethod
-    def _user_query(cls, user_id: PyUUID, *, include_inactive: bool = False) -> Select:
-        user_id = UserScope(user_id=user_id).user_id
-        return cls.apply_active_scope(
-            select(cls).where(cls.user_id == user_id), include_inactive=include_inactive,
-        )
-
-    @classmethod
-    async def _lock_user(cls, session: AsyncSession, user_id: PyUUID) -> bool:
-        from models.user import User
-
-        user_id = UserScope(user_id=user_id).user_id
-        result = await session.execute(
-            select(User.id).where(User.id == user_id, User.is_active.is_(True)).with_for_update()
-        )
-        return result.scalar_one_or_none() is not None
-
-    @classmethod
     async def create_for_user(
         cls, session: AsyncSession, *, user_id: PyUUID, payload: GoalCreate | Mapping[str, Any],
     ) -> Goal:
         values = GoalCreate.model_validate(payload).to_payload()
-        if not await cls._lock_user(session, user_id):
+        if await try_lock_user(session, user_id) is None:
             raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="User not found")
         if await cls.get_current_for_user(session, user_id=user_id) is not None:
             raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="User already has a current goal")
@@ -101,10 +84,9 @@ class Goal(BaseModel):
         payload: GoalUpdate | Mapping[str, Any], expected_version_id: int,
     ) -> Goal | None:
         """Replace supplied fields; reject stale edits without committing caller work."""
-        expected_version_id = VersionCheck(expected_version_id=expected_version_id).expected_version_id
         values = GoalUpdate.model_validate(payload).to_payload()
         async with session.begin_nested():
-            if not await cls._lock_user(session, user_id):
+            if await try_lock_user(session, user_id) is None:
                 return None
             result = await session.execute(
                 cls._user_query(user_id).where(cls.id == goal_id).with_for_update()
@@ -115,8 +97,7 @@ class Goal(BaseModel):
             await session.refresh(goal)
             if goal.status != GoalStatus.IN_PROGRESS:
                 raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="Goal has already ended")
-            if goal.version_id != expected_version_id:
-                raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="Goal version has changed; reload before editing")
+            require_version(goal, expected_version_id)
             # Validate dates against the stored counterpart when PATCH supplies only one.
             GoalCreate.model_validate({
                 "title": goal.title, "start_date": goal.start_date,
@@ -129,33 +110,11 @@ class Goal(BaseModel):
         return goal
 
     @classmethod
-    async def get_for_user(
-        cls, session: AsyncSession, goal_id: PyUUID, *, user_id: PyUUID,
-        include_inactive: bool = False,
-    ) -> Goal | None:
-        result = await session.execute(
-            cls._user_query(user_id, include_inactive=include_inactive).where(cls.id == goal_id)
-        )
-        return result.scalar_one_or_none()
-
-    @classmethod
     async def get_current_for_user(cls, session: AsyncSession, *, user_id: PyUUID) -> Goal | None:
         result = await session.execute(
             cls._user_query(user_id).where(cls.status == GoalStatus.IN_PROGRESS)
         )
         return result.scalar_one_or_none()
-
-    @classmethod
-    async def list_for_user(
-        cls, session: AsyncSession, *, user_id: PyUUID, offset: int = 0, limit: int = 50,
-        include_inactive: bool = False,
-    ) -> list[Goal]:
-        options = Pagination(offset=offset, limit=limit, include_inactive=include_inactive)
-        result = await session.execute(
-            cls._user_query(user_id, include_inactive=options.include_inactive)
-            .order_by(cls.created_at.desc(), cls.id.desc()).offset(options.offset).limit(options.limit)
-        )
-        return list(result.scalars().all())
 
     @classmethod
     async def _finish_for_user(
@@ -164,7 +123,7 @@ class Goal(BaseModel):
         from models.plans import Plan
 
         async with session.begin_nested():
-            if not await cls._lock_user(session, user_id):
+            if await try_lock_user(session, user_id) is None:
                 return None
             result = await session.execute(
                 cls._user_query(user_id).where(cls.id == goal_id).with_for_update()
@@ -196,27 +155,11 @@ class Goal(BaseModel):
     ) -> Goal | None:
         return await cls._finish_for_user(session, goal_id, user_id=user_id, target=GoalStatus.CANCELLED)
 
-    @classmethod
-    async def soft_delete_for_user(
-        cls, session: AsyncSession, goal_id: PyUUID, *, user_id: PyUUID,
-    ) -> Goal | None:
-        """Serialize with confirmation so deleting a current goal frees its slot."""
+    async def _before_deactivate(self, session: AsyncSession) -> None:
+        """Deleting the current goal ends its plans and frees the single IN_PROGRESS slot."""
         from models.plans import Plan
 
-        async with session.begin_nested():
-            if not await cls._lock_user(session, user_id):
-                return None
-            result = await session.execute(
-                cls._user_query(user_id, include_inactive=True).where(cls.id == goal_id)
-                .with_for_update().execution_options(populate_existing=True)
-            )
-            goal = result.scalar_one_or_none()
-            if goal is not None and goal.is_active:
-                await Plan.end_for_goal(session, user_id=user_id, goal_id=goal.id, reason="GOAL_DELETED")
-                goal.is_active = False
-                await session.flush()
-                await session.refresh(goal)
-        return goal
+        await Plan.end_for_goal(session, user_id=self.user_id, goal_id=self.id, reason="GOAL_DELETED")
 
 
 @event.listens_for(Goal, "before_update")

@@ -11,6 +11,7 @@ from models.user import User
 from models.exercises import Exercise
 from models.plans import Plan, MealPlan, MealPlanEntry, MealPlanItem, TrainingPlan, TrainingPlanEntry, TrainingPlanItem
 from models.journals import Meal, MealItem, Training, TrainingItem
+from models.media import ImageCleanup
 from core.graph_outbox import register_metadata_hooks
 
 register_metadata_hooks(Base.metadata)

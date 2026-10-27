@@ -72,31 +72,16 @@ class OAuthAccount(BaseModel):
         )
 
     @classmethod
-    async def get_by_user_provider(
-        cls,
-        session: AsyncSession,
-        user_id: PyUUID,
-        provider: str,
-        *,
-        include_inactive: bool = False,
-    ) -> "OAuthAccount | None":
-        return await cls.get_one(
-            session,
-            user_id=user_id,
-            provider=provider,
-            include_inactive=include_inactive,
-        )
-
-    @classmethod
     async def upsert_google_account(
         cls,
         session: AsyncSession,
         user_id: PyUUID,
         provider_user_id: str,
-        token_data: dict[str, Any],
+        token_data: dict[str, Any] | None = None,
     ) -> "OAuthAccount":
+        """Link the Google identity. HercFit only needs who the user is, so
+        provider tokens are not persisted unless a caller explicitly passes them."""
         account_data = OAuthAccountCreate(user_id=user_id, provider_user_id=provider_user_id)
-        token_data = OAuthTokenUpdate.model_validate(token_data)
         oauth_account = await cls.get_by_provider_user_id(
             session,
             provider="google",
@@ -110,7 +95,13 @@ class OAuthAccount(BaseModel):
             )
             session.add(oauth_account)
 
-        oauth_account.update_tokens(token_data)
+        if token_data:
+            oauth_account.update_tokens(token_data)
+        else:
+            # Drop credentials stored by earlier versions on the next sign-in.
+            oauth_account.access_token = None
+            oauth_account.refresh_token = None
+            oauth_account.token_expires_at = None
         return oauth_account
 
     def update_tokens(self, token_data: OAuthTokenUpdate | dict[str, Any]) -> None:

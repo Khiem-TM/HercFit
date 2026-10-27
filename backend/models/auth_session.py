@@ -97,6 +97,14 @@ class AuthSession(BaseModel):
             .with_for_update().execution_options(populate_existing=True)
         )).scalar_one_or_none()
 
+    @classmethod
+    async def get_for_update(cls, session: AsyncSession, session_id: uuid.UUID | None) -> AuthSession | None:
+        if session_id is None:
+            return None
+        return (await session.execute(
+            select(cls).where(cls.id == session_id).with_for_update().execution_options(populate_existing=True)
+        )).scalar_one_or_none()
+
     async def revoke(
         self,
         session: AsyncSession,

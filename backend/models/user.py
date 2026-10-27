@@ -22,8 +22,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.basemodel import BaseModel, utc_now
-from schemas.common import JsonObjectInput, UserScope
-from schemas.user import GoogleProfile, OnboardingInput, UserCreate, UserUpdate
+from models.domain import try_lock_user
+from schemas.common import JsonObjectInput
+from schemas.user import GoogleProfile, OnboardingInput, UserUpdate
 
 if TYPE_CHECKING:
     from models.auth_session import AuthSession
@@ -38,6 +39,7 @@ class User(BaseModel):
     __table_args__ = (
         Index("uq_users_email_ci", text("lower(email)"), unique=True),
         CheckConstraint("jsonb_typeof(personal_info) = 'object'", name="ck_users_personal_info_object"),
+        CheckConstraint("sex IS NULL OR sex IN ('MALE', 'FEMALE')", name="ck_users_sex"),
     )
 
     email: Mapped[str] = mapped_column(
@@ -66,6 +68,8 @@ class User(BaseModel):
 
     # Stable personal information. Measurements and goals have their own history.
     age: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Optional biological sex, an input of BMR equations only.
+    sex: Mapped[str | None] = mapped_column(String(10), nullable=True)
     personal_info: Mapped[dict[str, Any]] = mapped_column(
         JSONB(none_as_null=True), default=dict, server_default=text("'{}'::jsonb"), nullable=False,
     )
@@ -101,14 +105,6 @@ class User(BaseModel):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-
-    @classmethod
-    async def get_by_email(cls, session: AsyncSession, email: str) -> User | None:
-        return await cls.get_one(
-            session,
-            email=email,
-            include_inactive=True,
-        )
 
     @classmethod
     async def get_by_email_ci(
@@ -166,25 +162,12 @@ class User(BaseModel):
         return user
 
     @classmethod
-    async def _get_profile_for_update(
-        cls, session: AsyncSession, user_id: uuid.UUID,
-    ) -> User | None:
-        user_id = UserScope(user_id=user_id).user_id
-        # Persist pending work before refreshing a potentially cached User.
-        await session.flush()
-        result = await session.execute(
-            select(cls).where(cls.id == user_id, cls.is_active.is_(True))
-            .with_for_update().execution_options(populate_existing=True)
-        )
-        return result.scalar_one_or_none()
-
-    @classmethod
     async def update_personal_info(
         cls, session: AsyncSession, user_id: uuid.UUID, values: Mapping[str, Any],
     ) -> User | None:
         """Merge top-level groups, replacing each supplied group's entire value."""
         values = JsonObjectInput.model_validate(values).root
-        user = await cls._get_profile_for_update(session, user_id)
+        user = await try_lock_user(session, user_id)
         if user is None:
             return None
         user.personal_info = {**user.personal_info, **values}
@@ -193,18 +176,12 @@ class User(BaseModel):
         return user
 
     @classmethod
-    async def create_profile(
-        cls, session: AsyncSession, payload: UserCreate | Mapping[str, Any],
-    ) -> User:
-        return await cls.create(session, UserCreate.model_validate(payload).to_payload())
-
-    @classmethod
     async def update_profile(
         cls, session: AsyncSession, user_id: uuid.UUID,
         payload: UserUpdate | Mapping[str, Any],
     ) -> User | None:
         values = UserUpdate.model_validate(payload).to_payload()
-        user = await cls._get_profile_for_update(session, user_id)
+        user = await try_lock_user(session, user_id)
         if user is None:
             return None
         for key, value in values.items():
@@ -218,7 +195,7 @@ class User(BaseModel):
         """Soft-delete the account and revoke refresh sessions in the same transaction."""
         from models.auth_session import AuthSession
 
-        user = await cls._get_profile_for_update(session, user_id)
+        user = await try_lock_user(session, user_id)
         if user is None:
             return None
         sessions = await AuthSession.get_list(session, user_id=user_id)
@@ -248,12 +225,12 @@ class User(BaseModel):
         values = OnboardingInput.model_validate(values).to_payload()
 
         async with session.begin_nested():
-            user = await cls._get_profile_for_update(session, user_id)
+            user = await try_lock_user(session, user_id)
             if user is None:
                 return None
             if "personal_info" in values:
                 user.personal_info = {**user.personal_info, **values["personal_info"]}
-            for key in ("fullname", "nick_name", "avatar_url", "age"):
+            for key in ("fullname", "nick_name", "avatar_url", "age", "sex"):
                 if key in values:
                     setattr(user, key, values[key])
             if "body_metric" in values:

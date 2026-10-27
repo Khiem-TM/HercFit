@@ -7,15 +7,14 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID as PyUUID
 
 from sqlalchemy import (
-    CheckConstraint, DateTime, ForeignKey, Index, Numeric, Select,
-    event, func, inspect, select, text,
+    CheckConstraint, DateTime, ForeignKey, Index, Numeric, func, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.basemodel import BaseModel, utc_now
+from models.domain import guard_immutable
 from schemas.body_metrics import BodyMetricCreate, BodyMetricQuery
 from schemas.common import UserScope
 
@@ -50,14 +49,6 @@ class BodyMetric(BaseModel):
     )
     user: Mapped[User] = relationship("User", back_populates="body_metrics")
 
-    # User-scoped operations
-    @classmethod
-    def _user_query(cls, user_id: PyUUID, *, include_inactive: bool = False) -> Select:
-        user_id = UserScope(user_id=user_id).user_id
-        return cls.apply_active_scope(
-            select(cls).where(cls.user_id == user_id), include_inactive=include_inactive,
-        )
-
     @classmethod
     async def create_snapshot(
         cls, session: AsyncSession, *, user_id: PyUUID, payload: BodyMetricCreate | Mapping[str, Any],
@@ -65,16 +56,6 @@ class BodyMetric(BaseModel):
         user_id = UserScope(user_id=user_id).user_id
         values = BodyMetricCreate.model_validate(payload).to_payload()
         return await cls.create(session, {**values, "user_id": user_id})
-
-    @classmethod
-    async def get_for_user(
-        cls, session: AsyncSession, metric_id: PyUUID, *, user_id: PyUUID,
-        include_inactive: bool = False,
-    ) -> BodyMetric | None:
-        result = await session.execute(
-            cls._user_query(user_id, include_inactive=include_inactive).where(cls.id == metric_id)
-        )
-        return result.scalar_one_or_none()
 
     @classmethod
     async def list_for_user(
@@ -98,22 +79,10 @@ class BodyMetric(BaseModel):
 
     @classmethod
     async def get_latest_for_user(cls, session: AsyncSession, *, user_id: PyUUID) -> BodyMetric | None:
-        records = await cls.list_for_user(session, user_id=user_id, limit=1)
-        return cls.get_first_or_none(records)
-
-    @classmethod
-    async def soft_delete_for_user(
-        cls, session: AsyncSession, metric_id: PyUUID, *, user_id: PyUUID,
-    ) -> BodyMetric | None:
-        result = await session.execute(
-            cls._user_query(user_id, include_inactive=True).where(cls.id == metric_id).with_for_update()
+        return await cls.get_one(
+            session, user_id=UserScope(user_id=user_id).user_id,
+            order_by={"recorded_at": "desc", "id": "desc"},
         )
-        metric = result.scalar_one_or_none()
-        if metric is not None and metric.is_active:
-            metric.is_active = False
-            await session.flush()
-            await session.refresh(metric)
-        return metric
 
     @classmethod
     async def replace_for_user(
@@ -140,9 +109,4 @@ class BodyMetric(BaseModel):
         return replacement
 
 
-@event.listens_for(BodyMetric, "before_update")
-def _protect_snapshot(_mapper: Mapper, _connection: Connection, metric: BodyMetric) -> None:
-    state = inspect(metric)
-    fields = ("user_id", "recorded_at", "weight_kg", "height_cm", "body_fat_pct", "muscle_mass_kg", "additional_metrics")
-    if any(state.attrs[field].history.has_changes() for field in fields):
-        raise ValueError("Body metric snapshots are immutable; use replace_for_user")
+guard_immutable(BodyMetric)
