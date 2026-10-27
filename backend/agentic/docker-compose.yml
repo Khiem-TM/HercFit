@@ -16,7 +16,11 @@ services:
     build:
       context: ..
       dockerfile: agentic/Dockerfile
-    env_file: .env
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     environment:
       AGENT_DATABASE_URL: postgresql://hercfit:${AGENT_DB_PASSWORD:-hercfit_secret}@postgres:5432/hercfit_agentic
     command: ["python", "-m", "agentic.migrate"]
@@ -27,7 +31,11 @@ services:
     build:
       context: ..
       dockerfile: agentic/Dockerfile
-    env_file: .env
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     environment:
       AGENT_DATABASE_URL: postgresql://hercfit:${AGENT_DB_PASSWORD:-hercfit_secret}@postgres:5432/hercfit_agentic
       BACKEND_BASE_URL: ${BACKEND_BASE_URL:-http://host.docker.internal:8080}
@@ -35,10 +43,26 @@ services:
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-hercfit-graph-dev}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-hercfit-redis-dev}@redis:6379/0
+      SESSION_MEMORY_MODE: ${SESSION_MEMORY_MODE:-off}
     ports: ["${AGENT_PORT:-8081}:8081"]
     depends_on:
       migrate:
         condition: service_completed_successfully
+  redis:
+    image: redis:8.2-alpine
+    profiles: [memory]
+    command: [redis-server, --appendonly, "yes", --appendfsync, everysec, --maxmemory, "${REDIS_MAXMEMORY:-256mb}",
+              --maxmemory-policy, volatile-lru, --requirepass, "${REDIS_PASSWORD:-hercfit-redis-dev}"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:-hercfit-redis-dev}
+    ports: ["127.0.0.1:${REDIS_PORT:-6379}:6379"]
+    volumes: [agentic_redis_data:/data]
+    healthcheck:
+      test: [CMD-SHELL, 'redis-cli ping | grep -q PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 10
   neo4j:
     image: neo4j:2026.10.0
     profiles: [kg]
@@ -63,7 +87,11 @@ services:
     build:
       context: ..
       dockerfile: agentic/Dockerfile
-    env_file: .env
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     environment:
       AGENT_DATABASE_URL: postgresql://hercfit:${AGENT_DB_PASSWORD:-hercfit_secret}@postgres:5432/hercfit_agentic
       KG_BACKEND_DATABASE_URL: ${KG_BACKEND_DATABASE_URL:-postgresql://hercfit:hercfit_secret@host.docker.internal:5432/hercfit_db}
@@ -79,3 +107,4 @@ services:
 volumes:
   agentic_pg_data:
   agentic_neo4j_data:
+  agentic_redis_data:

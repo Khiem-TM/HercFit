@@ -28,6 +28,8 @@ services:
       target: backend
     container_name: hercfit-backend-api
     restart: unless-stopped
+    # Development: migrate on start and hot-reload the mounted source.
+    command: ["sh", "-c", "alembic upgrade head && python run_service.py"]
     env_file:
       - path: .env
         required: false
@@ -65,6 +67,7 @@ services:
       target: agentic
     container_name: hercfit-agentic-api
     restart: unless-stopped
+    command: ["python", "-m", "uvicorn", "agentic.main:app", "--host", "0.0.0.0", "--port", "8081", "--reload"]
     env_file:
       - path: .env
         required: false
@@ -75,12 +78,13 @@ services:
       AGENT_PORT: ${AGENT_PORT:-8081}
       BACKEND_BASE_URL: http://backend:8080
       AGENT_DATABASE_URL: postgresql://${POSTGRES_USER:-hercfit}:${POSTGRES_PASSWORD:-hercfit_secret}@postgres:5432/${POSTGRES_DB:-hercfit_db}
-      DEFAULT_PROVIDER: fpt
-      DEFAULT_MODEL: DeepSeek-V4-Flash
       KG_MODE: ${KG_MODE:-off}
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-hercfit-graph-dev}
+      # Optional: start Redis with --profile memory, then set SESSION_MEMORY_MODE.
+      REDIS_URL: redis://:${REDIS_PASSWORD:-hercfit-redis-dev}@redis:6379/0
+      SESSION_MEMORY_MODE: ${SESSION_MEMORY_MODE:-off}
     ports:
       - "${AGENT_PORT:-8081}:8081"
     volumes:
@@ -121,6 +125,26 @@ services:
       start_period: 30s
     networks: [hercfit-network]
 
+  redis:
+    image: redis:8.2-alpine
+    profiles: [memory]
+    restart: unless-stopped
+    # Session memory is rebuildable from checkpoints: every key has a TTL, so
+    # volatile-lru eviction only costs memory, never correctness.
+    command: [redis-server, --appendonly, "yes", --appendfsync, everysec, --maxmemory, "${REDIS_MAXMEMORY:-256mb}",
+              --maxmemory-policy, volatile-lru, --requirepass, "${REDIS_PASSWORD:-hercfit-redis-dev}"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:-hercfit-redis-dev}
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: [CMD-SHELL, 'redis-cli ping | grep -q PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [hercfit-network]
+
   kg-worker:
     profiles: [kg]
     build:
@@ -129,6 +153,11 @@ services:
       target: agentic
     restart: unless-stopped
     command: [python, -m, knowledge_graph.worker, run]
+    env_file:
+      - path: .env
+        required: false
+      - path: agentic/.env
+        required: false
     environment:
       AGENT_DATABASE_URL: postgresql://${POSTGRES_USER:-hercfit}:${POSTGRES_PASSWORD:-hercfit_secret}@postgres:5432/${POSTGRES_DB:-hercfit_db}
       KG_BACKEND_DATABASE_URL: postgresql://${POSTGRES_USER:-hercfit}:${POSTGRES_PASSWORD:-hercfit_secret}@postgres:5432/${POSTGRES_DB:-hercfit_db}
@@ -144,33 +173,36 @@ services:
     healthcheck:
       disable: true
 
-  streamlit:
+  embedding-worker:
+    profiles: [rag]
     build:
       context: .
       dockerfile: Dockerfile
-      target: streamlit
-    container_name: hercfit-streamlit
+      target: backend
     restart: unless-stopped
-    profiles:
-      - ui
-      - full
+    command: [python, -m, embedding.worker]
     env_file:
       - path: .env
         required: false
     environment:
-      AGENT_URL: http://agentic:8081
-    ports:
-      - "${STREAMLIT_PORT:-8501}:8501"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-hercfit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hercfit_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-hercfit_db}
+      KNOWLEDGE_INGEST_ROOT: /knowledge-input
     volumes:
-      - .:/app
+      - ./knowledge-input:/knowledge-input:ro
     depends_on:
       backend:
         condition: service_healthy
-    networks:
-      - hercfit-network
+    networks: [hercfit-network]
+    healthcheck:
+      disable: true
 
 volumes:
   neo4j_data:
+  redis_data:
   postgres_data:
     name: hercfit_postgres_data
 

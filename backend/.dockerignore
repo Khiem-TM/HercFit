@@ -30,3 +30,8 @@ mongo_data/
 logs/
 *.log
 tests
+
+# Shared build includes all service code, never their local credentials.
+**/.env
+**/.env.*
+!**/.env.example

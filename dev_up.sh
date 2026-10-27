@@ -68,11 +68,11 @@ ${BOLD}Commands:${NC}
 
 ${BOLD}Options:${NC}
   -d, --detach      Chạy ngầm (detached mode)
-  --ui, --streamlit Khởi chạy kèm giao diện Streamlit UI (port 8501)
   --db-only         Chỉ khởi chạy PostgreSQL database trong Docker
   --frontend-only   Chỉ chạy landing page, không cần Docker hoặc Backend
   --local           Chạy PostgreSQL trên Docker, còn Backend & Frontend chạy trực tiếp trên máy host
   --kg              Khởi chạy thêm Neo4j và worker Knowledge Graph (KG_MODE mặc định off)
+  --memory          Khởi chạy thêm Redis cho session memory của agent (SESSION_MEMORY_MODE mặc định off)
   --no-build        Không build lại Docker image khi khởi chạy
   -h, --help        Hiển thị hướng dẫn này
 
@@ -88,6 +88,7 @@ COMMAND="up"
 DETACH=false
 WITH_UI=false
 WITH_KG=false
+WITH_MEMORY=false
 DB_ONLY=false
 FRONTEND_ONLY=false
 LOCAL_MODE=false
@@ -104,7 +105,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --ui|--streamlit|--full)
-            WITH_UI=true
+            log_warn "Streamlit UI đã được gỡ bỏ (không còn streamlit_app.py); bỏ qua ${1}."
             shift
             ;;
         --db-only)
@@ -113,6 +114,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --kg)
             WITH_KG=true
+            shift
+            ;;
+        --memory)
+            WITH_MEMORY=true
             shift
             ;;
         --frontend-only)
@@ -139,8 +144,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "${FRONTEND_ONLY}" == true ]] && { [[ "${DB_ONLY}" == true ]] || [[ "${LOCAL_MODE}" == true ]] || [[ "${WITH_UI}" == true ]] || [[ "${WITH_KG}" == true ]]; }; then
-    log_error "--frontend-only không kết hợp với --db-only, --local, --ui hoặc --kg."
+if [[ "${FRONTEND_ONLY}" == true ]] && { [[ "${DB_ONLY}" == true ]] || [[ "${LOCAL_MODE}" == true ]] || [[ "${WITH_UI}" == true ]] || [[ "${WITH_KG}" == true ]] || [[ "${WITH_MEMORY}" == true ]]; }; then
+    log_error "--frontend-only không kết hợp với --db-only, --local, --ui, --kg hoặc --memory."
     exit 1
 fi
 
@@ -272,6 +277,9 @@ print_summary() {
     if [[ "${WITH_KG}" == true ]]; then
         echo -e "  • ${BOLD}Neo4j Browser:${NC}    http://localhost:${NEO4J_HTTP_PORT:-7474} (KG_MODE=${KG_MODE:-off})"
     fi
+    if [[ "${WITH_MEMORY}" == true ]]; then
+        echo -e "  • ${BOLD}Redis memory:${NC}     localhost:${REDIS_PORT:-6379} (SESSION_MEMORY_MODE=${SESSION_MEMORY_MODE:-off})"
+    fi
     if [[ "${DB_ONLY}" == false ]] && [[ -f "${FRONTEND_DIR}/package.json" ]]; then
         echo -e "  • ${BOLD}Frontend App:${NC}     http://localhost:${FRONTEND_PORT}"
     fi
@@ -313,16 +321,17 @@ case "${COMMAND}" in
     down|stop)
         log_info "Đang dừng toàn bộ dịch vụ HercFit..."
         stop_frontend
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg down
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg --profile memory down
         log_success "Đã dừng toàn bộ hệ thống."
         ;;
 
     restart)
         log_info "Đang khởi động lại hệ thống HercFit..."
         stop_frontend
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg down
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg --profile memory down
         RESTART_ARGS=(up)
         [[ "${WITH_KG}" == true ]] && RESTART_ARGS+=(--kg)
+        [[ "${WITH_MEMORY}" == true ]] && RESTART_ARGS+=(--memory)
         [[ "${LOCAL_MODE}" == true ]] && RESTART_ARGS+=(--local)
         [[ "${WITH_UI}" == true ]] && RESTART_ARGS+=(--ui)
         [[ "${DETACH}" == true ]] && RESTART_ARGS+=(--detach)
@@ -330,7 +339,7 @@ case "${COMMAND}" in
         ;;
 
     logs)
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg logs -f
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg --profile memory logs -f
         ;;
 
     status)
@@ -339,7 +348,7 @@ case "${COMMAND}" in
         else
             log_info "Frontend chưa chạy."
         fi
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg ps
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg --profile memory ps
         ;;
 
     up)
@@ -356,6 +365,9 @@ case "${COMMAND}" in
             if [[ "${WITH_KG}" == true ]]; then
                 ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile kg up -d neo4j
             fi
+            if [[ "${WITH_MEMORY}" == true ]]; then
+                ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile memory up -d redis
+            fi
             print_summary
             exit 0
         fi
@@ -363,6 +375,9 @@ case "${COMMAND}" in
         if [[ "${LOCAL_MODE}" == true ]]; then
             log_info "Chế độ LOCAL: Khởi chạy PostgreSQL trong Docker + Backend/Frontend trực tiếp trên máy..."
             ${COMPOSE_CMD} -f "${COMPOSE_FILE}" up -d postgres
+            if [[ "${WITH_MEMORY}" == true ]]; then
+                ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile memory up -d redis
+            fi
 
             if [[ "${WITH_KG}" == true ]]; then
                 ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile kg up -d neo4j
@@ -408,6 +423,9 @@ case "${COMMAND}" in
         fi
         if [[ "${WITH_KG}" == true ]]; then
             PROFILE_ARGS+=(--profile kg)
+        fi
+        if [[ "${WITH_MEMORY}" == true ]]; then
+            PROFILE_ARGS+=(--profile memory)
         fi
 
         log_info "Đang khởi chạy hạ tầng Backend & Database qua Docker Compose..."

@@ -2,7 +2,7 @@
 
 from alembic import op
 
-from core.graph_outbox import SOURCE_TABLES, installation_statements
+from core.graph_outbox import CHILD_TABLES, SOURCE_TABLES, installation_statements
 
 revision = "0004_knowledge_graph"
 down_revision = "0003_agent_journal_compat"
@@ -16,11 +16,12 @@ def upgrade():
 
 
 def downgrade():
-    for table in (*SOURCE_TABLES.values(), "meal_items"):
+    for table in (*SOURCE_TABLES.values(), *CHILD_TABLES.values()):
         op.execute(f"DROP TRIGGER IF EXISTS kg_capture ON {table}")
     op.execute("DROP FUNCTION IF EXISTS kg_enqueue_snapshot()")
     op.execute("DROP FUNCTION IF EXISTS kg_capture_backend()")
     op.execute("DROP FUNCTION IF EXISTS kg_publish_backend(text, jsonb, boolean)")
     op.execute("DROP FUNCTION IF EXISTS kg_allowlisted_payload(text, jsonb)")
+    op.execute("DROP FUNCTION IF EXISTS kg_training_profile(jsonb)")
     # Retain envelopes and revision/tombstone state. The outbox may share a DB
     # with the agent service, and deleting it would lose committed work.

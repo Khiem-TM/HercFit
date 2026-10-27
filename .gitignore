@@ -83,7 +83,19 @@ coverage.xml
 *.cover
 *.py,cover
 .hypothesis/
-backend/tests
+
+# Test suites, fixtures and evaluation runners at any directory level
+test/
+tests/
+__tests__/
+spec/
+specs/
+__mocks__/
+test_*.py
+*_test.py
+conftest.py
+*.test.*
+*.spec.*
 
 # --- Databases & Local Persistence ---
 *.db
@@ -123,5 +135,4 @@ pids/
 
 backend/docs
 design/
-backend/tests/
-backend/agentic/tests
+docs

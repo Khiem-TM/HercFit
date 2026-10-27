@@ -78,8 +78,19 @@ Danh mục SYSTEM được đọc chung, CUSTOM chỉ thuộc người tạo.
 | GET | `/api/trainings/{training_id}` | Snapshot chi tiết và tổng |
 | PUT | `/api/trainings/{training_id}` | Thay snapshot, tính lại tổng |
 | DELETE | `/api/trainings/{training_id}` | Xoá mềm, loại khỏi tiến độ |
-| GET | `/api/progress` | Tổng thực tế theo ngày, không cần plan |
+| GET | `/api/progress` | Tổng thực tế theo ngày (gồm training_load), không cần plan |
 | GET | `/api/plans/{plan_id}/progress` | Đối chiếu thực tế với chỉ tiêu plan |
+| GET/PUT | `/api/training/profile` | Hồ sơ VĐV (personal_info.training) kèm vùng HR/pace, dự đoán thành tích |
+| GET | `/api/training/summary` | Theo tuần: số buổi, tải sRPE, km/pace chạy, volume, hard sets/nhóm cơ, % bám lịch |
+| GET | `/api/training/load` | Tải theo ngày, acute 7d, chronic 28d, ACWR, monotony, strain |
+| GET | `/api/training/strength/progress` | e1RM, top set, volume theo buổi của một bài (exercise_id) |
+| GET | `/api/training/strength/records` | Kỷ lục e1RM và 1/3/5/10RM mọi bài |
+| GET | `/api/training/running/summary` | km/tuần, chạy dài nhất, pace theo loại buổi, tỉ lệ easy, best efforts, dự đoán |
+| GET | `/api/training/insights` | Phát hiện xác định (quá tải, tăng km, plateau, PR, bám lịch, dinh dưỡng) kèm evidence |
+| GET | `/api/training/templates` | Giáo án Gym/Running/Hybrid và bài chạy mẫu |
+| GET | `/api/training/templates/{code}/schedule` | Xem trước payload lịch tập từ giáo án (không ghi) |
+| POST | `/api/meals/preview`, `/api/trainings/preview` | Chạy thử ghi (validate, snapshot catalog, tổng, chỉ số, calo) rồi rollback; trả `preview: true` |
+| POST | `/api/plans/{plan_id}/training-plans/preview` | Chạy thử tạo lịch tập rồi rollback, dùng cho thẻ xác nhận |
 | GET | `/health` | Tiến trình hoạt động |
 | GET | `/health/ready` | DB truy cập được và revision bằng Alembic head |
 
@@ -205,13 +216,24 @@ POST /api/plans/{plan_id}/training-plans:
   "entries":[
     {"scheduled_date":"2030-11-01","label":"Gym","items":[{
       "exercise_id":"00000000-0000-4000-8000-000000000003",
-      "performance":{"kind":"STRENGTH","sets":[{"reps":8,"weight_kg":20,"rpe":7},{"reps":6,"weight_kg":30,"rpe":9}]}
+      "prescription":{"kind":"STRENGTH","sets":[{"count":4,"reps_min":8,"reps_max":12,"rpe_target":8,"rest_seconds":120}],
+                      "progression":{"rule":"DOUBLE_PROGRESSION","increment_kg":2.5}}
+    }]},
+    {"scheduled_date":"2030-11-03","label":"Interval","items":[{
+      "exercise_id":"00000000-0000-4000-8000-000000000004",
+      "prescription":{"kind":"ENDURANCE","workout_type":"INTERVAL","steps":[
+        {"step_type":"WARMUP","duration_seconds":900,"target":{"type":"PACE_ZONE","zone":"E"}},
+        {"repeat":5,"steps":[{"distance_meters":1000,"target":{"type":"PACE_ZONE","zone":"I"}},
+                             {"step_type":"RECOVERY","duration_seconds":180,"target":{"type":"PACE_ZONE","zone":"E"}}]}]}
     }]},
     {"scheduled_date":"2030-11-02","label":"Nghỉ","is_rest":true,"items":[]}
   ]
 }
 ~~~
 
+Lịch dùng prescription (mục tiêu: khoảng reps, %1RM/RPE, bước interval mỗi bước có
+đúng một trong duration_seconds/distance_meters, vùng pace E/M/T/I/R hoặc HR Z1–Z5),
+không dùng performance. Có thể lấy payload sẵn từ /api/training/templates/{code}/schedule.
 Response lịch có entries[].id, items[].id, position và snapshot danh mục.
 Dùng entry ID làm source_entry_id khi ghi thực tế; lập lịch không tạo nhật ký.
 
@@ -232,27 +254,33 @@ SERVING là số khẩu phần; G/ML phải khớp catalog, không tự suy di�
 Nutrient đã biết cần serving basis đã biết.
 
 POST /api/trainings dùng name, started_at, ended_at hoặc duration_seconds,
-timezone, note, source_entry_id tuỳ chọn và items. Mỗi item gồm exercise_id và
-performance đúng loại. STRENGTH dùng set như ví dụ lịch, hỗ trợ
-EXTERNAL/BODYWEIGHT/ASSISTED, hold/rest/tempo/RPE/RIR/note. Ví dụ các loại còn lại:
+timezone, note, session_rpe (0–10), source_entry_id tuỳ chọn và items. Mỗi item gồm
+exercise_id và performance đúng loại. STRENGTH: sets[] với reps/weight_kg, set_type
+(WARMUP/WORKING/BACKOFF/DROP/FAILURE), load_mode EXTERNAL/BODYWEIGHT/ASSISTED,
+hold/rest/tempo/RPE/RIR, superset_group, side. Server tính discipline, training_load
+(session_rpe × phút) và chỉ số item: volume_kg, best_e1rm_kg (Epley), hard_sets,
+duration/distance. Ví dụ các loại còn lại:
 
 ~~~json
 {"kind":"SPORT","duration_seconds":3600,"intensity":"MODERATE","met":6,"weight_kg":70}
 ~~~
 
 ~~~json
-{"kind":"ENDURANCE","duration_seconds":1800,"distance_meters":5000,"weight_kg":70,"elevation_gain_meters":50,"terrain":"road"}
+{"kind":"ENDURANCE","workout_type":"TEMPO","duration_seconds":1800,"distance_meters":5000,"avg_hr":160,
+ "elevation_gain_meters":50,"laps":[{"lap_type":"WORK","distance_meters":1000,"duration_seconds":330}]}
 ~~~
 
-ENDURANCE response có pace_seconds_per_km=360; không nhận pace từ input.
+ENDURANCE response có pace_seconds_per_km=360, speed_kmh, moving pace và pace từng
+lap; không nhận các trường suy ra từ input. Tổng lap không vượt quá distance_meters.
 Nếu biết calories, item có thể thêm:
 
 ~~~json
 {"calorie_estimate":{"kcal":"300","source":"USER","method":"MANUAL","method_version":"1","inputs":{"device":"watch"}}}
 ~~~
 
-Không gửi thì calories null; backend không chạy công thức ước tính. Nếu cung
-cấp start/end và duration thì chúng phải khớp. Không liên kết log tập vào ngày
+Không gửi thì backend ước tính có nguồn (source=HERCFIT_ESTIMATE): chạy/đi bộ theo
+phương trình ACSM, Gym/Sport/môn khác theo MET (Compendium) với cân nặng gần nhất;
+không có cân nặng thì kcal null. Nếu cung cấp start/end và duration thì chúng phải khớp. Không liên kết log tập vào ngày
 nghỉ. Log mới cần ít nhất một item.
 
 ### Điều chỉnh và tiến độ
@@ -278,6 +306,30 @@ dùng chỉ tiêu plan và toàn bộ nhật ký trong khoảng, kể cả ngoà
 Calories Out thực tế vẫn null khi chỉ có nhật ký tập luyện. Chỉ snapshot đang
 hoạt động được tính; legacy AGGREGATE_ONLY giữ totals gốc, items rỗng, không được
 tạo qua HTTP.
+
+### Thẻ xác nhận và hỏi lại (agent)
+
+Food và exercise có `image_url` tuỳ chọn (https hoặc đường dẫn nội bộ `/…`, không nhận `data:`),
+có trong snapshot của item. Với create_meals/create_trainings/create_training_plans, agent gọi
+endpoint preview trước khi tạo thao tác chờ; payload lỗi bị trả về ngay, còn kết quả chạy thử nằm ở
+`pending_action.display` (cùng dạng MealRead/TrainingRead/TrainingPlanRead). Khi `status` là
+`needs_input`, ChatResponse luôn kèm `clarification` dạng form {intro, questions[1..8]}; mỗi câu hỏi
+{id, label, question, mode single|multiple|quick_reply|text, options[{id,label,description,image_url,ref,value}],
+allow_free_text, free_text_hint, required, min_select, max_select}. Nếu model không dựng được form,
+backend tách các dòng đánh số trong reply thành câu hỏi `text`. Frontend hỏi lần lượt từng câu
+(bỏ qua được câu `required=false`), cho xem lại rồi gửi một tin nhắn tổng hợp: một câu thì gửi đúng
+`value`/text, nhiều câu thì mỗi dòng `label: câu trả lời`. `ref`/`image_url` chỉ lấy từ bản ghi
+catalog mà tool trả về trong lượt đó. Checkpoint cũ dạng một câu {question, mode, …} được bọc thành
+form một câu khi đọc.
+
+Ảnh: món/bài tập render từ `image_url` trong snapshot. Sau khi xác nhận create_meals/create_trainings,
+frontend lấy `id`/`version_id` của bản ghi vừa lưu trong `tool_outputs` (cùng `action_id`) rồi tải ảnh
+người dùng lên `PUT /api/media/{meals|trainings}/{id}/image`. Với món/bài tập CUSTOM từ research,
+`pending_action.display` = {kind: catalog_candidate, record, image_candidates, sources} (ảnh Tavily);
+ảnh người dùng giữ lại được lưu bằng `POST /api/media/{foods|exercises}/{id}/image/import`
+{source_url (https), expected_version_id}: backend tải ảnh (chặn địa chỉ nội bộ, tối đa 3 lần chuyển
+hướng, giới hạn dung lượng), mã hoá lại như ảnh tải lên rồi lưu Cloudinary. ChatResponse có thể kèm
+`illustrations` (ảnh minh hoạ web, chỉ để hiển thị) cho câu trả lời có research.
 
 ## Ranh giới
 
