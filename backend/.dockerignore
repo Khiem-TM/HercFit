@@ -35,3 +35,12 @@ tests
 **/.env
 **/.env.*
 !**/.env.example
+
+# Developer-only analysis and validation assets.
+**/docs
+**/tests
+**/evaluation
+**/eval_results
+**/reports
+**/traces
+observability/_dev

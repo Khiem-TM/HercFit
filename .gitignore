@@ -84,7 +84,7 @@ coverage.xml
 *.py,cover
 .hypothesis/
 
-# Test suites, fixtures and evaluation runners at any directory level
+# Test suites and fixtures at any directory level
 test/
 tests/
 __tests__/
@@ -133,6 +133,14 @@ pids/
 *.seed
 *.pid.lock
 
-backend/docs
 design/
-docs
+
+# Documentation at every directory level (kept locally).
+docs/
+
+# Local analysis tools and outputs; runtime adapters remain versioned.
+evaluation/
+eval_results/
+reports/
+traces/
+backend/observability/_dev/
