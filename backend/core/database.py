@@ -147,3 +147,33 @@ async def get_db() -> AsyncIterator[AsyncSession]:
     """FastAPI dependency yielding a SQLAlchemy AsyncSession."""
     async with get_db_session() as session:
         yield session
+
+
+# The trace GUC is read only by outbox/job inserts, so it is set once per
+# transaction on write paths (ORM flushes and DML statements), never on reads.
+from sqlalchemy import event, text as sql_text
+from sqlalchemy.orm import Session
+
+
+def attach_trace_context(session):
+    connection = session.connection()  # begins the transaction when a statement opens it
+    transaction = session.get_transaction()
+    if session.info.get('trace_transaction') is transaction or connection.dialect.name != 'postgresql':
+        return
+    from observability import durable_context
+    import json
+    session.info['trace_transaction'] = transaction
+    context = durable_context()
+    if context:
+        connection.execute(sql_text("SELECT set_config('hercfit.trace_context', :context, true)"), {'context': json.dumps(context)})
+
+
+@event.listens_for(Session, 'before_flush')
+def trace_flush(session, flush_context, instances):
+    attach_trace_context(session)
+
+
+@event.listens_for(Session, 'do_orm_execute')
+def trace_statement(orm_execute_state):
+    if orm_execute_state.is_insert or orm_execute_state.is_update or orm_execute_state.is_delete:
+        attach_trace_context(orm_execute_state.session)
