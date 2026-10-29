@@ -34,11 +34,28 @@ PAYLOAD_FIELDS = {
     "MealItem": COMMON_FIELDS + (
         "position", "food_id", "quantity", "unit", "nutrition_incomplete",
     ) + NUTRIENT_FIELDS,
+    "Training": COMMON_FIELDS + (
+        "user_id", "name", "started_at", "timezone", "source", "detail_status", "discipline",
+        "duration_seconds", "session_rpe", "training_load", "energy_kcal", "calories_incomplete",
+        "replaces_id", "source_entry_id",
+    ),
+    "TrainingItem": COMMON_FIELDS + (
+        "position", "exercise_id", "kind", "duration_seconds", "distance_meters",
+        "volume_kg", "best_e1rm_kg", "hard_sets", "energy_kcal",
+    ),
+    # Only catalog identity is projected from an exercise snapshot.
+    "ExerciseRef": ("id", "code", "name_vi", "name_en", "kind", "source_type"),
 }
+# Structured personalization: users.age and the TrainingProfile-validated subset of
+# personal_info['training']. Names, contact data, injuries, heart rates and every
+# other free-form personal_info key stay out of the graph.
+PROFILE_USER_FIELDS = ("age",)
+TRAINING_PROFILE_FIELDS = ("experience_level", "primary_focus", "available_days", "session_minutes", "equipment")
 SOURCE_TABLES = {
     "User": "users", "Goal": "goals", "BodyMetric": "body_metrics",
-    "Food": "foods", "Meal": "meals",
+    "Food": "foods", "Meal": "meals", "Training": "trainings",
 }
+CHILD_TABLES = {"MealItem": "meal_items", "TrainingItem": "training_items"}
 
 # Keep this envelope compatible with the agent database migration. It deliberately
 # has no FK to users/sessions: the outbox must survive deletion of its source.
@@ -53,12 +70,14 @@ CREATE TABLE IF NOT EXISTS kg_outbox (
     operation text NOT NULL CHECK (operation IN ('upsert', 'delete')),
     occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     payload jsonb NOT NULL,
+    trace_context jsonb DEFAULT NULLIF(current_setting('hercfit.trace_context', true), '')::jsonb,
     attempts integer NOT NULL DEFAULT 0,
     available_at timestamptz NOT NULL DEFAULT now(),
     delivered_at timestamptz,
     last_error text,
     UNIQUE (source, aggregate_type, aggregate_id, aggregate_version, operation)
 );
+ALTER TABLE kg_outbox ADD COLUMN IF NOT EXISTS trace_context jsonb DEFAULT NULLIF(current_setting('hercfit.trace_context', true), '')::jsonb;
 -- The agent service may have initialized the shared envelope first.
 ALTER TABLE kg_outbox ALTER COLUMN event_id SET DEFAULT gen_random_uuid();
 ALTER TABLE kg_outbox ALTER COLUMN occurred_at SET DEFAULT clock_timestamp();
@@ -78,12 +97,13 @@ CREATE TABLE IF NOT EXISTS kg_source_versions (
 """
 
 
-def _payload_function_sql() -> str:
+def _payload_function_sql(profile: bool = True) -> str:
     # Names and field lists are constants, never request or model-generated SQL.
+    fields_by_kind = {**PAYLOAD_FIELDS, "User": PAYLOAD_FIELDS["User"] + (PROFILE_USER_FIELDS if profile else ())}
     branches = "\n".join(
         "WHEN '" + kind + "' THEN ARRAY["
         + ",".join("'" + field + "'" for field in fields) + "]::text[]"
-        for kind, fields in PAYLOAD_FIELDS.items()
+        for kind, fields in fields_by_kind.items()
     )
     return """
 CREATE OR REPLACE FUNCTION kg_allowlisted_payload(kind text, data jsonb)
@@ -98,6 +118,25 @@ $$;
 """
 
 
+TRAINING_PROFILE_DDL = """
+CREATE OR REPLACE FUNCTION kg_training_profile(info jsonb)
+RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
+    SELECT COALESCE(jsonb_object_agg(key, value), '{}'::jsonb)
+    FROM jsonb_each(CASE WHEN jsonb_typeof(info->'training') = 'object'
+                         THEN info->'training' ELSE '{}'::jsonb END)
+    WHERE key IN (""" + ", ".join("'" + field + "'" for field in TRAINING_PROFILE_FIELDS) + """)
+$$;
+"""
+PROFILE_PAYLOAD_SQL = """
+    IF kind = 'User' AND action = 'upsert' THEN
+        projection := projection || jsonb_build_object('training_profile',
+            kg_training_profile(data->'personal_info'));
+    END IF;"""
+PROFILE_GUARD_SQL = """
+            AND OLD.age IS NOT DISTINCT FROM NEW.age
+            AND kg_training_profile(OLD.personal_info)
+                IS NOT DISTINCT FROM kg_training_profile(NEW.personal_info)"""
+
 PUBLISH_DDL = """
 CREATE OR REPLACE FUNCTION kg_publish_backend(kind text, data jsonb,
                                               force_delete boolean DEFAULT false)
@@ -109,7 +148,7 @@ DECLARE
     next_version bigint;
     action text;
 BEGIN
-    IF kind NOT IN ('User', 'Goal', 'BodyMetric', 'Food', 'Meal') THEN
+    IF kind NOT IN ('User', 'Goal', 'BodyMetric', 'Food', 'Meal', 'Training') THEN
         RAISE EXCEPTION USING MESSAGE = 'Unsupported graph aggregate: ' || kind;
     END IF;
     entity_owner := CASE kind
@@ -147,6 +186,17 @@ BEGIN
                 AND item.is_active
         ), '[]'::jsonb));
     END IF;
+    IF kind = 'Training' AND action = 'upsert' THEN
+        projection := projection || jsonb_build_object('items', COALESCE((
+            SELECT jsonb_agg(
+                kg_allowlisted_payload('TrainingItem', to_jsonb(item)) ||
+                jsonb_build_object('exercise_snapshot',
+                    kg_allowlisted_payload('ExerciseRef', item.exercise_snapshot))
+                ORDER BY item.position, item.id)
+            FROM training_items item WHERE item.training_id = entity_id::uuid
+                AND item.is_active
+        ), '[]'::jsonb));
+    END IF;--profile-payload
     INSERT INTO kg_outbox
         (source, aggregate_type, aggregate_id, owner_id, aggregate_version,
          operation, payload)
@@ -159,8 +209,22 @@ DECLARE
     data jsonb;
     meal_row record;
     meal_ids uuid[];
+    training_row record;
+    training_ids uuid[];
 BEGIN
-    IF TG_TABLE_NAME = 'meal_items' THEN
+    IF TG_TABLE_NAME = 'training_items' THEN
+        IF TG_OP = 'INSERT' THEN
+            training_ids := ARRAY[NEW.training_id];
+        ELSIF TG_OP = 'DELETE' THEN
+            training_ids := ARRAY[OLD.training_id];
+        ELSE
+            training_ids := ARRAY[OLD.training_id, NEW.training_id];
+        END IF;
+        FOR training_row IN SELECT * FROM trainings WHERE id = ANY(training_ids)
+                            ORDER BY id FOR UPDATE LOOP
+            PERFORM kg_publish_backend('Training', to_jsonb(training_row));
+        END LOOP;
+    ELSIF TG_TABLE_NAME = 'meal_items' THEN
         -- Child edits, FK SET NULL and cascade deletes all invalidate the meal.
         IF TG_OP = 'INSERT' THEN
             meal_ids := ARRAY[NEW.meal_id];
@@ -175,11 +239,14 @@ BEGIN
         END LOOP;
     ELSE
         data := CASE WHEN TG_OP = 'DELETE' THEN to_jsonb(OLD) ELSE to_jsonb(NEW) END;
-        -- Auth refresh/profile edits contain no new graph fact. Never project PII,
-        -- OAuth credentials or the unstructured personal_info column.
-        IF TG_ARGV[0] = 'User' AND TG_OP = 'UPDATE'
-            AND OLD.is_active IS NOT DISTINCT FROM NEW.is_active THEN
-            RETURN NULL;
+        -- Auth refresh and other profile edits contain no new graph fact. Never
+        -- project PII, OAuth credentials or free-form personal_info keys.
+        -- Nested so user-only columns (age, personal_info) are resolved for users rows only.
+        IF TG_ARGV[0] = 'User' AND TG_OP = 'UPDATE' THEN
+            IF OLD.is_active IS NOT DISTINCT FROM NEW.is_active--profile-guard
+            THEN
+                RETURN NULL;
+            END IF;
         END IF;
         PERFORM kg_publish_backend(TG_ARGV[0], data, TG_OP = 'DELETE');
     END IF;
@@ -219,15 +286,20 @@ END $$;
 """
 
 
-def installation_statements() -> tuple[str, ...]:
+def _publish_sql(profile: bool = True) -> str:
+    return (PUBLISH_DDL.replace("--profile-payload", PROFILE_PAYLOAD_SQL if profile else "")
+            .replace("--profile-guard", PROFILE_GUARD_SQL if profile else ""))
+
+
+def installation_statements(profile: bool = True) -> tuple[str, ...]:
     """DDL shared by Alembic and dedicated test/development metadata creation."""
     triggers = tuple(
         f"DROP TRIGGER IF EXISTS kg_capture ON {table}; "
         f"CREATE TRIGGER kg_capture AFTER INSERT OR UPDATE OR DELETE ON {table} "
         f"FOR EACH ROW EXECUTE FUNCTION kg_capture_backend('{kind}');"
-        for kind, table in {**SOURCE_TABLES, "MealItem": "meal_items"}.items()
+        for kind, table in {**SOURCE_TABLES, **CHILD_TABLES}.items()
     )
-    return (OUTBOX_DDL, _payload_function_sql(), PUBLISH_DDL,
+    return (OUTBOX_DDL, TRAINING_PROFILE_DDL, _payload_function_sql(profile), _publish_sql(profile),
             _snapshot_function_sql(), *triggers)
 
 

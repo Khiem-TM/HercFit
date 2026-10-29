@@ -7,9 +7,13 @@ from pydantic import BaseModel, Field
 
 class GraphContext(BaseModel):
     facts: list[dict[str, Any]] = Field(default_factory=list)
+    # Recent conversation turns (gated by live session generations).
     episodes: list[dict[str, Any]] = Field(default_factory=list)
-    capabilities: list[dict[str, Any]] = Field(default_factory=list)
-    templates: list[dict[str, Any]] = Field(default_factory=list)
+    # Derived user model (knowledge_graph.model) and the sections relevant to the request.
+    model: dict[str, Any] | None = None
+    sections: list[str] = Field(default_factory=list)
+    domains: list[str] = Field(default_factory=list)
+    intents: list[dict[str, Any]] = Field(default_factory=list)
     missing_fields: list[str] = Field(default_factory=list)
     conflicts: list[str] = Field(default_factory=list)
     projection_lag_ms: float | None = None
@@ -19,7 +23,7 @@ class GraphContext(BaseModel):
 class ProjectionEvent(BaseModel):
     event_id: UUID
     source: Literal['backend', 'agent']
-    aggregate_type: Literal['User', 'Goal', 'BodyMetric', 'Meal', 'Food', 'Execution', 'Session']
+    aggregate_type: Literal['User', 'Goal', 'BodyMetric', 'Meal', 'Food', 'Training', 'Execution', 'Session', 'Run']
     aggregate_id: str
     owner_id: str | None = None
     aggregate_version: int = Field(ge=1)

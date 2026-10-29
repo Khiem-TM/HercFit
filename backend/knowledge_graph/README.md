@@ -27,9 +27,61 @@ KG_MODE=shadow docker compose -f backend/docker-compose.yml --profile kg up -d a
 ```
 
 Modes: `off` bypasses retrieval; `shadow` measures it without prompt influence;
-`advisory` supplies bounded evidence; `optimized` additionally enables the strict
-progress read template. Default is `off`. Roll back by recreating the agent with
+`advisory` supplies the knowledge card below to routing, tool calls and the final
+answer; `optimized` additionally enables the strict progress read template.
+That template only parses the request, so `FAST_READ_ENABLED=true` enables it
+without the graph. Default is `off`. The agent warms every domain query at startup
+because a cold read exceeds the 150 ms cap; a timed-out read finishes in the
+background so its pooled connection survives. Roll back by recreating the agent with
 `KG_MODE=off`; business storage and confirmations remain available.
+
+## Knowledge layers
+
+1. **Facts** — owner-scoped projections of business records (Goal, BodyMetric,
+   Meal→MealItem→Food, Training→Exercise) and of `users.age` plus the
+   `TrainingProfile`-validated subset of `personal_info['training']` (level, focus,
+   days, minutes, equipment; never injuries, heart rates or free-form keys).
+2. **Conversation** — one `Run` per finished turn with a deterministic intent
+   (`knowledge_graph/intents.py`: domain × write/read/research, never message or
+   model text), linked `-[:HAS_INTENT]->(:Intent)` and `-[:ABOUT]->` the records it
+   touched. Turns are journaled in `agent_turn_records`, versioned like executions.
+3. **User model** — `knowledge_graph/model.py` derives what a coach remembers:
+   BMI, weight changes and trend, goal progress and required vs actual pace,
+   7-day nutrition averages and favourite foods, weekly/28-day training, best e1RM
+   progression and running totals. The worker stores it as `(:UserModel)` with
+   `FREQUENTLY_EATS`/`PRACTICES` habit edges, refreshing an owner after each of its
+   business events and, during maintenance, whenever the local day changes.
+   Conversation statistics are never stored there: they are aggregated at read
+   time behind the SQL session gate.
+
+The agent reads a **knowledge card**: user-model sections chosen for the request's
+domains (round-robin across domains), then the most relevant records, then recent
+turns, as compact Vietnamese lines within 1500 bytes. Every number is derived from
+projected facts by tested pure functions, so answers like "giảm bao nhiêu kg so
+với tháng trước" or "tuần này tập mấy buổi" are present without a tool call.
+
+`GET /api/v1/chat/knowledge-graph` returns the personal map for the UI: profile,
+insight cards, intents, a disclosure tree (`Bạn → hubs → records → details`, with
+`tree` and cross `link` edges) and a timeline. It reports `mode` so the client can
+say when the assistant does not use the graph yet.
+
+Optional `start` and `end` (inclusive local days, `YYYY-MM-DD`, Asia/Ho_Chi_Minh)
+limit the drawn meals, trainings, measurements and turns to those days, at most 40
+of each kind (newest first). Without them the map keeps its compact default (the 14
+newest of each kind). A windowed answer adds `window`: the effective `start`/`end`
+after clamping to the retained history, its bounds `min`/`max`, the per-kind `limit`,
+`totals` in the window before the limit, and `density`, activity per local day and
+hub over the whole retained history, which the client draws as a time scrubber.
+`start` after `end` is rejected with 422.
+
+Measure retrieval without models (context recall over the eval cases), and the
+full agent when model keys are available:
+
+```sh
+python -m agentic.evaluation.kg_eval seed
+python -m agentic.evaluation.kg_eval retrieval --out /tmp/kg_retrieval
+python -m agentic.evaluation.kg_eval run --modes off,advisory --repeat 2
+```
 
 ## Local or separate databases
 
@@ -41,7 +93,7 @@ For separate databases, migrate both sources before starting the worker:
 
 ```sh
 python -m alembic upgrade head
-python -m agentic.migrate
+python -m agentic.scripts.migrate
 python -m knowledge_graph.worker backfill
 python -m knowledge_graph.worker run
 ```
@@ -50,18 +102,19 @@ The standalone `agentic/docker-compose.yml` also supports `--profile kg`.
 Its backend DSN must reach the backend PostgreSQL from inside Docker; use
 `host.docker.internal` when that database is exposed on the host.
 `./dev_up.sh --local --kg` starts Neo4j and a local worker; the agent can be
-started separately with `python -m uvicorn agentic.main:app --port 8081`.
+started separately with `python -m uvicorn agentic.core.app.main:app --port 8081`.
 
 ## Data and recovery
 
 Backend PostgreSQL triggers capture User lifecycle, Goal, BodyMetric, Food,
-Meal and MealItem changes, including SQL imports. Events commit atomically with
+Meal/MealItem and Training/TrainingItem changes (trainings project as
+`User-[:TRAINED]->Training-[:PERFORMED]->Exercise`, exercises carry catalog identity only), including SQL imports. Events commit atomically with
 source writes. Meal child changes advance a separate aggregate revision;
 `payload.version_id` remains the ORM version. Food portions and nutrients are
-historical snapshots. Unstructured profile fields and credentials are excluded.
+historical snapshots. Free-form profile fields, contact data and credentials are excluded.
 
-Agent executions are recovered from committed checkpoints and journaled with
-stable IDs. Source session generations immediately filter deleted memory during
+Agent executions and turns are recovered from committed checkpoints and journaled
+with stable IDs. Source session generations immediately filter deleted memory during
 retrieval; durable tombstones reject late events. Clearing chat history preserves
 saved business records. Reusing a session ID advances its generation.
 
@@ -84,29 +137,13 @@ is empty. PostgreSQL remains intact. If it fails, fix the reported error class,
 retry and rerun backfill. This MVP rebuild uses temporary graph unavailability;
 chat falls back to the existing workflow.
 
-Graph retention defaults to 90 days for meals/measurements and 30 days for
-executions. Source journals/outbox are retained for recovery; this implementation
+Graph retention defaults to 90 days for meals, measurements and trainings and 30 days for
+executions and turns. Source journals/outbox are retained for recovery; this implementation
 does not automatically purge their SQL audit history. Goals must be active and
 CUSTOM foods remain owner-scoped. No embeddings, free-form memory extraction,
 or automatic promotion of learned execution templates is enabled.
 
-## Validation and rollout
-
-```sh
-PYTHONPATH=backend .venv/bin/python -m pytest backend/agentic/tests/unit -q
-PYTHONPATH=backend .venv/bin/python -m agentic.tests.evaluation.benchmark_kg
-```
-
-The benchmark uses synthetic backend and graph fixtures by default. It proves
-call counts and functional routing, not real Neo4j or provider latency. Its
-explicit `--real-model` option sends only synthetic requests to the configured
-provider. See `--help` for report and workload options.
-
-Integration tests require disposable services: set `KG_TEST_DATABASE_URL`,
-`KG_TEST_NEO4J_URI`, and `KG_TEST_NEO4J_PASSWORD`, then run the `test_kg_*` files
-under `agentic/tests/integration`. The graph suite deletes projection labels in
-that test graph. Backend trigger tests use `SCHEMA_TEST_DATABASE_URL` and create
-disposable schemas. Never point these tests at a production graph.
+## Rollout
 
 Promote modes only after regression tests pass and production-like measurements
 meet the planned gates: routing >=95% without >1 percentage-point regression,
