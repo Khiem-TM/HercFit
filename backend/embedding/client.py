@@ -1,4 +1,4 @@
-from observability import observed, annotate
+from agentic.observability import observed, annotate
 import math
 import httpx
 
@@ -14,9 +14,15 @@ class EmbeddingClient:
         await self.http.aclose()
 
     @observed('embedding.request', 'embedding', capture=('texts',), output=False)
-    async def embed(self, texts):
+    async def embed(self, texts, *, input_type="query"):
         if not texts or len(texts)>32:
             raise ValueError('Embedding batch must contain 1..32 texts')
+        if input_type not in {"query", "passage"}:
+            raise ValueError("input_type must be query or passage")
+        # E5 retrieval requires asymmetric prefixes, including non-English input.
+        if self.settings.EMBEDDING_MODEL.rsplit("/", 1)[-1] == "multilingual-e5-large":
+            prefix = input_type + ": "
+            texts = [prefix + text.removeprefix(prefix) for text in texts]
         annotate(model=self.settings.EMBEDDING_MODEL, input_count=len(texts))
         response=await self.http.post('embeddings',json={'model':self.settings.EMBEDDING_MODEL,'input':texts})
         response.raise_for_status()

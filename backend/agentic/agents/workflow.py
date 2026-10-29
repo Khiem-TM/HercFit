@@ -1,5 +1,5 @@
 from agentic.services.rag_pipeline import retrieve_graph_context
-from observability import annotate
+from agentic.observability import annotate
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
 from agentic.agents.state import AgentState
@@ -11,7 +11,7 @@ from agentic.services.routing import (latest_request, make_fast_read_plan, fast_
                                            fast_answer_instruction, FastReadPlan)
 from agentic.security.content_filter import assess
 from agentic.services import food_suggestion
-from knowledge_graph.service import domains_for
+from agentic.knowledge_graph.service import domains_for
 from agentic.observability.telemetry import MeasuredModels
 from agentic.observability.execution import run_node
 

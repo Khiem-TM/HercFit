@@ -1,5 +1,5 @@
 """Bounded image decoding and authenticated, server-only Cloudinary requests."""
-from observability import observed
+from agentic.observability import observed
 from dataclasses import dataclass
 from io import BytesIO
 import warnings

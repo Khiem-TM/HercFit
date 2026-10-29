@@ -160,7 +160,7 @@ def attach_trace_context(session):
     transaction = session.get_transaction()
     if session.info.get('trace_transaction') is transaction or connection.dialect.name != 'postgresql':
         return
-    from observability import durable_context
+    from agentic.observability import durable_context
     import json
     session.info['trace_transaction'] = transaction
     context = durable_context()

@@ -9,7 +9,7 @@ from models.foods import FoodItem, normalize_food_text
 from models.exercises import Exercise
 from schemas.foods import FoodRead
 from schemas.exercises import ExerciseRead
-from research.attestation import key_id, verify
+from agentic.research.attestation import key_id, verify
 
 MODELS = {'foods': (FoodItem, FoodRead), 'exercises': (Exercise, ExerciseRead)}
 

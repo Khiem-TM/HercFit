@@ -4,7 +4,7 @@ The agent reads a knowledge card: derived user-model sections chosen for the
 request's domains first, then the most relevant recent records, then recent
 conversation turns, all rendered as compact lines within a byte budget.
 """
-from observability import observed, annotate
+from agentic.observability import observed, annotate
 import asyncio
 import json
 import logging

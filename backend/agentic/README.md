@@ -35,7 +35,9 @@ Canonical module ownership:
 | `prompts` | Versioned templates and registry |
 | `tools` | Tool registry, definitions, policies, schemas and integrations |
 | `security` | Input, content and output checks |
-| `observability` | Execution guards, telemetry and tracing |
+| `knowledge_graph` | Optional Neo4j projection, user model, graph retrieval and outbox worker |
+| `research` | Research contracts, evidence audit, source registry and finalization attestation |
+| `observability` | Shared runtime adapter (request/trace IDs, middleware, propagation), execution guards and telemetry |
 | `evaluation` | Evaluation runners and golden datasets |
 | `scripts` | Migration, maintenance and JEV preflight commands |
 
@@ -51,10 +53,10 @@ files; a fresh checkout does not include them.
 
 Offline evaluation (`evaluation/`), test suites, architecture notes under `docs/`,
 trace output and analysis reports are local assets excluded from Git and Docker.
-The optional LangSmith exporter lives at `backend/observability/_dev/`; it is
+The optional LangSmith exporter lives at `backend/agentic/observability/_dev/`; it is
 loaded only when `MODE=dev` and enabled by the existing LangSmith configuration.
-A clean checkout or deployment image uses `observability/runtime.py`, which
+A clean checkout or deployment image uses `agentic/observability/runtime.py`, which
 keeps request correlation and disables trace export even with inherited SDK flags.
-Run local setup with `python -m observability._dev.bootstrap` from `backend/`.
+Run local setup with `python -m agentic.observability._dev.bootstrap` from `backend/`.
 Node guards, token/cost accounting and JEV runtime decisions remain versioned.
 The local evaluation commands above require the developer's evaluation files.

@@ -5,7 +5,7 @@ ran, whether a write was made or requested and the final status. Messages,
 replies, tool arguments and the model's free-form intent text never leave.
 """
 from agentic.tools.registry import REGISTRY
-from knowledge_graph.intents import classify
+from agentic.knowledge_graph.intents import classify
 
 TERMINAL = {'completed', 'needs_input', 'pending_confirmation', 'failed'}
 

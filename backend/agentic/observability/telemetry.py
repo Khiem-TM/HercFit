@@ -1,5 +1,5 @@
 """Content-free model/node measurements; no prompts, completions, or credentials."""
-from observability import graph_config
+from agentic.observability import graph_config
 from contextvars import ContextVar
 from time import perf_counter
 import math
@@ -16,7 +16,7 @@ def record_jev_result(result):
     keys = ('evaluation_id', 'phase', 'status', 'reason', 'model', 'usage', 'cost',
             'duration_ms', 'policy_version', 'cached', 'mode', 'enforced', 'attempted')
     metrics.setdefault('jev_events', []).append({k: result[k] for k in keys if k in result})
-    from observability import annotate
+    from agentic.observability import annotate
     annotate(jev_mode=result.get('mode'), jev_phase=result.get('phase'),
              jev_status=result.get('status'), jev_fallback=result.get('reason'),
              jev_model=result.get('model'), jev_policy_version=result.get('policy_version'),
@@ -132,7 +132,7 @@ class _MeasuredModel:
 class MeasuredModels:
     def __init__(self, models):
         self.models = models
-        from observability.settings import ObservabilitySettings
+        from agentic.observability.settings import ObservabilitySettings
         self.prices = ObservabilitySettings().LANGSMITH_MODEL_PRICES
 
     def get(self, role):

@@ -1,8 +1,8 @@
 """Parse model drafts and reject unsupported citations/numbers before publishing evidence."""
 import json
 from agentic.core.providers.fpt import strip_tool_markup
-from research.contracts import EvidenceClaim, ResearchDraft
-from research.quotes import numbers_supported, quote_found
+from agentic.research.contracts import EvidenceClaim, ResearchDraft
+from agentic.research.quotes import numbers_supported, quote_found
 
 def parse_draft(message,labels):
     """The model answers with JSON text: a forced function call made DeepSeek return an all-empty draft.

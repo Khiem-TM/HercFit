@@ -1,5 +1,5 @@
-from observability import observed, span
-from observability.propagation import outbound_headers
+from agentic.observability import observed, span
+from agentic.observability.propagation import outbound_headers
 import asyncio
 import httpx
 from pydantic import TypeAdapter

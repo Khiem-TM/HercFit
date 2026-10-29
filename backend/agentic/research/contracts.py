@@ -3,7 +3,7 @@ from typing import Any, ClassVar, Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from models.foods import normalize_food_text
-from research.evidence import audit
+from agentic.research.evidence import audit
 from schemas.foods import FoodCreate, FoodRead
 from schemas.exercises import ExerciseCreate, ExerciseRead
 
@@ -35,7 +35,7 @@ class EvidenceClaim(StrictModel):
     source_id: str = Field(min_length=1, max_length=200)
     quote: str = Field(min_length=1, max_length=800)
     applicable: bool
-    # The model's guess; verified claims carry the source registry's tier instead (research/sources.py).
+    # The model's guess; verified claims carry the source registry's tier instead (agentic/research/sources.py).
     authority: Literal['primary', 'professional', 'secondary', 'unknown']
     published_at: str | None = None
     conflict: bool = False

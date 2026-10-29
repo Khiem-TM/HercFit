@@ -14,9 +14,9 @@ from agentic.services.jev import JevService
 from agentic.services.memory.checkpoints import persistence
 from agentic.agents.workflow import build_workflow
 from agentic.services.runtime import Runtime
-from knowledge_graph.service import GraphContextService
-from observability import observer
-from observability.middleware import ObservabilityMiddleware
+from agentic.knowledge_graph.service import GraphContextService
+from agentic.observability import observer
+from agentic.observability.middleware import ObservabilityMiddleware
 
 
 def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=None, jev_client=None,

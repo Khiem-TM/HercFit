@@ -17,8 +17,8 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from core.database import get_async_engine, close_crud_db_pool
 from core.settings import settings
-from observability import observer
-from observability.middleware import ObservabilityMiddleware
+from agentic.observability import observer
+from agentic.observability.middleware import ObservabilityMiddleware
 from core.media_limits import ImageUploadLimit
 from routers import api_router
 from services.common import request_validation_error

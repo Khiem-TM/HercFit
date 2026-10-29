@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     CLOUDINARY_API_SECRET: SecretStr | None = None
     CLOUDINARY_FOLDER: str = Field(default="hercfit", pattern=r"^[a-zA-Z0-9_-]+$")
     # Shared with the agent service, which signs research finalization commands with it.
-    # Without it /research-finalizations refuses every command (research/attestation.py).
+    # Without it /research-finalizations refuses every command (agentic/research/attestation.py).
     RESEARCH_ATTESTATION_SECRET: SecretStr | None = None
     RESEARCH_ATTESTATION_PREVIOUS_SECRETS: list[SecretStr] = []
     RESEARCH_ATTESTATION_MAX_AGE_HOURS: int = Field(default=24, ge=1, le=168)

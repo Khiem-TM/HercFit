@@ -11,7 +11,7 @@ From the repository root:
 ```sh
 ./dev_up.sh up --kg -d
 docker compose -f backend/docker-compose.yml --profile kg stop kg-worker
-docker compose -f backend/docker-compose.yml --profile kg run --rm kg-worker python -m knowledge_graph.worker backfill
+docker compose -f backend/docker-compose.yml --profile kg run --rm kg-worker python -m agentic.knowledge_graph.worker backfill
 docker compose -f backend/docker-compose.yml --profile kg up -d kg-worker
 ```
 
@@ -42,10 +42,10 @@ background so its pooled connection survives. Roll back by recreating the agent 
    `TrainingProfile`-validated subset of `personal_info['training']` (level, focus,
    days, minutes, equipment; never injuries, heart rates or free-form keys).
 2. **Conversation** — one `Run` per finished turn with a deterministic intent
-   (`knowledge_graph/intents.py`: domain × write/read/research, never message or
+   (`agentic/knowledge_graph/intents.py`: domain × write/read/research, never message or
    model text), linked `-[:HAS_INTENT]->(:Intent)` and `-[:ABOUT]->` the records it
    touched. Turns are journaled in `agent_turn_records`, versioned like executions.
-3. **User model** — `knowledge_graph/model.py` derives what a coach remembers:
+3. **User model** — `agentic/knowledge_graph/model.py` derives what a coach remembers:
    BMI, weight changes and trend, goal progress and required vs actual pace,
    7-day nutrition averages and favourite foods, weekly/28-day training, best e1RM
    progression and running totals. The worker stores it as `(:UserModel)` with
@@ -94,8 +94,8 @@ For separate databases, migrate both sources before starting the worker:
 ```sh
 python -m alembic upgrade head
 python -m agentic.scripts.migrate
-python -m knowledge_graph.worker backfill
-python -m knowledge_graph.worker run
+python -m agentic.knowledge_graph.worker backfill
+python -m agentic.knowledge_graph.worker run
 ```
 
 The standalone `agentic/docker-compose.yml` also supports `--profile kg`.
@@ -126,9 +126,9 @@ oldest pending timestamp in each source database.
 Stop the worker before administrative commands to avoid its coordinator lock:
 
 ```sh
-python -m knowledge_graph.worker retry
-python -m knowledge_graph.worker reconcile
-python -m knowledge_graph.worker rebuild --confirm-rebuild
+python -m agentic.knowledge_graph.worker retry
+python -m agentic.knowledge_graph.worker reconcile
+python -m agentic.knowledge_graph.worker rebuild --confirm-rebuild
 ```
 
 Rebuild deletes derived graph entities, gates retrieval as `warming`, requeues

@@ -9,7 +9,7 @@ from langchain_core.messages import SystemMessage, AIMessage
 from langgraph.constants import TAG_NOSTREAM
 from agentic.core.providers.fpt import strip_tool_markup
 from agentic.agents.state import RouteDecision
-from research.contracts import QA_INTENTS
+from agentic.research.contracts import QA_INTENTS
 from agentic.services import catalog_choice, food_suggestion
 from agentic.prompts.layout import layout
 from agentic.tools.policy import CAPABILITY_GUIDANCE, CATALOG_DEPENDENCIES, COACH_GUIDANCE, TRAINING_DOMAINS, needs_catalog_handoff

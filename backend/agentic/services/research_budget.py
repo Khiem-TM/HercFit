@@ -1,4 +1,4 @@
-from observability import annotate
+from agentic.observability import annotate
 from contextlib import asynccontextmanager
 
 class BudgetExceeded(Exception): pass

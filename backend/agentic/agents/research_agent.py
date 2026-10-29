@@ -6,7 +6,7 @@ from agentic.security.input_guard import ClinicalQuestion, clinical_topic, safe_
 from agentic.components.reranker import NUTRITION_FIELDS, relevance, target_words, topical, rank_sources
 from agentic.prompts.registry import get_questions
 from agentic.prompts.registry import get_prompt
-from observability import annotate
+from agentic.observability import annotate
 import asyncio
 import hashlib
 import json
@@ -20,9 +20,9 @@ from agentic.core.context import request_context
 from agentic.agents.state import AgentState
 from agentic.tools.integrations.tavily import TavilyUnavailable, public_url
 from agentic.services.research_budget import research_lease, reserve, reserve_documents, BudgetExceeded
-from research.contracts import ResearchPlan, ResearchDraft, ResearchResult, ResearchStatus, QA_INTENTS
-from research.evidence import audit
-from research.sources import quality_gate, rate, social
+from agentic.research.contracts import ResearchPlan, ResearchDraft, ResearchResult, ResearchStatus, QA_INTENTS
+from agentic.research.evidence import audit
+from agentic.research.sources import quality_gate, rate, social
 from schemas.foods import FoodCreate
 from schemas.exercises import ExerciseCreate
 from models.foods import normalize_food_text
@@ -88,7 +88,7 @@ class ResearchV2:
         self.jev=jev
         def observed(fn,name):
             async def call(state):
-                from agentic.observability.tracing import span
+                from agentic.observability.node_span import span
                 with span(getattr(settings,'LANGSMITH_ENABLED',False),name,state['run_id']):
                     return await fn(state)
             return call

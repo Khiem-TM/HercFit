@@ -1,5 +1,5 @@
 from agentic.prompts.registry import get_prompt
-from observability import observed, annotate
+from agentic.observability import observed, annotate
 from agentic.prompts.layout import layout
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -18,7 +18,7 @@ from agentic.tools.policy import allowed_tools, CATALOG_DEPENDENCIES, needs_cata
 from agentic.components.context_filter import model_graph_context
 from agentic.services.routing import verified_fast_plan, terminal_result, fast_reads_enabled
 from agentic.tools.output import clamp_catalog_query, compact_output
-from research.sources import rate
+from agentic.research.sources import rate
 
 PROMPT = get_prompt('tool.call')
 

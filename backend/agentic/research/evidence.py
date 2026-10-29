@@ -11,8 +11,8 @@ import copy
 import json
 import re
 
-from research.quotes import NUMBER, canon, number_values, quoted_numbers
-from research.sources import allows
+from agentic.research.quotes import NUMBER, canon, number_values, quoted_numbers
+from agentic.research.sources import allows
 
 MUSCLE_TERMS = {
     'CHEST': (r'chest', r'pec', r'ngực'),

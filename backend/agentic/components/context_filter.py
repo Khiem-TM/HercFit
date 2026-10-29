@@ -1,6 +1,6 @@
 """Filter graph context and compact verified evidence without mutating checkpoints."""
 import json
-from knowledge_graph.service import render_lines
+from agentic.knowledge_graph.service import render_lines
 
 def model_graph_context(state, settings):
     if getattr(settings, 'KG_MODE', 'off') not in {'advisory', 'optimized'}:

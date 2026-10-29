@@ -26,12 +26,12 @@ async def list_foods(options: FoodQueryDep, service: CatalogServiceDep):
 
 @router.get("/resolve")
 async def resolve_food(service: CatalogServiceDep, query: str):
-    from research.contracts import ResolveQuery
+    from agentic.research.contracts import ResolveQuery
     from services.research_catalog import resolve
     return await resolve(service, 'foods', ResolveQuery(query=query).query)
 
 
-from research.contracts import FoodFinalization, FoodFinalizationResult
+from agentic.research.contracts import FoodFinalization, FoodFinalizationResult
 
 # The idempotent route stores the validated response, so the result needs a response model.
 @router.post("/research-finalizations", response_model=FoodFinalizationResult)

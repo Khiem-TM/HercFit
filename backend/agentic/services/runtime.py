@@ -12,7 +12,7 @@ from agentic.services.clarification import fallback_clarification
 from agentic.services.memory.transcript import visible
 from agentic.core.app.schemas.response import ChatResponse, Clarification
 
-from observability import annotate, graph_config, identify, observed, outcome, durable_context
+from agentic.observability import annotate, graph_config, identify, observed, outcome, durable_context
 from time import monotonic
 
 logger=logging.getLogger(__name__)
@@ -117,7 +117,7 @@ class Runtime:
         annotate(business_run_id=thread_id, graph_thread_id=thread_id)
         config=self.config(thread_id) # Lấy cấu hình
         try:
-            from agentic.observability.tracing import span
+            from agentic.observability.node_span import span
             with span(getattr(self.settings,'LANGSMITH_ENABLED',False),'agent_run',thread_id):
                 return await self._run_stream(input,thread_id,config,emit)
         except Exception as exc:
@@ -129,7 +129,7 @@ class Runtime:
             return self.response(state)
 
     async def _run_stream(self,input,thread_id,config,emit):
-        from observability.tracing import current
+        from agentic.observability.tracing import current
         observation = current.get()
         started = observation.started if observation else monotonic()
         first_progress = False
@@ -184,7 +184,7 @@ class Runtime:
         logger.info('agent_run_metrics',extra={'run_id':thread_id,'llm_calls':telemetry.get('llm_calls',0),
                     'input_tokens':telemetry.get('input_tokens',0),'output_tokens':telemetry.get('output_tokens',0)})
         result = self.response(snapshot.values)
-        from observability.tracing import current
+        from agentic.observability.tracing import current
         prior = current.get()
         if not prior or prior.metadata.get('status') not in {'timeout', 'failed'}:
             outcome(result.status, answer_ms=round((monotonic()-started)*1000, 3))

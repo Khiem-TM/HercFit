@@ -13,8 +13,11 @@ architecture notes, the refactoring audit and test suites are kept locally under
 - Preserve HTTP paths, response/event shapes, tool names and backend schemas.
 - Preserve LangGraph node names, `AgentState` fields, the `add_messages` reducer
   and serialized action payloads so existing checkpoints can resume.
-- PostgreSQL migrations, backend schemas, embedding retrieval and the shared
-  observability runtime adapter remain owned by their existing packages.
+- PostgreSQL migrations, backend schemas and embedding retrieval remain owned by
+  their existing backend packages. `knowledge_graph`, `research` and
+  `observability` live under `agentic/`; the backend imports
+  `agentic.observability` (runtime adapter) and `agentic.research` (finalization
+  contracts and attestation) but never the agent graph, services or tools.
 - Nutrition/Training currently share ToolAgent with domain allowlists. Do not
   introduce new model calls, graph nodes, BM25 or semantic caches as incidental
   changes to folder structure.
@@ -41,7 +44,7 @@ From the repository root:
 
 ```sh
 .venv/bin/python -m pytest -c backend/agentic/pytest.ini backend/agentic/tests
-LANGSMITH_TRACING=false LANGSMITH_ENABLED=false PYTHONPATH=backend .venv/bin/python -m pytest backend/tests backend/knowledge_graph/tests -q
+LANGSMITH_TRACING=false LANGSMITH_ENABLED=false PYTHONPATH=backend .venv/bin/python -m pytest backend/tests -q
 ```
 
 Use synthetic models and in-memory graph persistence for workflow tests. Real
@@ -55,8 +58,8 @@ expected output just to make a refactor pass. Report test skips and limitations.
 ## Local analysis assets
 
 - Keep `docs/`, `tests/`, `evaluation/`, `eval_results/`, `reports/`, `traces/`
-  and `backend/observability/_dev/` local; Git and Docker exclude them.
-- The optional LangSmith exporter is in `observability/_dev/` and loads only
+  and `backend/agentic/observability/_dev/` local; Git and Docker exclude them.
+- The optional LangSmith exporter is in `agentic/observability/_dev/` and loads only
   with `MODE=dev`. Clean checkouts use the non-exporting runtime adapter.
 - Keep node error handling, API request IDs, token/cost accounting and durable
   JEV decision logic versioned. They are application behavior, not offline evals.

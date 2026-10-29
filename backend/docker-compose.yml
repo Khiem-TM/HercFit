@@ -152,7 +152,7 @@ services:
       dockerfile: Dockerfile
       target: agentic
     restart: unless-stopped
-    command: [python, -m, knowledge_graph.worker, run]
+    command: [python, -m, agentic.knowledge_graph.worker, run]
     env_file:
       - path: .env
         required: false

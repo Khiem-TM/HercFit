@@ -1,7 +1,7 @@
 """Existing lexical/topic and publisher-quality ranking for public search results."""
 import re
 from models.foods import normalize_food_text
-from research.sources import TIER_RANK, rate
+from agentic.research.sources import TIER_RANK, rate
 
 GENERIC_WORDS=frozenset({'bao','nhieu','calo','kcal','calories','calorie','nutrition','dinh','duong','thanh','phan','cach','lam',
                          'la','gi','co','cua','va','cho','mot','ly','coc','size','the','and','of','facts'})

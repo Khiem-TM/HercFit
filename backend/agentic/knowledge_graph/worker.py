@@ -1,11 +1,11 @@
 """Postgres transactional outbox consumer and administrative commands.
 
-Run from backend/: python -m knowledge_graph.worker run
+Run from backend/: python -m agentic.knowledge_graph.worker run
 All commands use the backend PostgreSQL advisory lock, including when the agent
 database is separate. An event is acknowledged only after its graph commit.
 """
-from observability import observer, outcome, annotate
-from observability.persistence import worker_context
+from agentic.observability import observer, outcome, annotate
+from agentic.observability.persistence import worker_context
 import argparse
 import asyncio
 import logging

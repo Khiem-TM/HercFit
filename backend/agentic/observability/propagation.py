@@ -4,7 +4,7 @@ import hmac
 import json
 import time
 from urllib.parse import quote
-from observability.tracing import current, durable_context
+from agentic.observability.tracing import current, durable_context
 
 TRACE_HEADERS = {'langsmith-trace', 'baggage', 'x-hercfit-trace-time', 'x-hercfit-trace-signature'}
 

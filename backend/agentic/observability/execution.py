@@ -2,7 +2,7 @@
 import logging
 from time import perf_counter
 from openai import AuthenticationError
-from observability import annotate
+from agentic.observability import annotate
 from agentic.observability.telemetry import active_metrics, merge_jev_metrics
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ async def run_node(fn, state, node, settings):
     metrics={}
     marker=active_metrics.set(metrics)
     try:
-        from agentic.observability.tracing import span
+        from agentic.observability.node_span import span
         with span(getattr(settings,'LANGSMITH_ENABLED',False),node,state.get('run_id')):
             result=await fn(state)
     except Exception as exc:

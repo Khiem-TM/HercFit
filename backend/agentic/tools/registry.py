@@ -49,7 +49,7 @@ for action in ['complete','cancel']:
 add('get_progress','progress','GET','/progress',DateRangeQuery,ProgressRead,'Read daily progress for explicit start_date/end_date and timezone.')
 
 # Research finalizations use the same preview/hash/approval adapter as other writes.
-from research.contracts import ResolveQuery, FoodFinalization, ExerciseFinalization
+from agentic.research.contracts import ResolveQuery, FoodFinalization, ExerciseFinalization
 for domain, schema in [('foods', FoodFinalization), ('exercises', ExerciseFinalization)]:
     add('resolve_'+domain, domain, 'GET', '/'+domain+'/resolve', ResolveQuery, dict,
         'Resolve exact catalog identities, aliases and possible variants before research.')

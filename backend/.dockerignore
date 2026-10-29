@@ -43,4 +43,4 @@ tests
 **/eval_results
 **/reports
 **/traces
-observability/_dev
+agentic/observability/_dev

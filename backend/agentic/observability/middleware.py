@@ -2,8 +2,8 @@
 import asyncio
 import logging
 from time import monotonic
-from observability.tracing import observer, Observation
-from observability.propagation import trusted_parent, TRACE_HEADERS
+from agentic.observability.tracing import observer, Observation
+from agentic.observability.propagation import trusted_parent, TRACE_HEADERS
 
 log = logging.getLogger('hercfit.requests')
 

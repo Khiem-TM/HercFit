@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from langsmith import tracing_context
 
-from observability.settings import ObservabilitySettings
+from agentic.observability.settings import ObservabilitySettings
 
 current = ContextVar('hercfit_observation', default=None)
 

@@ -5,8 +5,8 @@ result can authorize tools or change the authenticated request identity.
 """
 import asyncio
 from time import perf_counter
-from observability import annotate
-from knowledge_graph.service import PILOT_DOMAINS
+from agentic.observability import annotate
+from agentic.knowledge_graph.service import PILOT_DOMAINS
 from agentic.core.context import request_context
 from agentic.services.routing import latest_request
 from agentic.observability.telemetry import active_metrics

@@ -1,7 +1,7 @@
 """Only opaque lineage is persisted; transaction-local GUCs never leak in pools."""
 import json
 from contextlib import contextmanager
-from observability.tracing import observer, durable_context, Observation, outcome
+from agentic.observability.tracing import observer, durable_context, Observation, outcome
 
 
 async def set_psycopg_context(conn, context=None):

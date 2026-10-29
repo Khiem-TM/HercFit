@@ -394,7 +394,7 @@ case "${COMMAND}" in
                     cd "${BACKEND_DIR}"
                     export NEO4J_URI="bolt://localhost:${NEO4J_BOLT_PORT:-7687}"
                     export NEO4J_PASSWORD="${NEO4J_PASSWORD:-hercfit-graph-dev}"
-                    exec "${KG_PYTHON}" -m knowledge_graph.worker run
+                    exec "${KG_PYTHON}" -m agentic.knowledge_graph.worker run
                 ) &
                 KG_WORKER_PID=$!
                 trap '[[ -z "${KG_WORKER_PID}" ]] || kill "${KG_WORKER_PID}" 2>/dev/null || true' EXIT

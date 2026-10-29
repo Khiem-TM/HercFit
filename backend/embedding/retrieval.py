@@ -1,4 +1,4 @@
-from observability import observed, annotate, span
+from agentic.observability import observed, annotate, span
 import json
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
