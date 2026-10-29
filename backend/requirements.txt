@@ -29,6 +29,3 @@ alembic>=1.14.0
 uuid6>=2024.7.12
 
 typing-extensions>=4.12.2
-
-# Text-bearing PDF ingestion (no OCR)
-pypdf>=5,<7

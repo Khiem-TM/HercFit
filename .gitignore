@@ -144,3 +144,6 @@ eval_results/
 reports/
 traces/
 backend/observability/_dev/
+
+# Local RAG document ingestion tools and source documents.
+/knowledge-ingestion/

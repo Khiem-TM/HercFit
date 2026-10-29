@@ -12,9 +12,6 @@ class EmbeddingSettings(BaseSettings):
     EMBEDDING_API_KEY: SecretStr | None=None
     EMBEDDING_REVISION: str='1'
     EMBEDDING_TIMEOUT_SECONDS: float=Field(default=15,gt=0)
-    KNOWLEDGE_INGEST_ROOT: str='knowledge-input'
-    KNOWLEDGE_MAX_FILE_BYTES: int=20_000_000
-    KNOWLEDGE_WORKER_POLL_SECONDS: float=2
 
     def check_embedding(self):
         if not self.EMBEDDING_BASE_URL or not self.EMBEDDING_MODEL or not self.EMBEDDING_DIMENSION:

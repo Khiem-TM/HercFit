@@ -173,32 +173,7 @@ services:
     healthcheck:
       disable: true
 
-  embedding-worker:
-    profiles: [rag]
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: backend
-    restart: unless-stopped
-    command: [python, -m, embedding.worker]
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER:-hercfit}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hercfit_secret}
-      POSTGRES_DB: ${POSTGRES_DB:-hercfit_db}
-      KNOWLEDGE_INGEST_ROOT: /knowledge-input
-    volumes:
-      - ./knowledge-input:/knowledge-input:ro
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks: [hercfit-network]
-    healthcheck:
-      disable: true
+  # Local ingestion worker: see ../knowledge-ingestion/compose.yml.
 
 volumes:
   neo4j_data:
