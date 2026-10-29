@@ -23,7 +23,7 @@ services:
         required: false
     environment:
       AGENT_DATABASE_URL: postgresql://hercfit:${AGENT_DB_PASSWORD:-hercfit_secret}@postgres:5432/hercfit_agentic
-    command: ["python", "-m", "agentic.migrate"]
+    command: ["python", "-m", "agentic.scripts.migrate"]
     depends_on:
       postgres:
         condition: service_healthy

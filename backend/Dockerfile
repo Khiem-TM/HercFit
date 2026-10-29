@@ -49,5 +49,5 @@ FROM base AS agentic
 EXPOSE 8081
 HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:${AGENT_PORT:-8081}/health || exit 1
-CMD ["python", "-m", "uvicorn", "agentic.main:app", "--host", "0.0.0.0", "--port", "8081", \
+CMD ["python", "-m", "uvicorn", "agentic.core.app.main:app", "--host", "0.0.0.0", "--port", "8081", \
      "--proxy-headers", "--forwarded-allow-ips", "*", "--timeout-graceful-shutdown", "30"]

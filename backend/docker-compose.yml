@@ -67,7 +67,7 @@ services:
       target: agentic
     container_name: hercfit-agentic-api
     restart: unless-stopped
-    command: ["python", "-m", "uvicorn", "agentic.main:app", "--host", "0.0.0.0", "--port", "8081", "--reload"]
+    command: ["python", "-m", "uvicorn", "agentic.core.app.main:app", "--host", "0.0.0.0", "--port", "8081", "--reload"]
     env_file:
       - path: .env
         required: false

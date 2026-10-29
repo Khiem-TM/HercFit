@@ -388,7 +388,7 @@ case "${COMMAND}" in
                     cd "${BACKEND_DIR}"
                     export POSTGRES_HOST=localhost
                     "${KG_PYTHON}" -m alembic upgrade head
-                    "${KG_PYTHON}" -m agentic.migrate
+                    "${KG_PYTHON}" -m agentic.scripts.migrate
                 )
                 (
                     cd "${BACKEND_DIR}"

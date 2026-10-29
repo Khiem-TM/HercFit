@@ -4,6 +4,8 @@ Run from backend/: python -m knowledge_graph.worker run
 All commands use the backend PostgreSQL advisory lock, including when the agent
 database is separate. An event is acknowledged only after its graph commit.
 """
+from observability import observer, outcome, annotate
+from observability.persistence import worker_context
 import argparse
 import asyncio
 import logging
@@ -17,11 +19,11 @@ from psycopg_pool import AsyncConnectionPool
 
 from .driver import create_driver, value
 from .models import ProjectionEvent
-from .projection import Projector
+from .projection import MODEL_SOURCES, Projector
 
 log = logging.getLogger(__name__)
 LOCK_KEY = 'hercfit-knowledge-graph-projection-v1'
-EVENT_COLUMNS = 'event_id,source,aggregate_type,aggregate_id,owner_id,aggregate_version,operation,occurred_at,payload'
+EVENT_COLUMNS = 'event_id,source,aggregate_type,aggregate_id,owner_id,aggregate_version,operation,occurred_at,payload,trace_context,attempts'
 
 
 class Worker:
@@ -49,6 +51,7 @@ class Worker:
 
     async def close(self):
         await self.driver.close()
+        await observer().close()
 
     async def consume_once(self):
         async with self.exclusive() as acquired:
@@ -60,6 +63,8 @@ class Worker:
         count = 0
         batch = value(self.settings, 'KG_WORKER_BATCH_SIZE', 100)
         maximum_lag = 0.0
+        attempted = 0
+        touched = set()
         for dsn in self.dsns:
             async with await AsyncConnection.connect(dsn, autocommit=True, row_factory=dict_row) as conn:
                 # Ordering affects fairness only, never correctness; projector
@@ -70,10 +75,12 @@ class Worker:
                     ORDER BY occurred_at,event_id LIMIT %s
                 ''', (batch,))).fetchall()
                 for row in events:
+                    attempted += 1
                     event_id = row['event_id']
                     try:
                         event = ProjectionEvent.model_validate(row)
-                        await self.projector.apply(event)
+                        with worker_context('worker.kg_projection', row.get('trace_context'), event_id=str(event_id), retry_count=row.get('attempts',0), queue_wait_ms=max(0,(datetime.now(timezone.utc)-row['occurred_at']).total_seconds()*1000)):
+                            await self.projector.apply(event)
                     except Exception as exc:
                         # Do not persist the exception text: driver errors may
                         # contain sensitive query parameters or connection URLs.
@@ -87,14 +94,31 @@ class Worker:
                     await conn.execute('''UPDATE kg_outbox SET delivered_at=now(),last_error=NULL
                         WHERE event_id=%s''', (event_id,))
                     count += 1
+                    if event.source == 'backend' and event.aggregate_type in MODEL_SOURCES and event.owner_id:
+                        touched.add(event.owner_id)
                 lag = await (await conn.execute('''SELECT COALESCE(MAX(EXTRACT(EPOCH FROM (now()-occurred_at))*1000),0) AS lag
                     FROM kg_outbox WHERE delivered_at IS NULL''')).fetchone()
                 maximum_lag = max(maximum_lag, float(lag['lag']))
+        await self.refresh_models(touched)
         await self.projector.query("""
             MATCH (s:KGState {key:'main'}) SET s.projection_lag_ms=$lag,s.last_poll_at=$time
         """, lag=maximum_lag, time=datetime.now(timezone.utc).isoformat())
+        if attempted or (maximum_lag > 0 and monotonic()-getattr(self, '_last_trace_heartbeat', 0) >= 300):
+            self._last_trace_heartbeat = monotonic()
+            with worker_context('worker.kg_batch', projection_lag_ms=maximum_lag, input_count=attempted, output_count=count):
+                pass
         log.info('kg_projection_batch delivered=%d projection_lag_ms=%.2f', count, maximum_lag)
         return count
+
+    async def refresh_models(self, owners):
+        """Derived knowledge is rebuildable: a failure is logged and retried by maintenance."""
+        refreshed = 0
+        for owner in sorted(owners):
+            try:
+                refreshed += bool(await self.projector.refresh_model(owner))
+            except Exception as exc:
+                log.warning('kg_model_refresh_failed error_type=%s', type(exc).__name__)
+        return refreshed
 
     @asynccontextmanager
     async def agent_pool(self):
@@ -104,16 +128,16 @@ class Worker:
             yield pool
 
     async def reconcile(self, limit=50):
-        from agentic.memory.reconcile import reconcile_checkpoints
+        from agentic.services.memory.reconcile import reconcile_checkpoints
         async with self.agent_pool() as pool:
             return await reconcile_checkpoints(pool,limit=limit)
 
     async def snapshot(self):
-        from agentic.memory.store import Store
+        from agentic.services.memory.store import Store
         async with await AsyncConnection.connect(self.coordinator_dsn, autocommit=True) as conn:
             await conn.execute('SELECT kg_enqueue_snapshot()')
         async with self.agent_pool() as pool:
-            from agentic.memory.reconcile import reconcile_checkpoints
+            from agentic.services.memory.reconcile import reconcile_checkpoints
             await reconcile_checkpoints(pool, limit=100000)
             await Store(pool).enqueue_kg_snapshot()
 
@@ -157,6 +181,7 @@ class Worker:
             if await self.pending():
                 raise RuntimeError('Projection backlog contains failures; graph remains warming. Fix errors and rerun backfill.')
             await self.projector.prune()
+            await self.refresh_models(await self.projector.stale_model_owners(limit=100000))
             await self.projector.query("MATCH (s:KGState {key:'main'}) SET s.ready=true")
 
     async def run(self, *, once=False):
@@ -167,9 +192,13 @@ class Worker:
                 if monotonic() >= next_maintenance:
                     await self.reconcile()
                     await self.projector.prune()
+                    # Day-relative windows (7 days, this week) move even without new events.
+                    await self.refresh_models(await self.projector.stale_model_owners())
                     next_maintenance = monotonic() + 60
                 await self.consume_once()
             except Exception as exc:
+                with worker_context('worker.kg_poll_failed'):
+                    outcome('failed', error_code=type(exc).__name__)
                 log.warning('kg_worker_failed error_type=%s',type(exc).__name__)
                 if once:
                     raise
@@ -186,7 +215,7 @@ async def main(args=None):
     options = parser.parse_args(args)
     if options.command == 'rebuild' and not options.confirm_rebuild:
         parser.error('rebuild requires --confirm-rebuild; PostgreSQL source records are retained')
-    from agentic.config.settings import AgentSettings
+    from agentic.core.app.config import AgentSettings
     settings = AgentSettings()
     worker = Worker(settings)
     try:
