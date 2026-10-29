@@ -30,6 +30,11 @@ async def _daily_totals(session, model, user_id, options, fields):
     return {row["day"]: row for row in rows}
 
 
+async def daily_meal_totals(session, user_id, options: DateRangeQuery):
+    """Per local day: meal count, known nutrient sums and how many meals had each value."""
+    return await _daily_totals(session, Meal, user_id, options, NUTRIENT_FIELDS)
+
+
 def _metric(row, field, target):
     count = row.get("count", 0)
     known_count = row.get(f"{field}_known", 0)
@@ -65,8 +70,11 @@ async def summarize_user(session, *, user_id, options: DateRangeQuery) -> Progre
 
 
 async def _summarize_days(session, user_id, options, plan=None):
+    from services.training_analytics import daily_loads
+
     meals = await _daily_totals(session, Meal, user_id, options, NUTRIENT_FIELDS)
     trainings = await _daily_totals(session, Training, user_id, options, ("energy_kcal",))
+    loads, _missing = await daily_loads(session, user_id, options.start_date, options.end_date, options.timezone)
     days = []
     day = options.start_date
     while day <= options.end_date:
@@ -76,6 +84,7 @@ async def _summarize_days(session, user_id, options, plan=None):
             calories_in=_metric(meal, "energy_kcal", getattr(plan, "calories_in_kcal", None)),
             exercise_calories=_metric(training, "energy_kcal", getattr(plan, "exercise_calories_kcal", None)),
             calories_out_target=getattr(plan, "calories_out_kcal", None),
+            training_load=loads.get(day, Decimal(0)),
             **{field: _metric(meal, field, getattr(plan, field, None)) for field in NUTRIENT_FIELDS if field != "energy_kcal"},
         ))
         day += timedelta(days=1)

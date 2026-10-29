@@ -24,8 +24,15 @@ NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)
 Name = Annotated[NonBlank, Field(max_length=255)]
 PositiveMeasurement = Annotated[Decimal, Field(gt=0, lt=10000000, max_digits=10, decimal_places=3, allow_inf_nan=False)]
 Percentage = Annotated[Decimal, Field(ge=0, le=100, max_digits=5, decimal_places=2, allow_inf_nan=False)]
+# Plausible human ranges for new measurements; reads stay permissive for legacy rows.
+WeightKg = Annotated[Decimal, Field(ge=20, le=400, max_digits=10, decimal_places=3, allow_inf_nan=False)]
+HeightCm = Annotated[Decimal, Field(ge=50, le=260, max_digits=10, decimal_places=3, allow_inf_nan=False)]
+MuscleMassKg = Annotated[Decimal, Field(gt=0, le=200, max_digits=10, decimal_places=3, allow_inf_nan=False)]
+BodyFatPercentage = Annotated[Decimal, Field(ge=2, le=75, max_digits=5, decimal_places=2, allow_inf_nan=False)]
 FiniteNumber = StrictInt | Annotated[StrictFloat, Field(allow_inf_nan=False)]
 Version = Annotated[int, Field(strict=True, ge=1)]
+# Catalog images: an https URL or a same-origin path (e.g. /static/foods/pho.webp); never data: URIs.
+ImageUrl = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2048, pattern=r"^(https://[^\s]+|/[A-Za-z0-9._~/-]+)$")]
 
 
 class InputSchema(BaseModel):

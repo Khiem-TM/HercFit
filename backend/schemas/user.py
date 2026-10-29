@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, ConfigDict, EmailStr, Field, HttpUrl, PlainSerializer
 
@@ -10,6 +10,8 @@ Email = Annotated[EmailStr, Field(max_length=255)]
 URL = Annotated[HttpUrl, PlainSerializer(str, return_type=str)]
 Age = Annotated[int, Field(strict=True, ge=1, le=120)]
 Nickname = Annotated[str, Field(max_length=100)]
+# Biological sex is optional and used only by energy equations (Mifflin-St Jeor).
+Sex = Literal["MALE", "FEMALE"]
 
 
 class UserCreate(InputSchema):
@@ -18,6 +20,7 @@ class UserCreate(InputSchema):
     nick_name: Nickname | None = None
     avatar_url: URL | None = None
     age: Age | None = None
+    sex: Sex | None = None
     personal_info: JsonObject = Field(default_factory=dict)
 
 
@@ -27,6 +30,7 @@ class UserUpdate(PartialSchema):
     nick_name: Nickname | None = None
     avatar_url: URL | None = None
     age: Age | None = None
+    sex: Sex | None = None
     personal_info: JsonObject = Field(default_factory=dict)
 
 

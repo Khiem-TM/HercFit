@@ -32,6 +32,8 @@ class TrainingCreate(InputSchema):
     timezone: TimeZoneName = DEFAULT_TIMEZONE
     note: str | None = None
     source_entry_id: UUID | None = None
+    # Session RPE (CR-10) drives the sRPE training load shared by all disciplines.
+    session_rpe: Annotated[Decimal, Field(ge=0, le=10, max_digits=4, decimal_places=2)] | None = None
     items: Annotated[list[ExerciseActivityInput], Field(min_length=1)]
 
     @model_validator(mode="after")
@@ -67,6 +69,7 @@ class TrainingReplace(VersionedRequest, TrainingCreate):
 
 
 class JournalRead(EntityRead):
+    image_url: str | None = None
     user_id: UUID
     name: str
     timezone: str
@@ -83,6 +86,14 @@ class MealItemRead(FoodPortionRead):
 
 class TrainingItemRead(ExerciseActivityRead):
     training_id: UUID
+    kind: str | None
+    duration_seconds: Decimal | None
+    distance_meters: Decimal | None
+    elevation_gain_meters: Decimal | None
+    volume_kg: Decimal | None
+    best_e1rm_kg: Decimal | None
+    hard_sets: int | None
+    working_sets: int | None
 
 
 class MealRead(NutritionTotals, JournalRead):
@@ -97,4 +108,7 @@ class TrainingRead(JournalRead):
     duration_seconds: DurationSeconds | None
     energy_kcal: Nutrient | None
     calories_incomplete: bool
+    discipline: Literal["STRENGTH", "ENDURANCE", "SPORT", "MIXED"]
+    session_rpe: Decimal | None
+    training_load: Decimal | None
     items: list[TrainingItemRead]

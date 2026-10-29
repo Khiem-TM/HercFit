@@ -1,7 +1,7 @@
 """Shared authenticated service and validated query dependencies."""
 
 from datetime import date
-from typing import Annotated
+from typing import Literal, Annotated
 from uuid import UUID
 
 from fastapi import Depends, Query
@@ -86,8 +86,11 @@ BodyMetricQueryDep = Annotated[BodyMetricQuery, Depends(get_metric_query)]
 
 
 def get_food_query(pagination: PaginationDep, search: str | None = None,
-                   source_type: FoodSourceType | None = None, item_type: FoodItemType | None = None):
-    return validated_query(FoodQuery, **pagination.model_dump(), search=search, source_type=source_type, item_type=item_type)
+                   source_type: FoodSourceType | None = None, item_type: FoodItemType | None = None,
+                   sort: Literal["relevance", "protein_density"] = "relevance",
+                   names: Annotated[list[str] | None, Query()] = None):
+    return validated_query(FoodQuery, **pagination.model_dump(), search=search, source_type=source_type,
+                           item_type=item_type, sort=sort, names=names)
 
 
 def get_exercise_query(pagination: PaginationDep, search: str | None = None,

@@ -2,16 +2,14 @@
 
 import base64
 import hashlib
-import hmac
 import json
-import math
 import secrets
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import Cookie, Depends, Header, HTTPException, Request, status
+import jwt
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,9 +17,10 @@ from core.database import get_db
 from core.settings import settings
 
 STATE_COOKIE_NAME = "oauth_state"
+PKCE_COOKIE_NAME = "oauth_pkce"
 REFRESH_TOKEN_COOKIE_NAME = "refresh_token"
+ACCESS_TOKEN_TYPE = "access"
 
-bearer_scheme = HTTPBearer(description="Provide Bearer token or AUTH_SECRET.", auto_error=False)
 strict_bearer_scheme = HTTPBearer(description="Provide Bearer JWT token.", auto_error=True)
 
 
@@ -48,102 +47,71 @@ def _b64encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
-def _b64decode(data: str) -> bytes:
-    padding = 4 - (len(data) % 4)
-    if padding != 4:
-        data += "=" * padding
-    return base64.urlsafe_b64decode(data.encode("ascii"))
+def pkce_pair() -> tuple[str, str]:
+    """RFC 7636 S256 verifier/challenge pair for the OAuth authorization code flow."""
+    verifier = secrets.token_urlsafe(64)  # 86 unreserved characters (43..128 allowed)
+    challenge = _b64encode(hashlib.sha256(verifier.encode("ascii")).digest())
+    return verifier, challenge
+
+
+class _ClaimEncoder(json.JSONEncoder):
+    def default(self, o: Any) -> Any:  # UUIDs, datetimes and enums in caller claims
+        return str(o)
+
+
+def _unauthorized(detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
-    """Create a signed HS256 JWT access token."""
+    """Create a signed HS256 access token with issuer, audience and token type."""
     if settings.JWT_ALGORITHM != "HS256":
         raise ValueError("Only HS256 is supported")
-    claims = dict(data)
     now = datetime.now(timezone.utc)
-    iat = int(now.timestamp())
-    if expires_delta is not None:
-        exp = int((now + expires_delta).timestamp())
-    else:
-        exp = int((now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp())
-
-    claims.setdefault("iat", iat)
-    claims["exp"] = exp
-
-    secret = settings.jwt_secret_value.encode("utf-8")
-    header = {"alg": settings.JWT_ALGORITHM, "typ": "JWT"}
-    header_b64 = _b64encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
-    payload_b64 = _b64encode(json.dumps(claims, separators=(",", ":"), default=str).encode("utf-8"))
-    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
-    signature = _b64encode(hmac.new(secret, signing_input, hashlib.sha256).digest())
-    return f"{header_b64}.{payload_b64}.{signature}"
+    lifetime = expires_delta if expires_delta is not None else timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    claims = dict(data)
+    claims.update(
+        iat=int(now.timestamp()),
+        nbf=int(now.timestamp()),
+        exp=int((now + lifetime).timestamp()),
+        iss=settings.JWT_ISSUER,
+        aud=settings.JWT_AUDIENCE,
+        jti=uuid4().hex,
+        token_type=ACCESS_TOKEN_TYPE,
+    )
+    return jwt.encode(claims, settings.jwt_secret_value, algorithm="HS256", json_encoder=_ClaimEncoder)
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
-    """Decode and verify a signed HS256 JWT access token."""
-    try:
-        parts = token.split(".")
-        if len(parts) != 3:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token format",
-                headers={"WWW-Authenticate": "Bearer"},
+    """Verify signature (current or retired secret), expiry, issuer, audience and type."""
+    if settings.JWT_ALGORITHM != "HS256":
+        raise _unauthorized("Invalid token algorithm")
+    for secret in settings.jwt_verification_secrets:
+        try:
+            payload = jwt.decode(
+                token,
+                secret,
+                algorithms=["HS256"],
+                audience=settings.JWT_AUDIENCE,
+                issuer=settings.JWT_ISSUER,
+                leeway=settings.JWT_LEEWAY_SECONDS,
+                options={"require": ["exp", "iat", "sub", "iss", "aud"]},
             )
-        header_b64, payload_b64, signature_b64 = parts
-        header = json.loads(_b64decode(header_b64).decode("utf-8"))
-        if header.get("alg") != "HS256" or settings.JWT_ALGORITHM != "HS256":
-            raise HTTPException(401, "Invalid token algorithm", headers={"WWW-Authenticate": "Bearer"})
-        signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
-        secret = settings.jwt_secret_value.encode("utf-8")
-        expected_sig = _b64encode(hmac.new(secret, signing_input, hashlib.sha256).digest())
-        if not hmac.compare_digest(signature_b64, expected_sig):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token signature",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        payload = json.loads(_b64decode(payload_b64).decode("utf-8"))
-        exp = payload.get("exp")
-        if isinstance(exp, bool) or not isinstance(exp, (int, float)) or not math.isfinite(exp):
-            raise HTTPException(401, "Invalid token expiry", headers={"WWW-Authenticate": "Bearer"})
-        if time.time() >= exp:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has expired",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+        except jwt.InvalidSignatureError:
+            continue  # Signed with another (possibly retired) key.
+        except jwt.ExpiredSignatureError:
+            # Raised only after the signature verified with this secret.
+            raise _unauthorized("Token has expired") from None
+        except jwt.PyJWTError:
+            raise _unauthorized("Could not validate credentials") from None
+        if payload.get("token_type") != ACCESS_TOKEN_TYPE:
+            raise _unauthorized("Invalid token type")
         return payload
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-
-def verify_bearer(
-    http_auth: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
-) -> None:
-    if not settings.AUTH_SECRET:
-        return
-    auth_secret = settings.AUTH_SECRET.get_secret_value()
-    if not http_auth or http_auth.credentials != auth_secret:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-
-
-async def get_current_user_id(
-    http_auth: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
-    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
-) -> str:
-   
-
-    if x_user_id:
-        return x_user_id
-    if settings.is_dev():
-        return "default-user"
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    raise _unauthorized("Invalid token signature")
 
 
 async def get_current_user(
@@ -156,25 +124,15 @@ async def get_current_user(
     payload = decode_access_token(http_auth.credentials)
     user_id_str = payload.get("sub")
     if not user_id_str:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token subject missing",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _unauthorized("Token subject missing")
     try:
-        user_uuid = UUID(user_id_str)
+        user_uuid = UUID(str(user_id_str))
     except (ValueError, TypeError, AttributeError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid user ID format in token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _unauthorized("Invalid user ID format in token") from None
 
     user = await User.get_by_id(session, user_uuid)
     if user is None or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User account is inactive or not found",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _unauthorized("User account is inactive or not found")
+    from observability import identify
+    identify(str(user.id), private_values=(user.fullname, str(user.email), user.nick_name))
     return user

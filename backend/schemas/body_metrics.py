@@ -3,10 +3,13 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from schemas.common import EntityRead, InputSchema, JsonObject, Pagination, Percentage, PositiveMeasurement
+from schemas.common import (
+    BodyFatPercentage, EntityRead, HeightCm, InputSchema, JsonObject, MuscleMassKg, Pagination,
+    Percentage, PositiveMeasurement, WeightKg,
+)
 
 
-class BodyMetricCreate(InputSchema):
+class BodyMetricBase(InputSchema):
     weight_kg: PositiveMeasurement
     height_cm: PositiveMeasurement | None = None
     body_fat_pct: Percentage | None = None
@@ -15,11 +18,19 @@ class BodyMetricCreate(InputSchema):
     additional_metrics: JsonObject = Field(default_factory=dict)
 
 
+class BodyMetricCreate(BodyMetricBase):
+    """New measurements must be physiologically plausible (typos like 700 kg are rejected)."""
+    weight_kg: WeightKg
+    height_cm: HeightCm | None = None
+    body_fat_pct: BodyFatPercentage | None = None
+    muscle_mass_kg: MuscleMassKg | None = None
+
+
 # Corrections are complete new snapshots, not updates to stored measurements.
 BodyMetricReplace = BodyMetricCreate
 
 
-class BodyMetricRead(BodyMetricCreate, EntityRead):
+class BodyMetricRead(BodyMetricBase, EntityRead):
     user_id: UUID
 
 

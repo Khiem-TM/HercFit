@@ -24,6 +24,23 @@ async def list_foods(options: FoodQueryDep, service: CatalogServiceDep):
     return await service.list(FoodItem, options)
 
 
+@router.get("/resolve")
+async def resolve_food(service: CatalogServiceDep, query: str):
+    from research.contracts import ResolveQuery
+    from services.research_catalog import resolve
+    return await resolve(service, 'foods', ResolveQuery(query=query).query)
+
+
+from research.contracts import FoodFinalization, FoodFinalizationResult
+
+# The idempotent route stores the validated response, so the result needs a response model.
+@router.post("/research-finalizations", response_model=FoodFinalizationResult)
+@transaction
+async def finalize_food(payload: FoodFinalization, service: CatalogServiceDep):
+    from services.research_catalog import finalize
+    return await finalize(service, 'foods', payload)
+
+
 @router.get("/{food_id}", response_model=FoodRead)
 async def get_food(food_id: UUID, service: CatalogServiceDep, include_inactive: bool = False):
     return await service.get(FoodItem, food_id, include_inactive=include_inactive)

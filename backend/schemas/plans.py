@@ -7,7 +7,8 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from schemas.activity import ExerciseActivityInput, ExerciseActivityRead, FoodPortionInput, FoodPortionRead
+from schemas.activity import FoodPortionInput, FoodPortionRead
+from schemas.exercises import ExercisePrescriptionInput, ExercisePrescriptionRead
 from schemas.common import EntityRead, InputSchema, JsonObject, Name, NonBlank, Pagination, Version
 from schemas.tracking import TimeZoneName, VersionedRequest
 
@@ -102,7 +103,7 @@ class MealPlanEntryCreate(ScheduleEntryCreate):
 
 class TrainingPlanEntryCreate(ScheduleEntryCreate):
     is_rest: bool = False
-    items: list[ExerciseActivityInput] = Field(default_factory=list)
+    items: list[ExercisePrescriptionInput] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def rest_or_exercises(self):
@@ -143,9 +144,13 @@ class MealPlanItemRead(FoodPortionRead):
     position: int
 
 
-class TrainingPlanItemRead(ExerciseActivityRead):
+class TrainingPlanItemRead(EntityRead):
     entry_id: UUID
     position: int
+    exercise_id: UUID | None
+    exercise_snapshot: JsonObject
+    prescription: ExercisePrescriptionRead
+    note: str | None
 
 
 class MealPlanEntryRead(ScheduleEntryCreate, EntityRead):

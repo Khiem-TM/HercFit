@@ -26,6 +26,8 @@ class DailyProgressRead(ReadSchema):
     carbohydrate_g: MetricProgress
     fat_g: MetricProgress
     fiber_g: MetricProgress
+    # Session-RPE load (Foster); lets nutrition advice scale with training stress.
+    training_load: Decimal = Decimal(0)
     calories_out_target: Decimal | None
     # Exercise logs alone do not measure total daily expenditure.
     calories_out_actual: None = None

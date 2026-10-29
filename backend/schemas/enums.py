@@ -14,8 +14,11 @@ class FoodItemType(StrEnum):
 
 
 class FoodServingUnit(StrEnum):
+    """Basis of the stored nutrient values: per serving_size grams, millilitres,
+    or per PORTION (one serving/suất whose gram weight may be unknown)."""
     G = "G"
     ML = "ML"
+    PORTION = "PORTION"
 
 
 class GoalStatus(StrEnum):

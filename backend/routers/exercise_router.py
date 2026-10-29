@@ -24,6 +24,23 @@ async def list_exercises(options: ExerciseQueryDep, service: CatalogServiceDep):
     return await service.list(Exercise, options)
 
 
+@router.get("/resolve")
+async def resolve_exercise(service: CatalogServiceDep, query: str):
+    from research.contracts import ResolveQuery
+    from services.research_catalog import resolve
+    return await resolve(service, 'exercises', ResolveQuery(query=query).query)
+
+
+from research.contracts import ExerciseFinalization, ExerciseFinalizationResult
+
+# The idempotent route stores the validated response, so the result needs a response model.
+@router.post("/research-finalizations", response_model=ExerciseFinalizationResult)
+@transaction
+async def finalize_exercise(payload: ExerciseFinalization, service: CatalogServiceDep):
+    from services.research_catalog import finalize
+    return await finalize(service, 'exercises', payload)
+
+
 @router.get("/{exercise_id}", response_model=ExerciseRead)
 async def get_exercise(exercise_id: UUID, service: CatalogServiceDep, include_inactive: bool = False):
     return await service.get(Exercise, exercise_id, include_inactive=include_inactive)
