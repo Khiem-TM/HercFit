@@ -2,10 +2,11 @@
 import { computed, useId, useTemplateRef } from 'vue'
 import { Check } from 'lucide-vue-next'
 import type { ClarifyQuestion } from '@/types/api'
-import { choosesOnce, type Answer } from '@/features/chat/clarification'
+import { choosesOnce, type Answer, type SetGroup, type SetRow } from '@/features/chat/clarification'
 import CatalogImage from './CatalogImage.vue'
+import SetsEditor from './SetsEditor.vue'
 
-const props = defineProps<{ question: ClarifyQuestion; disabled?: boolean; showLabel?: boolean }>()
+const props = defineProps<{ question: ClarifyQuestion; rows?: SetRow[]; disabled?: boolean; showLabel?: boolean }>()
 /** Fired when the user is done with this question (option tapped or Enter in the text field). */
 const emit = defineEmits<{ commit: [] }>()
 const answer = defineModel<Answer>({ required: true })
@@ -19,6 +20,7 @@ const hint = computed(() => {
     case 'multiple': return `Chọn tối đa ${props.question.max_select}`
     case 'quick_reply': return 'Trả lời nhanh'
     case 'text': return 'Tự nhập'
+    case 'sets': return 'Hiệp × reps × kg'
     default: return 'Chọn một'
   }
 })
@@ -27,18 +29,24 @@ const picked = (id: string) => answer.value.optionIds.includes(id) && !answer.va
 function pick(id: string) {
   if (props.disabled) return
   if (choosesOnce(props.question)) {
-    answer.value = { optionIds: [id], text: '', skipped: false }
+    answer.value = { ...answer.value, optionIds: [id], text: '', skipped: false }
     emit('commit')
     return
   }
   const ids = answer.value.optionIds
   const next = ids.includes(id) ? ids.filter(item => item !== id) : ids.length < props.question.max_select ? [...ids, id] : ids
-  answer.value = { optionIds: next, text: '', skipped: false }
+  answer.value = { ...answer.value, optionIds: next, text: '', skipped: false }
+}
+
+const editsSets = computed(() => props.question.mode === 'sets' && Boolean(props.rows?.length))
+
+function editSets(sets: Record<string, SetGroup[]>) {
+  answer.value = { ...answer.value, sets, text: '', skipped: false }
 }
 
 function type(text: string) {
   // Typing replaces a single choice; picked chips of a multiple question are kept in case the text is cleared.
-  answer.value = { optionIds: choosesOnce(props.question) ? [] : answer.value.optionIds, text, skipped: false }
+  answer.value = { ...answer.value, optionIds: choosesOnce(props.question) ? [] : answer.value.optionIds, text, skipped: false }
 }
 
 defineExpose({ focus: () => heading.value?.focus() })
@@ -53,8 +61,11 @@ defineExpose({ focus: () => heading.value?.focus() })
       {{ question.question }}
     </h4>
 
+    <!-- Sets × reps × kg for each exercise -->
+    <SetsEditor v-if="editsSets" :rows="rows ?? []" :answer="answer" :disabled="disabled" @change="editSets" />
+
     <!-- Catalog choices with pictures -->
-    <div v-if="withImages" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+    <div v-else-if="withImages" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
       <button
         v-for="option in question.options"
         :key="option.id"
@@ -83,18 +94,24 @@ defineExpose({ focus: () => heading.value?.focus() })
         type="button"
         :disabled="disabled"
         :aria-pressed="picked(option.id)"
-        :title="option.description || undefined"
-        class="inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-4 text-sm transition-colors disabled:opacity-50"
-        :class="picked(option.id) ? 'border-[#d4b77d] bg-[#d4b77d]/15 text-primary' : 'border-white/15 bg-white/[0.04] text-on-surface hover:border-white/30'"
+        class="inline-flex min-h-[40px] items-center gap-1.5 border px-4 text-sm transition-colors disabled:opacity-50"
+        :class="[
+          picked(option.id) ? 'border-[#d4b77d] bg-[#d4b77d]/15 text-primary' : 'border-white/15 bg-white/[0.04] text-on-surface hover:border-white/30',
+          option.description ? 'rounded-xl py-2 text-left' : 'rounded-full',
+        ]"
         @click="pick(option.id)"
       >
-        <Check v-if="picked(option.id)" class="h-3.5 w-3.5 text-[#d4b77d]" aria-hidden="true" />{{ option.label }}
+        <Check v-if="picked(option.id)" class="h-3.5 w-3.5 shrink-0 text-[#d4b77d]" aria-hidden="true" />
+        <span>
+          {{ option.label }}
+          <span v-if="option.description" class="block text-[11px] text-on-surface-variant">{{ option.description }}</span>
+        </span>
       </button>
     </div>
 
     <div v-if="question.allow_free_text || question.mode === 'text'" class="mt-3">
       <label :for="freeId" class="text-[11px] text-on-surface-variant">
-        {{ question.free_text_hint || (question.options.length ? 'Hoặc tự nhập câu trả lời' : 'Câu trả lời của bạn') }}
+        {{ question.free_text_hint || (editsSets ? 'Hoặc tự nhập (ví dụ: Đẩy ngực 4×8 @ 60kg)' : question.options.length ? 'Hoặc tự nhập câu trả lời' : 'Câu trả lời của bạn') }}
       </label>
       <input
         :id="freeId"
