@@ -1,18 +1,19 @@
 # HercFit Knowledge Graph
 
-Neo4j is a rebuildable, optional projection. PostgreSQL owns business records,
-approvals and LangGraph checkpoints. All numeric answers and write validation
-still use the authenticated backend API.
+Neo4j is a rebuildable projection that is always part of the agent context.
+PostgreSQL owns business records, approvals and LangGraph checkpoints. All writes
+and their validation still go through the authenticated backend API.
 
 ## Start with Docker
 
-From the repository root:
+From the repository root, `./dev_up.sh up -d` starts Neo4j and `kg-worker` with the
+rest of the stack (`--db-only` and `--local` start Neo4j too; `--local` runs the
+worker on the host). The first time, and after a rebuild, fill the graph once:
 
 ```sh
-./dev_up.sh up --kg -d
-docker compose -f backend/docker-compose.yml --profile kg stop kg-worker
-docker compose -f backend/docker-compose.yml --profile kg run --rm kg-worker python -m agentic.knowledge_graph.worker backfill
-docker compose -f backend/docker-compose.yml --profile kg up -d kg-worker
+docker compose -f backend/docker-compose.yml stop kg-worker
+docker compose -f backend/docker-compose.yml run --rm kg-worker python -m agentic.knowledge_graph.worker backfill
+docker compose -f backend/docker-compose.yml up -d kg-worker
 ```
 
 The worker initializes constraints and capabilities, but retrieval stays in
@@ -20,36 +21,56 @@ The worker initializes constraints and capabilities, but retrieval stays in
 http://localhost:7474. The development login is `neo4j` with the password from
 `NEO4J_PASSWORD` (default `hercfit-graph-dev`). Change the password for deployment.
 
-Set `KG_MODE` in the Compose environment and recreate the agent service:
+There is no runtime switch. Every turn reads the knowledge card below for the
+domains its wording names (`domains_for`), then for the router's domain and personal
+topic (`services.rag_pipeline.decision_domains`) when the wording missed them, so
+routing, tool calls, context reads, research and the final answer all see it. Reads
+are bounded (150 ms, fail-open): a slow or unreachable Neo4j only degrades a turn to
+the backend tools, and business storage and confirmations remain available. The agent
+warms every domain query at startup and keeps retrying in the background while Neo4j
+is still starting, because a cold read exceeds the cap; a timed-out read finishes in
+the background so its pooled connection survives. The strict read templates parse the
+request themselves and are controlled by `FAST_READ_ENABLED`, independent of the graph.
 
-```sh
-KG_MODE=shadow docker compose -f backend/docker-compose.yml --profile kg up -d agentic
-```
-
-Modes: `off` bypasses retrieval; `shadow` measures it without prompt influence;
-`advisory` supplies the knowledge card below to routing, tool calls and the final
-answer; `optimized` additionally enables the strict progress read template.
-That template only parses the request, so `FAST_READ_ENABLED=true` enables it
-without the graph. Default is `off`. The agent warms every domain query at startup
-because a cold read exceeds the 150 ms cap; a timed-out read finishes in the
-background so its pooled connection survives. Roll back by recreating the agent with
-`KG_MODE=off`; business storage and confirmations remain available.
+Each turn record (`agent_turn_records.data.route.kg`) keeps what the graph gave that
+turn: latest status and every attempt's status, total read time, domains, sections and
+fact/episode/line counts. Labels and counts only, never facts.
 
 ## Knowledge layers
 
 1. **Facts** — owner-scoped projections of business records (Goal, BodyMetric,
-   Meal→MealItem→Food, Training→Exercise) and of `users.age` plus the
-   `TrainingProfile`-validated subset of `personal_info['training']` (level, focus,
-   days, minutes, equipment; never injuries, heart rates or free-form keys).
+   Meal→MealItem→Food, Training→Exercise) and of `users.age`, `users.sex`, the
+   declared activity level and the `TrainingProfile`-validated subset of
+   `personal_info['training']` (level, focus, days, minutes, equipment; never injuries,
+   declared heart rates or free-form keys). Device data synchronized from Google
+   Health adds `DailyHealth` (day rollups), `SleepSession` and `DeviceWorkout`
+   (`HAS_DAILY_HEALTH`, `SLEPT`, `WORKED_OUT`) plus device `BodyMetric` samples. These
+   are published only while `health_connections.share_with_assistant` is true:
+   otherwise `kg_publish_backend` emits measurement-free tombstones, and changing the
+   consent republishes the user's device records. Spot vitals (`health_samples`),
+   per-second heart rate and provider credentials are never published.
 2. **Conversation** — one `Run` per finished turn with a deterministic intent
    (`agentic/knowledge_graph/intents.py`: domain × write/read/research, never message or
    model text), linked `-[:HAS_INTENT]->(:Intent)` and `-[:ABOUT]->` the records it
    touched. Turns are journaled in `agent_turn_records`, versioned like executions.
 3. **User model** — `agentic/knowledge_graph/model.py` derives what a coach remembers:
-   BMI, weight changes and trend, goal progress and required vs actual pace,
-   7-day nutrition averages and favourite foods, weekly/28-day training, best e1RM
-   progression and running totals. The worker stores it as `(:UserModel)` with
-   `FREQUENTLY_EATS`/`PRACTICES` habit edges, refreshing an owner after each of its
+   BMI (Asian cut-offs), weight and body-fat changes and trend, goal progress and
+   required vs actual pace, 7-day nutrition averages and favourite foods,
+   weekly/28-day training, best e1RM progression and running totals, and from device
+   data (model version 2) activity (steps vs 28 days, WHO 150 minutes), sleep
+   (duration vs recommendation, stages, regularity), recovery signals (resting HR and
+   HRV against the 28-day baseline, never a diagnosis) and energy balance (logged
+   intake vs device expenditure). Model version 3 guards the weight story: a weigh-in
+   that disagrees with both neighbours is dropped as a spike, and after a jump larger
+   than scale noise allows (2 kg + 0.25 kg/day) only the latest consistent run feeds
+   changes, rate, goal progress and energy balance, while the card names the jump and
+   asks to re-weigh. Trend and rate come from one estimate (30-day least squares, else
+   the longest change). The observed activity level combines steps on worn days with
+   exercise minutes per week from logged sessions and device workouts (each day counts
+   the larger), which can raise but never lower it. Declared-versus-measured
+   disagreements are kept as `conflicts` and shown as notes; logged exercise alone never
+   contradicts a higher declaration. The worker stores it as `(:UserModel)`, and the
+   `(:User)` node gets `FREQUENTLY_EATS`/`PRACTICES` habit edges, refreshing an owner after each of its
    business events and, during maintenance, whenever the local day changes.
    Conversation statistics are never stored there: they are aggregated at read
    time behind the SQL session gate.
@@ -62,8 +83,7 @@ với tháng trước" or "tuần này tập mấy buổi" are present without a
 
 `GET /api/v1/chat/knowledge-graph` returns the personal map for the UI: profile,
 insight cards, intents, a disclosure tree (`Bạn → hubs → records → details`, with
-`tree` and cross `link` edges) and a timeline. It reports `mode` so the client can
-say when the assistant does not use the graph yet.
+`tree` and cross `link` edges) and a timeline.
 
 Optional `start` and `end` (inclusive local days, `YYYY-MM-DD`, Asia/Ho_Chi_Minh)
 limit the drawn meals, trainings, measurements and turns to those days, at most 40
@@ -75,12 +95,13 @@ hub over the whole retained history, which the client draws as a time scrubber.
 `start` after `end` is rejected with 422.
 
 Measure retrieval without models (context recall over the eval cases), and the
-full agent when model keys are available:
+full agent when model keys are available. `run` compares the app with and without a
+graph service (`no_kg` is an ablation by dependency injection, not a setting):
 
 ```sh
 python -m agentic.evaluation.kg_eval seed
 python -m agentic.evaluation.kg_eval retrieval --out /tmp/kg_retrieval
-python -m agentic.evaluation.kg_eval run --modes off,advisory --repeat 2
+python -m agentic.evaluation.kg_eval run --variants no_kg,kg --repeat 2
 ```
 
 ## Local or separate databases
@@ -98,10 +119,10 @@ python -m agentic.knowledge_graph.worker backfill
 python -m agentic.knowledge_graph.worker run
 ```
 
-The standalone `agentic/docker-compose.yml` also supports `--profile kg`.
+The standalone `agentic/docker-compose.yml` also starts Neo4j and `kg-worker`.
 Its backend DSN must reach the backend PostgreSQL from inside Docker; use
 `host.docker.internal` when that database is exposed on the host.
-`./dev_up.sh --local --kg` starts Neo4j and a local worker; the agent can be
+`./dev_up.sh --local` starts Neo4j and a local worker; the agent can be
 started separately with `python -m uvicorn agentic.core.app.main:app --port 8081`.
 
 ## Data and recovery
@@ -143,11 +164,10 @@ does not automatically purge their SQL audit history. Goals must be active and
 CUSTOM foods remain owner-scoped. No embeddings, free-form memory extraction,
 or automatic promotion of learned execution templates is enabled.
 
-## Rollout
+## Measured gates
 
-Promote modes only after regression tests pass and production-like measurements
-meet the planned gates: routing >=95% without >1 percentage-point regression,
-retrieval p95 <=100 ms (150 ms cutoff), projection lag p95 <=5 seconds, and eligible
-read latency/tokens improving >=20%/15%. The strict progress template preserves
-the initial routing and final response calls, reducing four model calls to two.
-Ambiguity, compound requests, missing fields and graph outages use the baseline.
+Keep regression tests green and check production-like measurements against the planned
+gates: routing >=95% without >1 percentage-point regression, retrieval p95 <=100 ms
+(150 ms cutoff), projection lag p95 <=5 seconds, and `kg_eval run` showing the `kg`
+variant no worse than `no_kg` on tool choice and grounded content. Ambiguity, compound
+requests, missing fields and graph outages fall back to the backend tools.

@@ -8,15 +8,15 @@ from .model import LOCAL, MODEL_VERSION, build_user_model, model_links
 from .models import ProjectionEvent
 from .service import normalize
 
-PROJECTION_VERSION = 3
+PROJECTION_VERSION = 4
 NUTRIENTS = {'energy_kcal', 'protein_g', 'carbohydrate_g', 'fat_g', 'fiber_g'}
 FOOD_FIELDS = NUTRIENTS | {'id', 'version_id', 'code', 'name_vi', 'name_en', 'category_vi', 'category_en',
                            'item_type', 'source_type', 'serving_size', 'serving_unit'}
 FIELDS = {
-    'User': {'id', 'is_active', 'age', 'training_profile'},
+    'User': {'id', 'is_active', 'age', 'sex', 'activity_level', 'training_profile'},
     'Goal': {'id', 'version_id', 'title', 'description', 'goal_types', 'weight_kg_target',
              'targets', 'start_date', 'target_date', 'status'},
-    'BodyMetric': {'id', 'version_id', 'recorded_at', 'weight_kg', 'height_cm', 'body_fat_pct', 'muscle_mass_kg'},
+    'BodyMetric': {'id', 'version_id', 'recorded_at', 'weight_kg', 'height_cm', 'body_fat_pct', 'muscle_mass_kg', 'source'},
     'Food': FOOD_FIELDS,
     'Meal': NUTRIENTS | {'id', 'version_id', 'name', 'consumed_at', 'timezone', 'detail_status',
                          'replaces_id', 'nutrition_incomplete'},
@@ -27,14 +27,28 @@ FIELDS = {
     'Session': {'session_id', 'generation'},
     # A conversation turn: structured routing facts only, never message or reply text.
     'Run': {'run_id', 'session_id', 'session_generation', 'intent', 'domain', 'action', 'status', 'tools', 'occurred_at'},
+    # Wearable data the user allowed the assistant to use: day rollups and sessions only.
+    'DailyHealth': {'id', 'version_id', 'local_date', 'source', 'steps', 'distance_m', 'floors', 'active_minutes',
+                    'active_zone_minutes', 'total_kcal', 'active_kcal', 'resting_hr_bpm', 'hr_avg_bpm', 'hrv_ms',
+                    'spo2_avg_pct', 'respiratory_rate', 'vo2_max', 'hydration_ml', 'sleep_minutes'},
+    'SleepSession': {'id', 'version_id', 'source', 'start_at', 'end_at', 'local_date', 'is_main', 'is_nap',
+                     'minutes_asleep', 'minutes_awake', 'minutes_in_period', 'deep_minutes', 'light_minutes',
+                     'rem_minutes', 'efficiency_pct'},
+    'DeviceWorkout': {'id', 'version_id', 'source', 'started_at', 'ended_at', 'local_date', 'exercise_type',
+                      'display_name', 'active_seconds', 'energy_kcal', 'distance_m', 'steps', 'avg_hr_bpm',
+                      'active_zone_minutes'},
 }
+HEALTH_KINDS = ('DailyHealth', 'SleepSession', 'DeviceWorkout')
 PROFILE_FIELDS = {'experience_level', 'primary_focus', 'available_days', 'session_minutes', 'equipment'}
 TURN_STATUSES = {'completed', 'needs_input', 'pending_confirmation', 'failed'}
-MODEL_SOURCES = {'User', 'Goal', 'BodyMetric', 'Meal', 'Training'}
+MODEL_SOURCES = {'User', 'Goal', 'BodyMetric', 'Meal', 'Training', *HEALTH_KINDS}
 ITEM_FIELDS = NUTRIENTS | {'id', 'version_id', 'position', 'food_id', 'quantity', 'unit', 'nutrition_incomplete'}
 TRAINING_ITEM_FIELDS = {'id', 'position', 'exercise_id', 'kind', 'duration_seconds', 'distance_meters', 'volume_kg', 'best_e1rm_kg', 'hard_sets', 'energy_kcal'}
 EXERCISE_FIELDS = {'id', 'code', 'name_vi', 'name_en', 'kind', 'source_type'}
-RELATIONS = {'Goal': 'HAS_GOAL', 'BodyMetric': 'HAS_MEASUREMENT', 'Meal': 'LOGGED', 'Training': 'TRAINED'}
+RELATIONS = {'Goal': 'HAS_GOAL', 'BodyMetric': 'HAS_MEASUREMENT', 'Meal': 'LOGGED', 'Training': 'TRAINED',
+             'DailyHealth': 'HAS_DAILY_HEALTH', 'SleepSession': 'SLEPT', 'DeviceWorkout': 'WORKED_OUT'}
+# Record kinds a conversation turn may be ABOUT (and an execution may TARGET).
+RECORD_KINDS = {'Goal', 'BodyMetric', 'Meal', 'Food', 'Training', *HEALTH_KINDS}
 
 
 def sanitize(event):
@@ -64,7 +78,7 @@ def sanitize(event):
         data['resource_refs'] = [
             {'kind': ref['kind'], 'source_id': str(ref['source_id'])}
             for ref in payload.get('resource_refs', [])
-            if ref.get('kind') in {'Goal', 'BodyMetric', 'Meal', 'Food', 'Training'} and ref.get('source_id')
+            if ref.get('kind') in RECORD_KINDS and ref.get('source_id')
         ][:20]
     return data
 
@@ -89,8 +103,10 @@ def event_properties(event):
                  projected_at=datetime.now(timezone.utc).isoformat(), deleted=event.operation == 'delete',
                  fact_json=json.dumps(fact, ensure_ascii=False, separators=(',', ':')),
                  search_text=search_text(data))
+    # Sleep belongs to the morning it ended; a day rollup to its local date.
     props['business_at'] = utc_string(data.get('consumed_at') or data.get('recorded_at') or data.get('started_at')
-                                      or data.get('occurred_at') or event.occurred_at)
+                                      or data.get('end_at') or data.get('local_date') or data.get('occurred_at')
+                                      or event.occurred_at)
     if event.aggregate_type == 'Goal':
         props['status'] = str(data.get('status', '')).upper()
     if event.aggregate_type == 'Execution':
@@ -103,7 +119,7 @@ def event_properties(event):
 
 def search_text(data):
     # Meals and trainings are found by what was eaten or performed, not only by "Bữa tối".
-    names = [data.get(key) for key in ('name', 'name_vi', 'name_en', 'title')]
+    names = [data.get(key) for key in ('name', 'name_vi', 'name_en', 'title', 'display_name', 'exercise_type')]
     for item in data.get('items', []):
         snapshot = item.get('food_snapshot') or item.get('exercise') or {}
         names += [snapshot.get('name_vi'), snapshot.get('name_en')]
@@ -237,13 +253,13 @@ class Projector:
             await self._execution(tx, event, data, session_key)
         if label == 'Run':
             await self._run(tx, event, data, session_key)
-        if label in {'Goal', 'BodyMetric', 'Meal', 'Food', 'Training'}:
+        if label in RECORD_KINDS:
             await tx.run("""
                 MATCH (n:KGEntity {key:$key}), (e:Execution)
                 WHERE $key IN e.target_keys AND (e.owner_id=n.owner_id OR (n:Food AND n.scope='SYSTEM'))
                 MERGE (e)-[:TARGETS]->(n)
             """, key=event.key)
-        if label in {'Goal', 'BodyMetric', 'Meal', 'Training'}:
+        if label in RECORD_KINDS - {'Food'}:
             # A turn may be journaled before the record it created is projected.
             await tx.run("""
                 MATCH (n:KGEntity {key:$key}), (r:KGEntity {owner_id:$owner, kind:'Run'})
@@ -392,10 +408,10 @@ class Projector:
             MATCH (o:KGOwner {key:$owner}) WHERE coalesce(o.deleted, false) = false
             MATCH (u:KGEntity {key:$user_key}) WHERE coalesce(u.deleted, false) = false
             OPTIONAL MATCH (n:KGEntity {owner_id:$owner})
-            WHERE n.kind IN ['User','Goal','BodyMetric','Meal','Training'] AND coalesce(n.deleted, false) = false
+            WHERE n.kind IN $kinds AND coalesce(n.deleted, false) = false
               AND n.fact_json IS NOT NULL AND (n.kind IN ['User','Goal'] OR coalesce(n.business_at, n.source_at) >= $cutoff)
             RETURN u.key AS user, collect(n.fact_json) AS facts
-        """, owner=owner, user_key='backend:User:' + owner, cutoff=cutoff)
+        """, owner=owner, user_key='backend:User:' + owner, cutoff=cutoff, kinds=sorted(MODEL_SOURCES))
         if not rows:  # deleted or unknown owner; grouping by user keeps this empty
             return False
         # An owner whose history aged out still gets an (empty) model, so it is not re-selected every cycle.
@@ -441,7 +457,7 @@ class Projector:
 
     async def prune(self):
         now = datetime.now(timezone.utc)
-        for kinds, days in ((['Meal','BodyMetric','Training'], value(self.settings,'KG_BUSINESS_RETENTION_DAYS',90)),
+        for kinds, days in ((['Meal','BodyMetric','Training',*HEALTH_KINDS], value(self.settings,'KG_BUSINESS_RETENTION_DAYS',90)),
                             (['Execution','Run'], value(self.settings,'KG_MEMORY_RETENTION_DAYS',30))):
             await self.query("""
               MATCH (n:KGEntity) WHERE n.kind IN $kinds AND coalesce(n.business_at,n.source_at)<$cutoff

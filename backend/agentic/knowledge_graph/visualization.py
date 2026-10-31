@@ -17,7 +17,8 @@ from datetime import datetime, time, timedelta, timezone
 
 from .driver import create_driver, value
 from .intents import hub as intent_hub, label as intent_label
-from .model import DISCIPLINES, FOCUS, LEVELS, LOCAL, parse_time
+from .model import DISCIPLINES, FOCUS, LEVELS, LOCAL, SEX, parse_time
+from schemas.health import ACTIVITY_LABELS, BMI_LABELS
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +27,8 @@ MATCH (s:KGState {key:'main'}) WHERE s.ready=true
 OPTIONAL MATCH (m:KGEntity {key:$model_key})
 CALL () {
   MATCH (n:KGEntity {owner_id:$owner})
-  WHERE n.kind IN ['Goal','BodyMetric','Meal','Training'] AND coalesce(n.deleted,false)=false
+  WHERE n.kind IN ['Goal','BodyMetric','Meal','Training','DailyHealth','SleepSession','DeviceWorkout']
+    AND coalesce(n.deleted,false)=false
     AND n.fact_json IS NOT NULL AND (NOT n:Goal OR n.status='IN_PROGRESS')
     AND (n:Goal OR (coalesce(n.business_at, n.source_at) >= $business
                     AND ($until IS NULL OR coalesce(n.business_at, n.source_at) < $until)))
@@ -53,7 +55,8 @@ CALL () {
 CALL () {
   // When over the whole retained history, behind the same session gate as runs.
   MATCH (n:KGEntity {owner_id:$owner})
-  WHERE $density AND n.kind IN ['BodyMetric','Meal','Training','Run'] AND coalesce(n.deleted,false)=false
+  WHERE $density AND n.kind IN ['BodyMetric','Meal','Training','Run','DailyHealth','SleepSession','DeviceWorkout']
+    AND coalesce(n.deleted,false)=false
     AND n.fact_json IS NOT NULL AND coalesce(n.business_at, n.source_at) >= $retained
     AND (n.kind <> 'Run' OR (n.intent IS NOT NULL AND n.business_at >= $remembered
                              AND n.session_id IN $sessions AND n.session_generation = $generations[n.session_id]))
@@ -64,13 +67,15 @@ RETURN s.projection_lag_ms AS lag_ms, records, totals, runs, habits, moments,
 """
 DEFAULT_PER_KIND = 14
 WINDOW_PER_KIND = 40
-WINDOW_KINDS = {'BodyMetric': 'body', 'Meal': 'nutrition', 'Training': 'training', 'Run': 'conversation'}
+# Device data hangs under the body hub, so the client needs no new hub.
+WINDOW_KINDS = {'BodyMetric': 'body', 'Meal': 'nutrition', 'Training': 'training', 'Run': 'conversation',
+                'DailyHealth': 'body', 'SleepSession': 'body', 'DeviceWorkout': 'body'}
 HUBS = {'goal': 'Mục tiêu', 'body': 'Cơ thể', 'nutrition': 'Dinh dưỡng', 'training': 'Tập luyện', 'conversation': 'Hội thoại'}
 STATUS = {'completed': 'Hoàn tất', 'needs_input': 'Chờ bổ sung', 'pending_confirmation': 'Chờ xác nhận', 'failed': 'Lỗi'}
 DOMAINS = {'meals': 'Bữa ăn', 'foods': 'Thực phẩm', 'metrics': 'Số đo', 'goals': 'Mục tiêu', 'progress': 'Tiến độ',
            'trainings': 'Buổi tập', 'exercises': 'Bài tập', 'coaching': 'Huấn luyện', 'training_plans': 'Kế hoạch tập',
-           'profile': 'Hồ sơ'}
-EMPTY = {'status': 'unavailable', 'lag_ms': None, 'mode': None, 'profile': None, 'insights': [], 'intents': [],
+           'profile': 'Hồ sơ', 'health': 'Sức khoẻ'}
+EMPTY = {'status': 'unavailable', 'lag_ms': None, 'profile': None, 'insights': [], 'intents': [],
          'nodes': [], 'edges': [], 'timeline': []}
 
 
@@ -122,8 +127,12 @@ def _profile(model):
     training = profile.get('training') or {}
     if not profile:
         return None
+    level = profile.get('observed_level') or profile.get('declared_level')
     return {'age': profile.get('age'), 'height_cm': profile.get('height_cm'), 'weight_kg': profile.get('weight_kg'),
-            'bmi': profile.get('bmi'),
+            'bmi': profile.get('bmi'), 'sex': SEX.get(profile.get('sex')),
+            'bmi_class': BMI_LABELS.get(profile.get('bmi_class')), 'body_fat_pct': profile.get('body_fat_pct'),
+            'activity_level': ACTIVITY_LABELS.get(level, level), 'resting_hr': profile.get('resting_hr'),
+            'vo2_max': profile.get('vo2_max'),
             'experience': LEVELS.get(training.get('experience_level'), training.get('experience_level')),
             'focus': FOCUS.get(training.get('primary_focus'), training.get('primary_focus')),
             'available_days': training.get('available_days'), 'session_minutes': training.get('session_minutes'),
@@ -145,8 +154,24 @@ def _insights(model, intents):
         change = max(body.get('changes') or [], key=lambda c: c['days'], default=None)
         insights.append({'id': 'weight', 'hub': 'body', 'title': 'Cân nặng', 'value': _n(body['latest']['weight_kg'], 'kg'),
                          'caption': f"{change['delta_kg']:+g} kg so với {_date(change['since'])}" if change else f"Đo {_date(body['latest']['date'])}",
-                         'detail': f"Xu hướng {body['trend']}", 'series': [point['weight_kg'] for point in body.get('series', [])],
-                         'tone': 'neutral'})
+                         'detail': 'Số đo lệch bất thường, nên cân lại' if body.get('inconsistent') else f"Xu hướng {body['trend']}",
+                         'series': [point['weight_kg'] for point in body.get('series', [])],
+                         'tone': 'warning' if body.get('inconsistent') else 'neutral'})
+    activity, sleep = model.get('activity') or {}, model.get('sleep') or {}
+    if activity.get('steps_7d') is not None:
+        insights.append({'id': 'activity', 'hub': 'body', 'title': 'Vận động', 'value': f"{activity['steps_7d']} bước",
+                         'caption': 'TB/ngày · 7 ngày (thiết bị)',
+                         'detail': ' · '.join(filter(None, [
+                             f"{activity['active_minutes_7d']} phút vận động/tuần" if activity.get('active_minutes_7d') is not None else None,
+                             f"{activity['worn_days_28d']} ngày đeo / 28"])),
+                         'progress': min(1, activity['active_minutes_7d'] / 150) if activity.get('active_minutes_7d') is not None else None,
+                         'tone': 'positive' if activity.get('meets_who') else 'warning' if activity.get('meets_who') is False else 'neutral'})
+    if sleep.get('avg_minutes_7d') is not None:
+        low = sleep['recommended_hours'][0]
+        insights.append({'id': 'sleep', 'hub': 'body', 'title': 'Giấc ngủ',
+                         'value': f"{sleep['avg_minutes_7d'] // 60}g{sleep['avg_minutes_7d'] % 60:02d}",
+                         'caption': f"TB/đêm · {sleep['nights_7d']} đêm", 'detail': f"Khuyến nghị ≥ {low:g} giờ",
+                         'tone': 'warning' if sleep['avg_minutes_7d'] < low * 60 else 'positive'})
     if nutrition:
         today = nutrition.get('today') or {}
         insights.append({'id': 'nutrition', 'hub': 'nutrition', 'title': 'Dinh dưỡng',
@@ -201,9 +226,50 @@ def _body(builder, records):
         node['details'] = _details(('Cân nặng', _n(weight, 'kg')), ('Chiều cao', _n(height, 'cm')),
                                    ('BMI', _n(weight / (height / 100) ** 2) if weight and height else None),
                                    ('Mỡ cơ thể', _n(data.get('body_fat_pct'), '%')), ('Khối cơ', _n(data.get('muscle_mass_kg'), 'kg')),
-                                   ('Thời điểm', _local(data.get('recorded_at'), '%d/%m/%Y %H:%M')))
+                                   ('Thời điểm', _local(data.get('recorded_at'), '%d/%m/%Y %H:%M')),
+                                   ('Nguồn', 'Google Health' if (data.get('source') or 'MANUAL') != 'MANUAL' else None))
         builder.event(record['key'], 'body', data.get('recorded_at'), f"Cân nặng {_n(weight, 'kg')}" if weight else 'Số đo cơ thể',
                       f"Chiều cao {_n(height, 'cm')}" if height else None, record['key'])
+
+
+def _device(builder, days, sleeps, workouts):
+    """Device data the user shared: day rollups, sleep sessions and recorded workouts."""
+    groups = (('grp:days', 'Vận động theo ngày', days), ('grp:sleep', 'Giấc ngủ', sleeps), ('grp:workouts', 'Buổi vận động (thiết bị)', workouts))
+    for group, title, records in groups:
+        if records:
+            builder.node(group, 'Group', title, 'hub:body', 'body', count=len(records))
+    for record in days:
+        data = record['data']
+        day = data.get('local_date')
+        node = builder.node(record['key'], 'DailyHealth', f"{_date(day)} · {_n(data.get('steps'), 'bước') or 'Ngày'}",
+                            'grp:days', 'body', at=day)
+        node['details'] = _details(('Số bước', _n(data.get('steps'))), ('Quãng đường', _n((data.get('distance_m') or 0) / 1000 or None, 'km')),
+                                   ('Phút vận động', _n(data.get('active_minutes'))), ('Phút vùng tim', _n(data.get('active_zone_minutes'))),
+                                   ('Tiêu hao (ước tính)', _n(data.get('total_kcal'), 'kcal')), ('Nhịp tim nghỉ', _n(data.get('resting_hr_bpm'), 'bpm')),
+                                   ('HRV', _n(data.get('hrv_ms'), 'ms')), ('SpO2', _n(data.get('spo2_avg_pct'), '%')),
+                                   ('Ngủ', _n(data.get('sleep_minutes'), 'phút')), ('Nước', _n(data.get('hydration_ml'), 'ml')))
+    for record in sleeps:
+        data = record['data']
+        minutes = data.get('minutes_asleep')
+        node = builder.node(record['key'], 'SleepSession', f"{'Ngủ ngắn' if data.get('is_nap') else 'Ngủ'} · {_date(data.get('local_date'))}",
+                            'grp:sleep', 'body', at=data.get('end_at'))
+        node['summary'] = f"{int(minutes) // 60}g{int(minutes) % 60:02d}" if minutes else None
+        node['details'] = _details(('Bắt đầu', _local(data.get('start_at'))), ('Thức dậy', _local(data.get('end_at'))),
+                                   ('Thời gian ngủ', _n(minutes, 'phút')), ('Ngủ sâu', _n(data.get('deep_minutes'), 'phút')),
+                                   ('REM', _n(data.get('rem_minutes'), 'phút')), ('Hiệu quả', _n(data.get('efficiency_pct'), '%')))
+        builder.event(record['key'], 'body', data.get('end_at'), 'Giấc ngủ', node['summary'], record['key'])
+    for record in workouts:
+        data = record['data']
+        minutes = round(data['active_seconds'] / 60) if data.get('active_seconds') else None
+        node = builder.node(record['key'], 'DeviceWorkout',
+                            f"{data.get('display_name') or data.get('exercise_type') or 'Vận động'} · {_local(data.get('started_at'))}",
+                            'grp:workouts', 'body', at=data.get('started_at'))
+        node['details'] = _details(('Loại', data.get('exercise_type')), ('Thời lượng', f'{minutes} phút' if minutes else None),
+                                   ('Quãng đường', _n((data.get('distance_m') or 0) / 1000 or None, 'km')),
+                                   ('Năng lượng', _n(data.get('energy_kcal'), 'kcal')), ('Nhịp tim TB', _n(data.get('avg_hr_bpm'), 'bpm')),
+                                   ('Phút vùng tim', _n(data.get('active_zone_minutes'))))
+        builder.event(record['key'], 'body', data.get('started_at'), data.get('display_name') or 'Buổi vận động (thiết bị)',
+                      f'{minutes} phút' if minutes else None, record['key'])
 
 
 def _nutrition(builder, records, model, habits):
@@ -350,7 +416,7 @@ def window_meta(bounds, totals=(), moments=()):
 
 def build_map(model, records, runs, habits):
     builder = MapBuilder()
-    by_kind = {'Goal': [], 'BodyMetric': [], 'Meal': [], 'Training': []}
+    by_kind = {'Goal': [], 'BodyMetric': [], 'Meal': [], 'Training': [], 'DailyHealth': [], 'SleepSession': [], 'DeviceWorkout': []}
     for record in records:
         fact = json.loads(record['fact'])
         by_kind.setdefault(fact.get('kind'), []).append({'key': record['key'], 'data': fact.get('data') or {}})
@@ -361,8 +427,12 @@ def build_map(model, records, runs, habits):
     if profile:
         root['summary'] = ' · '.join(filter(None, [f"{profile['age']} tuổi" if profile.get('age') else None,
                                                    _n(profile.get('height_cm'), 'cm'), f"BMI {_n(profile['bmi'])}" if profile.get('bmi') else None]))
-        root['details'] = _details(('Tuổi', profile.get('age')), ('Chiều cao', _n(profile.get('height_cm'), 'cm')),
-                                   ('Cân nặng', _n(profile.get('weight_kg'), 'kg')), ('BMI', _n(profile.get('bmi'))),
+        root['details'] = _details(('Tuổi', profile.get('age')), ('Giới tính', profile.get('sex')),
+                                   ('Chiều cao', _n(profile.get('height_cm'), 'cm')),
+                                   ('Cân nặng', _n(profile.get('weight_kg'), 'kg')),
+                                   ('BMI', f"{_n(profile['bmi'])} ({profile['bmi_class']}, ngưỡng châu Á)" if profile.get('bmi') and profile.get('bmi_class') else _n(profile.get('bmi'))),
+                                   ('Mỡ cơ thể', _n(profile.get('body_fat_pct'), '%')), ('Mức vận động', profile.get('activity_level')),
+                                   ('Nhịp tim nghỉ', _n(profile.get('resting_hr'), 'bpm')), ('VO2max', _n(profile.get('vo2_max'))),
                                    ('Trình độ', profile.get('experience')), ('Trọng tâm', profile.get('focus')),
                                    ('Lịch tập', f"{profile['available_days']} buổi/tuần" if profile.get('available_days') else None),
                                    ('Mỗi buổi', f"{profile['session_minutes']} phút" if profile.get('session_minutes') else None),
@@ -371,6 +441,8 @@ def build_map(model, records, runs, habits):
         builder.node('hub:' + hub, 'Hub', title, 'me', hub)
     _goal(builder, by_kind['Goal'], model)
     _body(builder, sorted(by_kind['BodyMetric'], key=lambda r: r['data'].get('recorded_at') or '', reverse=True))
+    _device(builder, *(sorted(by_kind[kind], key=lambda r: r['data'].get(field) or '', reverse=True)
+                       for kind, field in (('DailyHealth', 'local_date'), ('SleepSession', 'end_at'), ('DeviceWorkout', 'started_at'))))
     _nutrition(builder, sorted(by_kind['Meal'], key=lambda r: r['data'].get('consumed_at') or '', reverse=True), model, habits)
     _training(builder, sorted(by_kind['Training'], key=lambda r: r['data'].get('started_at') or '', reverse=True), model)
     intents = _conversation(builder, sorted(runs, key=lambda r: r['data'].get('occurred_at') or '', reverse=True))
@@ -380,7 +452,9 @@ def build_map(model, records, runs, habits):
     for node in builder.nodes.values():
         node['children'] = sum(1 for edge in builder.edges if edge['kind'] == 'tree' and edge['source'] == node['id'])
     insights = _insights(model, intents)
-    by_hub = {item['hub']: item for item in insights}
+    by_hub = {}
+    for item in insights:  # the first insight of a hub (weight for body) summarizes it
+        by_hub.setdefault(item['hub'], item)
     for hub, item in by_hub.items():
         summary = {'goal': item.get('detail'), 'body': item.get('value'), 'nutrition': f"TB {item.get('value')}/ngày",
                    'training': f"{item.get('value')} {item.get('caption')}", 'conversation': item.get('detail')}[hub]
@@ -395,7 +469,7 @@ async def personal_graph(service, user_id, start=None, end=None):
     now = datetime.now(timezone.utc)
     windowed = start is not None or end is not None
     bounds = window_bounds(settings, now, start, end)
-    empty = {**EMPTY, 'mode': value(settings, 'KG_MODE', 'off')}
+    empty = dict(EMPTY)
     if windowed:
         empty['window'] = window_meta(bounds)
     try:

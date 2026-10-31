@@ -23,30 +23,45 @@ from .models import GraphContext
 log = logging.getLogger(__name__)
 LOCAL = ZoneInfo('Asia/Ho_Chi_Minh')
 # Routing domains with personal knowledge: fact kinds and user-model sections, by relevance.
+# activity, sleep and recovery are retrieval-only domains found in the message; the
+# router domain for device data is health.
 KINDS = {'meals': ['Meal'], 'foods': ['Food', 'Meal'], 'metrics': ['BodyMetric'], 'goals': ['Goal'],
          'progress': ['Goal', 'BodyMetric', 'Meal'], 'trainings': ['Training'], 'coaching': ['Training'],
-         'training_plans': ['Training'], 'profile': [], 'conversation': []}
+         'training_plans': ['Training'], 'profile': [], 'conversation': [],
+         'health': ['DailyHealth', 'SleepSession', 'DeviceWorkout'], 'activity': ['DailyHealth', 'DeviceWorkout'],
+         'sleep': ['SleepSession'], 'recovery': ['DailyHealth']}
 SECTIONS = {
     'meals': ['nutrition', 'foods', 'goal'], 'foods': ['foods', 'nutrition'],
-    'metrics': ['body', 'goal', 'profile'], 'goals': ['goal', 'body'],
-    'progress': ['goal', 'nutrition', 'body', 'training'],
-    'trainings': ['training', 'exercises', 'running', 'profile'], 'coaching': ['training', 'exercises', 'running', 'profile'],
-    'training_plans': ['profile', 'training', 'exercises', 'goal'], 'profile': ['profile', 'body', 'goal'],
+    'metrics': ['body', 'goal', 'profile', 'energy'], 'goals': ['goal', 'body', 'energy'],
+    'progress': ['goal', 'nutrition', 'energy', 'body', 'training'],
+    'trainings': ['training', 'exercises', 'running', 'profile', 'recovery'],
+    'coaching': ['training', 'recovery', 'exercises', 'running', 'profile'],
+    'training_plans': ['profile', 'training', 'exercises', 'goal'], 'profile': ['profile', 'body', 'activity', 'goal'],
     'conversation': ['conversation'],
+    'health': ['activity', 'sleep', 'recovery', 'energy'], 'activity': ['activity', 'energy', 'profile'],
+    'sleep': ['sleep', 'recovery'], 'recovery': ['recovery', 'sleep', 'activity'],
 }
+DEVICE_KINDS = ('DailyHealth', 'SleepSession', 'DeviceWorkout')
 PILOT_DOMAINS = set(KINDS)
 # Turns are journaled with the router domain of their first decision.
 EPISODE_DOMAINS = {'meals': ['meals', 'foods'], 'foods': ['meals', 'foods'], 'coaching': ['coaching', 'trainings'],
-                   'trainings': ['trainings', 'coaching'], 'progress': ['progress', 'meals', 'metrics', 'goals']}
+                   'trainings': ['trainings', 'coaching'], 'progress': ['progress', 'meals', 'metrics', 'goals'],
+                   'activity': ['health'], 'sleep': ['health'], 'recovery': ['health', 'coaching']}
 DOMAIN_PATTERNS = (
     ('conversation', r'hay hoi|thuong hoi|da hoi|hoi ban|tro chuyen|cuoc hoi thoai|lich su chat'),
     ('profile', r'ho so|trinh do|thong tin ca nhan|\btuoi\b|\bbmi\b'),
+    ('sleep', r'giac ngu|\bngu\b|mat ngu|thuc giac|\bsleep\b'),
+    ('recovery', r'nhip tim|\bhrv\b|phuc hoi|met moi|\bspo2\b|\boxy\b|recovery'),
+    ('activity', r'buoc chan|so buoc|\bbuoc\b|\bsteps?\b|van dong|tieu hao|dot chay|google fit|google health|thiet bi'),
     ('progress', r'tien do|progress|tong hop|bao cao'),
     ('training_plans', r'ke hoach tap|lich tap|giao an|chuong trinh tap|training plan'),
-    ('trainings', r'buoi tap|bai tap|tai tap|tap luyen|\btap\b|\bchay\b|\bkm\b|training|workout|\bgym\b|day nguc|squat|deadlift|e1rm|ky luc'),
-    ('metrics', r'can nang|\bcan\b|so do|chieu cao|\bweight\b'),
+    ('trainings', r'buoi tap|bai tap|tai tap|tap luyen|\btap\b|\bchay\b|\bkm\b|training|workout|\bgym\b|day nguc|squat|deadlift|e1rm|ky luc'
+                  r'|\bpace\b|\b(?:3|5|10|15|21|42)\s?k\b|marathon|cu ly|\brun(?:ning)?\b|\bjog|tempo|interval|\b1rm\b|\bvo2'),
+    # "giảm bao nhiêu kg" names no body word: a change verb near "kg" is a weight question.
+    ('metrics', r'can nang|\bcan\b|so do|chieu cao|\bweight\b|(?:giam|tang|xuong|len|mat|them)\b.{0,25}\bkg\b'
+                r'|\bkg\b.{0,25}(?:so voi|truoc)|giam mo|ty le mo|body ?fat|vong eo|beo phi'),
     ('goals', r'muc tieu|\bgoals?\b'),
-    ('meals', r'\bbua\b|\bmon\b|\ban\b|\bmeals?\b|\bcalo|protein|dinh duong'),
+    ('meals', r'\bbua\b|\bmon\b|\ban\b|\bmeals?\b|\bcalo|kcal|protein|dinh duong|an uong|carb|tinh bot|chat beo|macro'),
     ('foods', r'thuc pham|\bfoods?\b'),
 )
 # Conversational words otherwise match names such as "Bữa tối" or "Quả ...".
@@ -98,7 +113,8 @@ CALL () {
     RETURN n
   }
   WITH n WHERE (NOT n:Goal OR n.status = 'IN_PROGRESS')
-    AND (NOT (n:Meal OR n:BodyMetric OR n:Training) OR n.business_at >= $business_cutoff)
+    AND (NOT (n:Meal OR n:BodyMetric OR n:Training OR n:DailyHealth OR n:SleepSession OR n:DeviceWorkout)
+         OR n.business_at >= $business_cutoff)
   WITH n, CASE WHEN any(term IN $terms WHERE n.search_text CONTAINS term) THEN 1 ELSE 0 END AS score
   ORDER BY score DESC, n.business_at DESC, n.source_at DESC
   WITH n.kind AS kind, collect(n.fact_json)[0..$per_kind] AS group
@@ -145,21 +161,26 @@ class GraphContextService:
         if self.driver is not None:
             await self.driver.close()
 
-    async def warm_up(self):
-        """Plan and run each domain query a few times at startup: cold reads (~0.15-0.9 s) exceed the cap."""
-        if value(self.settings, 'KG_MODE', 'off') == 'off':
-            return
-        try:
-            for _ in range(3):
-                for domain in sorted(PILOT_DOMAINS):
-                    await self._query('kg-warm-up', {}, [domain], 'warm up query', {})
-        except Exception as exc:
-            log.warning('kg_warm_up_failed error_type=%s', type(exc).__name__)
+    async def warm_up(self, attempts=40, delay=3.0):
+        """Plan and run each domain query a few times at startup: cold reads (~0.15-0.9 s) exceed the cap.
+
+        Neo4j is not a startup dependency of the agent and may answer later, so an unreachable
+        graph is retried in the background (about two minutes) instead of staying cold."""
+        for attempt in range(attempts):
+            try:
+                for _ in range(3):
+                    for domain in sorted(PILOT_DOMAINS):
+                        await self._query('kg-warm-up', {}, [domain], 'warm up query', {})
+                return True
+            except Exception as exc:
+                if attempt == 0:
+                    log.warning('kg_warm_up_failed error_type=%s retrying=%s', type(exc).__name__, attempts > 1)
+                if attempt + 1 < attempts:
+                    await asyncio.sleep(delay)
+        return False
 
     @observed('kg.retrieve', 'retriever', capture=('message', 'domain_hint'))
     async def retrieve(self, authenticated_user_id, session_id, message, domain_hint=None, limits=None):
-        if value(self.settings, 'KG_MODE', 'off') == 'off':
-            return GraphContext(status='off')
         hints = [domain_hint] if isinstance(domain_hint, str) else list(domain_hint or domains_for(message))
         domains = [domain for domain in dict.fromkeys(hints) if domain in PILOT_DOMAINS]
         if not domains:
@@ -203,6 +224,9 @@ class GraphContextService:
         data['facts'] = [json.loads(item) for item in data['facts'] if item]
         data['episodes'] = [json.loads(item) for item in data['episodes'] if item]
         result = GraphContext(**data, model=model, domains=domains, sections=sections_for(domains))
+        if model and {'profile', 'activity'} & set(result.sections):
+            # Declared versus measured disagreements, e.g. activity level against device steps.
+            result.conflicts.extend((model.get('conflicts') or [])[:2])
         result.status = 'ok' if render_lines(result) else 'empty'
         for fact in result.facts:
             if fact.get('kind') == 'Meal' and any(item.get('nutrition_incomplete') for item in fact.get('data', {}).get('items', [])):
@@ -294,6 +318,19 @@ def fact_line(fact):
         return _join('Thực phẩm', data.get('name_vi') or data.get('name_en'),
                      _amount(data.get('serving_size'), (data.get('serving_unit') or '').lower()),
                      _amount(data.get('energy_kcal'), 'kcal'), _amount(data.get('protein_g'), 'g protein'))
+    if kind == 'DailyHealth':
+        return _join('Ngày (thiết bị)', data.get('local_date'), _amount(data.get('steps'), 'bước'),
+                     _amount(data.get('active_minutes'), 'phút vận động'), _amount(data.get('total_kcal'), 'kcal tiêu hao'),
+                     _amount(data.get('resting_hr_bpm'), 'bpm nghỉ'), _amount(data.get('sleep_minutes'), 'phút ngủ'))
+    if kind == 'SleepSession':
+        return _join('Giấc ngủ' + (' ngắn' if data.get('is_nap') else ''), f"{_local(data.get('start_at'))} → {_local(data.get('end_at'))}",
+                     _amount(data.get('minutes_asleep'), 'phút ngủ'), _amount(data.get('deep_minutes'), 'phút sâu'),
+                     _amount(data.get('rem_minutes'), 'phút REM'))
+    if kind == 'DeviceWorkout':
+        return _join('Buổi vận động (thiết bị)', _local(data.get('started_at')), data.get('display_name') or data.get('exercise_type'),
+                     _amount((data.get('active_seconds') or 0) / 60 or None, 'phút'),
+                     _amount((data.get('distance_m') or 0) / 1000 or None, 'km'), _amount(data.get('energy_kcal'), 'kcal'),
+                     _amount(data.get('avg_hr_bpm'), 'bpm TB'))
     if kind == 'Run':
         return _join('Lượt hội thoại', _local(data.get('occurred_at') or fact.get('source_at')),
                      intent_label(data.get('intent')), STATUS.get(data.get('status'), data.get('status')))

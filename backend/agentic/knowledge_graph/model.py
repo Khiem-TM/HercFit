@@ -8,16 +8,37 @@ aggregated at read time behind the SQL session gate.
 import re
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
+from statistics import mean, median, pstdev
 from zoneinfo import ZoneInfo
+
+from schemas.health import (
+    ACTIVITY_LABELS, ACTIVITY_ORDER, BMI_LABELS, HRV_DROP_PCT, RHR_ELEVATION_BPM, WHO_ACTIVE_MINUTES_PER_WEEK,
+    WORN_DAY_MIN_STEPS, activity_level_from_exercise, activity_level_from_steps, classify_bmi, recommended_sleep_hours,
+)
 
 from .intents import label as intent_label
 
 LOCAL = ZoneInfo('Asia/Ho_Chi_Minh')
-MODEL_VERSION = 1
+# 2: device data (activity, sleep, recovery, energy), sex and the declared activity level.
+# 3: implausible weigh-ins kept out of trends, one trend/rate source, exercise-aware activity level.
+MODEL_VERSION = 3
 LEVELS = {'BEGINNER': 'mới bắt đầu', 'INTERMEDIATE': 'trung cấp', 'ADVANCED': 'nâng cao'}
 FOCUS = {'STRENGTH': 'sức mạnh', 'RUNNING': 'chạy bộ', 'HYBRID': 'kết hợp sức mạnh và chạy'}
 DISCIPLINES = {'STRENGTH': 'sức mạnh', 'ENDURANCE': 'sức bền', 'SPORT': 'thể thao', 'MIXED': 'kết hợp'}
 PROFILE_FIELDS = ('experience_level', 'primary_focus', 'available_days', 'session_minutes', 'equipment')
+SEX = {'MALE': 'nam', 'FEMALE': 'nữ'}
+DAILY_KEYS = ('steps', 'distance_m', 'active_minutes', 'active_zone_minutes', 'total_kcal', 'active_kcal',
+              'resting_hr_bpm', 'hrv_ms', 'spo2_avg_pct', 'respiratory_rate', 'vo2_max', 'hydration_ml', 'sleep_minutes')
+MIN_WORN_DAYS = 7
+# Water, food and clothing move the scale by about 2 kg between weigh-ins; body mass itself
+# changes by at most ~0.25 kg/day. A larger change is a data problem, not a trend.
+WEIGHT_NOISE_KG = 2.0
+WEIGHT_RATE_KG_PER_DAY = 0.25
+# A trend needs both a weekly rate and a total change above day-to-day noise.
+STABLE_KG_PER_WEEK = 0.1
+STABLE_TOTAL_KG = 0.3
+# Logged exercise below this (per week) neither raises the activity level nor counts as evidence.
+MIN_EXERCISE_MINUTES = 60
 
 
 def parse_time(value):
@@ -52,58 +73,304 @@ def _round(value, digits=1):
     return None if value is None else round(value, digits)
 
 
+def _avg(values, digits=None):
+    values = [v for v in values if v is not None]
+    return round(mean(values), digits) if values else None
+
+
 def _metrics(facts):
     rows = []
     for fact in facts:
         data = fact.get('data') or {}
         at = parse_time(data.get('recorded_at')) or parse_time(fact.get('source_at'))
-        weight, height = number(data.get('weight_kg')), number(data.get('height_cm'))
-        if at and (weight or height):
-            rows.append({'at': at, 'weight_kg': weight, 'height_cm': height, 'body_fat_pct': number(data.get('body_fat_pct'))})
+        weight, height, fat = number(data.get('weight_kg')), number(data.get('height_cm')), number(data.get('body_fat_pct'))
+        # Device samples may carry a single measurement (a body-fat reading without weight).
+        if at and (weight or height or fat):
+            rows.append({'at': at, 'weight_kg': weight, 'height_cm': height, 'body_fat_pct': fat,
+                         'device': (data.get('source') or 'MANUAL') != 'MANUAL'})
     return sorted(rows, key=lambda row: row['at'])
 
 
-def _profile(user, metrics):
+def _days(facts):
+    """Device day rollups by local date."""
+    days = {}
+    for fact in facts:
+        data = fact.get('data') or {}
+        day = parse_date(data.get('local_date'))
+        if day:
+            days[day] = {key: number(data.get(key)) for key in DAILY_KEYS}
+    return days
+
+
+def _sleeps(facts):
+    sessions = []
+    for fact in facts:
+        data = fact.get('data') or {}
+        start, end, day = parse_time(data.get('start_at')), parse_time(data.get('end_at')), parse_date(data.get('local_date'))
+        if start and end and day:
+            sessions.append({'day': day, 'start': start, 'end': end, 'nap': bool(data.get('is_nap')),
+                             **{key: number(data.get(key)) for key in ('minutes_asleep', 'deep_minutes', 'light_minutes',
+                                                                        'rem_minutes', 'efficiency_pct')}})
+    return sorted(sessions, key=lambda session: session['end'])
+
+
+def _workouts(facts):
+    workouts = []
+    for fact in facts:
+        data = fact.get('data') or {}
+        day = parse_date(data.get('local_date'))
+        if day:
+            workouts.append({'day': day, 'type': data.get('exercise_type') or 'OTHER', 'name': data.get('display_name'),
+                             'minutes': (number(data.get('active_seconds')) or 0) / 60, 'kcal': number(data.get('energy_kcal')),
+                             'distance_km': (number(data.get('distance_m')) or 0) / 1000 or None})
+    return sorted(workouts, key=lambda workout: workout['day'])
+
+
+def _worn(days, start, end):
+    """Complete worn days in [start, end): today is still being recorded."""
+    return {day: d for day, d in days.items() if start <= day < end and (d['steps'] or 0) >= WORN_DAY_MIN_STEPS}
+
+
+def _exercise_week(sessions, workouts, today):
+    """Exercise minutes per week over the last 28 days, from logged sessions and device workouts.
+
+    A run may be both logged and recorded by a watch: each day counts the larger of the two."""
+    start = today - timedelta(days=28)
+    logged, recorded = defaultdict(float), defaultdict(float)
+    for session in sessions:
+        if start < session['day'] <= today:
+            logged[session['day']] += session['minutes']
+    for workout in workouts:
+        if start < workout['day'] <= today:
+            recorded[workout['day']] += workout['minutes']
+    total = sum(max(logged[day], recorded[day]) for day in set(logged) | set(recorded))
+    return round(total / 4) if total else None
+
+
+def _observed_level(days, exercise_week, today):
+    """What the data shows: steps on worn days, raised by exercise the step count misses.
+
+    Exercise is a lower bound (not every session is logged), so it can raise the level but
+    never lower it; `basis` says which evidence was used."""
+    worn = _worn(days, today - timedelta(days=28), today)
+    steps = _avg(d['steps'] for d in worn.values()) if len(worn) >= MIN_WORN_DAYS else None
+    candidates = []
+    if steps is not None:
+        candidates.append(('steps', activity_level_from_steps(steps)))
+    if exercise_week is not None and exercise_week >= MIN_EXERCISE_MINUTES:
+        candidates.append(('exercise', activity_level_from_exercise(exercise_week)))
+    if not candidates:
+        return None
+    level = max((level for _, level in candidates), key=ACTIVITY_ORDER.index)
+    return {'level': level, 'basis': [basis for basis, _ in candidates], 'steps_28d': steps, 'exercise_minutes_week': exercise_week}
+
+
+def _profile(user, metrics, days, today, observed=None):
     height = next((m['height_cm'] for m in reversed(metrics) if m['height_cm']), None)
     weight = next((m['weight_kg'] for m in reversed(metrics) if m['weight_kg']), None)
+    fat = next((m['body_fat_pct'] for m in reversed(metrics) if m['body_fat_pct']), None)
     training = {key: value for key, value in (user.get('training_profile') or {}).items()
                 if key in PROFILE_FIELDS and value not in (None, '', [])}
-    profile = {'age': user.get('age'), 'height_cm': height, 'weight_kg': weight,
-               'bmi': _round(weight / (height / 100) ** 2) if weight and height else None,
+    bmi = _round(weight / (height / 100) ** 2) if weight and height else None
+    resting = [d['resting_hr_bpm'] for day, d in days.items() if day > today - timedelta(days=7) and d['resting_hr_bpm']]
+    vo2 = next((days[day]['vo2_max'] for day in sorted(days, reverse=True) if days[day]['vo2_max']), None)
+    observed = observed or {}
+    profile = {'age': user.get('age'), 'sex': user.get('sex'), 'height_cm': height, 'weight_kg': weight,
+               'bmi': bmi, 'bmi_class': classify_bmi(bmi), 'body_fat_pct': fat,
+               'declared_level': user.get('activity_level'), 'observed_level': observed.get('level'),
+               'observed_basis': observed.get('basis'), 'exercise_minutes_week': observed.get('exercise_minutes_week'),
+               'resting_hr': round(median(resting)) if resting else None, 'vo2_max': _round(vo2),
                'training': training or None}
     return profile if any(value is not None for value in profile.values()) else None
 
 
-def _body(metrics):
+def _conflicts(profile, observed):
+    """Declared versus measured: surfaced to the assistant, never silently resolved."""
+    if not profile or not observed:
+        return []
+    declared, level = profile.get('declared_level'), observed['level']
+    if declared not in ACTIVITY_ORDER or abs(ACTIVITY_ORDER.index(declared) - ACTIVITY_ORDER.index(level)) < 2:
+        return []
+    if ACTIVITY_ORDER.index(level) < ACTIVITY_ORDER.index(declared) and 'steps' not in observed['basis']:
+        # Logged sessions alone are a lower bound: missing logs do not contradict a declaration.
+        return []
+    evidence = ', '.join(filter(None, [f"TB {int(observed['steps_28d'])} bước/ngày" if observed.get('steps_28d') else None,
+                                       f"{observed['exercise_minutes_week']} phút tập/tuần" if 'exercise' in observed['basis'] else None]))
+    return [f"Mức vận động khai báo '{ACTIVITY_LABELS[declared]}' nhưng dữ liệu ghi nhận "
+            f"'{ACTIVITY_LABELS[level]}'" + (f" ({evidence}, 28 ngày)" if evidence else '')]
+
+
+def _activity(days, workouts, today, observed=None):
+    worn28, worn7 = _worn(days, today - timedelta(days=28), today), _worn(days, today - timedelta(days=7), today)
+    week = [d for day, d in days.items() if today - timedelta(days=6) <= day <= today]
+    recent = [w for w in workouts if w['day'] > today - timedelta(days=7)]
+    if not worn28 and not recent and today not in days:
+        return None
+    minutes = [d['active_minutes'] for d in week if d['active_minutes'] is not None]
+    zone = [d['active_zone_minutes'] for d in week if d['active_zone_minutes'] is not None]
+    steps28 = _avg((d['steps'] for d in worn28.values()))
+    return {'steps_7d': _avg((d['steps'] for d in worn7.values())), 'steps_28d': steps28, 'worn_days_28d': len(worn28),
+            'today_steps': (days.get(today) or {}).get('steps'),
+            'active_minutes_7d': round(sum(minutes)) if minutes else None,
+            'meets_who': sum(minutes) >= WHO_ACTIVE_MINUTES_PER_WEEK if minutes else None,
+            'active_zone_minutes_7d': round(sum(zone)) if zone else None,
+            'total_kcal_7d': _avg((d['total_kcal'] for d in worn7.values())),
+            'observed_level': (observed or {}).get('level'),
+            'workouts_7d': len(recent), 'workout_minutes_7d': round(sum(w['minutes'] for w in recent)),
+            'workout_types_28d': dict(Counter(w['type'] for w in workouts if w['day'] > today - timedelta(days=28)))}
+
+
+def _clock(moment):
+    return moment.astimezone(LOCAL).strftime('%H:%M')
+
+
+def _sleep(sessions, today, age):
+    main = [s for s in sessions if not s['nap'] and s['minutes_asleep'] and s['day'] > today - timedelta(days=28)]
+    if not main:
+        return None
+    recent = [s for s in main if s['day'] > today - timedelta(days=7)]
+    low, high = recommended_sleep_hours(age)
+    staged = [s for s in recent if s['deep_minutes'] is not None and s['rem_minutes'] is not None]
+    staged_total = sum((s['deep_minutes'] or 0) + (s['light_minutes'] or 0) + (s['rem_minutes'] or 0) for s in staged)
+    # Minutes after noon, so 23:30 and 00:30 are an hour apart rather than 23 hours.
+    bedtimes = [(s['start'].astimezone(LOCAL).hour * 60 + s['start'].astimezone(LOCAL).minute + 720) % 1440 for s in recent]
+    last = main[-1]
+    return {'nights_7d': len(recent), 'avg_minutes_7d': _avg(s['minutes_asleep'] for s in recent),
+            'avg_minutes_28d': _avg(s['minutes_asleep'] for s in main), 'recommended_hours': [low, high],
+            'short_nights_7d': sum(1 for s in recent if s['minutes_asleep'] < low * 60),
+            'deep_pct': round(100 * sum(s['deep_minutes'] for s in staged) / staged_total) if staged_total else None,
+            'rem_pct': round(100 * sum(s['rem_minutes'] for s in staged) / staged_total) if staged_total else None,
+            'bedtime_stdev_min': round(pstdev(bedtimes)) if len(bedtimes) >= 3 else None,
+            'last': {'date': last['day'].isoformat(), 'minutes': round(last['minutes_asleep']),
+                     'bedtime': _clock(last['start']), 'wake': _clock(last['end'])}}
+
+
+def _recovery(days, today):
+    recent = [d for day, d in days.items() if today - timedelta(days=7) < day <= today]
+    base = [d for day, d in days.items() if today - timedelta(days=28) < day <= today - timedelta(days=7)]
+    def pair(key, digits=None):
+        now, before = [d[key] for d in recent if d[key]], [d[key] for d in base if d[key]]
+        return (_avg(now, digits) if len(now) >= 3 else None), (_avg(before, digits) if len(before) >= 7 else None)
+    rhr, rhr_base = pair('resting_hr_bpm')
+    hrv, hrv_base = pair('hrv_ms', 1)
+    spo2 = _avg((d['spo2_avg_pct'] for d in recent), 1)
+    if rhr is None and hrv is None and spo2 is None:
+        return None
+    signals = []
+    if rhr is not None and rhr_base is not None and rhr - rhr_base >= RHR_ELEVATION_BPM:
+        signals.append('nhịp tim nghỉ cao hơn nền')
+    if hrv is not None and hrv_base and 100 * (hrv_base - hrv) / hrv_base >= HRV_DROP_PCT:
+        signals.append('HRV thấp hơn nền')
+    return {'resting_hr_7d': rhr, 'resting_hr_base': rhr_base, 'hrv_7d': hrv, 'hrv_base': hrv_base,
+            'spo2_7d': spo2, 'respiratory_rate_7d': _avg((d['respiratory_rate'] for d in recent), 1), 'signals': signals}
+
+
+def _energy(meal_facts, days, weights, today):
+    """Logged intake against device expenditure on complete days of the last 28.
+
+    `weights` is the consistent weigh-in run (_weight_series), so a bad reading cannot fake a change."""
+    totals = defaultdict(lambda: {'kcal': 0.0, 'meals': 0, 'unknown': 0})
+    for fact in meal_facts:
+        data = fact.get('data') or {}
+        at = parse_time(data.get('consumed_at'))
+        if at:
+            day = totals[local_day(at)]
+            kcal = number(data.get('energy_kcal'))
+            day['kcal'] += kcal or 0.0
+            day['meals'] += 1
+            day['unknown'] += kcal is None or bool(data.get('nutrition_incomplete'))
+    start = today - timedelta(days=28)
+    paired = sorted((day, totals[day]['kcal'], days[day]['total_kcal']) for day in days
+                    if start <= day < today and days[day]['total_kcal'] and day in totals
+                    and totals[day]['meals'] >= 2 and not totals[day]['unknown'])
+    if len(paired) < 3:
+        return None
+    intake, out = round(mean(p[1] for p in paired)), round(mean(p[2] for p in paired))
+    weights = [m for m in weights if local_day(m['at']) >= paired[0][0]]
+    return {'days': len(paired), 'start': paired[0][0].isoformat(), 'end': paired[-1][0].isoformat(),
+            'intake_kcal': intake, 'expenditure_kcal': out, 'balance_kcal': intake - out,
+            'weight_change_kg': _round(weights[-1]['weight_kg'] - weights[0]['weight_kg'], 2) if len(weights) >= 2 else None}
+
+
+def _plausible(a, b):
+    days = abs((b['at'] - a['at']).total_seconds()) / 86400
+    return abs(b['weight_kg'] - a['weight_kg']) <= WEIGHT_NOISE_KG + WEIGHT_RATE_KG_PER_DAY * days
+
+
+def _weight_series(metrics):
+    """Weigh-ins a trend may use.
+
+    An isolated reading that disagrees with both neighbours (while they agree) is dropped as a
+    spike. An implausible jump that stays (a mistyped entry, a second scale or a device) cannot
+    be resolved from the data, so only the latest run of mutually plausible weigh-ins feeds
+    changes, rates, goal progress and energy balance, and the jump is reported instead."""
     weights = [m for m in metrics if m['weight_kg'] is not None]
+    kept, spikes = [], 0
+    for index, row in enumerate(weights):
+        following = weights[index + 1] if index + 1 < len(weights) else None
+        if kept and following and not _plausible(kept[-1], row) and not _plausible(row, following) \
+                and _plausible(kept[-1], following):
+            spikes += 1
+            continue
+        kept.append(row)
+    start = len(kept) - 1
+    while start > 0 and _plausible(kept[start - 1], kept[start]):
+        start -= 1
+    jump = None
+    if start > 0:
+        before, after = kept[start - 1], kept[start]
+        jump = {'from_kg': before['weight_kg'], 'from_date': local_day(before['at']).isoformat(),
+                'to_kg': after['weight_kg'], 'to_date': local_day(after['at']).isoformat(),
+                'sources_differ': before['device'] != after['device']}
+    return {'all': weights, 'segment': kept[start:] if kept else [], 'jump': jump, 'spikes': spikes}
+
+
+def _trend(rate, span_days):
+    if rate is None:
+        return 'chưa rõ'
+    if abs(rate) < STABLE_KG_PER_WEEK or abs(rate) * span_days / 7 < STABLE_TOTAL_KG:
+        return 'ổn định'
+    return 'giảm' if rate < 0 else 'tăng'
+
+
+def _body(series, metrics):
+    weights, segment = series['all'], series['segment']
     if not weights:
         return None
-    latest = weights[-1]
+    latest = weights[-1]  # never a dropped spike: a spike needs a later reading
     changes = []
     for window in (7, 30):
         # The most recent measurement at least ~80% of the window before the latest one.
-        base = next((m for m in reversed(weights[:-1]) if (latest['at'] - m['at']).days >= window * .8), None)
+        base = next((m for m in reversed(segment[:-1]) if (latest['at'] - m['at']).days >= window * .8), None)
         if base and not any(change['since'] == local_day(base['at']).isoformat() for change in changes):
             changes.append({'window': window, 'delta_kg': _round(latest['weight_kg'] - base['weight_kg']),
                             'since': local_day(base['at']).isoformat(),
                             'days': round((latest['at'] - base['at']).total_seconds() / 86400)})
     longest = max(changes, key=lambda change: change['days'], default=None)
     rate = round(longest['delta_kg'] / longest['days'] * 7, 2) if longest and longest['days'] else None
+    span = longest['days'] if longest else 0
     # Least-squares slope over the last 30 days: robust to day-to-day water noise and,
-    # unlike a moving average, without lag when weigh-ins are sparse.
-    recent = [m for m in weights if (latest['at'] - m['at']).days <= 30]
-    span = (recent[-1]['at'] - recent[0]['at']).total_seconds() / 86400 if len(recent) >= 2 else 0
-    if len(recent) >= 3 and span >= 7:
+    # unlike a moving average, without lag when weigh-ins are sparse. Trend and rate come
+    # from this one estimate, so the card never states a direction its rate contradicts.
+    recent = [m for m in segment if (latest['at'] - m['at']).days <= 30]
+    width = (recent[-1]['at'] - recent[0]['at']).total_seconds() / 86400 if len(recent) >= 2 else 0
+    if len(recent) >= 3 and width >= 7:
         xs = [(m['at'] - recent[0]['at']).total_seconds() / 86400 for m in recent]
         ys = [m['weight_kg'] for m in recent]
         mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
         denominator = sum((x - mx) ** 2 for x in xs)
         if denominator:
-            rate = round(sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / denominator * 7, 2)
-    delta = longest['delta_kg'] if longest else 0
+            rate, span = round(sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / denominator * 7, 2), width
+    fats = [m for m in metrics if m['body_fat_pct'] is not None]
+    fat = None
+    if fats:
+        base = next((m for m in fats if (fats[-1]['at'] - m['at']).days <= 30), fats[0])
+        fat = {'pct': fats[-1]['body_fat_pct'], 'date': local_day(fats[-1]['at']).isoformat(),
+               'change_30d': _round(fats[-1]['body_fat_pct'] - base['body_fat_pct']) if base is not fats[-1] else None}
     return {'latest': {'weight_kg': latest['weight_kg'], 'date': local_day(latest['at']).isoformat()},
-            'changes': changes, 'rate_kg_per_week': rate,
-            'trend': 'giảm' if delta <= -.3 else 'tăng' if delta >= .3 else 'ổn định',
+            'body_fat': fat, 'changes': changes, 'rate_kg_per_week': rate, 'trend': _trend(rate, span),
+            # The latest implausible jump and dropped spikes: the card asks to re-weigh instead of trending.
+            'inconsistent': series['jump'], 'outliers': series['spikes'],
             'series': [{'date': local_day(m['at']).isoformat(), 'weight_kg': m['weight_kg']} for m in weights[-12:]]}
 
 
@@ -115,7 +382,7 @@ def _target_from_text(*texts):
     return None
 
 
-def _goal(facts, metrics, body, today):
+def _goal(facts, series, body, today):
     active = [fact.get('data') or {} for fact in facts if str((fact.get('data') or {}).get('status', '')).upper() == 'IN_PROGRESS']
     if not active:
         return None
@@ -130,8 +397,13 @@ def _goal(facts, metrics, body, today):
         result['days_left'] = (end - today).days
         if start and end > start:
             result['time_pct'] = max(0, min(100, round(100 * (today - start).days / (end - start).days)))
-    weights = [m for m in metrics if m['weight_kg'] is not None]
+    # Progress is measured inside the consistent weigh-in run: a jump the data cannot explain
+    # is neither progress nor a setback, and a single reading after one is no baseline.
+    weights = series['segment']
     if target is None or not weights:
+        return result
+    if series['jump'] and len(weights) < 2:
+        result.update(current_weight_kg=weights[-1]['weight_kg'], weights_inconsistent=True)
         return result
     cutoff = datetime.combine(start + timedelta(days=3), datetime.max.time(), LOCAL) if start else None
     baseline = next((m for m in reversed(weights) if cutoff and m['at'] <= cutoff), weights[0])
@@ -303,10 +575,19 @@ def build_user_model(facts, now=None):
         groups[fact.get('kind')].append(fact)
     user = next((fact.get('data') or {} for fact in groups['User']), {})
     metrics = _metrics(groups['BodyMetric'])
-    body = _body(metrics)
+    series = _weight_series(metrics)
+    body = _body(series, metrics)
+    days = _days(groups['DailyHealth'])
+    workouts = _workouts(groups['DeviceWorkout'])
+    observed = _observed_level(days, _exercise_week(_sessions(groups['Training']), workouts, today), today)
+    profile = _profile(user, metrics, days, today, observed)
     return {'version': MODEL_VERSION, 'computed_at': now.isoformat(), 'today': today.isoformat(),
-            'profile': _profile(user, metrics), 'body': body, 'goal': _goal(groups['Goal'], metrics, body, today),
-            'nutrition': _nutrition(groups['Meal'], today), 'training': _training(groups['Training'], today, user)}
+            'profile': profile, 'body': body, 'goal': _goal(groups['Goal'], series, body, today),
+            'nutrition': _nutrition(groups['Meal'], today), 'training': _training(groups['Training'], today, user),
+            'activity': _activity(days, workouts, today, observed),
+            'sleep': _sleep(_sleeps(groups['SleepSession']), today, user.get('age')),
+            'recovery': _recovery(days, today), 'energy': _energy(groups['Meal'], days, series['segment'], today),
+            'conflicts': _conflicts(profile, observed)}
 
 
 def model_links(model):
@@ -357,11 +638,25 @@ def profile_line(model):
     plan = None
     if training.get('available_days'):
         plan = f"{training['available_days']} buổi/tuần" + (f" × {training['session_minutes']} phút" if training.get('session_minutes') else '')
+    bmi = None
+    if profile.get('bmi'):
+        bmi = f"BMI {_n(profile['bmi'])}" + (f" ({BMI_LABELS[profile['bmi_class']]}, ngưỡng châu Á)" if profile.get('bmi_class') else '')
+    level = None
+    if profile.get('declared_level') or profile.get('observed_level'):
+        basis = ' và '.join(filter(None, [
+            'bước chân' if 'steps' in (profile.get('observed_basis') or []) else None,
+            f"~{profile['exercise_minutes_week']} phút tập/tuần" if 'exercise' in (profile.get('observed_basis') or []) else None]))
+        level = 'vận động ' + _join(
+            f"khai báo {ACTIVITY_LABELS.get(profile['declared_level'], profile['declared_level'])}" if profile.get('declared_level') else None,
+            f"thực tế {ACTIVITY_LABELS[profile['observed_level']]}" + (f" (theo {basis})" if basis else '')
+            if profile.get('observed_level') else None).replace(' · ', ', ')
     return 'Hồ sơ: ' + _join(
-        f"{profile['age']} tuổi" if profile.get('age') else None,
+        f"{profile['age']} tuổi" if profile.get('age') else None, SEX.get(profile.get('sex')),
         f"cao {_n(profile['height_cm'])} cm" if profile.get('height_cm') else None,
-        f"nặng {_n(profile['weight_kg'])} kg" if profile.get('weight_kg') else None,
-        f"BMI {_n(profile['bmi'])}" if profile.get('bmi') else None,
+        f"nặng {_n(profile['weight_kg'])} kg" if profile.get('weight_kg') else None, bmi,
+        f"mỡ {_n(profile['body_fat_pct'])}%" if profile.get('body_fat_pct') else None, level,
+        f"nhịp tim nghỉ {profile['resting_hr']} bpm" if profile.get('resting_hr') else None,
+        f"VO2max {_n(profile['vo2_max'])}" if profile.get('vo2_max') else None,
         f"trình độ tập {LEVELS.get(training.get('experience_level'), training.get('experience_level'))}" if training.get('experience_level') else None,
         f"trọng tâm {FOCUS.get(training.get('primary_focus'), training.get('primary_focus'))}" if training.get('primary_focus') else None,
         plan, 'dụng cụ: ' + ', '.join(training['equipment']) if training.get('equipment') else None)
@@ -374,7 +669,18 @@ def body_line(model):
     latest = body['latest']
     changes = [f"{_signed(c['delta_kg'])} kg so với {c['since']} ({c['days']} ngày)" for c in body['changes']]
     rate = f" ~{_n(abs(body['rate_kg_per_week']))} kg/tuần" if body.get('rate_kg_per_week') and body['trend'] != 'ổn định' else ''
-    return 'Cân nặng: ' + _join(f"{_n(latest['weight_kg'])} kg ({latest['date']})", *changes, f"xu hướng {body['trend']}{rate}")
+    fat = body.get('body_fat')
+    fat_text = None
+    if fat:
+        fat_text = f"mỡ {_n(fat['pct'])}% ({fat['date']}" + (f", {_signed(fat['change_30d'])} điểm/30 ngày)" if fat.get('change_30d') else ')')
+    jump, note = body.get('inconsistent'), None
+    if jump:
+        note = (f"số đo lệch bất thường {_n(jump['from_kg'])} kg ({jump['from_date']}) → {_n(jump['to_kg'])} kg ({jump['to_date']})"
+                + (', khác nguồn nhập tay/thiết bị' if jump.get('sources_differ') else '')
+                + ': chưa tính xu hướng qua mốc này, nên cân lại cùng điều kiện')
+    outliers = f"bỏ qua {body['outliers']} lần cân lệch" if body.get('outliers') else None
+    return 'Cân nặng: ' + _join(f"{_n(latest['weight_kg'])} kg ({latest['date']})", *changes, f"xu hướng {body['trend']}{rate}",
+                                fat_text, note, outliers)
 
 
 def goal_line(model):
@@ -398,7 +704,8 @@ def goal_line(model):
     return 'Mục tiêu: ' + _join(
         goal.get('title'), target, path,
         'đã đạt' if goal.get('achieved') else (f"còn {_n(goal['remaining_kg'])} kg" if goal.get('remaining_kg') is not None else None),
-        f"đạt {goal['progress_pct']}%" if goal.get('progress_pct') is not None else None, deadline, pace)
+        f"đạt {goal['progress_pct']}%" if goal.get('progress_pct') is not None else None, deadline, pace,
+        'chưa tính tiến độ vì số đo cân lệch bất thường' if goal.get('weights_inconsistent') else None)
 
 
 def nutrition_line(model, today):
@@ -467,6 +774,71 @@ def running_line(model):
     return 'Chạy bộ: ' + _join(*parts)
 
 
+def _duration(minutes):
+    minutes = round(minutes)
+    return f"{minutes // 60}g{minutes % 60:02d}"
+
+
+def activity_line(model, today):
+    activity = model.get('activity')
+    if not activity:
+        return None
+    steps = None
+    if activity.get('steps_7d') is not None:
+        steps = f"TB {activity['steps_7d']} bước/ngày (7 ngày)" + (
+            f", {activity['steps_28d']} (28 ngày, {activity['worn_days_28d']} ngày đeo)" if activity.get('steps_28d') else '')
+    minutes = None
+    if activity.get('active_minutes_7d') is not None:
+        minutes = f"{activity['active_minutes_7d']} phút vận động/7 ngày " + (
+            '(đạt' if activity.get('meets_who') else '(chưa đạt') + f" WHO {WHO_ACTIVE_MINUTES_PER_WEEK})"
+    return 'Vận động (thiết bị): ' + _join(
+        steps, f"{'hôm nay' if today else model.get('today')} {activity['today_steps']:g} bước" if activity.get('today_steps') is not None else None,
+        minutes, f"tiêu hao TB {activity['total_kcal_7d']} kcal/ngày (ước tính)" if activity.get('total_kcal_7d') else None,
+        f"{activity['workouts_7d']} buổi ghi bởi thiết bị, {activity['workout_minutes_7d']} phút" if activity.get('workouts_7d') else None)
+
+
+def sleep_line(model):
+    sleep = model.get('sleep')
+    if not sleep:
+        return None
+    low, high = sleep['recommended_hours']
+    average = None
+    if sleep.get('avg_minutes_7d') is not None:
+        average = f"TB {_duration(sleep['avg_minutes_7d'])}/đêm ({sleep['nights_7d']} đêm, khuyến nghị {low:g}–{high:g} giờ" + (
+            f", {sleep['short_nights_7d']} đêm thiếu)" if sleep.get('short_nights_7d') else ')')
+    stages = f"sâu {sleep['deep_pct']}%, REM {sleep['rem_pct']}%" if sleep.get('deep_pct') is not None else None
+    last = sleep['last']
+    return 'Giấc ngủ (thiết bị): ' + _join(
+        average, stages, f"giờ đi ngủ lệch ±{sleep['bedtime_stdev_min']} phút" if sleep.get('bedtime_stdev_min') else None,
+        f"gần nhất {last['date']} {_duration(last['minutes'])} ({last['bedtime']}→{last['wake']})")
+
+
+def recovery_line(model):
+    recovery = model.get('recovery')
+    if not recovery:
+        return None
+    def compare(value, base, unit):
+        return f"{_n(value)} {unit}" + (f" (nền 28 ngày {_n(base)})" if base is not None else '')
+    return 'Phục hồi (thiết bị): ' + _join(
+        'nhịp tim nghỉ 7 ngày ' + compare(recovery['resting_hr_7d'], recovery['resting_hr_base'], 'bpm') if recovery.get('resting_hr_7d') else None,
+        'HRV ' + compare(recovery['hrv_7d'], recovery['hrv_base'], 'ms') if recovery.get('hrv_7d') else None,
+        f"SpO2 {_n(recovery['spo2_7d'])}%" if recovery.get('spo2_7d') else None,
+        'tín hiệu cần nghỉ thêm: ' + ', '.join(recovery['signals']) + ' (không phải chẩn đoán)' if recovery.get('signals') else None)
+
+
+def energy_line(model):
+    energy = model.get('energy')
+    if not energy:
+        return None
+    balance = energy['balance_kcal']
+    direction = 'thâm hụt' if balance < 0 else 'dư'
+    return 'Cân bằng năng lượng: ' + _join(
+        f"{energy['days']} ngày đủ dữ liệu ({energy['start']} → {energy['end']}): nạp TB {energy['intake_kcal']} kcal, "
+        f"thiết bị ghi tiêu hao {energy['expenditure_kcal']} kcal → {direction} ~{abs(balance)} kcal/ngày",
+        f"cân {_signed(energy['weight_change_kg'])} kg" if energy.get('weight_change_kg') is not None else None,
+        'calo thiết bị là ước tính')
+
+
 def conversation_line(intents):
     if not intents:
         return None
@@ -487,6 +859,10 @@ SECTION_RENDERERS = {
     'exercises': lambda model, intents, today: exercises_line(model),
     'running': lambda model, intents, today: running_line(model),
     'conversation': lambda model, intents, today: conversation_line(intents),
+    'activity': lambda model, intents, today: activity_line(model, today),
+    'sleep': lambda model, intents, today: sleep_line(model),
+    'recovery': lambda model, intents, today: recovery_line(model),
+    'energy': lambda model, intents, today: energy_line(model),
 }
 
 

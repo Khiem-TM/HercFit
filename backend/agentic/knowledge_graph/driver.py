@@ -1,4 +1,4 @@
-"""Driver creation is lazy so KG_MODE=off does not need the Neo4j package."""
+"""Driver creation is lazy: importing the graph modules opens no connection."""
 
 
 def value(settings, name, default=None):
