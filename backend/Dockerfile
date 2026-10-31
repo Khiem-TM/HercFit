@@ -51,3 +51,14 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:${AGENT_PORT:-8081}/health || exit 1
 CMD ["python", "-m", "uvicorn", "agentic.core.app.main:app", "--host", "0.0.0.0", "--port", "8081", \
      "--proxy-headers", "--forwarded-allow-ips", "*", "--timeout-graceful-shutdown", "30"]
+
+# =============================================================================
+# Target: ingestion (RAG embedding worker and operator CLI). Adds the tokenizer
+# and PDF dependencies only to this image; documents are mounted read-only.
+# =============================================================================
+FROM base AS ingestion
+USER root
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system -r /app/knowledge_ingestion/requirements.txt
+USER app
+CMD ["python", "-m", "knowledge_ingestion.cli", "worker"]

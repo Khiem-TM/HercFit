@@ -78,7 +78,6 @@ services:
       AGENT_PORT: ${AGENT_PORT:-8081}
       BACKEND_BASE_URL: http://backend:8080
       AGENT_DATABASE_URL: postgresql://${POSTGRES_USER:-hercfit}:${POSTGRES_PASSWORD:-hercfit_secret}@postgres:5432/${POSTGRES_DB:-hercfit_db}
-      KG_MODE: ${KG_MODE:-off}
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-hercfit-graph-dev}
@@ -94,6 +93,9 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+      # Started, not healthy: the agent warms the graph in the background and fails open.
+      neo4j:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
       interval: 10s
@@ -103,9 +105,10 @@ services:
     networks:
       - hercfit-network
 
+  # The personal knowledge graph is part of the agent context, so Neo4j and its
+  # projection worker run with the stack (a Neo4j outage only degrades turns).
   neo4j:
     image: neo4j:2026.10.0
-    profiles: [kg]
     restart: unless-stopped
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-hercfit-graph-dev}
@@ -146,7 +149,6 @@ services:
     networks: [hercfit-network]
 
   kg-worker:
-    profiles: [kg]
     build:
       context: .
       dockerfile: Dockerfile
@@ -173,7 +175,37 @@ services:
     healthcheck:
       disable: true
 
-  # Local ingestion worker: see ../knowledge-ingestion/compose.yml.
+  embedding-worker:
+    profiles: [rag]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ingestion
+    restart: unless-stopped
+    command: [python, -m, knowledge_ingestion.cli, worker]
+    env_file:
+      - path: .env
+        required: false
+      - path: agentic/.env
+        required: false
+      - path: knowledge_ingestion/.env
+        required: false
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-hercfit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hercfit_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-hercfit_db}
+    volumes:
+      # Prepared bundles and tokenizer cache stay on the host (git-ignored).
+      - ./knowledge_ingestion/data/input:/app/knowledge_ingestion/data/input:ro
+      - ./knowledge_ingestion/data/.cache:/app/knowledge_ingestion/data/.cache:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [hercfit-network]
+    healthcheck:
+      disable: true
 
 volumes:
   neo4j_data:

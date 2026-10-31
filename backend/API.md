@@ -91,8 +91,25 @@ Danh mục SYSTEM được đọc chung, CUSTOM chỉ thuộc người tạo.
 | GET | `/api/training/templates/{code}/schedule` | Xem trước payload lịch tập từ giáo án (không ghi) |
 | POST | `/api/meals/preview`, `/api/trainings/preview` | Chạy thử ghi (validate, snapshot catalog, tổng, chỉ số, calo) rồi rollback; trả `preview: true` |
 | POST | `/api/plans/{plan_id}/training-plans/preview` | Chạy thử tạo lịch tập rồi rollback, dùng cho thẻ xác nhận |
+| GET | `/api/integrations/google-health` | Trạng thái kết nối Google Health (không bao giờ trả token), scope còn thiếu, lần đồng bộ, số bản ghi |
+| POST | `/api/integrations/google-health/connect` | Trả URL đồng ý của Google (offline, chỉ đọc); đặt cookie nonce/PKCE |
+| GET | `/api/integrations/google-health/callback` | Google chuyển hướng về; chỉ nhận đúng tài khoản Google đăng nhập; redirect `/chat?integration=google-health&result=…` |
+| PATCH | `/api/integrations/google-health` | `share_with_assistant`: cho phép trợ lý và knowledge graph dùng dữ liệu thiết bị |
+| POST | `/api/integrations/google-health/sync` | Đồng bộ ngay (202); `409` khi đang đồng bộ hoặc cần kết nối lại |
+| DELETE | `/api/integrations/google-health` | Thu hồi quyền tại Google, xoá token; `purge_data=true` xoá dữ liệu đã đồng bộ |
+| GET | `/api/health/profile` | Hồ sơ sức khoẻ hợp nhất: giá trị kèm nguồn (DECLARED/MEASURED/PROVIDER/DERIVED), thiếu, xung đột |
+| GET | `/api/health/overview` | Vận động, giấc ngủ, phục hồi (so nền 28 ngày), cân bằng năng lượng trong `days` ngày |
+| GET | `/api/health/daily`, `/api/health/sleep`, `/api/health/workouts` | Tổng hợp ngày, phiên ngủ, buổi vận động thiết bị theo `start_date`/`end_date` |
+| GET | `/api/health/samples` | Chỉ số sinh tồn rời (`BLOOD_GLUCOSE`, `CORE_BODY_TEMPERATURE`) |
+| GET | `/api/assistant/context` | Thẻ ngữ cảnh cho trợ lý: hồ sơ, cơ thể, mục tiêu, hồ sơ VĐV, chạy 8 tuần, tập 4 tuần, dữ liệu có sẵn, mục còn thiếu |
+| POST | `/api/knowledge/search` | Tìm đoạn tài liệu đã duyệt (RAG): dense + full-text, RRF, rerank, ngưỡng liên quan |
 | GET | `/health` | Tiến trình hoạt động |
 | GET | `/health/ready` | DB truy cập được và revision bằng Alembic head |
+
+Dữ liệu thiết bị đọc qua `/api/health/*` với header `X-HercFit-Client: agent` (do
+agent gửi) trả `403 consent_required` khi người dùng chưa cho phép trợ lý dùng dữ liệu.
+`/api/progress` điền `calories_out_actual` và `/api/nutrition/targets` thêm
+`device_expenditure_kcal`, `activity_level_source` khi có dữ liệu thiết bị.
 
 Alias tương thích: GET /api/login và POST /api/logout, không tính thêm và không
 hiện trong OpenAPI. Entry/item ghi qua aggregate; không có CRUD item riêng.
@@ -330,6 +347,38 @@ người dùng lên `PUT /api/media/{meals|trainings}/{id}/image`. Với món/b�
 {source_url (https), expected_version_id}: backend tải ảnh (chặn địa chỉ nội bộ, tối đa 3 lần chuyển
 hướng, giới hạn dung lượng), mã hoá lại như ảnh tải lên rồi lưu Cloudinary. ChatResponse có thể kèm
 `illustrations` (ảnh minh hoạ web, chỉ để hiển thị) cho câu trả lời có research.
+
+## Ngữ cảnh cho trợ lý
+
+`GET /api/assistant/context?timezone=Asia/Ho_Chi_Minh` (cần JWT) trả một bản tóm tắt tất định, một round trip:
+`profile` (tuổi, giới tính), `body` (cân nặng, chiều cao mới nhất có giá trị, % mỡ, thời điểm đo), `goal`,
+`athlete` (hồ sơ VĐV, HR nghỉ thiết bị chỉ khi người dùng cho phép trợ lý), `running` (8 tuần: số buổi, TB 4 tuần km/tuần,
+buổi/tuần, pace, buổi dài nhất, tỉ lệ chạy nhẹ, buổi gần nhất, thành tích tốt nhất, dự đoán), `training_4w` (số buổi theo
+môn, ACWR), `inventory` (số bản ghi có sẵn, trạng thái Google Health) và `missing` (dữ kiện huấn luyện chưa có).
+Agent đọc thẻ này mỗi lượt để cá nhân hoá và chỉ hỏi người dùng những mục trong `missing`.
+
+## Tìm kiếm tài liệu (RAG)
+
+`POST /api/knowledge/search` (cần JWT; `503` khi RAG tắt hoặc profile embedding chưa sẵn sàng):
+
+| Trường | Kiểu | Ý nghĩa |
+| --- | --- | --- |
+| `query` | string 1–1000 | Câu hỏi chính; cũng là câu dùng để rerank |
+| `queries` | tối đa 3 string 1–300 | Cách diễn đạt khác của cùng câu hỏi (ví dụ bản tiếng Anh cho tài liệu tiếng Anh) |
+| `sport`, `language`, `topic` | string | Lọc theo metadata của revision |
+| `limit` | 1–10, mặc định 6 | Số đoạn trả về |
+
+Mỗi câu truy vấn cho một danh sách dense (cosine, pgvector) và một danh sách full-text
+(OR các từ đã stem; tiêu đề chương có trọng số cao hơn). Các danh sách được gộp bằng RRF,
+`RAG_CANDIDATES` ứng viên được rerank (`RERANK_ENABLED`, FPT `bge-reranker-v2-m3`),
+mỗi trang nguồn giữ tối đa `RAG_MAX_PER_PAGE` đoạn, tổng nội dung tối đa 18.000 ký tự.
+
+Phản hồi: `{chunks, status, profile_id, rerank}`. `status` là `ok`, `empty`, hoặc
+`low_relevance` khi điểm rerank cao nhất dưới `RAG_MIN_RERANK_SCORE` (hoặc cosine dưới
+`RAG_MIN_DENSE_SIMILARITY` khi không rerank được): kho tài liệu không bao phủ câu hỏi và agent
+chuyển sang nguồn web. `rerank` là `applied`, `disabled` hoặc `unavailable` (lỗi provider: giữ
+thứ tự RRF, không làm hỏng request). Mỗi chunk có `content, heading, page, page_end, page_label`
+(trang in nếu biết), `title, source_key, version, score, similarity`.
 
 ## Ranh giới
 

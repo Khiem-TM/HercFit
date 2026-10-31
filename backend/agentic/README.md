@@ -31,11 +31,11 @@ Canonical module ownership:
 | `core/app` | FastAPI entrypoint, configuration, dependencies and API schemas |
 | `agents` | LangGraph state, workflows, orchestration, research and tool agents |
 | `services` | Runtime, routing, RAG, JEV, catalog logic and conversation memory |
-| `components` | Hybrid retrieval adapter, ranking and context filtering |
+| `components` | Hybrid retrieval adapter (the backend owns fusion, reranking and the relevance threshold), web-source ranking and context filtering |
 | `prompts` | Versioned templates and registry |
 | `tools` | Tool registry, definitions, policies, schemas and integrations |
 | `security` | Input, content and output checks |
-| `knowledge_graph` | Optional Neo4j projection, user model, graph retrieval and outbox worker |
+| `knowledge_graph` | Always-on Neo4j projection, user model, graph retrieval and outbox worker |
 | `research` | Research contracts, evidence audit, source registry and finalization attestation |
 | `observability` | Shared runtime adapter (request/trace IDs, middleware, propagation), execution guards and telemetry |
 | `evaluation` | Evaluation runners and golden datasets |
