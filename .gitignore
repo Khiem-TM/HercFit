@@ -145,5 +145,9 @@ reports/
 traces/
 backend/agentic/observability/_dev/
 
-# Local RAG document ingestion tools and source documents.
+# RAG ingestion: code is versioned; source books, prepared bundles and the
+# tokenizer cache are not. /knowledge-ingestion/ is the former local location.
+backend/knowledge_ingestion/data/
+backend/knowledge_ingestion/.env
 /knowledge-ingestion/
+thesis/
