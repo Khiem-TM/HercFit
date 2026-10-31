@@ -31,25 +31,34 @@ async def lifespan(app: FastAPI):
     observer()
     from embedding.config import settings as embedding_settings
     from embedding.client import EmbeddingClient
-    app.state.embedding_client = None
+    from embedding.rerank import RerankClient
+    app.state.embedding_client = app.state.rerank_client = None
     if embedding_settings().RAG_ENABLED:
         try:
             app.state.embedding_client = EmbeddingClient(embedding_settings())
+            if embedding_settings().RERANK_ENABLED:
+                app.state.rerank_client = RerankClient(embedding_settings())
         except ValueError:
             pass  # Optional RAG configuration cannot disable CRUD/chat.
     cleanup_task = None
     if all((settings.CLOUDINARY_CLOUD_NAME, settings.CLOUDINARY_API_KEY, settings.CLOUDINARY_API_SECRET)):
         from services.image_cleanup import cleanup_loop
         cleanup_task = asyncio.create_task(cleanup_loop())
+    health_task = None
+    if settings.google_health_configured and settings.GOOGLE_HEALTH_SYNC_LOOP:
+        from services.google_health.scheduler import health_sync_loop
+        health_task = asyncio.create_task(health_sync_loop())
     try:
         yield
     finally:
-        if cleanup_task is not None:
-            cleanup_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await cleanup_task
-        if app.state.embedding_client is not None:
-            await app.state.embedding_client.close()
+        for task in (cleanup_task, health_task):
+            if task is not None:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+        for client in (app.state.embedding_client, app.state.rerank_client):
+            if client is not None:
+                await client.close()
         await observer().close()
         await close_crud_db_pool()
 
@@ -99,7 +108,7 @@ def create_app() -> FastAPI:
             async with get_async_engine().connect() as connection:
                 revisions = set((await connection.execute(text("SELECT version_num FROM alembic_version"))).scalars())
             if revisions == expected_heads:
-                return {"status": "ready", "observability": observer().status(), "rag": "configured" if getattr(app.state,"embedding_client",None) else "disabled_or_unavailable"}
+                return {"status": "ready", "observability": observer().status(), "rag": "configured" if getattr(app.state,"embedding_client",None) else "disabled_or_unavailable", "rerank": "configured" if getattr(app.state,"rerank_client",None) else "disabled"}
         except (SQLAlchemyError, OSError):
             pass
         return JSONResponse(status_code=503, content={"status": "not_ready"})

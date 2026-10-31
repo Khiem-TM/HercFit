@@ -13,7 +13,7 @@ async def knowledge_search(payload: SearchRequest, session: SessionDep, user: Cu
     # the external embedding call so ordinary CRUD remains available.
     await session.commit()
     try:
-        return await search(session,payload,settings(),client)
+        return await search(session,payload,settings(),client,getattr(request.app.state,'rerank_client',None))
     except HTTPException: raise
     except Exception:
         raise HTTPException(503,'RAG_RETRIEVAL_UNAVAILABLE') from None
