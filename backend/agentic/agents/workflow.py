@@ -1,5 +1,5 @@
-from agentic.services.rag_pipeline import retrieve_graph_context
-from observability import annotate
+from agentic.services.rag_pipeline import decision_domains, retrieve_graph_context
+from agentic.observability import annotate
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
 from agentic.agents.state import AgentState
@@ -11,9 +11,11 @@ from agentic.services.routing import (latest_request, make_fast_read_plan, fast_
                                            fast_answer_instruction, FastReadPlan)
 from agentic.security.content_filter import assess
 from agentic.services import food_suggestion
-from knowledge_graph.service import domains_for
+from agentic.knowledge_graph.service import domains_for
 from agentic.observability.telemetry import MeasuredModels
 from agentic.observability.execution import run_node
+from agentic.core.context import request_context
+from agentic.services import personal_context
 
 
 def build_workflow(models, store, saver, tavily, settings, graph_context=None, jev=None):
@@ -28,7 +30,8 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
 
 
     async def decide_step(state):
-        update=await retrieve_graph_context(state,domains_for(latest_request(state)), settings=settings, graph_context=graph_context)
+        hinted=domains_for(latest_request(state))
+        update=await retrieve_graph_context(state,hinted, settings=settings, graph_context=graph_context)
         current={**state,**update}
         routed=fast_route(current) if fast_reads_enabled(settings) and assess(latest_request(current)) is None else None
         if routed:
@@ -47,9 +50,22 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
             return {**update,'decision':decision,'status':'running','fast_read_plan':None,'fast_read_complete':False,
                     'turn':{'run_id':state.get('run_id'),'intent':decision['intent'],'domain':decision['domain'],
                             'action':decision['action']}}
+        if current.get('user_context_run_id')!=current.get('run_id'):
+            # Once per run: what HercFit already knows about the user, so the router reads instead of asking.
+            ctx=request_context.get(None)
+            card=await personal_context.load_card(ctx.backend,ctx.token) if ctx else None
+            update={**update,'user_context':card,'user_context_run_id':current.get('run_id')}
+            current.update(update)
         result=await orchestrator.decide(current)
         current.update(result)
         decision=result.get('decision') or {}
+        # The wording may name no graph domain ("pace 5K của tôi"): read the router's domain and
+        # personal topic now, so answer, context and research see the card, not only tool calls.
+        # Domains this step already tried are left to later steps (a timeout is not retried here).
+        missed=[d for d in decision_domains(decision) if d not in hinted]
+        if missed:
+            update={**update,**await retrieve_graph_context(current,missed,settings=settings,graph_context=graph_context)}
+            current.update(update)
         if (state.get('turn') or {}).get('run_id')!=state.get('run_id') and decision:
             # The first routing decision names the turn; later ones only continue it.
             result['turn']={'run_id':state.get('run_id'),'intent':decision.get('intent'),
@@ -111,21 +127,47 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
                                     'instruction':food_suggestion.ANSWER_INSTRUCTION})
         return {**update,**result}
 
+    async def context_step(state):
+        decision=state['decision']
+        topic=decision.get('topic') or 'general'
+        reads=personal_context.deep_reads(topic)
+        inventory=(state.get('user_context') or {}).get('inventory') or {}
+        if not inventory.get('health_shared_with_assistant'):
+            # Device data only with the user's consent (the backend enforces it too).
+            reads=[(name,args) for name,args in reads if not name.startswith(('get_health','list_'))]
+        result=await tool.read_context(state,reads) if reads else {}
+        outputs={o['tool']:o for o in result.get('tool_outputs',[])}
+        trace={'stage':'context','topic':topic,'reads':[{'tool':name,'ok':bool((outputs.get(name) or {}).get('ok'))}
+                                                         for name,_ in reads]}
+        annotate(personal_topic=topic, personal_reads=len(reads))
+        return {**result,'personal_reads_done':True,'route_trace':[*(state.get('route_trace') or []),trace]}
+
     async def invoke_tool(state): return await guarded(tool_step,state,'tool')
+    async def invoke_context(state): return await guarded(context_step,state,'context')
     async def invoke_research(state): return await guarded(research.invoke,state,'research')
     async def execute(state): return await guarded(tool.execute,state,'execute')
     graph.add_node('tool',invoke_tool)
     graph.add_node('research',invoke_research)
+    graph.add_node('context',invoke_context)
     graph.add_node('confirmation',await_confirmation)
     graph.add_node('execute',execute)
     graph.add_node('answer',answer)
     graph.add_edge(START,'orchestrator')
-    graph.add_conditional_edges('orchestrator',lambda s:s['decision']['action'] if s['decision']['action'] in {'tool','research'} else 'answer',
-                                {'tool':'tool','research':'research','answer':'answer'})
+    def after_orchestrator(s):
+        decision=s['decision']
+        if decision.get('personalize') and not s.get('personal_reads_done') and decision['action'] in {'research','answer'}:
+            return 'context'  # the user's data before research or the answer
+        return decision['action'] if decision['action'] in {'tool','research'} else 'answer'
+    graph.add_conditional_edges('orchestrator',after_orchestrator,
+                                {'tool':'tool','research':'research','answer':'answer','context':'context'})
+    graph.add_conditional_edges('context',lambda s:'research' if s['decision']['action']=='research' else 'answer',
+                                {'research':'research','answer':'answer'})
     graph.add_conditional_edges('tool',lambda s:'confirmation' if s.get('pending_action') else
         ('tool' if continue_catalog_lookup(s) else
          ('answer' if s.get('fast_read_complete') and s.get('status')=='running' and s.get('decision',{}).get('action')=='answer' else 'orchestrator')))
-    graph.add_conditional_edges('research',lambda s:'answer' if s.get('research_answer') or s.get('prepared_reply') or s.get('status') in {'needs_input','failed'} else 'orchestrator')
+    # A personalized answer is written from the user's data and the research evidence, whatever research found.
+    graph.add_conditional_edges('research',lambda s:'answer' if (s.get('decision') or {}).get('personalize') or s.get('research_answer')
+                                or s.get('prepared_reply') or s.get('status') in {'needs_input','failed'} else 'orchestrator')
     graph.add_conditional_edges('confirmation',lambda s:'execute' if s.get('approved') else END)
     # A finalize rejected with 409 comes back as a fresh preview that needs its own confirmation.
     graph.add_conditional_edges('execute',lambda s:'confirmation' if s.get('status')=='pending_confirmation' else 'orchestrator')

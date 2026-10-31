@@ -49,6 +49,11 @@ function asksForm(msg: ChatMessage): boolean {
   return Boolean(msg.clarification?.questions.length) && msg.status === 'needs_input' && msg.id === lastMessageId.value
 }
 
+function hidesReply(msg: ChatMessage): boolean {
+  const intro = msg.clarification?.intro?.trim()
+  return asksForm(msg) && Boolean(intro) && msg.content.trim() !== intro
+}
+
 function host(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url }
 }
@@ -107,6 +112,11 @@ function host(url: string): string {
                 class="md"
                 v-html="renderMarkdown(asksForm(msg) && msg.clarification?.intro ? msg.clarification.intro : msg.content)"
               />
+              <!-- Questions may refer to the reply ("trong danh sách trên"), so it stays one tap away. -->
+              <details v-if="hidesReply(msg)" class="mt-2">
+                <summary class="cursor-pointer text-xs text-outline hover:text-on-surface">Xem toàn bộ tin nhắn</summary>
+                <div class="md mt-2 border-t border-white/[0.06] pt-2" v-html="renderMarkdown(msg.content)" />
+              </details>
               <span v-if="msg.status === 'streaming'" class="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-white/70 align-middle" aria-hidden="true" />
               <p v-if="msg.status === 'stopped'" class="mt-2 text-xs text-outline">Đã dừng theo yêu cầu.</p>
             </div>

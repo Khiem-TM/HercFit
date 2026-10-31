@@ -95,6 +95,27 @@ tác không hợp lệ trên goal đã kết thúc. `422`: dữ liệu không h�
 ngày không khớp với ngày còn lại trong DB. Complete/cancel cùng trạng thái có thể
 lặp lại; không thể đổi một goal đã hoàn thành sang cancelled hoặc ngược lại.
 
+## Google Health (thay Google Fit)
+
+Google Fit REST đóng đăng ký từ 05/2024 và ngừng hỗ trợ cuối 2026; HercFit đồng bộ
+qua Google Health API v4 (`services/google_health/`). Luồng kết nối tách khỏi đăng
+nhập: đăng nhập vẫn chỉ lấy danh tính, còn kết nối xin quyền offline cho các scope
+`googlehealth.*.readonly` và chỉ chấp nhận đúng tài khoản Google đang đăng nhập
+(so `sub`). Token được mã hoá Fernet (`TOKEN_ENCRYPTION_KEY`) trong
+`health_connections`; `oauth_accounts` vẫn chỉ giữ danh tính.
+
+Profile gồm ba lớp: khai báo (`users`), đo lường (`body_metrics` có `source`,
+`external_id`; `daily_health_summaries`, `sleep_sessions`, `device_workouts`,
+`health_samples`) và suy luận khi đọc (`GET /health/profile`). Đồng bộ chạy trong
+vòng lặp của mỗi worker API (lease `SKIP LOCKED`), backfill
+`GOOGLE_HEALTH_BACKFILL_DAYS` ngày rồi mỗi `GOOGLE_HEALTH_SYNC_INTERVAL_MINUTES`
+phút với 3 ngày chồng lấn; chạy tay: `python -m services.google_health`.
+
+Cấu hình Google Cloud: bật Google Health API, thêm redirect URI
+`<FRONTEND_URL>/api/integrations/google-health/callback` vào OAuth client đăng nhập,
+thêm các scope ở Data Access và thêm Gmail thử nghiệm vào Test users. Ở chế độ
+Testing, refresh token hết hạn sau 7 ngày: kết nối chuyển `NEEDS_REAUTH`.
+
 ## Database và kiểm thử
 
 Các API dùng model hiện tại trong `backend/models`. Chuỗi migration hiện có

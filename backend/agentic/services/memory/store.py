@@ -1,5 +1,5 @@
-from observability import durable_context
-from observability.persistence import set_psycopg_context
+from agentic.observability import durable_context
+from agentic.observability.persistence import set_psycopg_context
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone

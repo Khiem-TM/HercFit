@@ -143,4 +143,11 @@ evaluation/
 eval_results/
 reports/
 traces/
-backend/observability/_dev/
+backend/agentic/observability/_dev/
+
+# RAG ingestion: code is versioned; source books, prepared bundles and the
+# tokenizer cache are not. /knowledge-ingestion/ is the former local location.
+backend/knowledge_ingestion/data/
+backend/knowledge_ingestion/.env
+/knowledge-ingestion/
+thesis/

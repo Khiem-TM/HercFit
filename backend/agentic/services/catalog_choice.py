@@ -12,10 +12,10 @@ from urllib.parse import urlparse
 
 from agentic.core.context import request_context
 from models.foods import normalize_food_text
-from research.attestation import sign
-from research.contracts import ExerciseFinalization, FoodFinalization
-from research.quotes import canon, number_values
-from research.sources import TIER_RANK, rate
+from agentic.research.attestation import sign
+from agentic.research.contracts import ExerciseFinalization, FoodFinalization
+from agentic.research.quotes import canon, number_values
+from agentic.research.sources import TIER_RANK, rate
 from schemas.foods import FoodCreate
 
 FINALIZATIONS = {'foods': FoodFinalization, 'exercises': ExerciseFinalization}

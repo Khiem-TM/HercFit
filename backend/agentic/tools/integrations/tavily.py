@@ -1,4 +1,4 @@
-from observability import observed, annotate, span
+from agentic.observability import observed, annotate, span
 import asyncio
 import ipaddress
 import time

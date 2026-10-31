@@ -12,21 +12,30 @@ class ClarifyOption(BaseModel):
     # Text sent back as the user's next message when the option is chosen.
     value: str = Field(max_length=300)
 
+class ShowIf(BaseModel):
+    """The question is asked only when an earlier question was answered with one of these options."""
+    question: str
+    option_ids: list[str] = Field(min_length=1)
+
 class ClarifyQuestion(BaseModel):
     """One missing piece of information; the client asks these one step at a time."""
     id: str
     # Short topic ("Mục tiêu chính") used to label the answer in the composed reply.
     label: str = Field(max_length=60)
     question: str = Field(max_length=300)
-    # 'text' has no options: the user only types the answer.
-    mode: Literal['single', 'multiple', 'quick_reply', 'text'] = 'single'
-    options: list[ClarifyOption] = Field(default_factory=list, max_length=8)
+    # 'text' has no options: the user only types the answer. 'sets' edits sets × reps × kg per exercise: the
+    # exercises picked in for_questions, or its own options.
+    mode: Literal['single', 'multiple', 'quick_reply', 'text', 'sets'] = 'single'
+    # Catalog picks list every record the reply showed ("những bài nào trong danh sách?").
+    options: list[ClarifyOption] = Field(default_factory=list, max_length=12)
     allow_free_text: bool = True
     free_text_hint: str | None = Field(default=None, max_length=120)
     # Optional questions can be skipped in the wizard.
     required: bool = True
-    min_select: int = Field(default=1, ge=0, le=8)
-    max_select: int = Field(default=1, ge=1, le=8)
+    min_select: int = Field(default=1, ge=0, le=12)
+    max_select: int = Field(default=1, ge=1, le=12)
+    for_questions: list[str] = Field(default_factory=list)
+    show_if: ShowIf | None = None
 
 class Clarification(BaseModel):
     """Human-in-the-loop form: every needs_input reply carries one, answered as a single next message."""

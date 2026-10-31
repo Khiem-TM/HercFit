@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, useTemplateRef, watch } from 'vue'
-import { ChevronsDown, ChevronsDownUp, ChevronsUp, History, Info, LayoutGrid, Maximize2, Minus, Orbit, Plus, RefreshCw, X } from 'lucide-vue-next'
+import { ChevronsDown, ChevronsDownUp, ChevronsUp, HeartPulse, History, LayoutGrid, Maximize2, Minus, Orbit, Plus, RefreshCw, X } from 'lucide-vue-next'
 import ConstellationCanvas from './ConstellationCanvas.vue'
 import KnowledgeInspector from './KnowledgeInspector.vue'
 import KnowledgeOverview from './KnowledgeOverview.vue'
 import KnowledgeTimeline from './KnowledgeTimeline.vue'
 import TimeWindow from './TimeWindow.vue'
+import HealthView from './health/HealthView.vue'
 import { localDay, shiftDay } from './dashboard/dashboardData'
 import { ancestors, collapse, indexTree, visibleIds } from './knowledgeTree'
 import { centreOn, clampDay, dayDiff, rangeLength, recentRange, sameRange } from './timeWindow'
@@ -14,10 +15,11 @@ import { useResizable } from '@/composables/useResizable'
 import { hubColor, hubTheme, type KnowledgeHub } from '@/types/knowledge'
 
 const props = defineProps<{ busy: boolean; activity: string; revision: number }>()
-const emit = defineEmits<{ close: [] }>()
-type Tab = 'overview' | 'map' | 'timeline'
+const emit = defineEmits<{ close: []; 'open-settings': [tab: 'profile' | 'integrations'] }>()
+type Tab = 'overview' | 'health' | 'map' | 'timeline'
 const tabs: { id: Tab; label: string; icon: typeof Orbit }[] = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutGrid },
+  { id: 'health', label: 'Sức khoẻ', icon: HeartPulse },
   { id: 'map', label: 'Bản đồ', icon: Orbit },
   { id: 'timeline', label: 'Dòng thời gian', icon: History },
 ]
@@ -43,7 +45,6 @@ const selected = computed(() => (selectedId.value ? index.value.byId.get(selecte
 const bounds = computed(() => ({ min: atlas.value.window?.min ?? fallbackMin, max: atlas.value.window?.max ?? today }))
 const shown = computed(() => (tab.value === 'map' ? atlas.value : graph.value))
 const records = computed(() => shown.value.nodes.filter(node => !['User', 'Hub', 'Group'].includes(node.kind)).length)
-const unused = computed(() => graph.value.mode === 'off' || graph.value.mode === 'shadow')
 const activeTab = computed(() => tabs.findIndex(item => item.id === tab.value))
 const refreshing = computed(() => (tab.value === 'map' ? atlasLoading.value : loading.value))
 
@@ -330,15 +331,12 @@ onUnmounted(() => {
     <div class="status" aria-live="polite">
       <span class="status-dot" :class="{ ready: shown.status === 'ok', busy }" />
       <span class="status-text">{{ busy ? (activity || 'Trợ lý đang xử lý…') : statusText }}</span>
-      <span v-if="unused" class="notice" title="Chế độ hiện tại chỉ hiển thị bản đồ; câu trả lời chưa dùng tri thức này. Bật KG_MODE=advisory để trợ lý cá nhân hoá.">
-        <Info :size="11" /> Trợ lý chưa dùng bản đồ này khi trả lời
-      </span>
       <button class="icon-button refresh" type="button" aria-label="Cập nhật bản đồ" :disabled="refreshing" @click="refreshAll">
         <RefreshCw :size="13" :class="{ spinning: refreshing }" />
       </button>
     </div>
 
-    <nav class="tabs" role="tablist" aria-label="Chế độ xem">
+    <nav class="tabs" role="tablist" aria-label="Chế độ xem" :style="{ '--tabs': tabs.length }">
       <span class="tab-glider" :style="{ transform: `translateX(${activeTab * 100}%)` }" aria-hidden="true" />
       <button v-for="item in tabs" :key="item.id" type="button" role="tab" :aria-selected="tab === item.id"
               :class="{ active: tab === item.id }" @click="tab = item.id">
@@ -349,6 +347,8 @@ onUnmounted(() => {
     <div class="content">
       <Transition name="swap" mode="out-in">
         <KnowledgeOverview v-if="tab === 'overview'" key="overview" class="scroll" :graph="graph" @explore="reveal" />
+        <HealthView v-else-if="tab === 'health'" key="health" class="scroll"
+                    @connect="emit('open-settings', 'integrations')" @edit-profile="emit('open-settings', 'profile')" />
         <div v-else-if="tab === 'map'" key="map" ref="mapView" class="map-view">
           <div ref="toolbar" class="map-toolbar">
             <div class="legend" role="toolbar" aria-label="Nhóm tri thức">
@@ -422,13 +422,12 @@ onUnmounted(() => {
 .status-dot { width: 6px; height: 6px; background: #696863; border-radius: 50%; flex-shrink: 0; }
 .status-dot.ready { background: #d4b77d; box-shadow: 0 0 8px #d4b77d66; }
 .status-dot.busy { background: #b9a9e3; animation: pulse 1.4s ease-in-out infinite; }
-.notice { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 12px; background: #e3a37f12; border: 1px solid #e3a37f30; color: #e8b99d; white-space: nowrap; font-family: Geist, sans-serif; font-size: 10px; }
 .refresh { margin-left: auto; width: 26px; height: 26px; }
-.tabs { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); margin: 4px var(--gutter) 0; padding: 3px; border: 1px solid #ffffff0c; border-radius: 12px; background: #0c0d11; }
+.tabs { position: relative; display: grid; grid-template-columns: repeat(var(--tabs, 3), 1fr); margin: 4px var(--gutter) 0; padding: 3px; border: 1px solid #ffffff0c; border-radius: 12px; background: #0c0d11; }
 .tabs button { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 6px; font-size: 11px; color: #8f8c84; border-radius: 9px; white-space: nowrap; transition: color 260ms; }
 .tabs button.active { color: #f3e6c6; }
 .tabs button:focus-visible { outline: 1px solid #d4b77d88; }
-.tab-glider { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 3); border-radius: 9px; background: linear-gradient(135deg, #d4b77d26, #d4b77d10); border: 1px solid #d4b77d33; transition: transform 380ms cubic-bezier(.2,.8,.2,1); }
+.tab-glider { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / var(--tabs, 3)); border-radius: 9px; background: linear-gradient(135deg, #d4b77d26, #d4b77d10); border: 1px solid #d4b77d33; transition: transform 380ms cubic-bezier(.2,.8,.2,1); }
 .content { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 10px; }
 .scroll { flex: 1; overflow-y: auto; }
 .map-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -467,8 +466,8 @@ footer { display: flex; justify-content: space-between; padding: 12px var(--gutt
 @keyframes observatory-arrive { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
 /* The panel's own width, not the screen's, decides how its content is arranged. */
 @container observatory (max-width: 480px) {
-  .subtitle, .notice { display: none; }
-  .tabs button { gap: 5px; font-size: 10.5px; }
+  .subtitle { display: none; }
+  .tabs button { gap: 4px; font-size: 10px; padding: 8px 3px; }
 }
 @container observatory (min-width: 980px) {
   .subtitle { max-width: 620px; font-size: 12px; }

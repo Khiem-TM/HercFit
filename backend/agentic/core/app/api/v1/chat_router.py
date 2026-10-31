@@ -115,5 +115,5 @@ async def knowledge_graph(request:Request,start:date|None=None,end:date|None=Non
     """Personal map; `start`/`end` are inclusive local days that limit which records it draws."""
     if start and end and start>end:
         raise HTTPException(422,'start must not be after end')
-    from knowledge_graph.visualization import personal_graph
+    from agentic.knowledge_graph.visualization import personal_graph
     return await personal_graph(request.app.state.graph_context,ctx.user_id,start=start,end=end)

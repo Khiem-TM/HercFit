@@ -2,11 +2,11 @@
 from agentic.components.hybrid_retriever import retrieve_knowledge
 from agentic.components.context_filter import bounded_documents
 from agentic.security.output_validation import parse_draft, check_claims, verify_claims, verified_claims, related_claims
-from agentic.security.input_guard import ClinicalQuestion, clinical_topic, safe_query
+from agentic.security.input_guard import ClinicalQuestion, clinical_topic, injury_prevention, safe_query
 from agentic.components.reranker import NUTRITION_FIELDS, relevance, target_words, topical, rank_sources
 from agentic.prompts.registry import get_questions
 from agentic.prompts.registry import get_prompt
-from observability import annotate
+from agentic.observability import annotate
 import asyncio
 import hashlib
 import json
@@ -16,13 +16,14 @@ from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import SystemMessage, HumanMessage
 from agentic.services import catalog_choice
 from agentic.services.illustrations import find_illustrations
+from agentic.services import personal_context
 from agentic.core.context import request_context
 from agentic.agents.state import AgentState
 from agentic.tools.integrations.tavily import TavilyUnavailable, public_url
 from agentic.services.research_budget import research_lease, reserve, reserve_documents, BudgetExceeded
-from research.contracts import ResearchPlan, ResearchDraft, ResearchResult, ResearchStatus, QA_INTENTS
-from research.evidence import audit
-from research.sources import quality_gate, rate, social
+from agentic.research.contracts import ResearchPlan, ResearchDraft, ResearchResult, ResearchStatus, QA_INTENTS
+from agentic.research.evidence import audit
+from agentic.research.sources import quality_gate, rate, social
 from schemas.foods import FoodCreate
 from schemas.exercises import ExerciseCreate
 from models.foods import normalize_food_text
@@ -37,12 +38,33 @@ def findings(claims,documents,heading):
         source=documents[claim.source_id]
         if claim.source_id not in references:
             label=source.get('title') or 'Tài liệu'
-            where=source.get('url') or f"revision {source.get('version','?')}, trang {source.get('page','?')}"
+            where=source.get('url') or book_location(source)
             references[claim.source_id]=(len(references)+1,f'{label} — {where}')
         note=(' (các nguồn chưa thống nhất)' if claim.conflict else
               '' if claim.applicable else ' (không khớp hoàn toàn với yêu cầu)')
         lines.append(f'- {claim.claim}{note} [{references[claim.source_id][0]}]')
     return [heading,*lines,'','Nguồn:',*[f'[{i}] {ref}' for i,ref in references.values()]]
+
+
+def book_location(source):
+    """Chapter and printed page of a curated passage; physical file pages mean nothing to a reader."""
+    parts=[source.get('heading')]
+    if source.get('page_label'): parts.append(f"tr. {source['page_label']}")
+    return ', '.join(p for p in parts if p) or f"phiên bản {source.get('version','?')}"
+
+
+def research_evidence(claims,documents,status):
+    """Numbered verified claims and their references, which a personalized answer cites as [n]."""
+    numbers,references,items={},[],[]
+    for claim in claims[:10]:
+        source=documents[claim.source_id]
+        if claim.source_id not in numbers:
+            numbers[claim.source_id]=len(numbers)+1
+            references.append({'n':numbers[claim.source_id],
+                               'text':f"{source.get('title') or 'Tài liệu'} — {source.get('url') or book_location(source)}"})
+        note='các nguồn chưa thống nhất' if claim.conflict else None if claim.applicable else 'không khớp hoàn toàn với yêu cầu'
+        items.append({'n':numbers[claim.source_id],'claim':claim.claim,'quote':claim.quote[:300],**({'note':note} if note else {})})
+    return {'status':status if items else 'insufficient','claims':items,'references':references}
 
 
 def consulted(documents,limit=4):
@@ -88,7 +110,7 @@ class ResearchV2:
         self.jev=jev
         def observed(fn,name):
             async def call(state):
-                from agentic.observability.tracing import span
+                from agentic.observability.node_span import span
                 with span(getattr(settings,'LANGSMITH_ENABLED',False),name,state['run_id']):
                     return await fn(state)
             return call
@@ -119,13 +141,22 @@ class ResearchV2:
                 result['research_usage']=dict(usage)
                 annotate(research=True, research_mode='v2', research_web_calls=usage['web'], research_search_calls=usage['search'], research_llm_calls=usage['llm'], research_rounds=usage['rounds'])
             keys=('research_usage','research_work','research_result','research_answer','research_trace','candidate','sources','illustrations',
-                  'status','error','jev_events','jev_rejections','clarification','catalog_choice','tool_outputs','prepared_reply')
+                  'status','error','jev_events','jev_rejections','clarification','catalog_choice','tool_outputs','prepared_reply',
+                  'research_evidence','route_trace')
             return {**{k:result[k] for k in keys if k in result},'research_count':state.get('research_count',0)+1}
         except Exception as exc:
-            # The user can still answer: budget, invalid topic or no web provider; anything else failed.
-            asks=isinstance(exc,(BudgetExceeded,ValueError,TavilyUnavailable))
+            # Only what the user can act on asks them: an exhausted budget, a missing web provider
+            # or a clinical topic. A processing failure is a failure, never a form.
+            asks=isinstance(exc,(BudgetExceeded,TavilyUnavailable,ClinicalQuestion))
             annotate(error_code=type(exc).__name__, budget_exceeded=isinstance(exc, BudgetExceeded), status='needs_input' if asks else 'failed')
             status=ResearchStatus.NEEDS_USER_INPUT if asks else ResearchStatus.FAILED
+            if state['decision'].get('personalize') and not isinstance(exc,ClinicalQuestion):
+                # A personalized answer still comes from the user's data; research just adds no evidence.
+                return {'research_count':state.get('research_count',0)+1,'status':'running','error':None,
+                        'research_result':ResearchResult(status=status,error_code=type(exc).__name__).model_dump(mode='json'),
+                        'research_evidence':{'status':'unavailable','claims':[],'references':[]},
+                        'route_trace':[*(state.get('route_trace') or []),{'stage':'research','status':'unavailable',
+                                                                          'error_code':type(exc).__name__}]}
             if isinstance(exc,ClinicalQuestion):
                 error='Câu hỏi liên quan chấn thương hoặc y khoa cần được chuyên gia đánh giá. HercFit chưa đủ căn cứ để đề xuất điều trị hoặc phác đồ phục hồi.'
             elif isinstance(exc,TavilyUnavailable):
@@ -193,8 +224,18 @@ class ResearchV2:
         work=dict(state['research_work']); docs={}; ctx=request_context.get()
         query=work['plan']['target']
         if work['qa'] and getattr(self.settings,'RAG_ENABLED',False):
+            queries=list(work['plan']['queries'])
+            decision=state['decision']
+            descriptor=personal_context.retrieval_descriptor(state.get('user_context'),decision.get('topic') or 'general') \
+                if decision.get('personalize') else None
+            if descriptor:
+                # Internal knowledge base only (never the web): passages for this user's level.
+                english=next((q for q in queries if q.isascii()),query)
+                queries=[(descriptor+'. '+english)[:300],*queries][:3]
             try:
-                docs = await retrieve_knowledge(ctx.backend, ctx.token, query)
+                # The router's paraphrases (one in English for the English corpus) widen recall.
+                docs, work['retrieval_status'] = await retrieve_knowledge(ctx.backend, ctx.token, query, queries=queries,
+                                                                          limit=6 if descriptor else 4)
             except Exception:
                 work['retrieval_status']='unavailable'
         # Local evidence is graded first. Web is only used now if local retrieval is empty.
@@ -265,7 +306,11 @@ class ResearchV2:
         if not work['documents']:
             work['draft']=ResearchDraft(missing_fields=['nguồn xác minh']).model_dump(); return {'research_work':work}
         draft=await self.draft(state,work)
-        if work['qa'] and not draft.sufficient and not work.get('web_fallback_done') and any(k.startswith('kb:') for k in work['documents']):
+        # A personalized request needs principles, not a full answer to the user's own goal: verified
+        # knowledge-base claims are kept, and the web is searched only when the books gave none.
+        personal_evidence=state['decision'].get('personalize') and draft.claims
+        if (work['qa'] and not draft.sufficient and not work.get('web_fallback_done') and not personal_evidence
+                and any(k.startswith('kb:') for k in work['documents'])):
             # One adaptive fallback, with the same durable budget and deadline.
             web=await self.web(state,work['plan']['queries'])
             work['documents']={**work['documents'],**web} if work.get('jev_local_enforced') else web
@@ -279,8 +324,10 @@ class ResearchV2:
         product=work['plan']['target'] if domain=='foods' and not work['qa'] else None
         def url_of(source_id): return str((work['documents'].get(source_id) or {}).get('url') or '')
         # Authority is the source registry's rating of the publisher; the model's own label is discarded.
+        # A knowledge answer may restate the question's own numbers; catalog values must be quoted.
+        context=work['plan']['target'] if work['qa'] else ''
         checked=[c.model_copy(update={'authority':rate(c.source_id,url_of(c.source_id),product).tier})
-                 for c in verify_claims(draft.claims,work['documents'])]
+                 for c in verify_claims(draft.claims,work['documents'],strict=not work['qa'],context=context)]
         dropped=len(draft.claims)-len(checked)-sum(1 for c in draft.claims if c.conflict or not c.applicable)
         missing=list(draft.missing_fields); conflicts=list(draft.conflicts)
         if any(c.conflict for c in draft.claims): conflicts.append('Nguồn bất đồng')
@@ -353,7 +400,7 @@ class ResearchV2:
                  missing_count=len(missing), conflict_count=len(conflicts), sufficient=not missing and not conflicts)
         # Verified quotes about another size/recipe: never saved as facts, shown as estimates.
         related=[c.model_copy(update={'authority':rate(c.source_id,url_of(c.source_id),product).tier})
-                 for c in related_claims(draft.claims,work['documents'])]
+                 for c in related_claims(draft.claims,work['documents'],context)]
         complete=status==ResearchStatus.COMPLETED
         sources=[]
         for claim in [*checked,*([] if complete else related)]:
@@ -363,6 +410,8 @@ class ResearchV2:
         answer=findings(checked,work['documents'],'Theo các nguồn đã kiểm chứng:') if checked else []
         if work['plan']['intent']=='TRAINING_PLAN' and answer:
             answer.insert(0,'Đề xuất tham khảo dựa trên nguồn bên dưới. Để cá nhân hóa, cần mục tiêu, số buổi mỗi tuần và kinh nghiệm tập hiện tại.')
+        if work['qa'] and answer and injury_prevention(work['plan']['target']):
+            answer.insert(0,'Thông tin phòng ngừa chung từ nguồn bên dưới, không thay cho chẩn đoán. Nếu đang đau hoặc đã chấn thương, hãy gặp chuyên gia y tế.')
         async def image_budget(kind): await reserve(self.store,state['run_id'],kind)
         images=await find_illustrations(self.tavily,work['plan']['target'],domain,reserve=image_budget) if complete or choice else []
         if candidate is not None:
@@ -375,6 +424,16 @@ class ResearchV2:
                 'jev_events':events,'jev_rejections':rejections,
                 'status':'running' if complete else 'needs_input',
                 'error':None if complete else 'Chưa đủ căn cứ: '+', '.join(missing+conflicts)}
+        if work['qa'] and state['decision'].get('personalize'):
+            # The answer node writes the reply from the user's data plus this evidence; no prepared text.
+            rejected=any(rejection for rejection in rejections.values()) and any(c.startswith('Jev') for c in conflicts+missing)
+            evidence=research_evidence([] if rejected else (checked or related),work['documents'],
+                                       'verified' if complete else 'partial')
+            update.update(status='running',error=None,research_answer=None,research_evidence=evidence,
+                          route_trace=[*(state.get('route_trace') or []),{
+                              'stage':'research','status':evidence['status'],'retrieval':work.get('retrieval_status'),
+                              'documents':len(work['documents']),'claims':len(draft.claims),'verified':len(checked)}])
+            return update
         if work['qa'] and not complete:
             # A knowledge question gets what the sources do say, marked as unconfirmed, instead of a form.
             # Claims Jev found unsupported or contradicted are not repeated, only the sources consulted.

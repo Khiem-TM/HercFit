@@ -68,10 +68,9 @@ ${BOLD}Commands:${NC}
 
 ${BOLD}Options:${NC}
   -d, --detach      Chạy ngầm (detached mode)
-  --db-only         Chỉ khởi chạy PostgreSQL database trong Docker
+  --db-only         Chỉ khởi chạy các database (PostgreSQL, Neo4j) trong Docker
   --frontend-only   Chỉ chạy landing page, không cần Docker hoặc Backend
   --local           Chạy PostgreSQL trên Docker, còn Backend & Frontend chạy trực tiếp trên máy host
-  --kg              Khởi chạy thêm Neo4j và worker Knowledge Graph (KG_MODE mặc định off)
   --memory          Khởi chạy thêm Redis cho session memory của agent (SESSION_MEMORY_MODE mặc định off)
   --no-build        Không build lại Docker image khi khởi chạy
   -h, --help        Hiển thị hướng dẫn này
@@ -87,7 +86,6 @@ ${BOLD}Chạy nhanh landing page:${NC}
 COMMAND="up"
 DETACH=false
 WITH_UI=false
-WITH_KG=false
 WITH_MEMORY=false
 DB_ONLY=false
 FRONTEND_ONLY=false
@@ -113,7 +111,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --kg)
-            WITH_KG=true
+            log_warn "Knowledge Graph (Neo4j + worker) luôn được khởi chạy; bỏ qua --kg."
             shift
             ;;
         --memory)
@@ -144,8 +142,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "${FRONTEND_ONLY}" == true ]] && { [[ "${DB_ONLY}" == true ]] || [[ "${LOCAL_MODE}" == true ]] || [[ "${WITH_UI}" == true ]] || [[ "${WITH_KG}" == true ]] || [[ "${WITH_MEMORY}" == true ]]; }; then
-    log_error "--frontend-only không kết hợp với --db-only, --local, --ui, --kg hoặc --memory."
+if [[ "${FRONTEND_ONLY}" == true ]] && { [[ "${DB_ONLY}" == true ]] || [[ "${LOCAL_MODE}" == true ]] || [[ "${WITH_UI}" == true ]] || [[ "${WITH_MEMORY}" == true ]]; }; then
+    log_error "--frontend-only không kết hợp với --db-only, --local, --ui hoặc --memory."
     exit 1
 fi
 
@@ -274,9 +272,7 @@ print_summary() {
     if [[ "${WITH_UI}" == true ]]; then
         echo -e "  • ${BOLD}Streamlit UI:${NC}     http://localhost:${STREAMLIT_PORT:-8501}"
     fi
-    if [[ "${WITH_KG}" == true ]]; then
-        echo -e "  • ${BOLD}Neo4j Browser:${NC}    http://localhost:${NEO4J_HTTP_PORT:-7474} (KG_MODE=${KG_MODE:-off})"
-    fi
+    echo -e "  • ${BOLD}Neo4j Browser:${NC}    http://localhost:${NEO4J_HTTP_PORT:-7474} (Knowledge Graph)"
     if [[ "${WITH_MEMORY}" == true ]]; then
         echo -e "  • ${BOLD}Redis memory:${NC}     localhost:${REDIS_PORT:-6379} (SESSION_MEMORY_MODE=${SESSION_MEMORY_MODE:-off})"
     fi
@@ -321,16 +317,15 @@ case "${COMMAND}" in
     down|stop)
         log_info "Đang dừng toàn bộ dịch vụ HercFit..."
         stop_frontend
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg --profile memory down
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile memory down
         log_success "Đã dừng toàn bộ hệ thống."
         ;;
 
     restart)
         log_info "Đang khởi động lại hệ thống HercFit..."
         stop_frontend
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg --profile memory down
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile memory down
         RESTART_ARGS=(up)
-        [[ "${WITH_KG}" == true ]] && RESTART_ARGS+=(--kg)
         [[ "${WITH_MEMORY}" == true ]] && RESTART_ARGS+=(--memory)
         [[ "${LOCAL_MODE}" == true ]] && RESTART_ARGS+=(--local)
         [[ "${WITH_UI}" == true ]] && RESTART_ARGS+=(--ui)
@@ -339,7 +334,7 @@ case "${COMMAND}" in
         ;;
 
     logs)
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg --profile memory logs -f
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile memory logs -f
         ;;
 
     status)
@@ -348,7 +343,7 @@ case "${COMMAND}" in
         else
             log_info "Frontend chưa chạy."
         fi
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile kg --profile memory ps
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile memory ps
         ;;
 
     up)
@@ -360,11 +355,8 @@ case "${COMMAND}" in
         set +a
 
         if [[ "${DB_ONLY}" == true ]]; then
-            log_info "Đang khởi tạo PostgreSQL Database qua Docker..."
-            ${COMPOSE_CMD} -f "${COMPOSE_FILE}" up -d postgres
-            if [[ "${WITH_KG}" == true ]]; then
-                ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile kg up -d neo4j
-            fi
+            log_info "Đang khởi tạo PostgreSQL và Neo4j qua Docker..."
+            ${COMPOSE_CMD} -f "${COMPOSE_FILE}" up -d postgres neo4j
             if [[ "${WITH_MEMORY}" == true ]]; then
                 ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile memory up -d redis
             fi
@@ -379,26 +371,25 @@ case "${COMMAND}" in
                 ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile memory up -d redis
             fi
 
-            if [[ "${WITH_KG}" == true ]]; then
-                ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile kg up -d neo4j
-                log_info "Chuẩn bị migrations và worker KG bằng Python môi trường dự án..."
-                KG_PYTHON="${ROOT_DIR}/.venv/bin/python"
-                [[ -x "${KG_PYTHON}" ]] || KG_PYTHON="$(command -v python3)"
-                (
-                    cd "${BACKEND_DIR}"
-                    export POSTGRES_HOST=localhost
-                    "${KG_PYTHON}" -m alembic upgrade head
-                    "${KG_PYTHON}" -m agentic.scripts.migrate
-                )
-                (
-                    cd "${BACKEND_DIR}"
-                    export NEO4J_URI="bolt://localhost:${NEO4J_BOLT_PORT:-7687}"
-                    export NEO4J_PASSWORD="${NEO4J_PASSWORD:-hercfit-graph-dev}"
-                    exec "${KG_PYTHON}" -m knowledge_graph.worker run
-                ) &
-                KG_WORKER_PID=$!
-                trap '[[ -z "${KG_WORKER_PID}" ]] || kill "${KG_WORKER_PID}" 2>/dev/null || true' EXIT
-            fi
+            # The knowledge graph is part of the agent context: Neo4j and its worker always run.
+            ${COMPOSE_CMD} -f "${COMPOSE_FILE}" up -d neo4j
+            log_info "Chuẩn bị migrations và worker KG bằng Python môi trường dự án..."
+            KG_PYTHON="${ROOT_DIR}/.venv/bin/python"
+            [[ -x "${KG_PYTHON}" ]] || KG_PYTHON="$(command -v python3)"
+            (
+                cd "${BACKEND_DIR}"
+                export POSTGRES_HOST=localhost
+                "${KG_PYTHON}" -m alembic upgrade head
+                "${KG_PYTHON}" -m agentic.scripts.migrate
+            )
+            (
+                cd "${BACKEND_DIR}"
+                export NEO4J_URI="bolt://localhost:${NEO4J_BOLT_PORT:-7687}"
+                export NEO4J_PASSWORD="${NEO4J_PASSWORD:-hercfit-graph-dev}"
+                exec "${KG_PYTHON}" -m agentic.knowledge_graph.worker run
+            ) &
+            KG_WORKER_PID=$!
+            trap '[[ -z "${KG_WORKER_PID}" ]] || kill "${KG_WORKER_PID}" 2>/dev/null || true' EXIT
 
             log_info "Đang khởi chạy Backend FastAPI server tại ${BACKEND_DIR}..."
             (
@@ -420,9 +411,6 @@ case "${COMMAND}" in
         PROFILE_ARGS=()
         if [[ "${WITH_UI}" == true ]]; then
             PROFILE_ARGS+=(--profile ui)
-        fi
-        if [[ "${WITH_KG}" == true ]]; then
-            PROFILE_ARGS+=(--profile kg)
         fi
         if [[ "${WITH_MEMORY}" == true ]]; then
             PROFILE_ARGS+=(--profile memory)

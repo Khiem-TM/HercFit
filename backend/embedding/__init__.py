@@ -1,1 +1,1 @@
-"""Hybrid RAG: ingestion, embedding, curation and retrieval; independent of the personal Neo4j graph (knowledge_graph)."""
+"""Runtime hybrid RAG retrieval and embedding client; independent of the personal Neo4j graph."""

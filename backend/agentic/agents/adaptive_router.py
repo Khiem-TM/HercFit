@@ -3,10 +3,10 @@ import math
 import re
 from models.foods import normalize_food_text
 from agentic.services.routing import latest_request
-from agentic.prompts.v1.routing import JEV_READ_ROUTES
+from agentic.prompts.v2.routing import JEV_READ_ROUTES
 from agentic.prompts.registry import get_questions
 
-JEV_ROUTING_QUESTIONS = get_questions("routing.jev")
+JEV_ROUTING_QUESTIONS = get_questions("routing.jev", "v2")
 
 def jev_routing_projection(state):
     """Keep the candidate gate cheap; history and personal snapshots never leave it."""

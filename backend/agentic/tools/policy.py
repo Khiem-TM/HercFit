@@ -3,17 +3,24 @@ import re
 from models.foods import normalize_food_text
 from agentic.tools.registry import REGISTRY
 
-COACH_GUIDANCE = get_prompt('training.coach')
+COACH_GUIDANCE = get_prompt('training.coach', 'v3')
 CAPABILITY_GUIDANCE = get_prompt('nutrition.capabilities')
+HEALTH_GUIDANCE = get_prompt('health.guidance', 'v2')
 
 CATALOG_DEPENDENCIES = {'meals': 'foods', 'trainings': 'exercises', 'training_plans': 'exercises'}
 # Additional read-only domains: coaching interprets logs/progress, logging may check the schedule.
 READ_DEPENDENCIES = {
-    'coaching': ('trainings', 'progress', 'metrics', 'exercises'),
+    'coaching': ('trainings', 'progress', 'metrics', 'exercises', 'health'),
     'trainings': ('training_plans',),
-    'training_plans': ('coaching',),
+    # A schedule hangs off the parent plan, which needs the active goal's id.
+    'training_plans': ('coaching', 'goals'),
     'meals': ('progress',),
-    'goals': ('progress', 'metrics'),
+    'goals': ('progress', 'metrics', 'health'),
+    # Device recovery and activity inform coaching; body questions compare with device data.
+    'progress': ('health',),
+    'metrics': ('health',),
+    'profile': ('health', 'metrics'),
+    'health': ('metrics', 'progress'),
 }
 
 
@@ -50,3 +57,5 @@ def continue_catalog_lookup(state):
 
 
 TRAINING_DOMAINS = frozenset({'trainings', 'training_plans', 'coaching'})
+# Domains that may read device data receive the health guidance.
+HEALTH_DOMAINS = frozenset(domain for domain in ('health', *READ_DEPENDENCIES) if 'health' in (domain, *READ_DEPENDENCIES.get(domain, ())))

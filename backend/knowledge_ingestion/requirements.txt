@@ -1,0 +1,4 @@
+# Additional dependencies for local document ingestion (no OCR).
+pypdf>=5,<7
+# Exact E5 tokenizer, without downloading model weights or installing torch.
+tokenizers>=0.21,<1

@@ -49,7 +49,7 @@ for action in ['complete','cancel']:
 add('get_progress','progress','GET','/progress',DateRangeQuery,ProgressRead,'Read daily progress for explicit start_date/end_date and timezone.')
 
 # Research finalizations use the same preview/hash/approval adapter as other writes.
-from research.contracts import ResolveQuery, FoodFinalization, ExerciseFinalization
+from agentic.research.contracts import ResolveQuery, FoodFinalization, ExerciseFinalization
 for domain, schema in [('foods', FoodFinalization), ('exercises', ExerciseFinalization)]:
     add('resolve_'+domain, domain, 'GET', '/'+domain+'/resolve', ResolveQuery, dict,
         'Resolve exact catalog identities, aliases and possible variants before research.')
@@ -57,7 +57,7 @@ for domain, schema in [('foods', FoodFinalization), ('exercises', ExerciseFinali
         'Save the immutable verified research command after human confirmation.', True)
 
 # Training plans (prescriptions) and deterministic coaching analytics.
-from schemas.plans import PlanRead, PlanEnd, TrainingPlanCreate, TrainingPlanRead, TrainingPlanReplace, TrainingPlanEntryRead
+from schemas.plans import PlanInput, PlanRead, PlanEnd, TrainingPlanCreate, TrainingPlanRead, TrainingPlanReplace, TrainingPlanEntryRead
 from schemas.tracking import ScheduleEntryQuery
 from schemas.training import (
     AnalyticsQuery, InsightQuery, InsightsRead, RunningSummaryRead, StrengthProgressQuery, StrengthProgressRead,
@@ -66,6 +66,8 @@ from schemas.training import (
 
 
 add('current_plan','training_plans','GET','/plans/current',Empty,PlanRead,'Read the active parent plan; its id is required to create a training schedule. 404 means none.')
+add('create_plan','training_plans','POST','/plans',PlanInput,PlanRead,
+    'Propose the parent plan when current_plan is 404: goal_id from current_goal, name, start_date, end_date covering the schedule. Must await confirmation.',True)
 add('current_training_plan','training_plans','GET','/plans/{resource_id}/training-plans/current',Resource,TrainingPlanRead,'Read the active training schedule of a parent plan (resource_id = plan id).')
 add('get_training_plans','training_plans','GET','/training-plans/{resource_id}',Resource,TrainingPlanRead,'Read one training schedule.')
 add('list_training_plan_entries','training_plans','GET','/training-plans/{resource_id}/entries',with_id(ScheduleEntryQuery),list[TrainingPlanEntryRead],
@@ -92,3 +94,29 @@ add('get_training_load','coaching','GET','/training/load',AnalyticsQuery,Trainin
 add('get_strength_progress','coaching','GET','/training/strength/progress',StrengthProgressQuery,StrengthProgressRead,'Per-session top set, best e1RM, volume and 4-week e1RM change for one exercise.')
 add('get_strength_records','coaching','GET','/training/strength/records',TimezoneQuery,StrengthRecordsRead,'All-time best e1RM and 1/3/5/10 rep maxes per exercise.')
 add('get_running_summary','coaching','GET','/training/running/summary',AnalyticsQuery,RunningSummaryRead,'Weekly running km, longest run, pace by workout type, easy share, best efforts and race predictions.')
+
+# Device data synchronized from Google Health (read-only). Connecting and syncing are
+# the user's actions in Settings, never tools; reads answer 403 consent_required while
+# the user has not allowed the assistant to use the data.
+from schemas.health import (
+    DailyHealthRead, DeviceWorkoutRead, HealthConnectionRead, HealthOverviewQuery, HealthOverviewRead,
+    HealthProfileRead, HealthSampleQuery, HealthSampleRead, SleepSessionRead,
+)
+add('get_health_connection','health','GET','/integrations/google-health',Empty,HealthConnectionRead,
+    'Whether Google Health is connected, consent to share with the assistant, last sync and record counts. Check this when health data is missing.')
+add('get_health_profile','health','GET','/health/profile',TimezoneQuery,HealthProfileRead,
+    'Unified health profile: each value with its source (DECLARED/MEASURED/PROVIDER/DERIVED), BMI class (Asian cut-offs), '
+    'measured resting HR, observed vs declared activity level, missing fields and declared-vs-measured conflicts.')
+add('get_health_overview','health','GET','/health/overview',HealthOverviewQuery,HealthOverviewRead,
+    'Deterministic analysis over the last N days: steps, active minutes vs WHO 150/week, sleep duration/stages/regularity, '
+    'resting HR and HRV against the 28-day baseline, and logged intake vs device expenditure. Start health questions here.')
+add('list_daily_health','health','GET','/health/daily',DateRangeQuery,list[DailyHealthRead],
+    'Per-day device rollups (steps, distance, active minutes, total kcal, resting HR, HRV, SpO2, sleep minutes) for start_date..end_date.')
+add('list_sleep_sessions','health','GET','/health/sleep',DateRangeQuery,list[SleepSessionRead],
+    'Sleep sessions (bedtime, wake time, minutes asleep, deep/light/REM minutes, efficiency, naps) for start_date..end_date.')
+add('list_device_workouts','health','GET','/health/workouts',DateRangeQuery,list[DeviceWorkoutRead],
+    'Workouts recorded by a device (type, duration, distance, kcal, average HR) for start_date..end_date. Not training-log entries.')
+add('list_health_samples','health','GET','/health/samples',HealthSampleQuery,list[HealthSampleRead],
+    'Spot vitals (BLOOD_GLUCOSE mg/dL, CORE_BODY_TEMPERATURE °C) for start_date..end_date. Report values; never diagnose.')
+HEALTH_TOOL_KINDS = {'list_daily_health': 'DailyHealth', 'list_sleep_sessions': 'SleepSession',
+                     'list_device_workouts': 'DeviceWorkout'}

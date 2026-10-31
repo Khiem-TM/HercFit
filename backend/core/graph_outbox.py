@@ -24,7 +24,7 @@ PAYLOAD_FIELDS = {
     ),
     "BodyMetric": COMMON_FIELDS + (
         "user_id", "recorded_at", "weight_kg", "height_cm", "body_fat_pct",
-        "muscle_mass_kg",
+        "muscle_mass_kg", "source",
     ),
     "Food": FOOD_FIELDS,
     "Meal": COMMON_FIELDS + (
@@ -45,17 +45,38 @@ PAYLOAD_FIELDS = {
     ),
     # Only catalog identity is projected from an exercise snapshot.
     "ExerciseRef": ("id", "code", "name_vi", "name_en", "kind", "source_type"),
+    # Wearable data: day rollups and sessions only. Spot vitals (health_samples),
+    # per-second heart rate and provider credentials never reach the graph.
+    "DailyHealth": COMMON_FIELDS + (
+        "user_id", "local_date", "source", "steps", "distance_m", "floors", "active_minutes",
+        "active_zone_minutes", "total_kcal", "active_kcal", "resting_hr_bpm", "hr_avg_bpm", "hrv_ms",
+        "spo2_avg_pct", "respiratory_rate", "vo2_max", "hydration_ml", "sleep_minutes",
+    ),
+    "SleepSession": COMMON_FIELDS + (
+        "user_id", "source", "start_at", "end_at", "local_date", "is_main", "is_nap", "minutes_asleep",
+        "minutes_awake", "minutes_in_period", "deep_minutes", "light_minutes", "rem_minutes", "efficiency_pct",
+    ),
+    "DeviceWorkout": COMMON_FIELDS + (
+        "user_id", "source", "started_at", "ended_at", "local_date", "exercise_type", "display_name",
+        "active_seconds", "energy_kcal", "distance_m", "steps", "avg_hr_bpm", "active_zone_minutes",
+    ),
 }
-# Structured personalization: users.age and the TrainingProfile-validated subset of
-# personal_info['training']. Names, contact data, injuries, heart rates and every
-# other free-form personal_info key stay out of the graph.
-PROFILE_USER_FIELDS = ("age",)
+# Structured personalization: users.age, users.sex and the declared activity level
+# (energy-equation inputs) and the TrainingProfile-validated subset of
+# personal_info['training']. Names, contact data, injuries, declared heart rates and
+# every other free-form personal_info key stay out.
+PROFILE_USER_FIELDS = ("age", "sex")
 TRAINING_PROFILE_FIELDS = ("experience_level", "primary_focus", "available_days", "session_minutes", "equipment")
+ACTIVITY_LEVELS = ("sedentary", "light", "moderate", "active", "very_active")
 SOURCE_TABLES = {
     "User": "users", "Goal": "goals", "BodyMetric": "body_metrics",
     "Food": "foods", "Meal": "meals", "Training": "trainings",
 }
 CHILD_TABLES = {"MealItem": "meal_items", "TrainingItem": "training_items"}
+# Created by migration 0014. Earlier migrations reinstall this module's current DDL,
+# so triggers on these tables are only created once the tables exist.
+HEALTH_TABLES = {"DailyHealth": "daily_health_summaries", "SleepSession": "sleep_sessions",
+                 "DeviceWorkout": "device_workouts"}
 
 # Keep this envelope compatible with the agent database migration. It deliberately
 # has no FK to users/sessions: the outbox must survive deletion of its source.
@@ -126,14 +147,22 @@ RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
                          THEN info->'training' ELSE '{}'::jsonb END)
     WHERE key IN (""" + ", ".join("'" + field + "'" for field in TRAINING_PROFILE_FIELDS) + """)
 $$;
+-- The declared activity level (an energy-equation input), only when it is a known level.
+CREATE OR REPLACE FUNCTION kg_activity_level(info jsonb)
+RETURNS text LANGUAGE sql IMMUTABLE AS $$
+    SELECT CASE WHEN info->'activity'->>'level' IN (""" + ", ".join("'" + level + "'" for level in ACTIVITY_LEVELS) + """)
+                THEN info->'activity'->>'level' END
+$$;
 """
 PROFILE_PAYLOAD_SQL = """
     IF kind = 'User' AND action = 'upsert' THEN
         projection := projection || jsonb_build_object('training_profile',
-            kg_training_profile(data->'personal_info'));
+            kg_training_profile(data->'personal_info'), 'activity_level', kg_activity_level(data->'personal_info'));
     END IF;"""
 PROFILE_GUARD_SQL = """
             AND OLD.age IS NOT DISTINCT FROM NEW.age
+            AND to_jsonb(OLD)->'sex' IS NOT DISTINCT FROM to_jsonb(NEW)->'sex'
+            AND kg_activity_level(OLD.personal_info) IS NOT DISTINCT FROM kg_activity_level(NEW.personal_info)
             AND kg_training_profile(OLD.personal_info)
                 IS NOT DISTINCT FROM kg_training_profile(NEW.personal_info)"""
 
@@ -148,7 +177,8 @@ DECLARE
     next_version bigint;
     action text;
 BEGIN
-    IF kind NOT IN ('User', 'Goal', 'BodyMetric', 'Food', 'Meal', 'Training') THEN
+    IF kind NOT IN ('User', 'Goal', 'BodyMetric', 'Food', 'Meal', 'Training',
+                    'DailyHealth', 'SleepSession', 'DeviceWorkout') THEN
         RAISE EXCEPTION USING MESSAGE = 'Unsupported graph aggregate: ' || kind;
     END IF;
     entity_owner := CASE kind
@@ -158,7 +188,23 @@ BEGIN
     action := CASE WHEN force_delete OR NOT COALESCE((data->>'is_active')::boolean, true)
                    OR (kind = 'Goal' AND data->>'status' <> 'IN_PROGRESS')
                    THEN 'delete' ELSE 'upsert' END;
+    -- Device data reaches the assistant only with the user's consent; without it
+    -- the record is published as a tombstone. Nested so health_connections is only
+    -- resolved for device data (it does not exist before migration 0014).
+    IF action = 'upsert' AND (kind IN ('DailyHealth', 'SleepSession', 'DeviceWorkout')
+            OR (kind = 'BodyMetric' AND COALESCE(data->>'source', 'MANUAL') <> 'MANUAL')) THEN
+        IF NOT EXISTS (SELECT 1 FROM health_connections c WHERE c.user_id = entity_owner::uuid
+                       AND c.share_with_assistant AND c.is_active) THEN
+            action := 'delete';
+        END IF;
+    END IF;
     projection := kg_allowlisted_payload(kind, data);
+    IF action = 'delete' AND (kind IN ('DailyHealth', 'SleepSession', 'DeviceWorkout')
+            OR (kind = 'BodyMetric' AND COALESCE(data->>'source', 'MANUAL') <> 'MANUAL')) THEN
+        -- A tombstone needs no measurements; withheld device data stays in its table.
+        projection := kg_allowlisted_payload(kind, jsonb_build_object(
+            'id', data->'id', 'version_id', data->'version_id', 'user_id', data->'user_id'));
+    END IF;
     IF action = 'delete' THEN
         projection := projection || jsonb_build_object('is_active', false);
     END IF;
@@ -255,13 +301,14 @@ END $$;
 """
 
 
-def _snapshot_function_sql() -> str:
+def _snapshot_function_sql(health: bool = True) -> str:
+    tables = {**SOURCE_TABLES, **(HEALTH_TABLES if health else {})}
     scans = "\n".join(
         f"""FOR item IN SELECT * FROM {table} ORDER BY id FOR SHARE LOOP
             PERFORM kg_publish_backend('{kind}', to_jsonb(item));
             total := total + 1;
         END LOOP;"""
-        for kind, table in SOURCE_TABLES.items()
+        for kind, table in tables.items()
     )
     return """
 CREATE OR REPLACE FUNCTION kg_enqueue_snapshot() RETURNS bigint
@@ -286,12 +333,65 @@ END $$;
 """
 
 
+HEALTH_DDL = """
+CREATE OR REPLACE FUNCTION kg_republish_health(owner uuid) RETURNS bigint
+LANGUAGE plpgsql AS $$
+DECLARE item record; total bigint := 0;
+BEGIN
+    -- Consent changed: every active device record becomes an upsert or a tombstone.
+    FOR item IN SELECT * FROM daily_health_summaries WHERE user_id = owner AND is_active ORDER BY id FOR SHARE LOOP
+        PERFORM kg_publish_backend('DailyHealth', to_jsonb(item)); total := total + 1;
+    END LOOP;
+    FOR item IN SELECT * FROM sleep_sessions WHERE user_id = owner AND is_active ORDER BY id FOR SHARE LOOP
+        PERFORM kg_publish_backend('SleepSession', to_jsonb(item)); total := total + 1;
+    END LOOP;
+    FOR item IN SELECT * FROM device_workouts WHERE user_id = owner AND is_active ORDER BY id FOR SHARE LOOP
+        PERFORM kg_publish_backend('DeviceWorkout', to_jsonb(item)); total := total + 1;
+    END LOOP;
+    FOR item IN SELECT * FROM body_metrics WHERE user_id = owner AND is_active AND source <> 'MANUAL'
+                ORDER BY id FOR SHARE LOOP
+        PERFORM kg_publish_backend('BodyMetric', to_jsonb(item)); total := total + 1;
+    END LOOP;
+    RETURN total;
+END $$;
+
+CREATE OR REPLACE FUNCTION kg_capture_health_consent() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'INSERT' OR OLD.share_with_assistant IS DISTINCT FROM NEW.share_with_assistant
+       OR OLD.is_active IS DISTINCT FROM NEW.is_active THEN
+        PERFORM kg_republish_health(NEW.user_id);
+    END IF;
+    RETURN NULL;
+END $$;
+"""
+
+
+def _guarded(table: str, statement: str) -> str:
+    """Run DDL only when the table exists (earlier migrations reinstall current DDL)."""
+    return f"DO $guard$ BEGIN IF to_regclass('{table}') IS NOT NULL THEN {statement} END IF; END $guard$;"
+
+
+def _health_trigger_statements() -> tuple[str, ...]:
+    captures = tuple(
+        _guarded(table, f"DROP TRIGGER IF EXISTS kg_capture ON {table}; "
+                        f"CREATE TRIGGER kg_capture AFTER INSERT OR UPDATE OR DELETE ON {table} "
+                        f"FOR EACH ROW EXECUTE FUNCTION kg_capture_backend('{kind}');")
+        for kind, table in HEALTH_TABLES.items()
+    )
+    consent = _guarded("health_connections",
+                       "DROP TRIGGER IF EXISTS kg_health_consent ON health_connections; "
+                       "CREATE TRIGGER kg_health_consent AFTER INSERT OR UPDATE ON health_connections "
+                       "FOR EACH ROW EXECUTE FUNCTION kg_capture_health_consent();")
+    return (*captures, consent)
+
+
 def _publish_sql(profile: bool = True) -> str:
     return (PUBLISH_DDL.replace("--profile-payload", PROFILE_PAYLOAD_SQL if profile else "")
             .replace("--profile-guard", PROFILE_GUARD_SQL if profile else ""))
 
 
-def installation_statements(profile: bool = True) -> tuple[str, ...]:
+def installation_statements(profile: bool = True, health: bool = True) -> tuple[str, ...]:
     """DDL shared by Alembic and dedicated test/development metadata creation."""
     triggers = tuple(
         f"DROP TRIGGER IF EXISTS kg_capture ON {table}; "
@@ -299,8 +399,9 @@ def installation_statements(profile: bool = True) -> tuple[str, ...]:
         f"FOR EACH ROW EXECUTE FUNCTION kg_capture_backend('{kind}');"
         for kind, table in {**SOURCE_TABLES, **CHILD_TABLES}.items()
     )
+    health_ddl = (HEALTH_DDL, *_health_trigger_statements()) if health else ()
     return (OUTBOX_DDL, TRAINING_PROFILE_DDL, _payload_function_sql(profile), _publish_sql(profile),
-            _snapshot_function_sql(), *triggers)
+            _snapshot_function_sql(health), *triggers, *health_ddl)
 
 
 def install_backend_outbox(connection) -> None:

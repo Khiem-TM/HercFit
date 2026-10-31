@@ -2,8 +2,8 @@
 import logging
 from time import perf_counter
 from openai import AuthenticationError
-from observability import annotate
-from agentic.observability.telemetry import active_metrics, merge_jev_metrics
+from agentic.observability import annotate
+from agentic.observability.telemetry import active_metrics, merge_jev_metrics, merge_retrieval
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ async def run_node(fn, state, node, settings):
     metrics={}
     marker=active_metrics.set(metrics)
     try:
-        from agentic.observability.tracing import span
+        from agentic.observability.node_span import span
         with span(getattr(settings,'LANGSMITH_ENABLED',False),node,state.get('run_id')):
             result=await fn(state)
     except Exception as exc:
@@ -42,7 +42,7 @@ async def run_node(fn, state, node, settings):
     telemetry['nodes']=[*telemetry.get('nodes',[]),{'name':node,'duration_ms':round((perf_counter()-started)*1000,3),
                                                  'llm_calls':metrics.get('llm_calls',0)}][-settings.MAX_GRAPH_STEPS:]
     if 'retrieval' in metrics:
-        telemetry['retrieval']=metrics['retrieval']
+        telemetry['retrieval']=merge_retrieval(telemetry.get('retrieval'),metrics['retrieval'])
     result['telemetry']=telemetry
     decision = result.get('decision') or {}
     annotate(node=node, domain=decision.get('domain') or (state.get('decision') or {}).get('domain'), research=node == 'research' or bool(state.get('research_count')))

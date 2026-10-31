@@ -32,6 +32,9 @@ BodyMetricReplace = BodyMetricCreate
 
 class BodyMetricRead(BodyMetricBase, EntityRead):
     user_id: UUID
+    # Device samples (source GOOGLE_HEALTH) may hold only height or body fat.
+    weight_kg: PositiveMeasurement | None = None
+    source: str = "MANUAL"
 
 
 class BodyMetricQuery(Pagination):

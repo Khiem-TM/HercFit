@@ -31,6 +31,7 @@ export const TOOL_TITLES: Record<string, string> = {
   create_trainings: 'Ghi buổi tập',
   update_trainings: 'Sửa buổi tập',
   delete_trainings: 'Xoá buổi tập',
+  create_plan: 'Tạo kế hoạch',
   create_training_plans: 'Tạo lịch tập',
   update_training_plans: 'Thay lịch tập',
   end_training_plan: 'Kết thúc lịch tập',

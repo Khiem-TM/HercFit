@@ -1,5 +1,5 @@
 """Content-free model/node measurements; no prompts, completions, or credentials."""
-from observability import graph_config
+from agentic.observability import graph_config
 from contextvars import ContextVar
 from time import perf_counter
 import math
@@ -16,7 +16,7 @@ def record_jev_result(result):
     keys = ('evaluation_id', 'phase', 'status', 'reason', 'model', 'usage', 'cost',
             'duration_ms', 'policy_version', 'cached', 'mode', 'enforced', 'attempted')
     metrics.setdefault('jev_events', []).append({k: result[k] for k in keys if k in result})
-    from observability import annotate
+    from agentic.observability import annotate
     annotate(jev_mode=result.get('mode'), jev_phase=result.get('phase'),
              jev_status=result.get('status'), jev_fallback=result.get('reason'),
              jev_model=result.get('model'), jev_policy_version=result.get('policy_version'),
@@ -25,6 +25,20 @@ def record_jev_result(result):
              jev_output_tokens=(result.get('usage') or {}).get('output_tokens'),
              jev_confidence={k: v['confidence'] for k, v in result.get('answers', {}).items() if 'confidence' in v},
              jev_probabilities={k: v['noul'] for k, v in result.get('answers', {}).items() if 'noul' in v})
+
+
+def merge_retrieval(previous, current):
+    """One knowledge-graph summary per run: the latest status and domains, every attempt counted.
+
+    `status` and `duration_ms` keep their single-attempt meaning for the latest read and the
+    total time; `statuses` lists each attempt in order (bounded)."""
+    if not previous:
+        return {**current, 'attempts': current.get('attempts', 1),
+                'statuses': list(current.get('statuses') or [current.get('status')])}
+    return {**previous, **current, 'attempts': previous.get('attempts', 1) + current.get('attempts', 1),
+            'duration_ms': round(previous.get('duration_ms', 0) + current.get('duration_ms', 0), 3),
+            'statuses': [*(previous.get('statuses') or [previous.get('status')]),
+                         *(current.get('statuses') or [current.get('status')])][-6:]}
 
 
 def merge_jev_metrics(telemetry, events):
@@ -132,7 +146,7 @@ class _MeasuredModel:
 class MeasuredModels:
     def __init__(self, models):
         self.models = models
-        from observability.settings import ObservabilitySettings
+        from agentic.observability.settings import ObservabilitySettings
         self.prices = ObservabilitySettings().LANGSMITH_MODEL_PRICES
 
     def get(self, role):

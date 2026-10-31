@@ -14,6 +14,11 @@ from agentic.prompts.v1.memory import SUMMARY_PROMPT
 from agentic.prompts.v1.research import PROMPT as RESEARCH_PROMPT
 from agentic.prompts.v1.routing import GRAPH_CONTEXT_GUIDANCE, JEV_ROUTING_QUESTIONS, ROUTING_PROMPT
 from agentic.prompts.v1.tool import PROMPT as TOOL_PROMPT
+from agentic.prompts.v2 import routing as v2_routing
+from agentic.prompts.v2.clarification import PROMPT as CLARIFICATION_PROMPT_V2
+from agentic.prompts.v2.domains import COACH_GUIDANCE as COACH_GUIDANCE_V2, HEALTH_GUIDANCE
+from agentic.prompts.v2.personal import PERSONAL_ROUTING, PERSONALIZED_ANSWER
+from agentic.prompts.v3.domains import COACH_GUIDANCE as COACH_GUIDANCE_V3
 
 
 TEMPLATES = MappingProxyType({
@@ -26,10 +31,22 @@ TEMPLATES = MappingProxyType({
     ('memory.summary', 'v1'): SUMMARY_PROMPT,
     ('nutrition.capabilities', 'v1'): CAPABILITY_GUIDANCE,
     ('training.coach', 'v1'): COACH_GUIDANCE,
+    # v2: Google Health device data and finer body/profile intents.
+    ('orchestration.route', 'v2'): v2_routing.ROUTING_PROMPT,
+    ('health.guidance', 'v2'): HEALTH_GUIDANCE,
+    ('training.coach', 'v2'): COACH_GUIDANCE_V2,
+    # v2: personalized advice from the user's stored data plus verified knowledge.
+    ('orchestration.personal', 'v2'): PERSONAL_ROUTING,
+    ('orchestration.personal_answer', 'v2'): PERSONALIZED_ANSWER,
+    # v2: catalog picks can be multiple choice and never reach the user without their options.
+    ('clarification.form', 'v2'): CLARIFICATION_PROMPT_V2,
+    # v3: training logs go straight to the structured preview; quick gym logs by intensity.
+    ('training.coach', 'v3'): COACH_GUIDANCE_V3,
 })
 
 _QUESTIONS = {
     ('routing.jev', 'v1'): JEV_ROUTING_QUESTIONS,
+    ('routing.jev', 'v2'): v2_routing.JEV_ROUTING_QUESTIONS,
     **{('research.' + phase, 'v1'): questions for phase, questions in RESEARCH_QUESTIONS.items()},
 }
 

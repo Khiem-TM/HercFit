@@ -21,7 +21,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from redis.asyncio import Redis
 from redis.exceptions import WatchError
 
-from observability import annotate, graph_config, observed
+from agentic.observability import annotate, graph_config, observed
 from agentic.services.memory.transcript import (LAST_MESSAGE_CHARS, TITLE_CHARS, entities_from_state, fold_plan, gap_turns,
                                        merge_entities, outside_messages, render_memory, seed_turns, turn_from_state)
 

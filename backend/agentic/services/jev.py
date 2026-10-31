@@ -7,7 +7,7 @@ import time
 from uuid import uuid4
 
 from psycopg.types.json import Jsonb
-from observability import observed
+from agentic.observability import observed
 
 from agentic.tools.integrations.jev import JevError, build_payload, encode_payload
 from agentic.core.context import request_context

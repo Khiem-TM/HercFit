@@ -8,11 +8,11 @@ from langgraph.types import Command
 from agentic.core.providers.fpt import ToolMarkupFilter, strip_tool_markup
 from agentic.services import catalog_choice
 from agentic.tools.output import carry_over
-from agentic.services.clarification import fallback_clarification
+from agentic.services.clarification import catalog_groups, fallback_clarification, logs_training
 from agentic.services.memory.transcript import visible
 from agentic.core.app.schemas.response import ChatResponse, Clarification
 
-from observability import annotate, graph_config, identify, observed, outcome, durable_context
+from agentic.observability import annotate, graph_config, identify, observed, outcome, durable_context
 from time import monotonic
 
 logger=logging.getLogger(__name__)
@@ -111,13 +111,13 @@ class Runtime:
     def clarification(state,reply):
         # Every needs_input reply is answered through a form, even when a branch skipped the answer node.
         if state.get('status')!='needs_input': return None
-        return Clarification.model_validate(state.get('clarification') or fallback_clarification(reply)).model_dump(mode='json')
+        return Clarification.model_validate(state.get('clarification') or fallback_clarification(reply, catalog_groups(state), logs_training(state))).model_dump(mode='json')
 
     async def run(self,input,thread_id,emit=None):
         annotate(business_run_id=thread_id, graph_thread_id=thread_id)
         config=self.config(thread_id) # Lấy cấu hình
         try:
-            from agentic.observability.tracing import span
+            from agentic.observability.node_span import span
             with span(getattr(self.settings,'LANGSMITH_ENABLED',False),'agent_run',thread_id):
                 return await self._run_stream(input,thread_id,config,emit)
         except Exception as exc:
@@ -129,7 +129,7 @@ class Runtime:
             return self.response(state)
 
     async def _run_stream(self,input,thread_id,config,emit):
-        from observability.tracing import current
+        from agentic.observability.tracing import current
         observation = current.get()
         started = observation.started if observation else monotonic()
         first_progress = False
@@ -184,7 +184,7 @@ class Runtime:
         logger.info('agent_run_metrics',extra={'run_id':thread_id,'llm_calls':telemetry.get('llm_calls',0),
                     'input_tokens':telemetry.get('input_tokens',0),'output_tokens':telemetry.get('output_tokens',0)})
         result = self.response(snapshot.values)
-        from observability.tracing import current
+        from agentic.observability.tracing import current
         prior = current.get()
         if not prior or prior.metadata.get('status') not in {'timeout', 'failed'}:
             outcome(result.status, answer_ms=round((monotonic()-started)*1000, 3))
@@ -223,9 +223,11 @@ class Runtime:
                      'session_generation':session['generation'],
                      'research_answer':None,'research_count':0,'sources':[],'candidate':None,'pending_action':None,'clarification':None,'illustrations':[],'research_handoff':None,'status':'running','error':None,
                      'catalog_choice':catalog_choice.carried(previous),'catalog_draft':None,'prepared_reply':None,
+                     'replying_to_form':previous.get('status')=='needs_input',
                      'graph_context':None,'graph_retrieval_attempted':False,'graph_context_run_id':None,'graph_context_domains':[],'turn':None,
                      'fast_read_plan':None,'fast_read_complete':False,'telemetry':{},'execution_records':[],
-                     'jev_events':[], 'jev_rejections':{}, 'model_auth_failed':False,'session_memory':memory,'safety':None}
+                     'jev_events':[], 'jev_rejections':{}, 'model_auth_failed':False,'session_memory':memory,'safety':None,
+                     'user_context':None,'user_context_run_id':None,'personal_reads_done':False,'research_evidence':None,'route_trace':[]}
             await self.graph.aupdate_state(self.config(thread_id),initial,as_node='__start__')
             await self.store.bind(payload.session_id,thread_id)
             return await self.run(None,thread_id,emit)

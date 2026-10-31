@@ -12,6 +12,7 @@ from schemas.nutrition import NutritionTargetsRead
 from schemas.tracking import DateRangeQuery
 from services import energy
 from services.common import UserService
+from services.health_service import device_expenditure, observed_activity_level
 
 GOAL_TYPES = {"fat_loss", "muscle_gain", "maintenance", "fitness"}
 COMPLETE_DAY_MIN_MEALS = 2
@@ -59,6 +60,11 @@ class NutritionTargetService(UserService):
         planning_weight = trend[-1][2] if trend else latest_weight
         goal_type, target_weight, target_date = _goal_inputs(await Goal.get_current_for_user(self.session, user_id=self.user_id))
         activity = ((user.personal_info or {}).get("activity") or {}).get("level")
+        activity_source = "declared" if activity else None
+        if not activity:
+            # A missing declaration is filled from 28 days of device steps.
+            activity = await observed_activity_level(self.session, self.user_id, today)
+            activity_source = "observed" if activity else None
         inputs = energy.EnergyInputs(
             weight_kg=planning_weight, height_cm=height, age=user.age, sex=getattr(user, "sex", None),
             activity_level=activity, goal_type=goal_type, target_weight_kg=target_weight,
@@ -101,5 +107,6 @@ class NutritionTargetService(UserService):
             activity_factor=result.activity_factor, macros=macros,
             adaptive=adaptive.__dict__, today=today_info,
             weight_trend=[{"date": d, "weight_kg": w, "trend_kg": t} for d, w, t in trend[-30:]],
-            warnings=result.warnings, method=energy.METHOD,
+            warnings=result.warnings, method=energy.METHOD, activity_level_source=activity_source,
+            device_expenditure_kcal=await device_expenditure(self.session, self.user_id, today),
         )

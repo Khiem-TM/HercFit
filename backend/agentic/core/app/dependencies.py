@@ -5,7 +5,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from agentic.tools.integrations.backend_client import BackendError
 from agentic.core.context import RequestContext, request_context
 
-from observability import identify
+from agentic.observability import identify
 
 bearer=HTTPBearer(auto_error=False)
 # Verified identities, keyed by a token digest (never the token itself).

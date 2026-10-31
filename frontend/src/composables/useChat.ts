@@ -105,7 +105,11 @@ export function useChat() {
       const lastAi = [...mapped].reverse().find((m) => m.role === 'ai')
       if (lastAi) {
         if (Array.isArray(data.sources) && data.sources.length > 0) lastAi.sources = data.sources
-        if (data.status === 'needs_input') lastAi.clarification = normalizeClarification(data.clarification)
+        if (data.status === 'needs_input') {
+          // The form only opens on a needs_input message; without the status a reload left typing as the only way to answer.
+          lastAi.clarification = normalizeClarification(data.clarification)
+          lastAi.status = 'needs_input'
+        }
         if (Array.isArray(data.illustrations)) lastAi.illustrations = data.illustrations
       }
       messages.value = mapped

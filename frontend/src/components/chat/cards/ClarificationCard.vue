@@ -2,19 +2,23 @@
 import { computed, nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 import { ArrowLeft, ArrowRight, PencilLine, Send, SkipForward } from 'lucide-vue-next'
 import type { Clarification } from '@/types/api'
-import { answerText, choosesOnce, composeReply, emptyAnswer, isAnswered, type Answer } from '@/features/chat/clarification'
+import {
+  answerText, choosesOnce, composeReply, emptyAnswer, isAnswered, setRows, visibleIndexes, type Answer,
+} from '@/features/chat/clarification'
 import ClarificationQuestion from './ClarificationQuestion.vue'
 
 const props = defineProps<{ clarification: Clarification; disabled?: boolean }>()
 const emit = defineEmits<{ send: [text: string] }>()
 
 const questions = computed(() => props.clarification.questions)
-const total = computed(() => questions.value.length)
+// Positions walk the questions asked so far; a show_if question appears once its trigger answer is picked.
+const answers = shallowRef<Answer[]>([])
+const order = computed(() => visibleIndexes(props.clarification, answers.value))
+const total = computed(() => order.value.length)
 const single = computed(() => total.value === 1)
 // step === total is the review screen.
 const step = shallowRef(0)
 const furthest = shallowRef(0)
-const answers = shallowRef<Answer[]>([])
 // Editing from the review screen returns there instead of walking every later question again.
 const editing = shallowRef(false)
 const body = useTemplateRef<InstanceType<typeof ClarificationQuestion>>('body')
@@ -27,23 +31,26 @@ watch(() => props.clarification, () => {
 }, { immediate: true })
 
 const reviewing = computed(() => step.value >= total.value)
-const current = computed(() => questions.value[Math.min(step.value, total.value - 1)])
+const index = computed(() => order.value[Math.min(step.value, total.value - 1)])
+const current = computed(() => questions.value[index.value])
+const rows = (questionIndex: number) => setRows(props.clarification, answers.value, questionIndex)
+const currentRows = computed(() => rows(index.value))
 const answer = computed({
-  get: () => answers.value[step.value] ?? emptyAnswer(),
-  set: (value: Answer) => { answers.value = answers.value.map((item, index) => index === step.value ? value : item) },
+  get: () => answers.value[index.value] ?? emptyAnswer(),
+  set: (value: Answer) => { answers.value = answers.value.map((item, i) => i === index.value ? value : item) },
 })
-const answered = computed(() => isAnswered(current.value, answer.value))
-const complete = computed(() => questions.value.every((question, index) => {
-  const value = answers.value[index] ?? emptyAnswer()
-  return isAnswered(question, value) || (!question.required && value.skipped)
+const answered = computed(() => isAnswered(current.value, answer.value, currentRows.value))
+const complete = computed(() => order.value.every(i => {
+  const value = answers.value[i] ?? emptyAnswer()
+  return isAnswered(questions.value[i], value, rows(i)) || (!questions.value[i].required && value.skipped)
 }))
 // A lone pick-only question answers on tap, like quick replies.
 const showNext = computed(() => !(single.value && choosesOnce(current.value) && !current.value.allow_free_text))
 
-function go(index: number) {
-  step.value = index
-  furthest.value = Math.max(furthest.value, index)
-  if (index < total.value) nextTick(() => body.value?.focus())
+function go(position: number) {
+  step.value = position
+  furthest.value = Math.min(Math.max(furthest.value, position), total.value)
+  if (position < total.value) nextTick(() => body.value?.focus())
 }
 
 function send() {
@@ -53,6 +60,7 @@ function send() {
 
 function next() {
   if (props.disabled || !answered.value) return
+  // Read after the answer: picking an option may have revealed or hidden later questions.
   if (single.value) return send()
   go(editing.value ? total.value : step.value + 1)
 }
@@ -68,20 +76,21 @@ function back() {
   go(Math.max(0, step.value - 1))
 }
 
-function edit(index: number) {
+function edit(position: number) {
   editing.value = true
-  go(index)
+  go(position)
 }
 
-function jump(index: number) {
+function jump(position: number) {
   // Jumping away from the review screen is an edit; between questions it keeps the current flow.
   if (reviewing.value) editing.value = true
-  go(index)
+  go(position)
 }
 
-function shown(index: number) {
-  const value = answers.value[index]
-  return value && isAnswered(questions.value[index], value) ? answerText(questions.value[index], value) : null
+function shown(questionIndex: number) {
+  const value = answers.value[questionIndex]
+  const question = questions.value[questionIndex]
+  return value && isAnswered(question, value, rows(questionIndex)) ? answerText(question, value, rows(questionIndex)) : null
 }
 </script>
 
@@ -93,15 +102,15 @@ function shown(index: number) {
         {{ reviewing ? 'Xem lại' : `Câu ${step + 1}/${total}` }}
       </span>
       <ol class="flex flex-1 gap-1">
-        <li v-for="(question, index) in questions" :key="question.id" class="flex-1">
+        <li v-for="(questionIndex, position) in order" :key="questions[questionIndex].id" class="flex-1">
           <button
             type="button"
-            :disabled="disabled || index > furthest"
-            :aria-label="`Câu ${index + 1}: ${question.label}`"
-            :aria-current="index === step ? 'step' : undefined"
+            :disabled="disabled || position > furthest"
+            :aria-label="`Câu ${position + 1}: ${questions[questionIndex].label}`"
+            :aria-current="position === step ? 'step' : undefined"
             class="block h-1.5 w-full rounded-full transition-colors disabled:cursor-default"
-            :class="index === step ? 'bg-primary' : shown(index) ? 'bg-[#d4b77d]' : answers[index]?.skipped ? 'bg-white/30' : 'bg-white/10'"
-            @click="jump(index)"
+            :class="position === step ? 'bg-primary' : shown(questionIndex) ? 'bg-[#d4b77d]' : answers[questionIndex]?.skipped ? 'bg-white/30' : 'bg-white/10'"
+            @click="jump(position)"
           />
         </li>
       </ol>
@@ -118,16 +127,16 @@ function shown(index: number) {
       <div v-if="reviewing" key="review">
         <h4 class="font-headline-md text-lg leading-snug text-primary">Kiểm tra lại câu trả lời</h4>
         <ul class="mt-3 divide-y divide-white/[0.06] rounded-xl border border-white/[0.08] bg-white/[0.02]">
-          <li v-for="(question, index) in questions" :key="question.id">
+          <li v-for="(questionIndex, position) in order" :key="questions[questionIndex].id">
             <button
               type="button"
               :disabled="disabled"
               class="flex min-h-[44px] w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.04] disabled:opacity-50"
-              @click="edit(index)"
+              @click="edit(position)"
             >
-              <span class="w-32 shrink-0 text-[11px] uppercase tracking-[0.08em] text-on-surface-variant">{{ question.label }}</span>
-              <span class="min-w-0 flex-1 text-sm" :class="shown(index) ? 'text-primary' : 'italic text-outline'">
-                {{ shown(index) ?? 'Bỏ qua' }}
+              <span class="w-32 shrink-0 text-[11px] uppercase tracking-[0.08em] text-on-surface-variant">{{ questions[questionIndex].label }}</span>
+              <span class="min-w-0 flex-1 text-sm" :class="shown(questionIndex) ? 'text-primary' : 'italic text-outline'">
+                {{ shown(questionIndex) ?? 'Bỏ qua' }}
               </span>
               <PencilLine class="mt-0.5 h-3.5 w-3.5 shrink-0 text-outline" aria-label="Sửa" />
             </button>
@@ -141,6 +150,7 @@ function shown(index: number) {
         :key="current.id"
         v-model="answer"
         :question="current"
+        :rows="currentRows"
         :disabled="disabled"
         :show-label="!single"
         @commit="next"

@@ -133,6 +133,6 @@ async def get_current_user(
     user = await User.get_by_id(session, user_uuid)
     if user is None or not user.is_active:
         raise _unauthorized("User account is inactive or not found")
-    from observability import identify
+    from agentic.observability import identify
     identify(str(user.id), private_values=(user.fullname, str(user.email), user.nick_name))
     return user

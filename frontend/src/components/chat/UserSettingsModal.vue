@@ -4,6 +4,7 @@ import {
   Activity,
   Check,
   Download,
+  HeartPulse,
   Loader2,
   LogOut,
   Settings,
@@ -12,9 +13,15 @@ import {
   X,
 } from 'lucide-vue-next'
 import { useAuth } from '@/composables/useAuth'
+import HealthIntegrationPanel from '@/components/chat/HealthIntegrationPanel.vue'
+
+type SettingsTab = 'profile' | 'metrics' | 'integrations' | 'settings'
 
 const props = defineProps<{
   open: boolean
+  /** Tab to show when the modal opens, e.g. after the Google Health consent screen. */
+  initialTab?: SettingsTab
+  integrationResult?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -36,7 +43,7 @@ const isExporting = ref(false)
 const isErasing = ref(false)
 const eraseEmail = ref('')
 
-const activeTab = ref<'profile' | 'metrics' | 'settings'>('profile')
+const activeTab = ref<SettingsTab>('profile')
 const isSavingProfile = ref(false)
 const isSavingMetric = ref(false)
 const feedbackMessage = ref<string | null>(null)
@@ -60,6 +67,7 @@ watch(
   () => props.open,
   (isOpen) => {
     if (isOpen) {
+      activeTab.value = props.initialTab ?? 'profile'
       feedbackMessage.value = null
       errorMessage.value = null
       profileForm.fullname = user.value?.fullname || ''
@@ -257,6 +265,20 @@ async function handleErase(): Promise<void> {
           >
             <Activity class="h-3.5 w-3.5" />
             <span>Chỉ số &amp; Mục tiêu</span>
+          </button>
+
+          <button
+            type="button"
+            class="flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-medium transition-colors"
+            :class="
+              activeTab === 'integrations'
+                ? 'border-white text-primary'
+                : 'border-transparent text-outline hover:text-on-surface-variant'
+            "
+            @click="activeTab = 'integrations'"
+          >
+            <HeartPulse class="h-3.5 w-3.5" />
+            <span>Kết nối</span>
           </button>
 
           <button
@@ -470,12 +492,22 @@ async function handleErase(): Promise<void> {
             </div>
           </div>
 
-          <!-- TAB 3: Settings & Session -->
+          <!-- TAB 3: Device integrations (Google Health) -->
+          <HealthIntegrationPanel
+            v-else-if="activeTab === 'integrations'"
+            :result="integrationResult"
+          />
+
+          <!-- TAB 4: Settings & Session -->
           <div v-else class="space-y-5">
             <div class="rounded-2xl border border-white/[0.08] bg-[#161616] p-4 space-y-2">
               <div class="flex items-center justify-between text-xs">
-                <span class="text-outline">Trạng thái xác thực Google OAuth</span>
-                <span class="font-label-code text-emerald-400">ĐÃ ĐỒNG BỘ</span>
+                <span class="text-outline">Đăng nhập Google OAuth</span>
+                <span class="font-label-code text-emerald-400">ĐÃ XÁC THỰC</span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-outline">Dữ liệu thiết bị (Google Health)</span>
+                <button type="button" class="font-label-code text-primary underline-offset-2 hover:underline" @click="activeTab = 'integrations'">XEM TAB KẾT NỐI</button>
               </div>
               <div class="flex items-center justify-between text-xs">
                 <span class="text-outline">Mô hình điều phối Agent</span>

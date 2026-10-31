@@ -1,5 +1,5 @@
-from observability import observed, span
-from observability.propagation import outbound_headers
+from agentic.observability import observed, span
+from agentic.observability.propagation import outbound_headers
 import asyncio
 import httpx
 from pydantic import TypeAdapter
@@ -20,7 +20,8 @@ class BackendClient:
 
     @observed('backend.request', capture=('method', 'path', 'params', 'body'), output=False)
     async def request(self, method, path, token, *, params=None, body=None, key=None):
-        headers = {'Authorization': 'Bearer ' + token}
+        # Lets the backend honour the user's consent for assistant access to device data.
+        headers = {'Authorization': 'Bearer ' + token, 'X-HercFit-Client': 'agent'}
         if key:
             headers['Idempotency-Key'] = key # Trống trùng lặp
         attempts = 3 if method == 'GET' or key else 1

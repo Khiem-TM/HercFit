@@ -1,0 +1,111 @@
+{
+  "source_key": "lore-of-running-4th-ed",
+  "title": "Lore of Running — Fourth Edition",
+  "license": "Copyright © 2003 Tim Noakes",
+  "author": "Timothy D. Noakes",
+  "edition": "4",
+  "language": "en",
+  "sport": "running",
+  "topic": "running-science-and-training",
+  "first_page": 16,
+  "last_page": 934,
+  "max_tokens": 480,
+  "overlap_tokens": 64,
+  "chapters": [
+    {
+      "page": 16,
+      "title": "Chapter 1: Muscle Structure and Function",
+      "printed_page": 3
+    },
+    {
+      "page": 36,
+      "title": "Chapter 2: Oxygen Transport and Running Economy",
+      "printed_page": 23
+    },
+    {
+      "page": 105,
+      "title": "Chapter 3: Energy Systems and Running Performance",
+      "printed_page": 92
+    },
+    {
+      "page": 188,
+      "title": "Chapter 4: Temperature Regulation During Exercise",
+      "printed_page": 175
+    },
+    {
+      "page": 271,
+      "title": "Chapter 5: Developing a Training Foundation",
+      "printed_page": 258
+    },
+    {
+      "page": 374,
+      "title": "Chapter 6: Learning From the Experts",
+      "printed_page": 361
+    },
+    {
+      "page": 497,
+      "title": "Chapter 7: Avoiding Overtraining",
+      "printed_page": 484
+    },
+    {
+      "page": 527,
+      "title": "Chapter 8: Training the Mind",
+      "printed_page": 514
+    },
+    {
+      "page": 579,
+      "title": "Chapter 9: 10K to Half-Marathon",
+      "printed_page": 566
+    },
+    {
+      "page": 609,
+      "title": "Chapter 10: Marathon",
+      "printed_page": 596
+    },
+    {
+      "page": 654,
+      "title": "Chapter 11: Ultramarathon",
+      "printed_page": 641
+    },
+    {
+      "page": 683,
+      "title": "Chapter 12: Pushing the Limits of Performance",
+      "printed_page": 670
+    },
+    {
+      "page": 711,
+      "title": "Chapter 13: Ergogenic Aids",
+      "printed_page": 698
+    },
+    {
+      "page": 752,
+      "title": "Chapter 14: Staying Injury Free",
+      "printed_page": 739
+    },
+    {
+      "page": 851,
+      "title": "Chapter 15: Running and Your Health",
+      "printed_page": 838
+    }
+  ],
+  "exclude_pages": [
+    269
+  ],
+  "sections": [
+    {
+      "page": 270,
+      "title": "Part II: Training Basics",
+      "printed_page": 257
+    },
+    {
+      "page": 576,
+      "title": "Part III: Transferring Training to Racing",
+      "printed_page": 563
+    },
+    {
+      "page": 710,
+      "title": "Part IV: Running Health",
+      "printed_page": 697
+    }
+  ]
+}

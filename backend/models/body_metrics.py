@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID as PyUUID
 
 from sqlalchemy import (
-    CheckConstraint, DateTime, ForeignKey, Index, Numeric, func, text,
+    CheckConstraint, DateTime, ForeignKey, Index, Numeric, String, func, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +31,14 @@ class BodyMetric(BaseModel):
         ],
         CheckConstraint("body_fat_pct >= 0 AND body_fat_pct <= 100", name="ck_body_metrics_body_fat"),
         CheckConstraint("jsonb_typeof(additional_metrics) = 'object'", name="ck_body_metrics_additional_object"),
+        # Device samples carry one measurement each (a scale weight, a body-fat reading).
+        CheckConstraint("weight_kg IS NOT NULL OR height_cm IS NOT NULL OR body_fat_pct IS NOT NULL "
+                        "OR muscle_mass_kg IS NOT NULL", name="ck_body_metrics_any_measurement"),
+        CheckConstraint("source IN ('MANUAL', 'GOOGLE_HEALTH')", name="ck_body_metrics_source"),
+        CheckConstraint("jsonb_typeof(data_source) = 'object'", name="ck_body_metrics_data_source"),
         Index("ix_body_metrics_user_recorded", "user_id", "recorded_at", "id"),
+        Index("uq_body_metrics_external", "user_id", "source", "external_id", unique=True,
+              postgresql_where=text("external_id IS NOT NULL AND is_active")),
     )
 
     user_id: Mapped[PyUUID] = mapped_column(
@@ -40,11 +47,18 @@ class BodyMetric(BaseModel):
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False,
     )
-    weight_kg: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False)
+    weight_kg: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
     height_cm: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
     body_fat_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     muscle_mass_kg: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
     additional_metrics: Mapped[dict[str, Any]] = mapped_column(
+        JSONB(none_as_null=True), default=dict, server_default=text("'{}'::jsonb"), nullable=False,
+    )
+    # MANUAL entries come from the user or the assistant; GOOGLE_HEALTH rows are
+    # keyed by the provider's data point name so repeated syncs never duplicate.
+    source: Mapped[str] = mapped_column(String(20), default="MANUAL", server_default="MANUAL", nullable=False)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    data_source: Mapped[dict[str, Any]] = mapped_column(
         JSONB(none_as_null=True), default=dict, server_default=text("'{}'::jsonb"), nullable=False,
     )
     user: Mapped[User] = relationship("User", back_populates="body_metrics")
@@ -79,10 +93,53 @@ class BodyMetric(BaseModel):
 
     @classmethod
     async def get_latest_for_user(cls, session: AsyncSession, *, user_id: PyUUID) -> BodyMetric | None:
-        return await cls.get_one(
-            session, user_id=UserScope(user_id=user_id).user_id,
-            order_by={"recorded_at": "desc", "id": "desc"},
+        """Latest weigh-in: device rows holding only height or body fat are not a weight."""
+        result = await session.execute(
+            cls._user_query(user_id).where(cls.weight_kg.is_not(None))
+            .order_by(cls.recorded_at.desc(), cls.id.desc()).limit(1)
         )
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def sync_device_samples(
+        cls, session: AsyncSession, *, user_id: PyUUID, source: str, rows: list[dict[str, Any]],
+        window: tuple[datetime, datetime] | None = None,
+    ) -> dict[str, int]:
+        """Mirror provider samples. Snapshots stay immutable: a changed sample replaces
+        the old row, and samples the provider no longer returns inside the synced
+        window are deactivated. Returns inserted/replaced/removed counts."""
+        fields = ("recorded_at", "weight_kg", "height_cm", "body_fat_pct", "muscle_mass_kg")
+        incoming = {row["external_id"]: row for row in rows}
+        query = cls._user_query(user_id).where(cls.source == source, cls.external_id.is_not(None))
+        if window is not None:
+            query = query.where(cls.recorded_at >= window[0], cls.recorded_at < window[1])
+        if incoming and window is None:
+            query = query.where(cls.external_id.in_(incoming))
+        existing = {row.external_id: row for row in (await session.execute(query)).scalars()}
+        if window is not None and incoming:
+            outside = set(incoming) - set(existing)
+            if outside:
+                existing.update({row.external_id: row for row in (await session.execute(
+                    cls._user_query(user_id).where(cls.source == source, cls.external_id.in_(outside))
+                )).scalars()})
+        counts = {"inserted": 0, "replaced": 0, "removed": 0}
+        for external_id, row in incoming.items():
+            current = existing.get(external_id)
+            if current is not None and all(_same(getattr(current, f), row.get(f)) for f in fields):
+                continue
+            if current is not None:
+                current.is_active = False
+                await session.flush()
+                counts["replaced"] += 1
+            else:
+                counts["inserted"] += 1
+            session.add(cls(user_id=user_id, source=source, **row))
+        for external_id, current in existing.items():
+            if external_id not in incoming and window is not None and window[0] <= current.recorded_at < window[1]:
+                current.is_active = False
+                counts["removed"] += 1
+        await session.flush()
+        return counts
 
     @classmethod
     async def replace_for_user(
@@ -107,6 +164,14 @@ class BodyMetric(BaseModel):
             await session.flush()
             await session.refresh(original)
         return replacement
+
+
+def _same(stored: Any, incoming: Any) -> bool:
+    if stored is None or incoming is None:
+        return stored is None and incoming is None
+    if isinstance(stored, datetime):
+        return stored == incoming
+    return Decimal(str(stored)) == Decimal(str(incoming))
 
 
 guard_immutable(BodyMetric)

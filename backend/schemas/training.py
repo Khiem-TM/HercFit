@@ -47,6 +47,8 @@ class TrainingProfileRead(ReadSchema):
     profile: TrainingProfile
     configured: bool
     hr_zones: dict[str, list[int]] | None
+    # Heart-rate reserve zones use the declared resting HR, else the device's 7-day median.
+    resting_hr_source: Literal["PROFILE", "DEVICE"] | None = None
     pace_zones: dict[str, list[int]] | None
     threshold_source: Literal["PROFILE", "RECENT_RACE"] | None
     race_predictions_seconds: dict[str, int] | None

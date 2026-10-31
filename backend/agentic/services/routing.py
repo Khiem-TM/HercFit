@@ -24,7 +24,8 @@ class FastReadPlan(BaseModel):
     template_version: int = TEMPLATE_VERSION
     registry_fingerprint: str
     tool: str = 'get_progress'
-    arguments: dict[str, str]
+    # Normalized tool arguments: dates and timezones are strings, counts (days) integers.
+    arguments: dict[str, str | int]
 
 
 def registry_fingerprint():
@@ -41,8 +42,8 @@ def latest_request(state):
 
 
 def fast_reads_enabled(settings):
-    # The progress template parses the request itself; it does not read graph data.
-    return getattr(settings, 'FAST_READ_ENABLED', False) or getattr(settings, 'KG_MODE', 'off') == 'optimized'
+    # The templates parse the request themselves; they do not read graph data.
+    return bool(getattr(settings, 'FAST_READ_ENABLED', False))
 
 
 def _progress_arguments(match, today):
@@ -74,6 +75,16 @@ class FastTemplate:
     pattern: re.Pattern
     instruction: str
     arguments: Callable = _no_arguments
+    # Router label journaled for the turn (knowledge_graph.intents.MODEL_INTENTS).
+    intent: str = 'READ'
+
+
+_RECENT = ('hôm nay', 'tuần này', 'đêm qua', 'tối qua', 'gần đây')
+
+
+def _health_arguments(match, _today):
+    """A week for "today/this week/last night", otherwise four weeks against the baseline."""
+    return {'days': 7 if any(word in match.group(0) for word in _RECENT) else 28, 'timezone': TIMEZONE}
 
 
 _LEAD = r'(?:xem |cho tôi xem |cho mình xem |kiểm tra |tra )?'
@@ -98,6 +109,23 @@ FAST_TEMPLATES = (
                  'Trả lời mục tiêu năng lượng và macro, phần calo còn lại hôm nay theo kết quả backend đã xác minh; '
                  'nêu ngắn gọn cách tính (BMR, TDEE) và cảnh báo nếu có. Thiếu dữ liệu hồ sơ thì nêu trường còn thiếu.',
                  _timezone_argument),
+)
+_WHEN = r'(?:(?:hôm nay|tuần này|đêm qua|tối qua|gần đây) )?'
+_WHO = r'(?:(?:tôi|mình|em) )?'
+_TAIL = r'(?: hôm nay| tuần này| đêm qua| tối qua| gần đây)?(?: thế nào| ra sao| bao nhiêu)?[.!?]?'
+_HEALTH = 'Trả lời theo phân tích dữ liệu thiết bị đã xác minh; nêu khoảng ngày và nguồn. Chưa kết nối, chưa cho phép ' \
+          'hoặc chưa có dữ liệu thì hướng dẫn vào Cài đặt → Kết nối. Không chẩn đoán.'
+FAST_TEMPLATES += (
+    FastTemplate('health.activity', 1, 'health', 'get_health_overview',
+                 re.compile(_LEAD + _WHEN + _WHO + r'(?:(?:đã )?đi (?:được )?(?:bao nhiêu|mấy) bước|(?:số bước|bước chân|mức vận động)'
+                            + _OWNER + ')' + _TAIL),
+                 _HEALTH + ' Tập trung vào bước chân, phút vận động so với WHO 150 phút/tuần.', _health_arguments, 'ACTIVITY_REVIEW'),
+    FastTemplate('health.sleep', 1, 'health', 'get_health_overview',
+                 re.compile(_LEAD + _WHEN + _WHO + r'(?:ngủ (?:được )?(?:bao lâu|bao nhiêu tiếng|thế nào|ra sao)|giấc ngủ' + _OWNER + ')' + _TAIL),
+                 _HEALTH + ' Tập trung vào thời lượng ngủ so với khuyến nghị, giai đoạn ngủ và độ đều giờ ngủ.', _health_arguments, 'SLEEP_REVIEW'),
+    FastTemplate('health.recovery', 1, 'health', 'get_health_overview',
+                 re.compile(_LEAD + _WHEN + r'(?:nhịp tim(?: nghỉ)?|hrv|mức phục hồi)' + _OWNER + _TAIL),
+                 _HEALTH + ' Tập trung vào nhịp tim nghỉ và HRV so với nền 28 ngày.', _health_arguments, 'RECOVERY_REVIEW'),
 )
 TEMPLATES_BY_ID = {template.id: template for template in FAST_TEMPLATES}
 
@@ -148,7 +176,7 @@ def fast_route(state, now=None):
         if not template.pattern.fullmatch(text):
             continue
         from agentic.agents.state import RouteDecision
-        decision = RouteDecision(intent='READ', action='tool', next_agent='tool', domain=template.domain,
+        decision = RouteDecision(intent=template.intent, action='tool', next_agent='tool', domain=template.domain,
                                  read_only=True, instruction=template.instruction).model_dump()
         plan = make_fast_read_plan({**state, 'decision': decision}, now=now)
         return (decision, plan) if plan else None
