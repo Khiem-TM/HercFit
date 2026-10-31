@@ -388,18 +388,31 @@ async def running_summary(session, user_id, options, profile: TrainingProfile | 
     }
 
 
+async def recent_runs(session, user_id, start: date, end: date, zone: str, *, limit: int = 1) -> list[dict[str, Any]]:
+    """Newest runs first: date, distance, duration, pace and workout type."""
+    rows = [r for r in await _rows(session, user_id, start, end, zone) if r.is_run]
+    rows.sort(key=lambda r: (r.day, str(r.training_id)), reverse=True)
+    return [{"date": r.day.isoformat(), "distance_km": round(float(r.distance_meters) / 1000, 2) if r.distance_meters else None,
+             "duration_min": round(float(r.duration_seconds) / 60, 1) if r.duration_seconds else None,
+             "pace_s_per_km": round(float(r.duration_seconds * 1000 / r.distance_meters)) if r.distance_meters and r.duration_seconds else None,
+             "workout_type": r.performance.get("workout_type", WorkoutType.EASY.value)} for r in rows[:limit]]
+
+
 # ----------------------------------------------------------------- profile
 
-def profile_read(personal_info: dict | None) -> dict[str, Any]:
+def profile_read(personal_info: dict | None, measured_resting_hr: int | None = None) -> dict[str, Any]:
+    """measured_resting_hr: device 7-day median, used only when none was declared."""
     raw = (personal_info or {}).get("training")
     profile = TrainingProfile.model_validate(raw) if isinstance(raw, dict) else TrainingProfile()
     threshold, source = profile.threshold_pace_s_per_km, "PROFILE" if profile.threshold_pace_s_per_km else None
     if threshold is None and profile.recent_race:
         threshold, source = threshold_from_race(profile.recent_race.distance_meters, profile.recent_race.time_seconds), "RECENT_RACE"
     race = profile.recent_race
+    resting = profile.resting_hr or measured_resting_hr
     return {
         "profile": profile, "configured": isinstance(raw, dict),
-        "hr_zones": hr_zones(profile.max_hr, profile.resting_hr) if profile.max_hr else None,
+        "hr_zones": hr_zones(profile.max_hr, resting) if profile.max_hr else None,
+        "resting_hr_source": "PROFILE" if profile.resting_hr else "DEVICE" if measured_resting_hr else None,
         "pace_zones": pace_zones(threshold) if threshold else None, "threshold_source": source,
         "race_predictions_seconds": {label: round(riegel(race.time_seconds, race.distance_meters, d))
                                      for label, d in RACE_DISTANCES.items() if label != "1K"} if race else None,

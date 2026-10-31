@@ -19,6 +19,9 @@ from routers.preview_router import router as preview_router
 from routers.media_router import router as media_router
 from routers.nutrition_router import router as nutrition_router
 from routers.privacy_router import router as privacy_router
+from routers.integration_router import router as integration_router
+from routers.health_router import router as health_router
+from routers.assistant_router import router as assistant_router
 from schemas.auth_session import LogoutResponse
 
 api_router = APIRouter()
@@ -31,7 +34,7 @@ api_router.include_router(goal_router)
 api_router.include_router(media_router)
 for domain_router in (preview_router, food_router, exercise_router, plan_router, meal_plan_router,
                       training_plan_router, meal_router, training_router, progress_router,
-                      training_analytics_router, nutrition_router):
+                      training_analytics_router, nutrition_router, integration_router, health_router, assistant_router):
     api_router.include_router(domain_router)
 
 # Alias routes: /api/login and /api/logout

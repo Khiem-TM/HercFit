@@ -12,6 +12,9 @@ from models.exercises import Exercise
 from models.plans import Plan, MealPlan, MealPlanEntry, MealPlanItem, TrainingPlan, TrainingPlanEntry, TrainingPlanItem
 from models.journals import Meal, MealItem, Training, TrainingItem
 from models.media import ImageCleanup
+from models.health import (
+    DailyHealthSummary, DeviceWorkout, HealthConnection, HealthSample, HealthSyncRun, SleepSession,
+)
 from core.graph_outbox import register_metadata_hooks
 
 register_metadata_hooks(Base.metadata)
@@ -32,4 +35,5 @@ __all__ = [
     "Exercise", "Plan", "MealPlan", "MealPlanEntry", "MealPlanItem",
     "TrainingPlan", "TrainingPlanEntry", "TrainingPlanItem",
     "Meal", "MealItem", "Training", "TrainingItem",
+    "HealthConnection", "HealthSyncRun", "DailyHealthSummary", "SleepSession", "DeviceWorkout", "HealthSample",
 ]

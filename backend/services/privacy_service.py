@@ -2,7 +2,7 @@
 
 Erasure deletes the users row; foreign keys cascade to every owned table and the
 knowledge-graph capture triggers emit delete events, so the Neo4j projection is
-cleaned by the worker. Images attached to the user's records are queued for
+cleaned by the worker. A Google Health grant is revoked at Google first. Images attached to the user's records are queued for
 Cloudinary removal first. Conversation data lives in the agent service, which
 exposes its own purge endpoint (DELETE /api/v1/chat/me).
 """
@@ -42,6 +42,16 @@ EXPORT_QUERIES: tuple[tuple[str, str], ...] = (
                             "ORDER BY e.scheduled_date, i.position"),
     ("custom_foods", "SELECT * FROM foods WHERE owner_user_id = :uid ORDER BY created_at"),
     ("custom_exercises", "SELECT * FROM exercises WHERE owner_user_id = :uid ORDER BY created_at"),
+    # Provider credentials are never exported; only the grant's metadata.
+    ("health_connections", "SELECT provider, account_email, granted_scopes, status, share_with_assistant, consented_at, "
+                           "timezone, provider_profile, last_sync_at, last_success_at, created_at "
+                           "FROM health_connections WHERE user_id = :uid"),
+    ("health_sync_runs", "SELECT trigger, status, window_start, window_end, counts, error_code, created_at, finished_at "
+                         "FROM health_sync_runs WHERE user_id = :uid ORDER BY created_at"),
+    ("daily_health_summaries", "SELECT * FROM daily_health_summaries WHERE user_id = :uid ORDER BY local_date"),
+    ("sleep_sessions", "SELECT * FROM sleep_sessions WHERE user_id = :uid ORDER BY start_at"),
+    ("device_workouts", "SELECT * FROM device_workouts WHERE user_id = :uid ORDER BY started_at"),
+    ("health_samples", "SELECT * FROM health_samples WHERE user_id = :uid ORDER BY measured_at"),
 )
 IMAGE_TABLES = (("meals", "user_id"), ("trainings", "user_id"), ("foods", "owner_user_id"), ("exercises", "owner_user_id"))
 
@@ -60,6 +70,13 @@ async def export_user_data(session, user_id) -> dict:
 
 async def erase_user(session, user_id) -> dict:
     """Hard-delete the account in the caller's transaction; returns counts for the receipt."""
+    from models.health import HealthConnection
+    from services.google_health.connection import revoke_connection
+
+    # Revoke the Google Health grant first (best effort); the row itself cascades.
+    connection = await HealthConnection.for_user(session, user_id)
+    if connection is not None:
+        await revoke_connection(connection)
     images = 0
     if settings.CLOUDINARY_CLOUD_NAME:
         for table, owner in IMAGE_TABLES:
@@ -69,7 +86,8 @@ async def erase_user(session, user_id) -> dict:
             ), {"uid": user_id, "cloud": settings.CLOUDINARY_CLOUD_NAME})
             images += result.rowcount or 0
     counts = {}
-    for name in ("meals", "trainings", "body_metrics", "goals"):
+    for name in ("meals", "trainings", "body_metrics", "goals", "daily_health_summaries", "sleep_sessions",
+                 "device_workouts", "health_samples"):
         counts[name] = (await session.execute(text(f"SELECT count(*) FROM {name} WHERE user_id = :uid"),
                                               {"uid": user_id})).scalar_one()
     deleted = (await session.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})).rowcount

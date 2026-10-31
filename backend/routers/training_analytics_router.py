@@ -15,6 +15,7 @@ from schemas.training import (
 )
 from schemas.plans import TrainingPlanCreate
 from services import training_analytics as analytics
+from services.health_service import measured_resting_hr
 from services.training_library import RUN_WORKOUTS, build_schedule, list_templates
 
 router = APIRouter(prefix="/training", tags=["training-analytics"])
@@ -27,14 +28,16 @@ def _range(start_date: date, end_date: date, timezone: str) -> AnalyticsQuery:
 
 @router.get("/profile", response_model=TrainingProfileRead)
 async def get_training_profile(service: UserContextDep):
-    return analytics.profile_read(service.user.personal_info)
+    measured = await measured_resting_hr(service.session, service.user_id, analytics.today_in(TZ))
+    return analytics.profile_read(service.user.personal_info, measured)
 
 
 @router.put("/profile", response_model=TrainingProfileRead)
 @transaction
 async def put_training_profile(payload: TrainingProfile, service: UserDataServiceDep):
     user = await service.merge_personal_info({"training": payload.model_dump(mode="json")})
-    return analytics.profile_read(user.personal_info)
+    measured = await measured_resting_hr(service.session, service.user_id, analytics.today_in(TZ))
+    return analytics.profile_read(user.personal_info, measured)
 
 
 @router.get("/summary", response_model=TrainingSummaryRead)

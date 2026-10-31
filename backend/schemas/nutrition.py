@@ -67,3 +67,7 @@ class NutritionTargetsRead(BaseModel):
     weight_trend: list[WeightTrendPoint]
     warnings: list[str]
     method: dict[str, str]
+    # "observed": the activity level came from device steps because none was declared.
+    activity_level_source: Literal["declared", "observed"] | None = None
+    # Average device-measured total expenditure over recent complete worn days (an estimate).
+    device_expenditure_kcal: float | None = None

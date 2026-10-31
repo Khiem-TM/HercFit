@@ -74,6 +74,18 @@ class Settings(BaseSettings):
     ]
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Google Health API (successor of the Google Fit REST API). Reuses the login
+    # OAuth client; the callback is served by the backend through the frontend origin.
+    GOOGLE_HEALTH_ENABLED: bool = True
+    GOOGLE_HEALTH_REDIRECT_URI: str | None = None
+    GOOGLE_HEALTH_SYNC_LOOP: bool = True
+    GOOGLE_HEALTH_SYNC_INTERVAL_MINUTES: int = Field(default=360, ge=15, le=7 * 24 * 60)
+    GOOGLE_HEALTH_BACKFILL_DAYS: int = Field(default=30, ge=1, le=90)
+    # Fernet keys (urlsafe base64, 32 bytes) for provider tokens at rest. The first
+    # key encrypts; previous keys still decrypt during a rotation.
+    TOKEN_ENCRYPTION_KEY: SecretStr | None = None
+    TOKEN_ENCRYPTION_PREVIOUS_KEYS: list[SecretStr] = []
+
     # Optional image storage; secrets are used only by the backend.
     CLOUDINARY_CLOUD_NAME: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]+$")
     CLOUDINARY_API_KEY: SecretStr | None = None
@@ -120,6 +132,16 @@ class Settings(BaseSettings):
         if not self.GOOGLE_OAUTH_CLIENT_SECRET:
             raise ValueError("GOOGLE_OAUTH_CLIENT_SECRET is not configured in settings or .env")
         return self.GOOGLE_OAUTH_CLIENT_SECRET.get_secret_value()
+
+    @property
+    def google_health_redirect_uri(self) -> str:
+        return self.GOOGLE_HEALTH_REDIRECT_URI or (
+            f"{self.FRONTEND_URL.rstrip('/')}/api/integrations/google-health/callback")
+
+    @property
+    def google_health_configured(self) -> bool:
+        return bool(self.GOOGLE_HEALTH_ENABLED and self.GOOGLE_OAUTH_CLIENT_ID
+                    and self.GOOGLE_OAUTH_CLIENT_SECRET and self.TOKEN_ENCRYPTION_KEY)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -70,8 +70,10 @@ async def summarize_user(session, *, user_id, options: DateRangeQuery) -> Progre
 
 
 async def _summarize_days(session, user_id, options, plan=None):
+    from services.health_service import daily_expenditure
     from services.training_analytics import daily_loads
 
+    expenditure = await daily_expenditure(session, user_id, options.start_date, options.end_date)
     meals = await _daily_totals(session, Meal, user_id, options, NUTRIENT_FIELDS)
     trainings = await _daily_totals(session, Training, user_id, options, ("energy_kcal",))
     loads, _missing = await daily_loads(session, user_id, options.start_date, options.end_date, options.timezone)
@@ -84,6 +86,7 @@ async def _summarize_days(session, user_id, options, plan=None):
             calories_in=_metric(meal, "energy_kcal", getattr(plan, "calories_in_kcal", None)),
             exercise_calories=_metric(training, "energy_kcal", getattr(plan, "exercise_calories_kcal", None)),
             calories_out_target=getattr(plan, "calories_out_kcal", None),
+            calories_out_actual=expenditure.get(day),
             training_load=loads.get(day, Decimal(0)),
             **{field: _metric(meal, field, getattr(plan, field, None)) for field in NUTRIENT_FIELDS if field != "energy_kcal"},
         ))
