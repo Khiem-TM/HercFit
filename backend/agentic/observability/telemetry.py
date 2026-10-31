@@ -27,6 +27,20 @@ def record_jev_result(result):
              jev_probabilities={k: v['noul'] for k, v in result.get('answers', {}).items() if 'noul' in v})
 
 
+def merge_retrieval(previous, current):
+    """One knowledge-graph summary per run: the latest status and domains, every attempt counted.
+
+    `status` and `duration_ms` keep their single-attempt meaning for the latest read and the
+    total time; `statuses` lists each attempt in order (bounded)."""
+    if not previous:
+        return {**current, 'attempts': current.get('attempts', 1),
+                'statuses': list(current.get('statuses') or [current.get('status')])}
+    return {**previous, **current, 'attempts': previous.get('attempts', 1) + current.get('attempts', 1),
+            'duration_ms': round(previous.get('duration_ms', 0) + current.get('duration_ms', 0), 3),
+            'statuses': [*(previous.get('statuses') or [previous.get('status')]),
+                         *(current.get('statuses') or [current.get('status')])][-6:]}
+
+
 def merge_jev_metrics(telemetry, events):
     """Keep shadow spend distinct and never charge cached usage twice."""
     for event in events:

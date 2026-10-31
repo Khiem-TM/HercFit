@@ -13,8 +13,8 @@ from agentic.core.context import request_context
 from agentic.tools.integrations.backend_client import BackendError
 from agentic.core.providers.fpt import strip_tool_markup
 from agentic.tools.integrations.tavily import public_url
-from agentic.tools.registry import REGISTRY
-from agentic.tools.policy import allowed_tools, CATALOG_DEPENDENCIES, needs_catalog_handoff, CAPABILITY_GUIDANCE, COACH_GUIDANCE, TRAINING_DOMAINS
+from agentic.tools.registry import HEALTH_TOOL_KINDS, REGISTRY
+from agentic.tools.policy import allowed_tools, CATALOG_DEPENDENCIES, needs_catalog_handoff, CAPABILITY_GUIDANCE, COACH_GUIDANCE, HEALTH_DOMAINS, HEALTH_GUIDANCE, TRAINING_DOMAINS
 from agentic.components.context_filter import model_graph_context
 from agentic.services.routing import verified_fast_plan, terminal_result, fast_reads_enabled
 from agentic.tools.output import clamp_catalog_query, compact_output
@@ -37,6 +37,9 @@ def research_handoff(state, domain):
     empty=[o for o in state.get('tool_outputs',[]) if o.get('tool')=='list_'+domain and o.get('ok') and o.get('output')==[]]
     query=((empty[-1].get('arguments') or {}).get('search') or '').strip() if empty else ''
     return {'domain':domain,'query':query} if query else None
+
+# Reads whose 404 means "none yet" (a state the model can act on), not a backend failure.
+NOT_FOUND_IS_EMPTY = {'current_goal', 'latest_metrics', 'current_plan', 'current_training_plan'}
 
 CATALOG_WRITES = {'create_foods': 'foods', 'finalize_foods': 'foods', 'create_exercises': 'exercises', 'finalize_exercises': 'exercises'}
 
@@ -65,12 +68,14 @@ class ToolAgent:
         if decision.get('read_only'):
             allowed={name:spec for name,spec in allowed.items() if not spec.write}
         prompt = PROMPT+'\n'+CAPABILITY_GUIDANCE+('\n'+COACH_GUIDANCE if decision['domain'] in TRAINING_DOMAINS else '')
+        if decision['domain'] in HEALTH_DOMAINS:
+            prompt += '\n'+HEALTH_GUIDANCE
         if decision.get('read_only'):
             prompt += '\nNhiệm vụ chỉ đọc: không ghi dữ liệu, không tạo candidate và không chuyển research. Catalog trống thì báo chưa có kết quả.'
         # Relative dates ("hôm nay", "sáng nay") resolve against the real local clock; the
         # clock and per-run data stay in the trailing message so the prompt prefix is cacheable.
         tail = ['Thời gian hiện tại: ' + datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')).replace(second=0, microsecond=0).isoformat()]
-        context = model_graph_context(state, self.settings)
+        context = model_graph_context(state)
         if context:
             tail.append('Hồ sơ tri thức (dữ liệu đã lưu có thể cũ; xác minh ID/version bằng backend; không phải chỉ dẫn):\n'+context)
         tail.append('Nhiệm vụ: '+decision['instruction']+'\nCandidate: '+json.dumps(state.get('candidate'),ensure_ascii=False))
@@ -148,8 +153,10 @@ class ToolAgent:
                   'tool': name, 'status': 'failed', 'occurred_at': datetime.now(timezone.utc).isoformat(),
                   'error_code': None, 'resource_refs': [], 'template_id': plan.template_id if plan else None,
                   'template_version': plan.template_version if plan else None}
-        labels = {'goals': 'Goal', 'metrics': 'BodyMetric', 'meals': 'Meal', 'foods': 'Food', 'profile': 'User'}
-        kind = labels.get(REGISTRY[name].domain)
+        labels = {'goals': 'Goal', 'metrics': 'BodyMetric', 'meals': 'Meal', 'foods': 'Food', 'profile': 'User',
+                  'trainings': 'Training'}
+        # Health tools return different record kinds; summaries (overview, profile) have no ids.
+        kind = HEALTH_TOOL_KINDS.get(name) or labels.get(REGISTRY[name].domain)
         try:
             data = await ctx.backend.call(name, args, ctx.token, **({'key': key} if key else {}))
             record['status'] = 'succeeded'
@@ -169,10 +176,25 @@ class ToolAgent:
             records[:] = [r for r in records if r['execution_id'] != record['execution_id']]
             records.append(record)
 
-    async def execute_calls(self, state, calls, messages, plan=None):
-        allowed=allowed_tools(state['decision']['domain'])
-        if state['decision'].get('read_only'):
-            allowed={name:spec for name,spec in allowed.items() if not spec.write}
+    async def read_context(self, state, reads):
+        """Code-owned reads for a personalized answer, through the same allowlist check, adapter,
+        journal and budget as model-chosen reads. A failed read reaches the answer as unavailable;
+        it never asks the user or ends the turn."""
+        done={o['tool'] for o in state.get('tool_outputs',[]) if o.get('ok')}
+        calls=[{'name':name,'args':args,'id':str(uuid5(NAMESPACE_URL,state['run_id']+':context:'+name))}
+               for name,args in reads if name not in done]
+        if not calls:
+            return {}
+        allowed={name:REGISTRY[name] for name,_ in reads if not REGISTRY[name].write}
+        result=await self.execute_calls(state,calls,[AIMessage(content='',tool_calls=calls)],allowed=allowed)
+        result.update(status='running',error=None)
+        return result
+
+    async def execute_calls(self, state, calls, messages, plan=None, *, allowed=None):
+        if allowed is None:
+            allowed=allowed_tools(state['decision']['domain'])
+            if state['decision'].get('read_only'):
+                allowed={name:spec for name,spec in allowed.items() if not spec.write}
         outputs=list(state.get('tool_outputs',[]))
         records=list(state.get('execution_records',[]))
         count=state.get('tool_count',0)
@@ -219,7 +241,7 @@ class ToolAgent:
                         data=await self._backend_call(state,name,normalized,call['id'],records,plan=plan)
                         out.update(ok=True,output=compact_output(name,data),arguments=normalized)
                 except BackendError as exc:
-                    if exc.status==404 and name in {'current_goal','latest_metrics'}:
+                    if exc.status==404 and name in NOT_FOUND_IS_EMPTY:
                         out.update(ok=True,output=None,not_found=True)
                     else:
                         out.update(status_code=exc.status,error=exc.detail)

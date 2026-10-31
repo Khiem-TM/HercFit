@@ -52,8 +52,10 @@ def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=No
                 await memory.health()
             store, saver = await resources.enter_async_context((persistence_factory or persistence)(settings))
             app.state.backend = backend
+            # The graph is always composed; only an offline evaluation baseline injects a factory returning None.
             graph_context = (graph_context_factory or GraphContextService)(settings, store)
-            resources.push_async_callback(graph_context.close)
+            if graph_context is not None:
+                resources.push_async_callback(graph_context.close)
             app.state.graph_context = graph_context
             jev_service = JevService(jev, store, settings) if jev is not None else None
             app.state.runtime = Runtime(
@@ -63,7 +65,8 @@ def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=No
             tasks = []
             try:
                 tasks.append(asyncio.create_task(app.state.runtime.reconcile_forever()))
-                tasks.append(asyncio.create_task(graph_context.warm_up()))
+                if graph_context is not None:
+                    tasks.append(asyncio.create_task(graph_context.warm_up()))
                 yield
             finally:
                 for task in tasks:
@@ -83,7 +86,7 @@ def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=No
             await app.state.runtime.store.ready()
             r=await app.state.backend.http.get('/health/ready')
             r.raise_for_status()
-            result={'status':'ready','knowledge_graph_mode':settings.KG_MODE,'observability':observer().status()}
+            result={'status':'ready','observability':observer().status()}
             memory=getattr(app.state.runtime,'memory',None)
             if memory is not None:
                 # Reported, never required: chat works without Redis.

@@ -28,6 +28,9 @@ class AgentSettings(BaseSettings):
     # Per-role timeouts: routing/tool/clarify calls return small JSON and should
     # fail over quickly; a hung call previously cost 30 s twice (≈60 s tails).
     ROUTING_TIMEOUT_SECONDS: float = Field(default=12, gt=0)
+    # Tool calls write whole payloads (a meal's items, a food's nutrition): p95 13.6 s over 500 stored tool steps,
+    # so 12 s failed ~5% of them, three attempts at a time (run 195ff084 timed out after a confirmed write).
+    TOOL_TIMEOUT_SECONDS: float = Field(default=30, gt=0)
     RESPONSE_TIMEOUT_SECONDS: float = Field(default=30, gt=0)
     RESEARCH_TIMEOUT_SECONDS: float = Field(default=45, gt=0)
     MODEL_MAX_RETRIES: int = Field(default=1, ge=0, le=3)
@@ -67,7 +70,8 @@ class AgentSettings(BaseSettings):
     JEV_OUTPUT_PRICE_PER_MILLION: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     RAG_ENABLED: bool = False
     LANGSMITH_ENABLED: bool = False
-    KG_MODE: Literal['off', 'shadow', 'advisory', 'optimized'] = 'off'
+    # The knowledge graph is always part of the agent context; an unreachable Neo4j
+    # only degrades a turn to the backend tools (KG_RETRIEVAL_TIMEOUT_MS, fail-open).
     # Strict full-message templates for common reads (progress, current goal, latest
     # measurement, profile, calorie targets): one answer call instead of four.
     FAST_READ_ENABLED: bool = True

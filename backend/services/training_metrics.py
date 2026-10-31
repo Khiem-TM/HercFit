@@ -28,6 +28,11 @@ DEFAULT_REST = {SetType.WARMUP: 60.0}
 DEFAULT_WORK_REST = 90.0
 STRENGTH_MET = 3.5  # Compendium: resistance training, multiple exercises, 8-15 reps, varied resistance.
 SPORT_MET = {ActivityIntensity.LIGHT: 4.0, ActivityIntensity.MODERATE: 6.0, ActivityIntensity.VIGOROUS: 8.0}
+# A gym session logged by intensity only (catalog sport "resistance_training"), 2024 Adult Compendium:
+# 02054 multiple exercises, 8-15 reps (3.5); 02061 gym/weight training, general (5.0); 02050 power lifting or
+# body building, vigorous (6.0).
+RESISTANCE_MET = {ActivityIntensity.LIGHT: 3.5, ActivityIntensity.MODERATE: 5.0, ActivityIntensity.VIGOROUS: 6.0}
+INTENSITY_MET = {"resistance_training": RESISTANCE_MET}
 
 
 def _round(value: float | None, digits: int = 3) -> float | None:
@@ -170,7 +175,8 @@ def estimate_kcal(performance, configuration: dict[str, Any], weight_kg: float |
         met = configuration.get("default_met")
         return met_kcal(met, seconds, weight, "MET_ENDURANCE") if met else None
     if performance.kind == ExerciseKind.SPORT:
-        met = performance.met or configuration.get("default_met") or SPORT_MET[performance.intensity]
+        table = INTENSITY_MET.get(configuration.get("sport"), SPORT_MET)
+        met = performance.met or configuration.get("default_met") or table[performance.intensity]
         return met_kcal(met, performance.duration_seconds, weight, "MET_SPORT", intensity=performance.intensity.value)
     seconds, basis = strength_duration(performance)
     return met_kcal(configuration.get("default_met") or STRENGTH_MET, seconds, weight, "MET_STRENGTH", duration_basis=basis)

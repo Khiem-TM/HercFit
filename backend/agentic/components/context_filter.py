@@ -2,9 +2,7 @@
 import json
 from agentic.knowledge_graph.service import render_lines
 
-def model_graph_context(state, settings):
-    if getattr(settings, 'KG_MODE', 'off') not in {'advisory', 'optimized'}:
-        return None
+def model_graph_context(state):
     if state.get('graph_context_run_id') != state.get('run_id') or not state.get('graph_context'):
         return None
     # Readable lines only: no IDs, versions, static capabilities or raw snapshots.

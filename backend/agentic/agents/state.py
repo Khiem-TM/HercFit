@@ -5,7 +5,7 @@ from pydantic.json_schema import SkipJsonSchema # Loại bỏ trường khỏi J
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 
-Domain = Literal['profile', 'metrics', 'goals', 'meals', 'trainings', 'foods', 'exercises', 'progress', 'training_plans', 'coaching']
+Domain = Literal['profile', 'metrics', 'goals', 'meals', 'trainings', 'foods', 'exercises', 'progress', 'training_plans', 'coaching', 'health']
 
 # Điều phối response model trả về --> Hỗ trợ orschestration
 class RouteDecision(BaseModel):
@@ -20,6 +20,9 @@ class RouteDecision(BaseModel):
     explicit_web_request: bool = False
     objectives: list[str] = Field(default_factory=list, max_length=3)
     research_queries: list[str] = Field(default_factory=list, max_length=3)
+    personalize: bool = Field(default=False, description="Advice or analysis about this user's own body/training/nutrition: read their stored data first")
+    topic: Literal['running', 'strength', 'training', 'nutrition', 'body', 'recovery', 'general'] | None = Field(
+        default=None, description='Subject of a personalized request; selects which stored analytics are read')
     create_distinct: SkipJsonSchema[bool] = False
     read_only: SkipJsonSchema[bool] = False
 
@@ -48,6 +51,8 @@ class AgentState(TypedDict, total=False):
     catalog_choice: dict[str, Any] | None
     catalog_draft: dict[str, Any] | None
     prepared_reply: str | None
+    # The previous turn asked through a form, so this message answers it rather than starting a new request.
+    replying_to_form: bool
     illustrations: list[dict[str, Any]]
     approved: bool
     status: str
@@ -68,3 +73,10 @@ class AgentState(TypedDict, total=False):
     execution_records: list[dict[str, Any]]
     session_memory: dict[str, Any] | None
     safety: dict[str, Any] | None
+    # Personal context (code-owned): the user's context card for this run, whether the
+    # topic's deep reads ran, research evidence for a personalized answer, and the routing trace.
+    user_context: dict[str, Any] | None
+    user_context_run_id: str | None
+    personal_reads_done: bool
+    research_evidence: dict[str, Any] | None
+    route_trace: list[dict[str, Any]]

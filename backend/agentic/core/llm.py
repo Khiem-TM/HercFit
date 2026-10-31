@@ -3,7 +3,7 @@ from agentic.core.app.config import AgentSettings
 from agentic.core.providers.fpt import FPTChatOpenAI
 
 ROLE_TIMEOUTS = {
-    'decision': 'ROUTING_TIMEOUT_SECONDS', 'tool': 'ROUTING_TIMEOUT_SECONDS', 'clarify': 'ROUTING_TIMEOUT_SECONDS',
+    'decision': 'ROUTING_TIMEOUT_SECONDS', 'tool': 'TOOL_TIMEOUT_SECONDS', 'clarify': 'ROUTING_TIMEOUT_SECONDS',
     'summary': 'ROUTING_TIMEOUT_SECONDS', 'response': 'RESPONSE_TIMEOUT_SECONDS', 'research': 'RESEARCH_TIMEOUT_SECONDS',
 }
 

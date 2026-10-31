@@ -20,7 +20,8 @@ class BackendClient:
 
     @observed('backend.request', capture=('method', 'path', 'params', 'body'), output=False)
     async def request(self, method, path, token, *, params=None, body=None, key=None):
-        headers = {'Authorization': 'Bearer ' + token}
+        # Lets the backend honour the user's consent for assistant access to device data.
+        headers = {'Authorization': 'Bearer ' + token, 'X-HercFit-Client': 'agent'}
         if key:
             headers['Idempotency-Key'] = key # Trống trùng lặp
         attempts = 3 if method == 'GET' or key else 1
