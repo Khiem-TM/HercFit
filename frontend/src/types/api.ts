@@ -25,12 +25,199 @@ export interface UserUpdatePayload {
 export interface BodyMetricRead {
   id: string
   user_id: string
-  weight_kg: number
+  /** Device samples (source GOOGLE_HEALTH) may carry only height or body fat. */
+  weight_kg: number | null
   height_cm: number | null
   body_fat_pct: number | null
   muscle_mass_kg: number | null
   recorded_at: string
   additional_metrics: Record<string, unknown>
+  source?: 'MANUAL' | 'GOOGLE_HEALTH'
+}
+
+export type HealthConnectionStatus = 'ACTIVE' | 'NEEDS_REAUTH' | 'REVOKED' | 'ERROR'
+
+export interface HealthSyncRun {
+  id: string
+  trigger: 'INITIAL' | 'SCHEDULED' | 'MANUAL'
+  status: 'RUNNING' | 'SUCCEEDED' | 'PARTIAL' | 'FAILED'
+  created_at: string
+  finished_at: string | null
+  window_start: string | null
+  window_end: string | null
+  counts: Record<string, unknown>
+  error_code: string | null
+}
+
+/** Decimal columns are serialized as JSON strings to keep their precision. */
+export type Numeric = number | string | null
+
+export type ValueSource = 'DECLARED' | 'MEASURED' | 'PROVIDER' | 'DERIVED'
+
+export interface ProfileValue {
+  value: number | string | null
+  source: ValueSource
+  observed_at: string | null
+  label: string | null
+}
+
+/** GET /api/health/profile: declared, measured and derived values with their source. */
+export interface HealthProfile {
+  as_of: string
+  timezone: string
+  connected: boolean
+  age: ProfileValue | null
+  sex: ProfileValue | null
+  height_cm: ProfileValue | null
+  weight_kg: ProfileValue | null
+  body_fat_pct: ProfileValue | null
+  bmi: ProfileValue | null
+  resting_hr_bpm: ProfileValue | null
+  max_hr_bpm: ProfileValue | null
+  hrv_ms: ProfileValue | null
+  vo2_max: ProfileValue | null
+  activity_level: ProfileValue | null
+  observed_activity_level: ProfileValue | null
+  steps_avg_7d: number | null
+  steps_avg_28d: number | null
+  active_minutes_7d: number | null
+  sleep_avg_minutes_7d: number | null
+  worn_days_28d: number
+  missing_fields: string[]
+  conflicts: string[]
+}
+
+export interface DailyHealth {
+  id: string
+  local_date: string
+  source: string
+  timezone: string
+  steps: number | null
+  distance_m: Numeric
+  floors: number | null
+  active_minutes: number | null
+  active_minutes_by_level: Record<string, number>
+  active_zone_minutes: number | null
+  total_kcal: Numeric
+  active_kcal: Numeric
+  resting_hr_bpm: number | null
+  hr_avg_bpm: Numeric
+  hr_min_bpm: number | null
+  hr_max_bpm: number | null
+  hrv_ms: Numeric
+  spo2_avg_pct: Numeric
+  respiratory_rate: Numeric
+  vo2_max: Numeric
+  hydration_ml: Numeric
+  sleep_minutes: number | null
+  skin_temp_delta_c: Numeric
+}
+
+export interface SleepSession {
+  id: string
+  start_at: string
+  end_at: string
+  local_date: string
+  sleep_type: string | null
+  is_main: boolean
+  is_nap: boolean
+  minutes_asleep: number | null
+  minutes_awake: number | null
+  minutes_in_period: number | null
+  minutes_to_fall_asleep: number | null
+  deep_minutes: number | null
+  light_minutes: number | null
+  rem_minutes: number | null
+  awake_minutes: number | null
+  efficiency_pct: Numeric
+  data_source: Record<string, string>
+}
+
+export interface DeviceWorkout {
+  id: string
+  started_at: string
+  ended_at: string
+  local_date: string
+  exercise_type: string | null
+  display_name: string | null
+  active_seconds: number | null
+  energy_kcal: Numeric
+  distance_m: Numeric
+  steps: number | null
+  avg_hr_bpm: number | null
+  active_zone_minutes: number | null
+  hr_zone_seconds: Record<string, number>
+  elevation_gain_m: Numeric
+  avg_speed_mps: Numeric
+  run_vo2_max: Numeric
+  data_source: Record<string, string>
+}
+
+export interface HealthSample {
+  id: string
+  sample_type: 'BLOOD_GLUCOSE' | 'CORE_BODY_TEMPERATURE'
+  measured_at: string
+  value: Numeric
+  unit: string
+  details: Record<string, string>
+}
+
+/** GET /api/health/overview: deterministic analysis over the chosen days. */
+export interface HealthOverview {
+  start_date: string
+  end_date: string
+  timezone: string
+  connected: boolean
+  activity: {
+    days_with_data: number; steps_avg: number | null; steps_avg_7d: number | null; steps_trend_pct: number | null
+    distance_km_avg: number | null; active_minutes_week: number | null; meets_who_guideline: boolean | null
+    active_zone_minutes_week: number | null; total_kcal_avg: number | null; active_kcal_avg: number | null
+    observed_level: string | null; workouts: number; workout_minutes: number; workout_types: Record<string, number>
+  }
+  sleep: {
+    nights: number; avg_minutes: number | null; avg_minutes_7d: number | null; recommended_hours: [number, number]
+    nights_below_recommended: number; deep_pct: number | null; rem_pct: number | null; efficiency_pct: number | null
+    bedtime_stdev_minutes: number | null; last_night: SleepSession | null
+  }
+  recovery: {
+    resting_hr_7d: number | null; resting_hr_baseline: number | null; resting_hr_elevated: boolean | null
+    hrv_7d: number | null; hrv_baseline: number | null; hrv_suppressed: boolean | null
+    spo2_avg: number | null; respiratory_rate_avg: number | null; signals: string[]
+  }
+  energy: {
+    complete_days: number; intake_kcal_avg: number | null; device_expenditure_kcal_avg: number | null
+    balance_kcal_avg: number | null; weight_change_kg: number | null; note: string | null
+  }
+  notes: string[]
+}
+
+/** The part of GET /api/progress the health view reads (logged intake vs device expenditure). */
+export interface ProgressDay {
+  date: string
+  meal_count: number
+  calories_in: { actual: Numeric; known_total: Numeric; missing_count: number }
+  calories_out_actual: Numeric
+}
+
+/** GET /api/integrations/google-health: never contains provider tokens. */
+export interface HealthConnection {
+  provider: string
+  configured: boolean
+  connected: boolean
+  status: HealthConnectionStatus | null
+  account_email: string | null
+  granted_scopes: string[]
+  missing_scopes: string[]
+  share_with_assistant: boolean
+  consented_at: string | null
+  timezone: string | null
+  provider_profile: Record<string, string | number>
+  last_sync_at: string | null
+  last_success_at: string | null
+  next_sync_at: string | null
+  last_error_code: string | null
+  records: Record<string, number>
+  last_run: HealthSyncRun | null
 }
 
 export interface BodyMetricCreatePayload {
@@ -91,8 +278,11 @@ export interface ClarifyQuestion {
   /** Short topic, prefixes the answer in the composed reply. */
   label: string
   question: string
-  /** 'text' has no options: typed answer only. */
-  mode: 'single' | 'multiple' | 'quick_reply' | 'text'
+  /**
+   * 'text' has no options: typed answer only. 'sets' edits sets × reps × kg per exercise: the exercises
+   * picked in `for_questions`, or its own options.
+   */
+  mode: 'single' | 'multiple' | 'quick_reply' | 'text' | 'sets'
   options: ClarifyOption[]
   allow_free_text: boolean
   free_text_hint?: string | null
@@ -100,6 +290,9 @@ export interface ClarifyQuestion {
   required: boolean
   min_select: number
   max_select: number
+  for_questions?: string[]
+  /** Asked only when the earlier question was answered with one of these options. */
+  show_if?: { question: string; option_ids: string[] } | null
 }
 
 /** Human-in-the-loop form, asked one question at a time and answered as one message. */

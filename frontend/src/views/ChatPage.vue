@@ -34,6 +34,30 @@ const ImageLibraryModal = defineAsyncComponent(() => import('@/components/media/
 const isImageLibraryOpen = ref(false)
 const isKnowledgeOpen = ref(false)
 const isUserModalOpen = ref(false)
+// Google Health's consent screen returns to /chat?integration=google-health&result=...
+const userModalTab = ref<'profile' | 'integrations'>('profile')
+const integrationResult = ref<string | null>(null)
+
+function openUserModal(): void {
+  userModalTab.value = 'profile'
+  integrationResult.value = null
+  isUserModalOpen.value = true
+}
+
+function openSettings(tab: 'profile' | 'integrations'): void {
+  userModalTab.value = tab
+  integrationResult.value = null
+  isUserModalOpen.value = true
+}
+
+function consumeIntegrationReturn(): void {
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('integration') !== 'google-health') return
+  integrationResult.value = params.get('result') ?? 'error'
+  userModalTab.value = 'integrations'
+  isUserModalOpen.value = true
+  window.history.replaceState({}, '', window.location.pathname)
+}
 const isSidebarCollapsed = shallowRef(false)
 const sidebar = useTemplateRef<InstanceType<typeof ChatSidebar>>('sidebar')
 const openSidebarButton = useTemplateRef<HTMLButtonElement>('openSidebarButton')
@@ -51,6 +75,7 @@ async function showSidebar(): Promise<void> {
 }
 
 onMounted(async () => {
+  consumeIntegrationReturn()
   if (!activeSessionId.value) {
     createNewSession()
   }
@@ -86,7 +111,7 @@ function handleSelectPrompt(prompt: string): void {
       @new-chat="createNewSession"
       @select-session="selectSession"
       @delete-session="deleteSession"
-      @open-user-modal="isUserModalOpen = true"
+      @open-user-modal="openUserModal"
       @collapse="hideSidebar"
     />
 
@@ -191,12 +216,14 @@ function handleSelectPrompt(prompt: string): void {
       </template>
     </main>
 
-    <KnowledgePanel v-if="isKnowledgeOpen" :busy="isStreaming || isConfirming" :activity="activeNodeLabel" :revision="messages.length + Number(isStreaming) + Number(isConfirming) + sessions.length" @close="isKnowledgeOpen = false" />
+    <KnowledgePanel v-if="isKnowledgeOpen" :busy="isStreaming || isConfirming" :activity="activeNodeLabel" :revision="messages.length + Number(isStreaming) + Number(isConfirming) + sessions.length" @close="isKnowledgeOpen = false" @open-settings="openSettings" />
     <ImageLibraryModal v-if="isImageLibraryOpen" @close="isImageLibraryOpen = false" />
 
     <!-- User Profile, Metrics & Settings Modal -->
     <UserSettingsModal
       :open="isUserModalOpen"
+      :initial-tab="userModalTab"
+      :integration-result="integrationResult"
       @close="isUserModalOpen = false"
     />
   </div>

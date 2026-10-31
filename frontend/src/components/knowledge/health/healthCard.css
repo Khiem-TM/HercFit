@@ -1,0 +1,28 @@
+/* Shared chrome for the health cards; data colours live in healthColors.ts. */
+.card { container: card / inline-size; min-width: 0; padding: clamp(16px, 2.2cqi, 24px); border: 1px solid #8fc3d426; border-radius: 18px; background: linear-gradient(125deg, #8fc3d407, transparent 60%), #14171d; }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.eyeline { display: flex; align-items: center; gap: 6px; margin: 0 0 7px; font: 9px 'JetBrains Mono', monospace; letter-spacing: .12em; color: #8fc3d4; }
+h3 { margin: 0; font-size: 14px; font-weight: 500; color: #e9e8e2; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 12px 16px; margin: 18px 0 16px; }
+.kpi { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.kpi > span { font-size: 10px; color: #8d949c; }
+.kpi > strong { font: 600 clamp(19px, 5cqi, 24px) Geist, sans-serif; color: #f1f0eb; letter-spacing: -.01em; }
+.kpi > strong small { margin-left: 3px; font-size: 11px; font-weight: 400; color: #a3a8ae; }
+.kpi > em { font-style: normal; font-size: 10px; color: #a3a8ae; line-height: 1.5; }
+.status { display: inline-flex; align-items: center; gap: 5px; }
+.status.good { color: #9fd3b0; }
+.status.warn { color: #e8c07d; }
+.note { margin: 12px 0 0; font-size: 10.5px; line-height: 1.6; color: #8d949c; }
+.empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 26px 8px; text-align: center; color: #a3a8ae; font-size: 11.5px; }
+.empty small { color: #8d949c; font-size: 10.5px; line-height: 1.6; }
+.picker { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border: 1px solid #ffffff0e; border-radius: 9px; background: #0e1116; }
+.picker button { padding: 5px 9px; border-radius: 6px; font-size: 10px; color: #9b9fa5; transition: background 180ms, color 180ms; }
+.picker button[aria-pressed=true] { background: #8fc3d41c; color: #cfe7ef; }
+.signals { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.signals li { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid #e8c07d33; border-radius: 10px; background: #e8c07d0d; color: #ead7b0; font-size: 10.5px; line-height: 1.55; }
+.signals li svg { flex: none; margin-top: 1px; color: #e8c07d; }
+table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+th { padding: 6px 8px; text-align: left; font-weight: 500; color: #8d949c; border-bottom: 1px solid #ffffff14; white-space: nowrap; }
+td { padding: 6px 8px; color: #d9d8d2; border-bottom: 1px solid #ffffff0a; white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.num, th.num { text-align: right; }
+.table-wrap { overflow-x: auto; margin-top: 12px; }

@@ -86,7 +86,6 @@ export interface KnowledgeWindow {
 
 export interface KnowledgeGraph {
   status: string
-  mode: string | null
   lag_ms: number | null
   model_at?: string | null
   generated_at?: string | null
@@ -100,7 +99,7 @@ export interface KnowledgeGraph {
 }
 
 export const emptyKnowledgeGraph = (status = 'loading'): KnowledgeGraph => ({
-  status, mode: null, lag_ms: null, profile: null, insights: [], intents: [], nodes: [], edges: [], timeline: [],
+  status, lag_ms: null, profile: null, insights: [], intents: [], nodes: [], edges: [], timeline: [],
 })
 
 export const hubTheme: Record<KnowledgeHub, { label: string; color: string }> = {
