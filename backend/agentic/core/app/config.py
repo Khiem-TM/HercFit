@@ -58,6 +58,14 @@ class AgentSettings(BaseSettings):
     RESEARCH_REASONING_EFFORT: Literal['low', 'medium', 'high'] | None = 'low'
     # Shared with the backend (backend/.env): signs verified research finalization commands.
     RESEARCH_ATTESTATION_SECRET: SecretStr | None = None
+    # Shared with the backend (backend/.env): proves this service when it exchanges a user
+    # token for a short-lived delegated token (POST /api/v2/auth/delegations).
+    AGENT_SERVICE_SECRET: SecretStr | None = None
+    # Forget health tool outputs, context cards and session memory when the user revokes consent.
+    CONSENT_PURGE_ENABLED: bool = True
+    # Same switch as the backend (backend/.env, core/flags.py). "agent": health is read through
+    # the context API; raw tools whose v1 routes are superseded are not offered.
+    READER_V2_DOMAINS: list[str] = []
     JEV_MODE: Literal['off', 'shadow', 'enforce'] = 'off'
     JEV_BASE_URL: str = Field(default='https://litellm.otanicloud.link/v1',
                               validation_alias=AliasChoices('JEV_BASE_URL', 'JEV_GATEWAY_URL'))

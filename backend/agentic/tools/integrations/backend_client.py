@@ -1,7 +1,12 @@
 from agentic.observability import observed, span
 from agentic.observability.propagation import outbound_headers
 import asyncio
+import hashlib
+import logging
+import time
 import httpx
+import jwt
+from core import service_auth
 from pydantic import TypeAdapter
 from agentic.tools.registry import REGISTRY
 from domains.identity.schemas.user import UserRead
@@ -11,17 +16,60 @@ class BackendError(Exception):
         self.status, self.detail = status, detail
         super().__init__(str(detail))
 
+logger = logging.getLogger(__name__)
+DELEGATION_PATH = '/api/v2/auth/delegations'
+DELEGATION_SKEW_SECONDS = 60
+
+
 class BackendClient:
-    def __init__(self, base_url, timeout=15, transport=None):
+    def __init__(self, base_url, timeout=15, transport=None, service_secret=None):
         self.http = httpx.AsyncClient(base_url=base_url, timeout=timeout, transport=transport)
+        # With a service secret, the agent reads with backend-issued delegated tokens, so
+        # consent is enforced from the token itself rather than a self-declared header.
+        self.service_secret = service_secret
+        self._delegations = {}
+
+    async def delegated_token(self, token):
+        """A cached delegated token for this user token, or None (fallback: user token + header)."""
+        if not self.service_secret:
+            return None
+        key = hashlib.sha256(token.encode()).hexdigest()
+        cached = self._delegations.get(key)
+        now = time.time()
+        if cached and cached[1] - DELEGATION_SKEW_SECONDS > now:
+            return cached[0]
+        try:
+            subject = str(jwt.decode(token, options={'verify_signature': False}).get('sub') or '')
+        except jwt.PyJWTError:
+            return None
+        proof = service_auth.sign(self.service_secret, 'POST', DELEGATION_PATH, subject, b'')
+        try:
+            response = await self.http.post(DELEGATION_PATH, headers={
+                'Authorization': 'Bearer ' + token, service_auth.HEADER: proof})
+        except httpx.TransportError:
+            return None
+        if response.status_code != 200:
+            logger.warning('backend_delegation_failed status=%s', response.status_code)
+            return None
+        data = response.json()
+        try:
+            expires = jwt.decode(data['access_token'], options={'verify_signature': False})['exp']
+        except (KeyError, jwt.PyJWTError):
+            return None
+        if len(self._delegations) > 1000:
+            self._delegations = {k: v for k, v in self._delegations.items() if v[1] > now}
+        self._delegations[key] = (data['access_token'], float(expires))
+        return data['access_token']
 
     async def close(self):
         await self.http.aclose()
 
     @observed('backend.request', capture=('method', 'path', 'params', 'body'), output=False)
     async def request(self, method, path, token, *, params=None, body=None, key=None):
-        # Lets the backend honour the user's consent for assistant access to device data.
-        headers = {'Authorization': 'Bearer ' + token, 'X-HercFit-Client': 'agent'}
+        # The backend applies the user's consent to the assistant's reads: preferably from a
+        # delegated token; the self-declared header remains for the transition only.
+        delegated = await self.delegated_token(token)
+        headers = {'Authorization': 'Bearer ' + (delegated or token), 'X-HercFit-Client': 'agent'}
         if key:
             headers['Idempotency-Key'] = key # Trống trùng lặp
         attempts = 3 if method == 'GET' or key else 1

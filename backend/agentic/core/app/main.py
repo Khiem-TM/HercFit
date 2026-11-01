@@ -31,8 +31,11 @@ def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=No
         async with AsyncExitStack() as resources:
             resources.push_async_callback(observer().close)
             settings.check()
+            service_secret = settings.AGENT_SERVICE_SECRET.get_secret_value() if getattr(
+                settings, 'AGENT_SERVICE_SECRET', None) else None
             backend = backend_client if backend_client is not None else BackendClient(
-                settings.BACKEND_BASE_URL, settings.BACKEND_TIMEOUT_SECONDS)
+                settings.BACKEND_BASE_URL, settings.BACKEND_TIMEOUT_SECONDS,
+                **({'service_secret': service_secret} if service_secret else {}))
             resources.push_async_callback(backend.close)
             tavily_key = settings.TAVILY_API_KEY.get_secret_value() if settings.TAVILY_API_KEY else ''
             tavily = tavily_client if tavily_client is not None else TavilyClient(tavily_key)
@@ -65,6 +68,9 @@ def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=No
             tasks = []
             try:
                 tasks.append(asyncio.create_task(app.state.runtime.reconcile_forever()))
+                if getattr(settings, 'CONSENT_PURGE_ENABLED', True) and hasattr(store, 'pool'):
+                    from agentic.services.consent_purge import purge_forever
+                    tasks.append(asyncio.create_task(purge_forever(app.state.runtime)))
                 if graph_context is not None:
                     tasks.append(asyncio.create_task(graph_context.warm_up()))
                 yield

@@ -19,6 +19,7 @@ from agentic.prompts.v2.clarification import PROMPT as CLARIFICATION_PROMPT_V2
 from agentic.prompts.v2.domains import COACH_GUIDANCE as COACH_GUIDANCE_V2, HEALTH_GUIDANCE
 from agentic.prompts.v2.personal import PERSONAL_ROUTING, PERSONALIZED_ANSWER
 from agentic.prompts.v3.domains import COACH_GUIDANCE as COACH_GUIDANCE_V3
+from agentic.prompts.v3.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V3
 
 
 TEMPLATES = MappingProxyType({
@@ -42,6 +43,8 @@ TEMPLATES = MappingProxyType({
     ('clarification.form', 'v2'): CLARIFICATION_PROMPT_V2,
     # v3: training logs go straight to the structured preview; quick gym logs by intensity.
     ('training.coach', 'v3'): COACH_GUIDANCE_V3,
+    # v3: sourced context API first; missing coverage is unknown, never "not worn".
+    ('health.guidance', 'v3'): HEALTH_GUIDANCE_V3,
 })
 
 _QUESTIONS = {

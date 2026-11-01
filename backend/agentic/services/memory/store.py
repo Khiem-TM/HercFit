@@ -140,6 +140,36 @@ class Store:
         async with self.pool.connection() as conn:
             await conn.execute('DELETE FROM agent_threads WHERE thread_id=%s', (thread_id,))
 
+    async def forget_episodes(self, user_id, is_health):
+        """Remove the user's conversation episodes that `is_health(data)` selects.
+
+        Each journal row (turn or tool execution) gets a graph `delete` at the next
+        version, so the projector tombstones the episode, and the row itself is
+        removed so a graph rebuild (enqueue_kg_snapshot) cannot restore it.
+        """
+        removed = {'Run': 0, 'Execution': 0}
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                await set_psycopg_context(conn)
+                for table, key, aggregate in (('agent_turn_records', 'run_id', 'Run'),
+                                              ('agent_execution_records', 'execution_id', 'Execution')):
+                    rows = await (await conn.execute(
+                        f'SELECT {key} AS id, version, data FROM {table} WHERE user_id=%s FOR UPDATE',
+                        (user_id,))).fetchall()
+                    for row in rows:
+                        data = row['data'] or {}
+                        if not is_health(data):
+                            continue
+                        version = row['version'] + 1
+                        event_id = uuid5(NAMESPACE_URL, f"agent:{aggregate}:{row['id']}:{version}:delete")
+                        await conn.execute('''INSERT INTO kg_outbox
+                            (event_id,source,aggregate_type,aggregate_id,owner_id,aggregate_version,operation,occurred_at,payload)
+                            VALUES (%s,'agent',%s,%s,%s,%s,'delete',now(),%s) ON CONFLICT DO NOTHING''',
+                            (event_id, aggregate, str(row['id']), str(user_id), version, Jsonb(data)))
+                        await conn.execute(f'DELETE FROM {table} WHERE {key}=%s', (row['id'],))
+                        removed[aggregate] += 1
+        return removed
+
     async def new_action(self, session_id, user_id, tool, payload, preview, expires_at, research_id=None, action_id=None):
         async with self.pool.connection() as conn:
             async with conn.transaction():

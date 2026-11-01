@@ -144,5 +144,34 @@ add('list_device_workouts','health','GET','/health/workouts',DateRangeQuery,list
     'Workouts recorded by a device (type, duration, distance, kcal, average HR) for start_date..end_date. Not training-log entries.')
 add('list_health_samples','health','GET','/health/samples',HealthSampleQuery,list[HealthSampleRead],
     'Spot vitals (BLOOD_GLUCOSE mg/dL, CORE_BODY_TEMPERATURE °C) for start_date..end_date. Report values; never diagnose.')
+
+# Sourced, budgeted health context (backend /api/v2/assistant/context): every item carries
+# value, unit, source, measured_at, freshness, coverage, method and evidence ids.
+from typing import Any as _Any, Literal as _Literal
+from pydantic import Field as _Field
+from agentic.tools.schemas.common import InputSchema as _InputSchema
+
+_Topic = _Literal['overview', 'activity', 'sleep', 'recovery', 'body', 'nutrition', 'vitals', 'wellbeing']
+_Period = _Literal['7d', '28d', '90d']
+
+
+class HealthContextQuery(_InputSchema):
+    topic: _Topic = 'overview'
+    period: _Period = '28d'
+    budget: int = _Field(default=1500, ge=200, le=3000)
+
+
+class HealthContextDeepQuery(_InputSchema):
+    topics: list[_Topic] = _Field(min_length=1, max_length=8)
+    period: _Period = '28d'
+    budget: int = _Field(default=4000, ge=200, le=8000)
+
+
+add('get_health_context','health','GET','/v2/assistant/context',HealthContextQuery,dict[str,_Any],
+    'Precomputed health context with provenance (value, unit, source, measured_at, freshness, coverage, method). '
+    'Prefer this over raw lists; use the numbers as given, never recompute them, and treat missing coverage as unknown.')
+add('query_health_context','health','GET','/v2/assistant/context:query',HealthContextDeepQuery,dict[str,_Any],
+    'Deeper context for several topics within a token budget (default 4000). vitals/wellbeing need separate consent; '
+    'ECG is the device classification only: report it, never diagnose.')
 HEALTH_TOOL_KINDS = {'list_daily_health': 'DailyHealth', 'list_sleep_sessions': 'SleepSession',
                      'list_device_workouts': 'DeviceWorkout'}

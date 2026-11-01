@@ -5,7 +5,7 @@ from agentic.tools.registry import REGISTRY
 
 COACH_GUIDANCE = get_prompt('training.coach', 'v3')
 CAPABILITY_GUIDANCE = get_prompt('nutrition.capabilities')
-HEALTH_GUIDANCE = get_prompt('health.guidance', 'v2')
+HEALTH_GUIDANCE = get_prompt('health.guidance', 'v3')
 
 CATALOG_DEPENDENCIES = {'meals': 'foods', 'trainings': 'exercises', 'training_plans': 'exercises'}
 # Additional read-only domains: coaching interprets logs/progress, logging may check the schedule.
@@ -24,11 +24,23 @@ READ_DEPENDENCIES = {
 }
 
 
+# Raw device tools whose backend routes have a v2 successor (backend api/deprecations.py).
+# They stay registered (checkpoints and pending actions refer to tools by name) but are
+# not offered once the agent reader moved to the context API.
+SUPERSEDED_HEALTH_TOOLS = frozenset({'list_sleep_sessions', 'list_device_workouts', 'list_health_samples'})
+
+
+def reader_v2_agent():
+    from agentic.core.app.config import agent_settings
+    return 'agent' in (agent_settings.READER_V2_DOMAINS or [])
+
+
 def allowed_tools(domain):
     readable = {CATALOG_DEPENDENCIES.get(domain), *READ_DEPENDENCIES.get(domain, ())}
+    hidden = SUPERSEDED_HEALTH_TOOLS if reader_v2_agent() else frozenset()
     return {
         name: spec for name, spec in REGISTRY.items()
-        if spec.domain == domain or (spec.domain in readable and not spec.write)
+        if name not in hidden and (spec.domain == domain or (spec.domain in readable and not spec.write))
     }
 
 
