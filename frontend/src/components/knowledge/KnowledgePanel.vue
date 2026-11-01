@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, useTemplateRef, watch } from 'vue'
-import { ChevronsDown, ChevronsDownUp, ChevronsUp, HeartPulse, History, LayoutGrid, Maximize2, Minus, Orbit, Plus, RefreshCw, X } from 'lucide-vue-next'
+import { ChevronsDown, ChevronsDownUp, ChevronsUp, History, LayoutGrid, Maximize2, Minus, Orbit, Plus, RefreshCw, X } from 'lucide-vue-next'
 import ConstellationCanvas from './ConstellationCanvas.vue'
+import KnowledgeDashboard from './KnowledgeDashboard.vue'
 import KnowledgeInspector from './KnowledgeInspector.vue'
-import KnowledgeOverview from './KnowledgeOverview.vue'
 import KnowledgeTimeline from './KnowledgeTimeline.vue'
 import TimeWindow from './TimeWindow.vue'
-import HealthView from './health/HealthView.vue'
 import { localDay, shiftDay } from './dashboard/dashboardData'
 import { ancestors, collapse, indexTree, visibleIds } from './knowledgeTree'
 import { centreOn, clampDay, dayDiff, rangeLength, recentRange, sameRange } from './timeWindow'
@@ -16,10 +15,9 @@ import { hubColor, hubTheme, type KnowledgeHub } from '@/types/knowledge'
 
 const props = defineProps<{ busy: boolean; activity: string; revision: number }>()
 const emit = defineEmits<{ close: []; 'open-settings': [tab: 'profile' | 'integrations'] }>()
-type Tab = 'overview' | 'health' | 'map' | 'timeline'
+type Tab = 'overview' | 'map' | 'timeline'
 const tabs: { id: Tab; label: string; icon: typeof Orbit }[] = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutGrid },
-  { id: 'health', label: 'Sức khoẻ', icon: HeartPulse },
   { id: 'map', label: 'Bản đồ', icon: Orbit },
   { id: 'timeline', label: 'Dòng thời gian', icon: History },
 ]
@@ -346,9 +344,8 @@ onUnmounted(() => {
 
     <div class="content">
       <Transition name="swap" mode="out-in">
-        <KnowledgeOverview v-if="tab === 'overview'" key="overview" class="scroll" :graph="graph" @explore="reveal" />
-        <HealthView v-else-if="tab === 'health'" key="health" class="scroll"
-                    @connect="emit('open-settings', 'integrations')" @edit-profile="emit('open-settings', 'profile')" />
+        <KnowledgeDashboard v-if="tab === 'overview'" key="overview" class="scroll" :graph="graph" @explore="reveal"
+                            @connect="emit('open-settings', 'integrations')" @edit-profile="emit('open-settings', 'profile')" />
         <div v-else-if="tab === 'map'" key="map" ref="mapView" class="map-view">
           <div ref="toolbar" class="map-toolbar">
             <div class="legend" role="toolbar" aria-label="Nhóm tri thức">

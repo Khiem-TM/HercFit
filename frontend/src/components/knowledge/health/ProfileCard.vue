@@ -4,8 +4,9 @@ import { AlertTriangle, IdCard } from 'lucide-vue-next'
 import type { HealthProfile, ProfileValue, ValueSource } from '@/types/api'
 import { ACTIVITY_LABELS, SEX_LABELS, SOURCE_LABELS, dayLabel, fmt } from './healthFormat'
 
-const props = defineProps<{ profile: HealthProfile | null }>()
-const emit = defineEmits<{ edit: [] }>()
+/** `traits` (training habits from the knowledge profile) and `map` join the overview's profile here. */
+const props = defineProps<{ profile: HealthProfile | null; traits?: string[] }>()
+const emit = defineEmits<{ edit: []; map: [] }>()
 
 const FIELDS: { key: keyof HealthProfile; label: string; unit?: string; digits?: number }[] = [
   { key: 'age', label: 'Tuổi' }, { key: 'sex', label: 'Giới tính' },
@@ -46,7 +47,10 @@ const sourceClass = (source: ValueSource) => source.toLowerCase()
   <section class="card" aria-labelledby="health-profile-title">
     <header class="card-head">
       <div><p class="eyeline"><IdCard :size="13" /> HỒ SƠ SỨC KHOẺ HỢP NHẤT</p><h3 id="health-profile-title">Khai báo, đo lường và suy luận</h3></div>
-      <button type="button" class="link" @click="emit('edit')">Sửa hồ sơ</button>
+      <span class="actions">
+        <button type="button" class="link" @click="emit('map')">Xem trên bản đồ</button>
+        <button type="button" class="link" @click="emit('edit')">Sửa hồ sơ</button>
+      </span>
     </header>
     <p v-if="!profile" class="empty">Chưa đọc được hồ sơ sức khoẻ.</p>
     <template v-else>
@@ -56,6 +60,9 @@ const sourceClass = (source: ValueSource) => source.toLowerCase()
           <strong>{{ tile.value }}<small v-if="tile.unit">{{ tile.unit }}</small></strong>
           <em v-if="tile.note">{{ tile.note }}</em>
         </div>
+      </div>
+      <div v-if="traits?.length" class="traits" aria-label="Thói quen tập luyện">
+        <span v-for="trait in traits" :key="trait">{{ trait }}</span>
       </div>
       <div v-if="level" class="level">
         <span>Mức vận động</span>
@@ -76,7 +83,10 @@ const sourceClass = (source: ValueSource) => source.toLowerCase()
 
 <style scoped src="./healthCard.css"></style>
 <style scoped>
-.link { font-size: 10px; color: #a9c9d4; border-bottom: 1px solid #a9c9d455; }
+.actions { display: flex; gap: 14px; }
+.link { font-size: 10px; color: light-dark(#2d4952, #a9c9d4); border-bottom: 1px solid light-dark(#2d495255, #a9c9d455); }
+.traits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+.traits span { padding: 4px 10px; border: 1px solid light-dark(#87671a2e, #d4b77d2e); border-radius: 20px; font-size: 10px; color: light-dark(#7f7049, #d9cba9); background: light-dark(#87671a0a, #d4b77d0a); }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 14px 18px; margin-top: 18px; }
 .tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .tile-label { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 10px; color: light-dark(#60676e, #8d949c); }
