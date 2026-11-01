@@ -1,4 +1,4 @@
-"""Existing lexical/topic and publisher-quality ranking for public search results."""
+"""Xếp hạng theo từ vựng/chủ đề và chất lượng nhà xuất bản hiện có cho kết quả tìm kiếm công khai."""
 import re
 from domains.catalog.models.foods import normalize_food_text
 from agentic.research.sources import TIER_RANK, rate
@@ -12,7 +12,7 @@ def target_words(target):
 
 
 def relevance(target,text):
-    """Share of the researched item's words that a page mentions (accent-insensitive)."""
+    """Tỉ lệ các từ của món đang tra cứu mà một trang có nhắc tới (không phân biệt dấu)."""
     words=target_words(target)
     if not words: return 0.0
     page=set(re.findall(r'\w+',normalize_food_text(text)))

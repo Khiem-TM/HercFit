@@ -1,4 +1,4 @@
-"""Code-owned KG routing policy. Graph data cannot grant tool permissions."""
+"""Chính sách định tuyến KG do code quản lý. Dữ liệu graph không thể cấp quyền dùng tool."""
 from agentic.components.context_filter import compact_evidence, model_graph_context
 import hashlib
 import json
@@ -24,7 +24,7 @@ class FastReadPlan(BaseModel):
     template_version: int = TEMPLATE_VERSION
     registry_fingerprint: str
     tool: str = 'get_progress'
-    # Normalized tool arguments: dates and timezones are strings, counts (days) integers.
+    # Tham số tool đã chuẩn hoá: ngày và múi giờ là chuỗi, số đếm (ngày) là số nguyên.
     arguments: dict[str, str | int]
 
 
@@ -42,7 +42,7 @@ def latest_request(state):
 
 
 def fast_reads_enabled(settings):
-    # The templates parse the request themselves; they do not read graph data.
+    # Các mẫu tự phân tích request; chúng không đọc dữ liệu graph.
     return bool(getattr(settings, 'FAST_READ_ENABLED', False))
 
 
@@ -66,8 +66,8 @@ def _timezone_argument(_match, _today):
 
 @dataclass(frozen=True)
 class FastTemplate:
-    """A full-message grammar for one standalone read. Compound or implicit
-    requests never match, so the LLM router still handles everything else."""
+    """Ngữ pháp toàn tin nhắn cho một lệnh đọc độc lập. Yêu cầu ghép hoặc ngầm định
+    không bao giờ khớp, nên router LLM vẫn xử lý mọi thứ khác."""
     id: str
     version: int
     domain: str
@@ -75,7 +75,7 @@ class FastTemplate:
     pattern: re.Pattern
     instruction: str
     arguments: Callable = _no_arguments
-    # Router label journaled for the turn (knowledge_graph.intents.MODEL_INTENTS).
+    # Nhãn router được ghi nhật ký cho lượt (knowledge_graph.intents.MODEL_INTENTS).
     intent: str = 'READ'
 
 
@@ -83,7 +83,7 @@ _RECENT = ('hôm nay', 'tuần này', 'đêm qua', 'tối qua', 'gần đây')
 
 
 def _health_arguments(match, _today):
-    """A week for "today/this week/last night", otherwise four weeks against the baseline."""
+    """Một tuần cho "hôm nay/tuần này/đêm qua", nếu không thì bốn tuần so với mốc."""
     return {'days': 7 if any(word in match.group(0) for word in _RECENT) else 28, 'timezone': TIMEZONE}
 
 
@@ -135,7 +135,7 @@ def _normalized_request(state):
 
 
 def make_fast_read_plan(state, now=None):
-    """A full-message grammar deliberately rejects compound and implicit requests."""
+    """Ngữ pháp toàn tin nhắn cố ý từ chối yêu cầu ghép và ngầm định."""
     decision = state.get('decision', {})
     if (decision.get('action') != 'tool' or decision.get('next_agent') != 'tool'
             or decision.get('missing_fields')
@@ -161,10 +161,10 @@ def make_fast_read_plan(state, now=None):
 
 
 def fast_route(state, now=None):
-    """Code-owned routing for standalone reads: returns (decision, plan) or None.
+    """Định tuyến do code quản lý cho lệnh đọc độc lập: trả về (decision, plan) hoặc None.
 
-    Applies only to the first routing step of a run with no pending work, so a
-    follow-up, compound request or unfinished workflow always reaches the LLM router.
+    Chỉ áp dụng cho bước định tuyến đầu tiên của một lượt chạy không có việc đang chờ, để
+    câu hỏi nối tiếp, yêu cầu ghép hay workflow dở dang luôn đến được router LLM.
     """
     if (state.get('tool_outputs') or state.get('tool_count') or state.get('pending_action') or state.get('candidate')
             or state.get('catalog_handoff') or state.get('research_handoff') or state.get('research_count')
@@ -193,10 +193,10 @@ def verified_fast_plan(state):
 
 
 def terminal_result(plan, output):
-    """Whether one fast read fully answers its template (no further routing needed)."""
+    """Một lần đọc nhanh có trả lời trọn mẫu của nó không (không cần định tuyến thêm)."""
     if plan.template_id == TEMPLATE_ID:
         return terminal_progress(plan, output)
-    return True  # Single-record reads are complete when the call succeeded (404 = no record).
+    return True  # Lệnh đọc một bản ghi là trọn vẹn khi lời gọi thành công (404 = không có bản ghi).
 
 
 def fast_answer_instruction(plan):

@@ -51,7 +51,7 @@ async function guarded(action: () => Promise<void>): Promise<void> {
   }
 }
 
-/** The one switch: on asks Google once for everything missing (if anything), then sends history and changes. */
+/** Công tắc duy nhất: bật thì xin Google một lần mọi thứ còn thiếu (nếu có), rồi gửi lịch sử và các thay đổi. */
 function setSync(enabled: boolean): Promise<void> {
   return guarded(async () => {
     const state = await props.api.setExportSwitch(enabled)

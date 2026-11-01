@@ -1,4 +1,4 @@
-"""Authenticated cover-image operations for all four activity/catalog types."""
+"""Thao tác ảnh bìa đã xác thực cho cả bốn loại hoạt động/catalog."""
 from typing import Annotated
 from uuid import UUID
 
@@ -25,7 +25,7 @@ async def upload_image(kind: ImageEntity, entity_id: UUID, service: MediaService
 
 @router.post("/{kind}/{entity_id}/image/import", response_model=ImageRead)
 async def import_image(kind: ImageEntity, entity_id: UUID, payload: ImageImport, service: MediaServiceDep):
-    """Store a research illustration the user kept on a confirmation card."""
+    """Lưu ảnh minh hoạ từ tra cứu mà người dùng đã giữ trên thẻ xác nhận."""
     return await service.import_remote(kind, entity_id, payload.expected_version_id, payload.source_url)
 
 

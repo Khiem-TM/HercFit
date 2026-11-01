@@ -1,4 +1,4 @@
-"""Read models for deterministic nutrition targets (no LLM arithmetic)."""
+"""Model đọc cho mục tiêu dinh dưỡng tất định (không để LLM làm tính toán)."""
 from datetime import date
 from typing import Literal
 
@@ -67,7 +67,7 @@ class NutritionTargetsRead(BaseModel):
     weight_trend: list[WeightTrendPoint]
     warnings: list[str]
     method: dict[str, str]
-    # "observed": the activity level came from device steps because none was declared.
+    # "observed": mức vận động lấy từ bước chân của thiết bị vì chưa khai báo.
     activity_level_source: Literal["declared", "observed"] | None = None
-    # Average device-measured total expenditure over recent complete worn days (an estimate).
+    # Trung bình tổng tiêu hao đo bởi thiết bị trên các ngày có đeo đã trọn gần đây (một ước tính).
     device_expenditure_kcal: float | None = None

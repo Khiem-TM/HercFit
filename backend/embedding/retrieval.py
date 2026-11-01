@@ -11,7 +11,7 @@ from domains.catalog.models.foods import normalize_food_text
 class SearchRequest(BaseModel):
     model_config=ConfigDict(extra='forbid')
     query: str=Field(min_length=1,max_length=1000)
-    # Other phrasings of the same question, e.g. an English one for an English corpus.
+    # Các cách diễn đạt khác của cùng câu hỏi, ví dụ một bản tiếng Anh cho kho tiếng Anh.
     queries: list[Annotated[str,Field(min_length=1,max_length=300)]]=Field(default_factory=list,max_length=3)
     sport: str | None=Field(default=None,max_length=80)
     language: str | None=Field(default=None,max_length=30)
@@ -25,7 +25,7 @@ class SearchOptions(BaseModel):
     keyword: bool=True
     rerank: bool=True
     diversify: bool=True
-    # False disables both relevance thresholds (calibration runs); explicit values override settings.
+    # False tắt cả hai ngưỡng liên quan (lượt chạy hiệu chỉnh); giá trị tường minh ghi đè settings.
     thresholds: bool=True
     min_score: float | None=None
     min_similarity: float | None=None
@@ -33,7 +33,7 @@ class SearchOptions(BaseModel):
     debug: bool=False
 
 def fuse(*rankings, k=60):
-    """Reciprocal-rank fusion of any number of ranked id lists."""
+    """Hợp nhất xếp hạng nghịch đảo (RRF) cho số lượng tuỳ ý danh sách id đã xếp hạng."""
     scores={}
     for ranking in rankings:
         for rank,item in enumerate(ranking,1): scores[item]=scores.get(item,0)+1/(k+rank)
@@ -46,9 +46,9 @@ ELIGIBLE='''FROM knowledge_chunks c JOIN knowledge_revisions r ON r.id=c.revisio
         AND COALESCE(r.metadata->>'visibility','authenticated')='authenticated'
         AND r.metadata @> CAST(:filters AS jsonb)'''
 
-# One round trip: a dense and a keyword list per query, each a bounded top-N scan. The
-# tsquery is built once per query and document language class, as knowledge_ts_config().
-# MATERIALIZED keeps the text->vector cast and tsquery parse from repeating for every row.
+# Một lượt gọi: mỗi truy vấn một danh sách dense và một danh sách từ khoá, mỗi danh sách quét top-N có giới hạn. tsquery
+# được dựng một lần cho mỗi truy vấn và lớp ngôn ngữ tài liệu, như knowledge_ts_config().
+# MATERIALIZED giữ phép ép text->vector và phân tích tsquery không lặp lại cho từng dòng.
 CANDIDATES='''WITH qv AS MATERIALIZED (SELECT ord,CAST(v AS vector) AS vec
         FROM jsonb_array_elements_text(CAST(:vectors AS jsonb)) WITH ORDINALITY AS t(v,ord)),
     qt AS MATERIALIZED (SELECT ord,knowledge_query('en',q) AS q_en,knowledge_query('',q) AS q_other
@@ -75,8 +75,8 @@ async def search(session, request, settings, client, reranker=None, options=None
     options=options or SearchOptions()
     timings={}; started=perf_counter()
     queries=list(dict.fromkeys(q.strip() for q in [request.query,*(request.queries if options.multi else [])] if q.strip()))
-    # Embed before acquiring a database connection; slow providers must not hold
-    # the backend's small shared connection pool.
+    # Embed trước khi lấy kết nối database; nhà cung cấp chậm không được giữ
+    # pool kết nối dùng chung nhỏ của backend.
     vectors=await client.embed(queries)
     timings['embed_ms']=round((perf_counter()-started)*1000,1)
     profile=(await session.execute(text('SELECT id FROM knowledge_profiles WHERE active'))).scalar_one_or_none()
@@ -89,7 +89,7 @@ async def search(session, request, settings, client, reranker=None, options=None
             'vectors':json.dumps(vectors),'queries':json.dumps([normalize_food_text(q) for q in queries]),
             'keyword':options.keyword})).mappings().all()
         timings['candidates_ms']=round((perf_counter()-mark)*1000,1)
-    # Both scores rank higher-is-better: cosine similarity and ts_rank_cd; ties break on id as in SQL.
+    # Cả hai điểm đều xếp hạng càng cao càng tốt: độ tương đồng cosine và ts_rank_cd; bằng điểm thì xét id như trong SQL.
     lists=defaultdict(list); similarity={}
     for row in sorted(rows,key=lambda r:(r['kind'],r['ord'],-r['score'],str(r['id']))):
         lists[row['kind'],row['ord']].append(row['id'])
@@ -104,9 +104,9 @@ async def search(session, request, settings, client, reranker=None, options=None
         return finish({'chunks':[],'status':'empty','profile_id':profile,'rerank':'disabled'},diagnostics,timings,started,options)
     by_id={r['id']:dict(r) for r in (await session.execute(text(CONTENT),{'ids':ids})).mappings().all()}
     candidates=[by_id[i] for i in ids if i in by_id]
-    # Release the connection before the external rerank call, as for the embedding call.
+    # Nhả kết nối trước lời gọi rerank bên ngoài, như với lời gọi embedding.
     await session.commit()
-    # The cross-encoder scores best in the passages' language: an English paraphrase for English books.
+    # Cross-encoder chấm tốt nhất theo ngôn ngữ của đoạn văn: một bản diễn đạt tiếng Anh cho sách tiếng Anh.
     english=[c for c in candidates if c.get('language')=='en']
     rerank_query=next((q for q in queries if q.isascii()),request.query) if len(english)*2>len(candidates) else request.query
     status,scores=await rerank(reranker,rerank_query,candidates,options,timings)
@@ -130,13 +130,13 @@ async def search(session, request, settings, client, reranker=None, options=None
     return finish(result,diagnostics,timings,started,options)
 
 async def rerank(reranker,query,candidates,options,timings):
-    """(status, scores); a reranker outage keeps the fused order and never fails the search."""
+    """(status, scores); reranker gặp sự cố thì giữ thứ tự đã hợp nhất và không bao giờ làm hỏng lần tìm kiếm."""
     if reranker is None or not options.rerank or not candidates:
         return 'disabled',None
     mark=perf_counter()
     try:
         with span('rag.rerank', 'retriever'):
-            # The chapter heading gives the cross-encoder the context an isolated passage lacks.
+            # Tiêu đề chương cho cross-encoder ngữ cảnh mà một đoạn văn đứng riêng còn thiếu.
             scores=await reranker.rerank(query,[(row['heading']+'\n' if row['heading'] else '')+row['content'] for row in candidates])
         return 'applied',scores
     except Exception as exc:

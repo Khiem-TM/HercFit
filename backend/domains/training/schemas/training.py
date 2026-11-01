@@ -1,4 +1,4 @@
-"""Athlete profile and read models for training analytics, insights and templates."""
+"""Hồ sơ vận động viên và model đọc cho phân tích, insight và giáo án mẫu."""
 
 from datetime import date
 from decimal import Decimal
@@ -31,7 +31,7 @@ class TrainingProfile(InputSchema):
     resting_hr: Annotated[int, Field(strict=True, ge=25, le=120)] | None = None
     threshold_pace_s_per_km: PaceSeconds | None = None
     recent_race: RecentRace | None = None
-    # Reference one-rep maxes by catalog exercise code, used for %1RM targets.
+    # 1RM tham chiếu theo mã bài tập trong catalog, dùng cho chỉ tiêu %1RM.
     one_rep_max: dict[NonBlank, Annotated[float, Field(gt=0, le=1000)]] = Field(default_factory=dict)
     injuries: list[NonBlank] = Field(default_factory=list)
     equipment: list[NonBlank] = Field(default_factory=list)
@@ -47,7 +47,7 @@ class TrainingProfileRead(ReadSchema):
     profile: TrainingProfile
     configured: bool
     hr_zones: dict[str, list[int]] | None
-    # Heart-rate reserve zones use the declared resting HR, else the device's 7-day median.
+    # Vùng nhịp tim dự trữ dùng nhịp tim nghỉ đã khai báo, nếu không có thì dùng trung vị 7 ngày của thiết bị.
     resting_hr_source: Literal["PROFILE", "DEVICE"] | None = None
     pace_zones: dict[str, list[int]] | None
     threshold_source: Literal["PROFILE", "RECENT_RACE"] | None

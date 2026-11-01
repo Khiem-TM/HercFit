@@ -1,21 +1,21 @@
-"""Feature switches read from settings (backend/.env).
+"""Các công tắc tính năng đọc từ settings (backend/.env).
 
-READER_V2_DOMAINS moves one consumer at a time onto the health platform's records
-(docs/GOOGLE_HEALTH_PLATFORM_2026-11-01.md). Each domain changes one documented
-behaviour; an empty list keeps every reader on its v1 behaviour.
+READER_V2_DOMAINS chuyển từng bên dùng một sang các bản ghi của nền tảng sức khoẻ
+(docs/GOOGLE_HEALTH_PLATFORM_2026-11-01.md). Mỗi miền đổi một hành vi
+đã ghi trong tài liệu; danh sách rỗng giữ mọi bộ đọc ở hành vi v1.
 
-  training   device runs (Google) count in running analytics unless a manual run
-             covers the same time; no workout type, RPE or sets are invented for them
-  nutrition  daily intake also counts meals logged in other apps (Google nutrition
-             logs not linked to a HercFit meal)
-  body       one weigh-in seen twice (manual + scale within 10 min, <= 0.2 kg apart)
-             counts once in weight trends, the manual reading wins
-  wellbeing  the overview context carries a counts-only wellbeing summary (needs the
-             separate sensitive consent; never symptom names or moods)
-  analytics  baselines use complete past days only, served from ANALYTICS_RECOMPUTE
-             when stored, recomputed live with the same algorithm otherwise
-  agent      the assistant reads health through the context API; raw tools whose v1
-             routes are superseded are not offered (agent service, same .env)
+  training   buổi chạy từ thiết bị (Google) được tính vào phân tích chạy bộ trừ khi có buổi
+             nhập tay trùng thời gian; không tự đặt loại bài, RPE hay set cho chúng
+  nutrition  lượng ăn theo ngày tính cả bữa ghi ở ứng dụng khác (nhật ký dinh dưỡng
+             Google không gắn với bữa ăn HercFit)
+  body       một lần cân thấy hai lần (nhập tay + cân trong vòng 10 phút, lệch <= 0,2 kg)
+             chỉ tính một lần trong xu hướng cân nặng, ưu tiên bản nhập tay
+  wellbeing  ngữ cảnh overview có bản tóm tắt sức khoẻ tinh thần chỉ gồm số đếm (cần
+             consent nhạy cảm riêng; không bao giờ có tên triệu chứng hay tâm trạng)
+  analytics  đường nền chỉ dùng các ngày đã trọn, lấy từ ANALYTICS_RECOMPUTE
+             khi đã lưu, ngược lại tính trực tiếp bằng cùng thuật toán
+  agent      trợ lý đọc dữ liệu sức khoẻ qua context API; các tool thô có route v1
+             đã bị thay thế không được cung cấp (service agent, cùng .env)
 """
 from __future__ import annotations
 

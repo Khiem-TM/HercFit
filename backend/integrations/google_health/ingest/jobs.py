@@ -1,20 +1,20 @@
-"""Google Health job handlers (run by workers/, queued in the jobs table).
+"""Handler job Google Health (do workers/ chạy, xếp hàng trong bảng jobs).
 
-GH_ONBOARD         plan the first import: 30 days of aggregates, sessions and
-                   records first; then 90 days of dense series (one UTC day per
-                   job, walking back); then up to 2 years of aggregates and
-                   session metadata, at low priority.
-GH_FETCH_WINDOW    read one data type for one window, page by page. Each page is
-                   staged with the next page token in one fenced transaction, so
-                   a crash resumes where it stopped. Out of page budget, the job
-                   yields and continues. Only a complete window sweeps deletions,
-                   applies to business tables (primary mode) and advances the cursor.
-GH_RECONCILE       every 6 h: the last 3 days of every enabled type.
-GH_REVERIFY        a rotating 7-day slice of older history, to catch late edits.
-GH_WEBHOOK_ROUTE   route verified notifications to coalesced fetches.
-GH_IDENTITY_REFRESH health user id, paired devices, profile and settings.
-SHADOW_COMPARE     shadow mode: what primary mode would change, stored as diffs.
-RETENTION_SWEEP    drop detail past its retention (HEALTH_RETENTION_ENFORCE).
+GH_ONBOARD         lập kế hoạch lần nhập đầu: trước tiên 30 ngày tổng hợp, phiên và
+                   bản ghi; rồi 90 ngày chuỗi dày (mỗi job một ngày UTC,
+                   lùi dần); rồi tới 2 năm tổng hợp và
+                   metadata phiên, ở độ ưu tiên thấp.
+GH_FETCH_WINDOW    đọc một loại dữ liệu cho một cửa sổ, từng trang. Mỗi trang được
+                   lưu tạm cùng page token kế tiếp trong một transaction đã fence, nên
+                   khi sập sẽ tiếp tục đúng chỗ dừng. Hết ngân sách trang thì job
+                   nhường slot và tiếp tục sau. Chỉ cửa sổ trọn vẹn mới quét bản ghi bị xoá,
+                   áp vào bảng nghiệp vụ (chế độ primary) và đẩy cursor.
+GH_RECONCILE       mỗi 6 giờ: 3 ngày gần nhất của mọi loại đã bật.
+GH_REVERIFY        một lát 7 ngày xoay vòng của lịch sử cũ hơn, để bắt các lần sửa muộn.
+GH_WEBHOOK_ROUTE   định tuyến thông báo đã kiểm chứng thành các lần fetch gộp.
+GH_IDENTITY_REFRESH health user id, thiết bị đã ghép, hồ sơ và cài đặt.
+SHADOW_COMPARE     chế độ shadow: những gì chế độ primary sẽ đổi, lưu thành diff.
+RETENTION_SWEEP    xoá chi tiết quá hạn lưu (HEALTH_RETENTION_ENFORCE).
 """
 from __future__ import annotations
 
@@ -61,13 +61,13 @@ RECONCILE_DAYS = 3
 REVERIFY_SLICE = 7
 HISTORY_SPAN = 90
 PRIORITY = {"recent": 80, "reconcile": 75, "webhook": 90, "detail": 40, "history": 20, "reverify": 10}
-# Rollups that feed daily_health_summaries columns.
+# Các rollup nuôi cột của daily_health_summaries.
 ROLLUP_TYPES = frozenset({"steps", "distance", "floors", "active-minutes", "active-zone-minutes", "total-calories",
                           "active-energy-burned", "heart-rate", "hydration-log"})
 
 
 class ConnectionChanged(Exception):
-    """Disconnected, re-authorized or reconnected since the job was queued."""
+    """Đã ngắt kết nối, uỷ quyền lại hoặc kết nối lại kể từ khi job được xếp hàng."""
 
 
 @dataclass
@@ -76,9 +76,9 @@ class Context:
     http: httpx.AsyncClient
 
 
-# ------------------------------------------------------------------------------------------- planning
+# ------------------------------------------------------------------------------------------- lập kế hoạch
 def modes(data_type: str) -> list[str]:
-    """How a type is imported: rollup (daily columns), points (records), series (compressed chunks)."""
+    """Cách một loại được nhập: rollup (cột theo ngày), points (bản ghi), series (chunk nén)."""
     item = spec(data_type)
     result = []
     if data_type in ROLLUP_TYPES and Op.DAILY_ROLLUP in item.read_ops:
@@ -125,7 +125,7 @@ def today_for(connection: HealthConnection) -> date:
 
 async def plan_recent(session, connection: HealthConnection, days: int, *, priority: int, reason: str,
                       operation_id: UUID | None = None, walk_back: bool = False) -> int:
-    """Fetch jobs for the last `days` of every enabled type (series: one UTC day each)."""
+    """Các job fetch cho `days` ngày gần nhất của mọi loại đã bật (series: mỗi job một ngày UTC)."""
     today = today_for(connection)
     count = 0
     for data_type in enabled_types(connection.granted_scopes or []):
@@ -146,7 +146,7 @@ async def plan_recent(session, connection: HealthConnection, days: int, *, prior
     return count
 
 
-# ------------------------------------------------------------------------------------------- helpers
+# ------------------------------------------------------------------------------------------- hàm hỗ trợ
 async def _connection(session, job: Job, *, lock: bool = False) -> HealthConnection:
     query = select(HealthConnection).where(HealthConnection.id == job.connection_id)
     if lock:
@@ -160,7 +160,7 @@ async def _connection(session, job: Job, *, lock: bool = False) -> HealthConnect
 
 @asynccontextmanager
 async def fenced(job: Job):
-    """A transaction in which this job still owns its lease and its connection generation is current."""
+    """Một transaction trong đó job này vẫn sở hữu lease và thế hệ kết nối của nó vẫn là hiện hành."""
     async with get_db_session() as session:
         await queue.fence(session, job)
         if job.connection_id is not None:
@@ -204,13 +204,13 @@ async def _cursor(session, connection: HealthConnection, data_type: str, *, stat
          "error": error, "revision": DISCOVERY_REVISION, "generation": connection.generation})
 
 
-# ------------------------------------------------------------------------------------------- handlers
+# ------------------------------------------------------------------------------------------- handler
 async def onboard(ctx: Context) -> None:
     async with fenced(ctx.job) as session:
         connection = await _connection(session, ctx.job)
         count = await plan_recent(session, connection, RECENT_DAYS, priority=PRIORITY["recent"], reason="onboard",
                                   walk_back=False, operation_id=ctx.job.operation_id)
-        # Dense detail walks back day by day (90 days); aggregates and records walk back in 90-day windows.
+        # Chi tiết dày lùi dần từng ngày (90 ngày); tổng hợp và bản ghi lùi theo cửa sổ 90 ngày.
         today = today_for(connection)
         for data_type in enabled_types(connection.granted_scopes or []):
             for mode in modes(data_type):
@@ -240,7 +240,7 @@ async def reconcile(ctx: Context) -> None:
 
 
 async def reverify(ctx: Context) -> None:
-    """Re-read a 7-day slice of older history per type, rotating backwards; catches late edits and gaps."""
+    """Đọc lại một lát 7 ngày của lịch sử cũ hơn cho mỗi loại, xoay vòng lùi dần; bắt các lần sửa muộn và khoảng trống."""
     async with fenced(ctx.job) as session:
         connection = await _connection(session, ctx.job)
         today = today_for(connection)
@@ -248,14 +248,14 @@ async def reverify(ctx: Context) -> None:
         for data_type in enabled_types(connection.granted_scopes or []):
             for mode in modes(data_type):
                 if mode == SERIES:
-                    continue  # dense series are re-read by reconcile only (bounded cost)
+                    continue  # chuỗi dày chỉ được reconcile đọc lại (chi phí có giới hạn)
                 row = (await session.execute(text(
                     "SELECT reverify_through FROM sync_cursors WHERE connection_id = :c AND data_type = :t "
                     "AND source_family = 'all-sources'"), {"c": connection.id, "t": data_type})).first()
                 limit = today - timedelta(days=horizon(data_type, mode) - 1)
                 end = (row[0] if row and row[0] else today - timedelta(days=RECONCILE_DAYS)) - timedelta(days=1)
                 if end < limit:
-                    end = today - timedelta(days=RECONCILE_DAYS + 1)  # wrapped: start over from the recent edge
+                    end = today - timedelta(days=RECONCILE_DAYS + 1)  # đã vòng hết: bắt đầu lại từ mép gần đây
                 start = max(limit, end - timedelta(days=REVERIFY_SLICE - 1))
                 count += bool(await enqueue_fetch(session, connection, data_type, mode, start, end,
                                                   priority=PRIORITY["reverify"], reason="reverify"))
@@ -288,7 +288,7 @@ async def fetch_window(ctx: Context) -> None:
     item = spec(data_type)
     granted = contract_scopes.can_read(item.scope_group, connection.granted_scopes or [])
     if not granted or data_type not in enabled_types(connection.granted_scopes or []):
-        status = "NOT_GRANTED" if not granted else "UNSUPPORTED"  # granted, but HercFit does not read it now
+        status = "NOT_GRANTED" if not granted else "UNSUPPORTED"  # đã được cấp, nhưng hiện HercFit không đọc nó
         async with fenced(job) as session:
             await _cursor(session, connection, data_type, status=status)
             await queue.complete(session, job, {"status": status})
@@ -321,7 +321,7 @@ async def fetch_window(ctx: Context) -> None:
                                              page_size=plan.page_size, page_token=token))
         budget -= 1
         parsed, rejected, unknown = _parse(data_type, page.points, rollup=mode == ROLLUP)
-        if data_type == "electrocardiogram":  # only a lower bound is filterable
+        if data_type == "electrocardiogram":  # chỉ lọc được theo cận dưới
             parsed = [(point, raw) for point, raw in parsed if not point.time.civil_date or point.time.civil_date <= end]
         progress.update(pages=progress["pages"] + 1, points=progress["points"] + len(parsed),
                         rejected=progress["rejected"] + rejected, unknown=progress["unknown"] + unknown)
@@ -386,10 +386,10 @@ async def _walk_back(session, connection: HealthConnection, job: Job) -> None:
 
 
 async def _fetch_series(ctx: Context, connection: HealthConnection, client: GoogleHealthClient) -> None:
-    """One UTC day of a dense type: read fully, then replace that day's chunks atomically."""
+    """Một ngày UTC của một loại dày: đọc trọn, rồi thay nguyên tử các chunk của ngày đó."""
     job = ctx.job
     data_type, day = job.data_type, job.window_start
-    # The filter shape comes from the schema of the version actually called (v4beta-only types).
+    # Dạng filter lấy từ schema của phiên bản thực sự được gọi (các loại chỉ có trên v4beta).
     plan = reads.plan(data_type, rollup=False,
                       api_version=api_version_for(data_type, set(settings.GH_V4BETA_TYPES)) or "v4")
     low, high = series.utc_day(day)
@@ -460,7 +460,7 @@ def _timestamp(value: Any) -> datetime | None:
 
 
 async def webhook_route(ctx: Context) -> None:
-    """Turn received notifications into coalesced fetches; duplicates and reordering are harmless."""
+    """Biến các thông báo đã nhận thành các lần fetch gộp; bản trùng và đảo thứ tự đều vô hại."""
     routed = unknown = ignored = 0
     async with fenced(ctx.job) as session:
         rows = (await session.execute(text("""
@@ -495,7 +495,7 @@ async def webhook_route(ctx: Context) -> None:
 
 
 def _days(intervals: Any) -> list[date]:
-    """Civil dates a notification covers (civilDateTimeInterval, else civilIso8601TimeInterval)."""
+    """Các ngày địa phương mà một thông báo bao phủ (civilDateTimeInterval, nếu không thì civilIso8601TimeInterval)."""
     days: set[date] = set()
     for interval in intervals or []:
         interval = interval or {}
@@ -558,17 +558,17 @@ ROUTE_RETENTION_DAYS = 90
 
 
 def can_read_routes(scopes: list[str] | None) -> bool:
-    """exportExerciseTcx needs an activity scope AND a location scope."""
+    """exportExerciseTcx cần một scope vận động VÀ một scope location."""
     granted = scopes or []
     return contract_scopes.can_read("location", granted) and contract_scopes.can_read("activity_and_fitness", granted)
 
 
 async def route_fetch(ctx: Context) -> None:
-    """GH_ROUTE_FETCH: download GPS routes (TCX) of recent device workouts that have one.
+    """GH_ROUTE_FETCH: tải lộ trình GPS (TCX) của các buổi vận động gần đây có lộ trình.
 
-    Stored compressed with a 90-day retention, for the user only: routes never enter
-    the assistant context, prompts or the knowledge graph. A workout deleted on Google
-    (404) is skipped; a missing location scope ends the job without retrying.
+    Lưu dạng nén với thời hạn 90 ngày, chỉ cho người dùng: lộ trình không bao giờ vào
+    ngữ cảnh trợ lý, prompt hay knowledge graph. Buổi vận động đã xoá trên Google
+    (404) bị bỏ qua; thiếu scope location thì kết thúc job mà không thử lại.
     """
     import hashlib
     import zlib
@@ -613,7 +613,7 @@ async def route_fetch(ctx: Context) -> None:
 
 
 async def legacy_sync(ctx: Context) -> None:
-    """GH_INGEST_V2=off with an external worker: the in-process sync, run by the worker instead of the API."""
+    """GH_INGEST_V2=off với worker riêng: sync trong tiến trình, do worker chạy thay cho API."""
     from integrations.google_health.scheduler import sync_due
     synced = await sync_due()
     async with get_db_session() as session:

@@ -18,11 +18,11 @@ export interface HealthData {
   workouts: DeviceWorkout[]
   samples: HealthSample[]
   progress: ProgressDay[]
-  /** Body measurements synchronized from the device (source GOOGLE_HEALTH). */
+  /** Số đo cơ thể đồng bộ từ thiết bị (source GOOGLE_HEALTH). */
   measurements: BodyMetricRead[]
 }
 
-/** Every Google Health read for one window of local days. A refetch keeps the previous data on screen. */
+/** Mọi lần đọc Google Health cho một cửa sổ ngày địa phương. Lần tải lại giữ dữ liệu trước trên màn hình. */
 export function useHealthData(windowDays: () => number) {
   const { authFetch } = useAuth()
   const data = shallowRef<HealthData | null>(null)

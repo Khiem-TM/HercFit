@@ -1,4 +1,4 @@
-"""Deterministic daily energy and macro targets with an adaptive expenditure estimate."""
+"""Mục tiêu năng lượng và macro theo ngày tất định, kèm ước tính mức tiêu hao thích ứng."""
 from typing import Annotated
 
 from fastapi import APIRouter, Query

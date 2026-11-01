@@ -1,4 +1,4 @@
-"""Render the Google Health capability matrix from the registry.
+"""Dựng ma trận khả năng Google Health từ registry.
 
     python -m scripts.capability_matrix > docs/google_health/capability_matrix.md
 """

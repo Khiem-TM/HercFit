@@ -8,7 +8,7 @@ from agentic.core.context import RequestContext, request_context
 from agentic.observability import identify
 
 bearer=HTTPBearer(auto_error=False)
-# Verified identities, keyed by a token digest (never the token itself).
+# Danh tính đã kiểm chứng, khoá theo bản băm của token (không bao giờ là chính token).
 _identity_cache: dict[str, tuple[float, object]] = {}
 _CACHE_MAX = 5000
 

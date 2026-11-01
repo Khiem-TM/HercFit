@@ -26,7 +26,7 @@ const groups = computed(() => {
   const result: { key: string; title: string; events: (KnowledgeEvent & { time: string })[] }[] = []
   for (const event of props.events) {
     if (filter.value !== 'all' && event.hub !== filter.value) continue
-    // Goal start dates are days without a time of day.
+    // Ngày bắt đầu mục tiêu là ngày không có giờ cụ thể.
     const date = new Date(event.at.length === 10 ? `${event.at}T00:00:00` : event.at)
     if (Number.isNaN(date.getTime())) continue
     const key = dayKey(date)

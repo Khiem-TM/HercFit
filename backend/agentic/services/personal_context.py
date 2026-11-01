@@ -1,14 +1,14 @@
-"""Personal context for advice and analysis requests; code-owned, never chosen by a model.
+"""Ngữ cảnh cá nhân cho yêu cầu tư vấn và phân tích; do code quyết định, không bao giờ do model chọn.
 
-An advice question about the user ("with my current fitness", "a plan that suits me") is
-answered from the user's stored data plus verified knowledge, not by asking the user for
-facts HercFit already has. This module provides:
+Một câu hỏi tư vấn về người dùng ("với thể lực hiện tại của tôi", "kế hoạch hợp với tôi") được
+trả lời từ dữ liệu đã lưu của người dùng cộng tri thức đã kiểm chứng, không phải bằng cách hỏi người dùng
+những dữ kiện HercFit đã có. Module này cung cấp:
 
-* the user context card: GET /api/assistant/context, rendered compactly for prompts;
-* detection of personal advice/analysis requests and their topic;
-* the deep reads (backend analytics tools) each topic needs before research or answering;
-* an internal-only retrieval descriptor so the knowledge base is searched at the user's level;
-* the slots a card already answers, used to drop clarification questions about them.
+* thẻ ngữ cảnh người dùng: GET /api/assistant/context, dựng gọn cho prompt;
+* phát hiện yêu cầu tư vấn/phân tích cá nhân và chủ đề của chúng;
+* các lần đọc sâu (tool phân tích của backend) mỗi chủ đề cần trước khi tra cứu hoặc trả lời;
+* một mô tả truy hồi chỉ dùng nội bộ để cơ sở tri thức được tìm theo trình độ của người dùng;
+* các ô thông tin thẻ đã trả lời, dùng để bỏ câu hỏi làm rõ về chúng.
 """
 import re
 from datetime import date, datetime, timedelta
@@ -22,10 +22,10 @@ CARD_KEYS = frozenset({'today', 'profile', 'body', 'athlete', 'running', 'traini
 TIMEZONE = 'Asia/Ho_Chi_Minh'
 TOPICS = ('running', 'strength', 'training', 'nutrition', 'body', 'recovery', 'general')
 
-# Wording that makes the request about this user (accent-free, lower case).
+# Cách diễn đạt khiến yêu cầu nói về chính người dùng này (không dấu, chữ thường).
 FIRST_PERSON = re.compile(r"\b(?:toi|minh|tui|em|ban than|cua toi|cua minh)\b|the trang|hien tai|trinh do|phu hop voi|"
                           r"\bmy\b|\bme\b|\bi(?:'m| am| have| run| want| need| should| can| do)\b|current (?:fitness|level|pace)")
-# Advice, planning or analysis rather than a definition or a log entry.
+# Tư vấn, lập kế hoạch hay phân tích chứ không phải định nghĩa hay một mục nhật ký.
 ADVICE = re.compile(r'lam sao|lam the nao|\bnen\b|co nen|giup|ke hoach|lich tap|giao an|cai thien|\btang\b|\bgiam\b|\bkeo\b|'
                     r'dat duoc|muc tieu|phan tich|danh gia|nhan xet|tien bo|phu hop|bao lau|the nao|tu van|loi khuyen|'
                     r'qua suc|co dang|co on|du chua|co du|co tot|'
@@ -40,11 +40,11 @@ TOPIC_WORDS = {
 DOMAIN_TOPICS = {'coaching': 'training', 'trainings': 'training', 'training_plans': 'training', 'progress': 'nutrition',
                  'meals': 'nutrition', 'foods': 'nutrition', 'metrics': 'body', 'goals': 'body', 'profile': 'body',
                  'health': 'recovery', 'exercises': 'training'}
-# Requests that write or look up a catalog item are never "advice", whatever their wording.
+# Yêu cầu ghi hoặc tra một mục catalog không bao giờ là "tư vấn", dù diễn đạt thế nào.
 NON_ADVICE_INTENTS = {'LOG_FOOD', 'LOG_EXERCISE', 'catalog_lookup', 'catalog_research', 'catalog_estimate', 'PROFILE_UPDATE'}
-# Read-only review routes: an advice question there ("is my weight fine for a marathon?") takes the
-# personal-context path so the answer also gets knowledge. Planning, logging and goal routes may
-# write and stay tool routes.
+# Các tuyến xem lại chỉ đọc: một câu hỏi tư vấn ở đó ("cân nặng của tôi chạy marathon được không?") đi theo
+# đường ngữ cảnh cá nhân để câu trả lời cũng có tri thức. Các tuyến lập kế hoạch, ghi nhật ký và mục tiêu có thể
+# ghi và vẫn là tuyến tool.
 REVIEW_DOMAINS = {'coaching', 'metrics', 'progress', 'health', 'profile'}
 
 
@@ -67,7 +67,7 @@ def topic_for(text: str, domain: str | None = None) -> str:
 
 
 def wants_personal_context(text: str, decision: dict) -> bool:
-    """The router's flag, or code-detected personal advice, outside write/catalog flows."""
+    """Cờ của router, hoặc tư vấn cá nhân do code phát hiện, ngoài các luồng ghi/catalog."""
     if decision.get('read_only') or decision.get('intent') in NON_ADVICE_INTENTS:
         return False
     action = decision.get('action')
@@ -83,7 +83,7 @@ def _range(days: int, end: date) -> dict:
 
 
 def deep_reads(topic: str, end: date | None = None) -> list[tuple[str, dict]]:
-    """Backend analytics each topic needs beyond the card; every value is computed by the backend."""
+    """Các phân tích backend mỗi chủ đề cần ngoài thẻ; mọi giá trị đều do backend tính."""
     end = end or today()
     profile = ('get_training_profile', {})
     insights = ('get_training_insights', {'timezone': TIMEZONE})
@@ -98,21 +98,21 @@ def deep_reads(topic: str, end: date | None = None) -> list[tuple[str, dict]]:
 
 
 async def load_card(backend, token) -> dict | None:
-    """The user's context card; the turn continues without it if the backend cannot build one."""
+    """Thẻ ngữ cảnh của người dùng; lượt vẫn tiếp tục khi backend không dựng được thẻ."""
     try:
         card = await backend.request('GET', CONTEXT_PATH, token, params={'timezone': TIMEZONE})
     except Exception as exc:
         annotate(user_context='unavailable', user_context_error=type(exc).__name__)
         return None
     if not isinstance(card, dict) or not CARD_KEYS <= card.keys():
-        # An unexpected shape (older backend, proxy error page) is treated as no card.
+        # Dạng dữ liệu bất ngờ (backend cũ hơn, trang lỗi của proxy) được coi như không có thẻ.
         annotate(user_context='invalid')
         return None
     annotate(user_context='loaded', user_context_missing=len(card.get('missing') or []))
     return card
 
 
-# ---------------------------------------------------------------- rendering
+# ---------------------------------------------------------------- dựng hiển thị
 
 def pace(seconds) -> str | None:
     if not seconds:
@@ -141,7 +141,7 @@ def _join(parts) -> str:
 
 
 def render_card(card: dict | None) -> str | None:
-    """Compact Vietnamese summary (a few hundred tokens) with dates; data, not instructions."""
+    """Bản tóm tắt tiếng Việt gọn (vài trăm token) có ngày tháng; là dữ liệu, không phải chỉ dẫn."""
     if not card:
         return None
     profile, body, goal, athlete = card['profile'], card['body'], card.get('goal'), card['athlete']
@@ -204,11 +204,11 @@ def render_card(card: dict | None) -> str | None:
     return '\n'.join(lines)
 
 
-# ---------------------------------------------------------------- retrieval
+# ---------------------------------------------------------------- truy hồi
 
 def retrieval_descriptor(card: dict | None, topic: str) -> str | None:
-    """Coarse athlete description added to the internal knowledge-base search only (never the web):
-    the passages a coach would read for this level, not for elite athletes."""
+    """Mô tả vận động viên ở mức thô, chỉ thêm vào lần tìm trong cơ sở tri thức nội bộ (không bao giờ web):
+    những đoạn một huấn luyện viên sẽ đọc cho trình độ này, không phải cho vận động viên đỉnh cao."""
     if not card:
         return None
     athlete, running = card['athlete'], card['running']
@@ -232,7 +232,7 @@ def retrieval_descriptor(card: dict | None, topic: str) -> str | None:
     return None
 
 
-# ---------------------------------------------------------------- clarification
+# ---------------------------------------------------------------- làm rõ
 
 def _known(card, *paths):
     for path in paths:
@@ -244,7 +244,7 @@ def _known(card, *paths):
     return False
 
 
-# Question wording → whether the card already answers it.
+# Cách diễn đạt câu hỏi → thẻ đã trả lời nó chưa.
 SLOTS = {
     'age': (r'tuoi|\bage\b', ('profile.age',)),
     'weight': (r'can nang|\bweight\b|bao nhieu kg', ('body.weight_kg',)),
@@ -263,7 +263,7 @@ SLOTS = {
 
 
 def answered_by_card(question: str, card: dict | None) -> bool:
-    """True when every fact the question asks about is already in the card."""
+    """True khi mọi dữ kiện câu hỏi hỏi tới đã có trong thẻ."""
     if not card:
         return False
     words = normalize_food_text(question or '')

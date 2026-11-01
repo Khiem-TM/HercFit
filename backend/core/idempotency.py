@@ -1,4 +1,4 @@
-"""Idempotent business writes, committed atomically with their response."""
+"""Lệnh ghi nghiệp vụ idempotent, commit nguyên tử cùng phản hồi của chúng."""
 
 from contextvars import ContextVar
 from hashlib import sha256
@@ -18,7 +18,7 @@ class IdempotentRoute(APIRoute):
         handler = super().get_route_handler()
 
         async def wrapped(request: Request):
-            # Cache body on the same Request FastAPI will validate.
+            # Cache body trên cùng Request mà FastAPI sẽ kiểm tra.
             await request.body()
             token = active_request.set(request)
             try:
@@ -33,7 +33,7 @@ async def execute_idempotent(request, service, invoke, response):
     key = request.headers.get("Idempotency-Key")
     if not key or request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
         return await invoke()
-    # Account deactivation is deliberately outside the agent write contract.
+    # Vô hiệu hoá tài khoản cố ý nằm ngoài hợp đồng ghi của agent.
     if request.url.path == "/api/profile" and request.method == "DELETE":
         return await invoke()
     if len(key) > 128 or not key.isascii() or not key.isprintable():
@@ -45,8 +45,8 @@ async def execute_idempotent(request, service, invoke, response):
         [request.method, request.url.path, sorted(request.query_params.multi_items()), body],
         sort_keys=True, separators=(",", ":"), ensure_ascii=False,
     ).encode()).hexdigest()
-    # Lock even when the ledger row does not yet exist. Same user/key serializes
-    # across processes; rollback releases the lock and leaves no phantom success.
+    # Khoá kể cả khi dòng sổ chưa tồn tại. Cùng người dùng/khoá được tuần tự hoá
+    # giữa các tiến trình; rollback nhả khoá và không để lại thành công ảo.
     await session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
                           {"key": f"idempotency:{user_id}:{key}"})
     stored = (await session.execute(text(

@@ -1,4 +1,4 @@
-"""Pure ASGI middleware keeps roots/context alive for the entire SSE response."""
+"""Middleware ASGI thuần giữ root/context sống suốt toàn bộ phản hồi SSE."""
 import asyncio
 import logging
 from time import monotonic
@@ -19,7 +19,7 @@ class ObservabilityMiddleware:
         manager = self.manager or observer()
         headers = {k.decode().lower(): v.decode() for k, v in scope.get('headers', [])}
         parent = trusted_parent(manager.config, scope['method'], scope['path'], headers) if self.accept_parent else None
-        # Strip all caller-controlled trace headers before downstream handlers.
+        # Bỏ mọi header trace do bên gọi kiểm soát trước các handler phía sau.
         scope = {**scope, 'headers': [(k, v) for k, v in scope.get('headers', []) if k.decode().lower() not in TRACE_HEADERS]}
         state = Observation(manager)
         code = 500

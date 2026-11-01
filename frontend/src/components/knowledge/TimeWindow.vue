@@ -10,7 +10,7 @@ const props = defineProps<{
   min: string
   max: string
   density: Record<string, HubCounts>
-  /** The window the map was last drawn for, with its totals. */
+  /** Cửa sổ mà bản đồ được vẽ lần gần nhất, kèm các tổng của nó. */
   drawn?: KnowledgeWindow
   loading?: boolean
   failed?: boolean
@@ -39,7 +39,7 @@ const total = (counts?: HubCounts) => STACK.reduce((sum, hub) => sum + (counts?.
 const activity = computed(() => days.value.slice(startIndex.value, endIndex.value + 1).reduce((sum, day) => sum + total(props.density[day]), 0))
 const quiet = computed(() => !days.value.some(day => total(props.density[day])))
 
-/** Stacked bars per day; a square-root scale keeps light days visible next to busy ones. */
+/** Cột chồng theo ngày; thang căn bậc hai giữ những ngày ít hoạt động vẫn nhìn thấy được cạnh ngày bận rộn. */
 const bars = computed(() => {
   const peak = Math.max(1, ...days.value.map(day => total(props.density[day])))
   return days.value.flatMap((day, i) => {
@@ -72,7 +72,7 @@ const clipped = computed(() => {
 
 const longDate = (day: string) => new Intl.DateTimeFormat('vi-VN', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'numeric', year: 'numeric' })
   .format(new Date(`${day}T12:00:00Z`))
-// vi-VN short dates read "11-10"; next to the range dash a slash is clearer.
+// Ngày ngắn vi-VN hiển thị "11-10"; cạnh dấu gạch nối khoảng thì dấu gạch chéo rõ hơn.
 const dayMonth = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}`
 
 watch(() => props.modelValue, value => { if (!grip.value) draft.value = value })
@@ -105,14 +105,14 @@ function grab(event: PointerEvent) {
   if (event.button !== 0 || !track.value) return
   const index = indexAt(event)
   let mode = (event.target as HTMLElement).closest<HTMLElement>('[data-grip]')?.dataset.grip as Grip | undefined
-  // Handles of a one- or two-day window overlap; the first movement decides which edge moves.
+  // Tay nắm của cửa sổ một hoặc hai ngày chồng lên nhau; lần di chuyển đầu tiên quyết định mép nào di chuyển.
   if ((mode === 'start' || mode === 'end') && endIndex.value - startIndex.value <= 1) mode = 'edge'
   event.preventDefault()
   track.value.setPointerCapture(event.pointerId)
   origin = draft.value
   anchor = index
   if (!mode) {
-    // A tap on the track pulls the nearer edge to that day.
+    // Chạm lên thanh trượt kéo mép gần hơn tới ngày đó.
     mode = Math.abs(index - startIndex.value) <= Math.abs(index - endIndex.value) ? 'start' : 'end'
     place(mode, index)
   }
@@ -146,7 +146,7 @@ function key(event: KeyboardEvent, edge: 'start' | 'end') {
   event.preventDefault()
   index = edge === 'start' ? Math.min(Math.max(index, 0), endIndex.value) : Math.max(Math.min(index, count.value - 1), startIndex.value)
   draft.value = edge === 'start' ? { start: days.value[index], end: draft.value.end } : { start: draft.value.start, end: days.value[index] }
-  // Held keys repeat quickly; ask for the map once they settle.
+  // Giữ phím sẽ lặp nhanh; chỉ hỏi bản đồ khi đã dừng hẳn.
   clearTimeout(timer)
   timer = setTimeout(commit, 450)
 }

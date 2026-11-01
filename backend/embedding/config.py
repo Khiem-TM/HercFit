@@ -12,17 +12,17 @@ class EmbeddingSettings(BaseSettings):
     EMBEDDING_API_KEY: SecretStr | None=None
     EMBEDDING_REVISION: str='1'
     EMBEDDING_TIMEOUT_SECONDS: float=Field(default=15,gt=0)
-    # Cross-encoder rerank on the same provider and key (FPT: bge-reranker-v2-m3 at /v1/rerank).
+    # Xếp hạng lại bằng cross-encoder trên cùng nhà cung cấp và khoá (FPT: bge-reranker-v2-m3 tại /v1/rerank).
     RERANK_ENABLED: bool=False
     RERANK_MODEL: str='bge-reranker-v2-m3'
     RERANK_PATH: str='v1/rerank'
     RERANK_TIMEOUT_SECONDS: float=Field(default=5,gt=0,le=30)
-    # Fused candidates sent to the reranker, and the depth of each dense/keyword list.
+    # Số ứng viên đã hợp nhất gửi cho reranker, và độ sâu của mỗi danh sách dense/từ khoá.
     RAG_CANDIDATES: int=Field(default=24,ge=1,le=64)
-    # Chunks kept per source page, so overlapping windows of one page do not crowd out other evidence.
+    # Số chunk giữ lại cho mỗi trang nguồn, để các cửa sổ chồng nhau của một trang không chèn ép bằng chứng khác.
     RAG_MAX_PER_PAGE: int=Field(default=1,ge=1,le=10)
-    # Below these the knowledge base is treated as not covering the question (calibrated with
-    # agentic.evaluation.rag_eval); the rerank score applies when reranking succeeded, else cosine.
+    # Dưới các ngưỡng này, cơ sở tri thức được coi là không bao quát câu hỏi (hiệu chỉnh bằng
+    # agentic.evaluation.rag_eval); điểm rerank áp dụng khi rerank thành công, nếu không thì dùng cosine.
     RAG_MIN_RERANK_SCORE: float | None=Field(default=None,ge=0,le=1)
     RAG_MIN_DENSE_SIMILARITY: float | None=Field(default=None,ge=-1,le=1)
 

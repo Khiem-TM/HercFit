@@ -1,7 +1,7 @@
-"""Periodic Google Health synchronization inside each API worker.
+"""Đồng bộ Google Health định kỳ bên trong mỗi worker API.
 
-Every worker may run the loop: leases with SKIP LOCKED hand each due connection
-to exactly one worker. Run once from a shell with `python -m services.google_health`.
+Mọi worker đều có thể chạy vòng lặp: lease với SKIP LOCKED giao mỗi kết nối đến hạn
+cho đúng một worker. Chạy một lần từ shell bằng `python -m integrations.google_health`.
 """
 import asyncio
 import logging

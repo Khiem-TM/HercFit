@@ -1,8 +1,8 @@
-"""Token buckets in PostgreSQL, shared by every worker process.
+"""Token bucket trong PostgreSQL, dùng chung cho mọi tiến trình worker.
 
-`take(key, rate_per_minute)` spends one token or returns the seconds to wait.
-Buckets: `gh:user:{connection}` (Google's documented default is 300 requests per
-minute per user) and `gh:project` (the project's quota, from configuration).
+`take(key, rate_per_minute)` tiêu một token hoặc trả về số giây phải chờ.
+Các bucket: `gh:user:{connection}` (mặc định theo tài liệu của Google là 300 request mỗi
+phút mỗi người dùng) và `gh:project` (quota của project, lấy từ cấu hình).
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from core.database import get_db_session
 
 
 async def take(key: str, per_minute: int, *, capacity: int | None = None) -> float:
-    """0 when a token was spent, else seconds until one is available."""
+    """0 khi đã tiêu được một token, ngược lại là số giây cho tới khi có token."""
     rate = per_minute / 60.0
     capacity = capacity or per_minute
     async with get_db_session() as session:
@@ -34,7 +34,7 @@ async def take(key: str, per_minute: int, *, capacity: int | None = None) -> flo
 
 
 async def acquire(keys: list[tuple[str, int]], *, max_wait: float = 30.0, sleep=asyncio.sleep) -> None:
-    """Wait (bounded) for a token in every bucket; raises TimeoutError when quota stays exhausted."""
+    """Chờ (có giới hạn) một token ở mọi bucket; ném TimeoutError khi quota vẫn cạn."""
     waited = 0.0
     for key, per_minute in keys:
         while True:

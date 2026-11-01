@@ -1,12 +1,12 @@
-"""Parse model drafts and reject unsupported citations/numbers before publishing evidence."""
+"""Phân tích bản nháp của model và từ chối trích dẫn/con số không có căn cứ trước khi công bố bằng chứng."""
 import json
 from agentic.core.providers.fpt import strip_tool_markup
 from agentic.research.contracts import EvidenceClaim, ResearchDraft
 from agentic.research.quotes import numbers_supported, quote_found
 
 def parse_draft(message,labels):
-    """The model answers with JSON text: a forced function call made DeepSeek return an all-empty draft.
-    Claims cite short labels (S1...) that map back to real source ids; malformed claims are skipped."""
+    """Model trả lời bằng văn bản JSON: ép gọi hàm từng khiến DeepSeek trả về bản nháp rỗng hoàn toàn.
+    Khẳng định trích nhãn ngắn (S1...) ánh xạ ngược về id nguồn thật; khẳng định sai định dạng bị bỏ qua."""
     text=strip_tool_markup(message.content if isinstance(message.content,str) else '')
     start,end=text.find('{'),text.rfind('}')
     try:
@@ -33,7 +33,7 @@ MAX_INVALID_CLAIM_FRACTION = 1 / 3
 
 
 def check_claims(claims, documents, context=''):
-    """(checked, dropped) where dropped holds (claim, reason) for unverifiable claims."""
+    """(checked, dropped) trong đó dropped chứa (claim, reason) cho các khẳng định không kiểm chứng được."""
     checked, dropped = [], []
     for claim in claims:
         source = documents.get(claim.source_id)
@@ -42,7 +42,7 @@ def check_claims(claims, documents, context=''):
             continue
         if claim.conflict or not claim.applicable:
             continue
-        # Reject invented numeric assertions even if a real quote was attached.
+        # Từ chối khẳng định số liệu bịa ra kể cả khi có kèm một trích dẫn thật.
         if not numbers_supported(claim.claim, claim.quote, context):
             dropped.append((claim, 'Unsupported numeric claim'))
             continue
@@ -51,8 +51,8 @@ def check_claims(claims, documents, context=''):
 
 
 def verify_claims(claims, documents, *, strict=True, context=''):
-    """Verified claims. A strict check (catalog records that may be saved) rejects a mostly
-    invented draft outright; a knowledge answer keeps whatever was verified and drops the rest."""
+    """Các khẳng định đã kiểm chứng. Kiểm tra chặt (bản ghi catalog có thể được lưu) từ chối thẳng một bản nháp
+    phần lớn là bịa; câu trả lời tri thức giữ lại những gì đã kiểm chứng và bỏ phần còn lại."""
     checked, dropped = check_claims(claims, documents, context)
     if strict and dropped and len(dropped) > MAX_INVALID_CLAIM_FRACTION * max(1, len(claims)):
         raise ValueError(dropped[0][1])
@@ -60,14 +60,14 @@ def verify_claims(claims, documents, *, strict=True, context=''):
 
 
 def verified_claims(claims, documents, context=''):
-    """Every claim whose quote is in its source and whose numbers are in the quote, whatever the
-    model said about applicability or conflicts: the material a person can choose from."""
+    """Mọi khẳng định có trích dẫn nằm trong nguồn và có con số nằm trong trích dẫn, bất kể
+    model nói gì về khả năng áp dụng hay mâu thuẫn: tư liệu mà người dùng có thể chọn."""
     return [c for c in claims if c.source_id in documents and quote_found(c.quote, documents[c.source_id]['content'])
             and numbers_supported(c.claim, c.quote, context)]
 
 
 def related_claims(claims, documents, context=''):
-    """Verified quotes the model judged not applicable (another size, recipe or object): shown to the
-    user as estimates to choose from, never saved as facts on their own."""
+    """Trích dẫn đã kiểm chứng mà model đánh giá là không áp dụng (khẩu phần, công thức hay đối tượng khác): hiển thị cho
+    người dùng như các ước tính để chọn, không bao giờ tự lưu thành dữ kiện."""
     return [c for c in claims if not c.applicable and not c.conflict and c.source_id in documents
             and quote_found(c.quote, documents[c.source_id]['content']) and numbers_supported(c.claim, c.quote, context)]

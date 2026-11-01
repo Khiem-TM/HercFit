@@ -1,4 +1,4 @@
-"""Version 1: unchanged application-owned instructions."""
+"""Phiên bản 1: hướng dẫn do ứng dụng sở hữu, không thay đổi."""
 
 PROMPT = """Bạn là Tool Agent của HercFit. Chọn API có schema đúng để thực hiện yêu cầu.
 Chỉ dùng tool đã cấp. Đọc trước khi sửa/xoá, lấy đúng resource ID và expected_version_id.

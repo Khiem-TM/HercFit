@@ -1,13 +1,13 @@
-"""Health platform M3b: the source layer and compressed series.
+"""Nền tảng sức khoẻ M3b: lớp nguồn và chuỗi dữ liệu nén.
 
-* health_source_records: one row per provider data point (or dailyRollUp window)
-  exactly as Google returned it, with its schema revision, data source, the
-  three clocks (physical, civil, UTC offset) and the fetch that last saw it.
-  Mark-and-sweep deletion compares `last_seen_root` with a completed fetch.
-* health_series_chunks: dense samples and intervals (heart rate at 1 Hz, steps
-  intervals, HRV, SpO2, ...) compressed per source and period, so 90 days for
-  1,000 users stay millions of rows, not billions.
-* health_record_links: which business row came from which source record.
+* health_source_records: mỗi data point của nhà cung cấp (hoặc cửa sổ dailyRollUp) một dòng,
+  đúng như Google trả về, kèm revision schema, nguồn dữ liệu, ba
+  loại giờ (vật lý, địa phương, độ lệch UTC) và lần fetch thấy nó gần nhất.
+  Xoá kiểu đánh dấu-và-quét so sánh `last_seen_root` với một lần fetch đã hoàn tất.
+* health_series_chunks: các mẫu và khoảng dày (nhịp tim 1 Hz, khoảng bước
+  chân, HRV, SpO2, ...) nén theo nguồn và chu kỳ, để 90 ngày cho
+  1.000 người dùng vẫn là hàng triệu dòng, không phải hàng tỉ.
+* health_record_links: dòng nghiệp vụ nào đến từ bản ghi nguồn nào.
 """
 from alembic import op
 

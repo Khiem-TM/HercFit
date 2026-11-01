@@ -1,16 +1,16 @@
-"""Capture business writes into export_outbox, in the business transaction.
+"""Ghi nhận lệnh ghi nghiệp vụ vào export_outbox, trong transaction nghiệp vụ.
 
-A write is captured only when all hold:
-* the record is HercFit's (not imported from Google) and the transaction is not
-  an import (`SET LOCAL hercfit.origin = 'google'`), so nothing loops back;
-* the user has an ACTIVE connection, enabled the export group, and granted its
-  write scope; enabling a group exports changes made after that moment only
-  (history export is a separate, explicit job);
-* deletes are captured only when the user asked to delete the Google copy too.
+Một lệnh ghi chỉ được ghi nhận khi thoả mọi điều kiện:
+* bản ghi thuộc HercFit (không nhập từ Google) và transaction không phải
+  lần nhập (`SET LOCAL hercfit.origin = 'google'`), nên không gì vòng ngược lại;
+* người dùng có kết nối ACTIVE, đã bật nhóm xuất và đã cấp scope ghi
+  của nó; bật một nhóm chỉ xuất các thay đổi sau thời điểm đó
+  (xuất lịch sử là job riêng, tường minh);
+* lệnh xoá chỉ được ghi nhận khi người dùng yêu cầu xoá cả bản trên Google.
 
-Rows carry an idempotency key (aggregate, version, op, data type), the payload and
-its hash. A replaced snapshot (meals, trainings, body metrics are immutable) moves
-the Google mapping to the new aggregate and becomes an UPDATE of the same point.
+Các dòng mang khoá idempotency (aggregate, phiên bản, thao tác, loại dữ liệu), payload và
+băm của nó. Ảnh chụp bị thay (bữa ăn, buổi tập, số đo cơ thể là bất biến) chuyển
+mapping Google sang aggregate mới và trở thành UPDATE của cùng data point.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ async def _origin(session) -> str | None:
 
 
 async def mark_import(session) -> None:
-    """Call in import transactions: writes in them are never exported back."""
+    """Gọi trong transaction nhập: lệnh ghi trong đó không bao giờ được xuất ngược lại."""
     await session.execute(text("SELECT set_config('hercfit.origin', 'google', true)"))
 
 
@@ -60,16 +60,16 @@ async def capture(session, user_id: UUID, aggregate_type: str, entity: Any, op: 
     setting = await _setting(session, connection.id, group)
     if setting is None or not setting.enabled:
         return 0
-    # A write captured live happens after the group was enabled, so it is a new change by
-    # definition. Records made before enabling are only sent by the explicit history export.
-    # (Comparing created_at with enabled_at would mix the app's and the database's clocks.)
+    # Một lệnh ghi được ghi nhận trực tiếp xảy ra sau khi nhóm được bật, nên theo định nghĩa
+    # nó là thay đổi mới. Bản ghi tạo trước khi bật chỉ được gửi bởi lệnh xuất lịch sử tường minh.
+    # (So created_at với enabled_at sẽ trộn đồng hồ của ứng dụng và của database.)
     points = mapping.build(aggregate_type, entity)
     written = 0
     for data_type, payload in points:
         if not contract_scopes.can_write(spec(data_type).scope_group, connection.granted_scopes or []):
             continue
         if replaces_id is not None:
-            # The immutable snapshot was replaced: the same Google point now follows the new aggregate.
+            # Ảnh chụp bất biến đã bị thay: cùng data point trên Google giờ đi theo aggregate mới.
             await session.execute(text("""
                 UPDATE google_resource_mappings SET aggregate_id = :new, updated_at = now()
                 WHERE connection_id = :c AND aggregate_type = :t AND aggregate_id = :old AND data_type = :d"""),
@@ -79,7 +79,7 @@ async def capture(session, user_id: UUID, aggregate_type: str, entity: Any, op: 
               AND aggregate_id = :a AND data_type = :d"""),
             {"c": connection.id, "t": aggregate_type, "a": entity.id, "d": data_type})).first()
         if history and exists and exists.state == "CONFIRMED" and exists.payload_sha256 == mapping.payload_sha256(payload):
-            continue  # already on Google, unchanged: a history export sends it only once
+            continue  # đã có trên Google và không đổi: xuất lịch sử chỉ gửi một lần
         effective = op if op == "DELETE" else ("UPDATE" if exists else "CREATE")
         if effective == "DELETE" and not exists:
             continue
@@ -112,7 +112,7 @@ async def hook(session, user_id, aggregate_type, entity, op, **extra) -> None:
 
 
 async def preview(session, user_id: UUID, aggregate_type: str, entity: Any) -> list[dict[str, Any]]:
-    """The Google effects a write would have (shown on the confirmation card, bound at execution)."""
+    """Tác động lên Google mà một lệnh ghi sẽ có (hiển thị trên thẻ xác nhận, gắn lại lúc thực thi)."""
     group = mapping.AGGREGATE_GROUPS.get(aggregate_type)
     if group is None:
         return []

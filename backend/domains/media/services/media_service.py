@@ -1,4 +1,4 @@
-"""One cover image per entity; optimistic locking and durable cleanup tickets."""
+"""Mỗi thực thể một ảnh bìa; khoá lạc quan và phiếu dọn dẹp bền vững."""
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -48,7 +48,7 @@ class MediaService(UserService):
 
     async def queue_old(self, entity, cloud_name):
         if entity.image_public_id:
-            # Managed URLs carry their original cloud name; never delete arbitrary URLs.
+            # URL được quản lý mang tên cloud gốc của nó; không bao giờ xoá URL tuỳ ý.
             parsed = urlparse(entity.image_url or "")
             old_cloud = parsed.path.split("/")[1] if parsed.netloc == "res.cloudinary.com" else cloud_name
             await self.session.execute(insert(ImageCleanup).values(
@@ -58,11 +58,11 @@ class MediaService(UserService):
     async def upload(self, kind, entity_id, expected_version_id, file):
         entity = await self.entity(kind, entity_id, write=True)
         require_version(entity, expected_version_id)
-        cloud = CloudinaryImages()  # fail fast when storage is not configured
+        cloud = CloudinaryImages()  # thất bại sớm khi chưa cấu hình kho lưu trữ
         return await self._store(kind, entity_id, expected_version_id, await read_image(file), cloud)
 
     async def import_remote(self, kind, entity_id, expected_version_id, source_url):
-        """Research illustration chosen on a confirmation card, re-hosted on Cloudinary."""
+        """Ảnh minh hoạ từ tra cứu được chọn trên thẻ xác nhận, lưu lại trên Cloudinary."""
         entity = await self.entity(kind, entity_id, write=True)
         require_version(entity, expected_version_id)
         cloud = CloudinaryImages()
@@ -70,8 +70,8 @@ class MediaService(UserService):
 
     async def _store(self, kind, entity_id, expected_version_id, image, cloud):
         public_id = f"{settings.CLOUDINARY_FOLDER}/{kind}/{entity_id}/{uuid4().hex}"
-        # Commit a cleanup ticket BEFORE network I/O. A crash or DB failure later
-        # leaves a durable ticket; the worker waits an hour for in-flight requests.
+        # Commit phiếu dọn dẹp TRƯỚC I/O mạng. Sập hay lỗi DB sau đó
+        # vẫn để lại phiếu bền vững; worker chờ một giờ cho các request đang dở.
         self.session.add(ImageCleanup(public_id=public_id, cloud_name=cloud.cloud_name,
                                       available_at=datetime.now(timezone.utc) + timedelta(hours=1)))
         await self.session.commit()

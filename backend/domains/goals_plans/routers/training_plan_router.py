@@ -1,4 +1,4 @@
-"""Dated training-plans, replaced as complete versions."""
+"""Kế hoạch tập theo ngày, được thay bằng phiên bản đầy đủ."""
 from uuid import UUID
 
 from fastapi import APIRouter, Response

@@ -1,4 +1,4 @@
-"""Take catalog locks before row/user locks, including direct model helpers."""
+"""Lấy khoá catalog trước khoá dòng/người dùng, kể cả trong các hàm hỗ trợ model trực tiếp."""
 from functools import wraps
 from sqlalchemy import text
 

@@ -1,6 +1,6 @@
-"""Wearable health data synchronized from the Google Health API.
+"""Dữ liệu sức khoẻ từ thiết bị đeo, đồng bộ từ Google Health API.
 
-Split from models.health in the domain reorganization."""
+Tách ra từ models.health trong đợt tổ chức lại theo miền."""
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -62,12 +62,12 @@ class HealthConnection(BaseModel):
     next_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     lease_token: Mapped[PyUUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # users.getIdentity healthUserId: webhooks address users by it, never by the OAuth subject.
+    # healthUserId của users.getIdentity: webhook định danh người dùng bằng nó, không bao giờ bằng OAuth subject.
     health_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # Bumped on every (re)connect and disconnect: a job started under an older
-    # generation must not write, call Google or serve context any more.
+    # Tăng ở mỗi lần (kết nối lại) và ngắt kết nối: job bắt đầu dưới thế hệ
+    # cũ hơn không được ghi, gọi Google hay phục vụ ngữ cảnh nữa.
     generation: Mapped[int] = mapped_column(BigInteger, default=1, server_default=text("1"), nullable=False)
-    # Fencing token: each lease claim increments it; writes check it in the same transaction.
+    # Fencing token: mỗi lần lấy lease tăng nó; lệnh ghi kiểm tra nó trong cùng transaction.
     lease_epoch: Mapped[int] = mapped_column(BigInteger, default=0, server_default=text("0"), nullable=False)
     api_version: Mapped[str] = mapped_column(String(8), default="v4", server_default="v4", nullable=False)
 

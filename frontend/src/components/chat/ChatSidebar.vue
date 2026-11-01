@@ -45,7 +45,7 @@ const userInitials = computed(() => {
     id="chat-sidebar"
     class="relative z-20 flex h-full min-h-0 w-[272px] shrink-0 flex-col overflow-hidden border-r border-ink/[0.07] bg-sunken select-none"
   >
-    <!-- Top Section: Brand Toggle + New Chat Button -->
+    <!-- Phần trên: nút thương hiệu + nút cuộc trò chuyện mới -->
     <div class="flex shrink-0 flex-col gap-2 p-3">
       <div class="flex items-center justify-between px-1.5 py-1">
         <a
@@ -76,7 +76,7 @@ const userInitials = computed(() => {
         </button>
       </div>
 
-      <!-- New Conversation Button -->
+      <!-- Nút cuộc trò chuyện mới -->
       <button
         type="button"
         :disabled="isStreaming"
@@ -97,7 +97,7 @@ const userInitials = computed(() => {
       @delete-session="emit('delete-session', $event)"
     />
 
-    <!-- Bottom Section: User Avatar (opens Profile & Settings Modal) -->
+    <!-- Phần dưới: avatar người dùng (mở hộp thoại Hồ sơ & Cài đặt) -->
     <div class="flex shrink-0 items-center gap-2 border-t border-ink/[0.07] p-3">
       <button
         type="button"

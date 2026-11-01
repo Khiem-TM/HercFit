@@ -1,22 +1,22 @@
-"""GH_EXPORT_DISPATCH: send captured changes to Google, never twice and never blindly.
+"""GH_EXPORT_DISPATCH: gửi các thay đổi đã ghi nhận lên Google, không bao giờ hai lần và không bao giờ mù quáng.
 
-States (export_outbox.state):
-  PENDING -> DISPATCHING -> CONFIRMED            the Operation finished, or a read-back matched
-  DISPATCHING -> VERIFYING (timeout / 5xx / not done): read back before anything else
-  VERIFYING -> CONFIRMED (Google holds a point HercFit wrote with this content)
-            -> PENDING (proven absent: sent again) | UNCERTAIN (cannot be checked: blind retries stop)
-  Google assigns its own data point ids and ignores a client-provided name (checked with a real
-  account on 2026-11-01 for weight, nutrition-log and exercise), so a lost create is found by
-  listing the record's days and matching content written by our OAuth client.
-  any -> BLOCKED_PERMISSION (write scope missing; reads keep working), FAILED (400),
-         SUPERSEDED (a newer version of the same record is pending)
-  UPDATE/DELETE touch only points HercFit created (owned mapping). If the point
-  changed at Google since our last write, the row becomes CONFLICT and an
-  export_conflicts entry waits for the user (keep local / accept remote).
+Trạng thái (export_outbox.state):
+  PENDING -> DISPATCHING -> CONFIRMED            Operation đã xong, hoặc lần đọc lại khớp
+  DISPATCHING -> VERIFYING (timeout / 5xx / chưa xong): đọc lại trước mọi việc khác
+  VERIFYING -> CONFIRMED (Google đang giữ một data point HercFit ghi với nội dung này)
+            -> PENDING (đã chứng minh vắng mặt: gửi lại) | UNCERTAIN (không kiểm tra được: dừng thử lại mù)
+  Google tự cấp id cho data point và bỏ qua tên do client đặt (đã kiểm tra bằng tài khoản
+  thật ngày 2026-11-01 với weight, nutrition-log và exercise), nên một lệnh tạo bị mất được tìm bằng cách
+  liệt kê các ngày của bản ghi và so khớp nội dung do OAuth client của chúng ta ghi.
+  bất kỳ -> BLOCKED_PERMISSION (thiếu scope ghi; lệnh đọc vẫn chạy), FAILED (400),
+           SUPERSEDED (đang có phiên bản mới hơn của cùng bản ghi chờ gửi)
+  UPDATE/DELETE chỉ chạm tới các data point HercFit đã tạo (mapping được sở hữu). Nếu data point
+  đã đổi trên Google kể từ lần ghi cuối của chúng ta, dòng trở thành CONFLICT và một
+  mục export_conflicts chờ người dùng (giữ bản cục bộ / nhận bản từ xa).
 
-Writes run only with the kill switch on (GH_EXPORT_DISPATCH), the group allowed
-(GH_EXPORT_GROUPS) and the capability verified with a real account
-(GOOGLE_HEALTH_VERIFIED_CAPABILITIES, e.g. "weight:create").
+Lệnh ghi chỉ chạy khi công tắc ngắt khẩn cấp bật (GH_EXPORT_DISPATCH), nhóm được phép
+(GH_EXPORT_GROUPS) và khả năng đã kiểm chứng bằng tài khoản thật
+(GOOGLE_HEALTH_VERIFIED_CAPABILITIES, ví dụ "weight:create").
 """
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ def _shape(data_type: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _restrict(value: Any, shape: Any) -> Any:
-    """The part of a value HercFit wrote: Google adds fields of its own (e.g. sampleTime.civilTime)."""
+    """Phần giá trị do HercFit ghi: Google tự thêm các trường của nó (ví dụ sampleTime.civilTime)."""
     if isinstance(shape, dict):
         source = value if isinstance(value, dict) else {}
         return {key: _restrict(source.get(key), item) for key, item in shape.items()}
@@ -57,7 +57,7 @@ def _restrict(value: Any, shape: Any) -> Any:
 
 
 def _typed(data_type: str, point: dict[str, Any], shape: dict[str, Any] | None = None) -> str:
-    """Hash of the typed value (via the schema adapter); with `shape`, only the fields HercFit wrote."""
+    """Băm của giá trị có kiểu (qua adapter schema); với `shape` thì chỉ các trường HercFit đã ghi."""
     value = adapter().parse_point(data_type, point).value
     if shape is not None:
         value = _restrict(value, shape)
@@ -128,7 +128,7 @@ async def dispatch(ctx: Context) -> None:
                 await _set(session, row, state, error=reason, delay=timedelta(hours=1))
                 done[state] = done.get(state, 0) + 1
                 continue
-            # A newer pending version of the same record replaces this one.
+            # Một phiên bản mới hơn đang chờ của cùng bản ghi thay cho dòng này.
             newer = (await session.execute(text("""
                 SELECT 1 FROM export_outbox WHERE aggregate_type = :t AND aggregate_id = :a AND data_type = :d
                   AND aggregate_version > :v AND state = 'PENDING' LIMIT 1"""),
@@ -159,7 +159,7 @@ async def _send(client, row: dict[str, Any]) -> dict[str, Any]:
     data_type, payload, op = row["data_type"], row["payload"], row["op"]
     try:
         if op == "CREATE":
-            # Never retried by the client: Google assigns the id, so a second POST could be a second point.
+            # Client không bao giờ thử lại: Google tự cấp id, nên POST lần hai có thể thành data point thứ hai.
             return _from_operation(await client.create_point(data_type, payload), row, fallback_name=None)
         if not row.get("owned_by_hercfit") or not row.get("remote_name"):
             return {"state": "UNCERTAIN", "error": "no_owned_remote_point"}
@@ -176,7 +176,7 @@ async def _send(client, row: dict[str, Any]) -> dict[str, Any]:
             return {"state": "BLOCKED_PERMISSION", "error": exc.code}
         if exc.error_class in (SCHEMA, UNSUPPORTED):
             return {"state": "FAILED", "error": exc.code}
-        return {"state": "VERIFYING", "error": exc.code}  # outcome unknown: never re-send blindly
+        return {"state": "VERIFYING", "error": exc.code}  # kết quả chưa rõ: không bao giờ gửi lại mù quáng
 
 
 def _from_operation(operation: dict[str, Any], row: dict[str, Any], *, fallback_name: str | None) -> dict[str, Any]:
@@ -190,7 +190,7 @@ def _from_operation(operation: dict[str, Any], row: dict[str, Any], *, fallback_
 
 
 async def _verify(client, row: dict[str, Any]) -> dict[str, Any]:
-    """Read back an unknown outcome: by Google's id when known, otherwise by content."""
+    """Đọc lại một kết quả chưa rõ: theo id của Google khi đã biết, nếu không thì theo nội dung."""
     data_type, payload = row["data_type"], row["payload"]
     name = row.get("remote_name")
     if name is None:
@@ -208,7 +208,7 @@ async def _verify(client, row: dict[str, Any]) -> dict[str, Any]:
     try:
         remote = await client.get_point(name)
     except GoogleHealthError as exc:
-        if exc.error_class == UNSUPPORTED:  # 404: proven absent
+        if exc.error_class == UNSUPPORTED:  # 404: đã chứng minh là vắng mặt
             return _absent(row)
         return {"state": "VERIFYING", "error": exc.code}
     if row["op"] == "DELETE":
@@ -219,16 +219,16 @@ async def _verify(client, row: dict[str, Any]) -> dict[str, Any]:
 
 def _absent(row: dict[str, Any]) -> dict[str, Any]:
     if row["op"] == "CREATE" and row["attempts"] < MAX_VERIFY:
-        return {"state": "PENDING", "error": "absent_resend"}  # proven absent, so sending again cannot duplicate
+        return {"state": "PENDING", "error": "absent_resend"}  # đã chứng minh vắng mặt, nên gửi lại không thể tạo bản trùng
     return {"state": "UNCERTAIN", "error": "absent"}
 
 
 class _Unsearchable(Exception):
-    """The point carries no time the list filter can search by."""
+    """Data point không mang thời điểm nào mà filter của lệnh list tìm được."""
 
 
 async def _find_written(client, row: dict[str, Any]) -> str | None:
-    """Google's name of a point our OAuth client wrote with this content, from a list of its days."""
+    """Tên Google của data point do OAuth client của chúng ta ghi với nội dung này, tìm qua danh sách các ngày của nó."""
     data_type, payload = row["data_type"], row["payload"]
     parsed = adapter().parse_point(data_type, payload)
     start = parsed.time.physical_start
@@ -236,7 +236,7 @@ async def _find_written(client, row: dict[str, Any]) -> str | None:
         raise _Unsearchable
     day = (start + timedelta(seconds=parsed.time.start_offset_s or 0)).date()
     plan = reads.plan(data_type, rollup=False)
-    query = reads.list_filter(plan, day - timedelta(days=1), day + timedelta(days=2))  # sleep files under its end day
+    query = reads.list_filter(plan, day - timedelta(days=1), day + timedelta(days=2))  # giấc ngủ được xếp vào ngày kết thúc của nó
     fetch = await client.list_all(data_type, filter=query, page_size=plan.page_size, max_pages=5)
     expected, shape = _typed(data_type, payload), parsed.value
     for point in fetch.points:

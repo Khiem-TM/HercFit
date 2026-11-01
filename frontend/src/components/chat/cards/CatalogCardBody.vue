@@ -5,7 +5,7 @@ import CatalogImage from './CatalogImage.vue'
 import { AUTHORITY, fmt, unverifiedText } from '@/features/chat/confirmation'
 
 const props = defineProps<{ candidate: Record<string, any>; disabled?: boolean }>()
-/** Research picture to import to Cloudinary after confirmation; null keeps the record without a picture. */
+/** Ảnh từ tra cứu sẽ nhập lên Cloudinary sau khi xác nhận; null giữ bản ghi mà không có ảnh. */
 const selected = defineModel<string | null>({ default: null })
 
 const record = computed(() => props.candidate.record || {})

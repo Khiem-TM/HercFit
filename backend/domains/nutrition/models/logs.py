@@ -1,8 +1,8 @@
-"""Hydration and nutrition logs (migration 0020): HercFit-owned or imported from Google Health.
+"""Nhật ký nước uống và dinh dưỡng (migration 0020): do HercFit sở hữu hoặc nhập từ Google Health.
 
-A Google nutrition-log entry is not a HercFit meal: it is kept as its own log and
-may be linked to a meal or a catalog food when the identity is certain, so the
-same intake is never counted twice.
+Một mục nhật ký dinh dưỡng Google không phải bữa ăn HercFit: nó được giữ như nhật ký riêng và
+có thể liên kết với một bữa ăn hoặc thực phẩm trong catalog khi danh tính chắc chắn, để
+cùng một lượng ăn không bao giờ bị tính hai lần.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ class _ImportableLog:
     utc_offset_s: Mapped[int | None] = mapped_column(Integer)
     local_date: Mapped[date] = mapped_column(Date, nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
-    # Provenance of an imported row (migration 0023): the provider record it was projected from.
+    # Nguồn gốc của một dòng nhập về (migration 0023): bản ghi nhà cung cấp mà nó được chiếu từ đó.
     source_record_id: Mapped[PyUUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("health_source_records.id", ondelete="SET NULL"), nullable=True)
 

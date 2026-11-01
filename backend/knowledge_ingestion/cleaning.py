@@ -1,4 +1,4 @@
-"""Conservative normalization of paginated OCR text, without rewriting facts."""
+"""Chuẩn hoá thận trọng văn bản OCR có phân trang, không viết lại dữ kiện."""
 from collections import Counter
 from dataclasses import dataclass, field
 import re
@@ -18,27 +18,27 @@ def normalized_line(line):
 
 def join_drop_cap(match):
     letter, tail = match.groups()
-    # "I have" / "I come" are complete words, unlike "I n" (In).
+    # "I have" / "I come" là từ hoàn chỉnh, khác với "I n" (In).
     if letter == 'I' and tail not in {'n', 'f', 't', 's'}:
         return 'I ' + tail
     return letter + tail
 
 
 def clean_pages(raw, first_page=1, last_page=None, chapter_pages=(), exclude_pages=()):
-    # Preserve form feeds: they are physical source-page boundaries.
+    # Giữ ký tự form feed: chúng là ranh giới trang nguồn vật lý.
     raw = unicodedata.normalize('NFKC', raw.replace('\r\n', '\n').replace('\r', '\n'))
     raw = raw.replace('\ufeff', '').replace('\u00ad', '').replace('\u200b', '')
     raw = ''.join(c for c in raw if c in '\n\t\f' or not unicodedata.category(c).startswith('C'))
     pages = raw.split('\f')
     if pages and not pages[-1].strip():
-        pages.pop()  # trailing form feed is a terminator, not another physical page
+        pages.pop()  # form feed ở cuối là ký tự kết thúc, không phải thêm một trang vật lý
     edge_count = Counter()
     interior = set()
     for page in pages:
         lines = [normalized_line(l) for l in page.splitlines() if l.strip()]
         edge_count.update(set(lines[:2] + lines[-2:]))
         interior.update(lines[2:-2])
-    # Remove only frequently repeated margin strings absent from page interiors.
+    # Chỉ xoá các chuỗi lề lặp lại thường xuyên mà không có trong thân trang.
     repeated = {s for s, n in edge_count.items() if n >= max(5, len(pages) // 20) and len(s) < 100 and s not in interior}
     stats = Counter(total_pages=len(pages), source_characters=len(raw))
     selected = []
@@ -66,7 +66,7 @@ def clean_pages(raw, first_page=1, last_page=None, chapter_pages=(), exclude_pag
             if body is not None:
                 stats['chapter_decoration_lines_removed'] += body
                 kept = kept[body:]
-        # Drop-cap OCR: "M    uscle" -> "Muscle", "I   n" -> "In".
+        # OCR chữ hoa đầu đoạn: "M    uscle" -> "Muscle", "I   n" -> "In".
         text = '\n'.join(kept)
         text, split_caps = re.subn(r'(?m)^([A-Z])[ \t]*\n[ \t]{2,}([a-z]+\b)', join_drop_cap, text)
         stats['drop_caps_joined'] += split_caps
@@ -75,7 +75,7 @@ def clean_pages(raw, first_page=1, last_page=None, chapter_pages=(), exclude_pag
         if number in chapter_pages:
             text = re.sub(r'(?m)^(I) (n)\b', join_drop_cap, text)
             text = re.sub(r'(?m)^(J) (ust)\b', join_drop_cap, text)
-        # Join only alphabetic line-wrap hyphens followed by a lowercase letter.
+        # Chỉ nối dấu gạch nối ngắt dòng giữa chữ cái khi theo sau là chữ thường.
         text, count = re.subn(r'([A-Za-z]{2,})-\n[ \t]*([a-z]{2,})', r'\1\2', text)
         stats['hyphenated_wraps_joined'] += count
         blocks = re.split(r'\n\s*\n', text)
@@ -84,7 +84,7 @@ def clean_pages(raw, first_page=1, last_page=None, chapter_pages=(), exclude_pag
             rows = [l.rstrip() for l in block.splitlines() if l.strip()]
             if not rows:
                 continue
-            # Preserve rows in lists/tables; flatten wrapped prose paragraphs.
+            # Giữ các dòng trong danh sách/bảng; làm phẳng các đoạn văn bị ngắt dòng.
             tabular = sum(bool(re.search(r'\S\s{3,}\S', l)) for l in rows) >= 2
             listed = any(re.match(r'^\s*(?:[•*]|\d+[.)])\s', l) for l in rows)
             if tabular or listed:

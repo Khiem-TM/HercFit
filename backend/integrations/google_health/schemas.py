@@ -1,6 +1,6 @@
-"""Wearable health data (Google Health API) and the unified health profile.
+"""Dữ liệu sức khoẻ từ thiết bị đeo (Google Health API) và hồ sơ sức khoẻ hợp nhất.
 
-Split from schemas.health in the domain reorganization."""
+Tách ra từ schemas.health trong đợt tổ chức lại theo miền."""
 from datetime import date
 from typing import Any, Literal
 from uuid import UUID
@@ -10,7 +10,7 @@ from domains.health_records.schemas.health import ConnectionStatus, HEALTH_PROVI
 
 
 # ---------------------------------------------------------------------------
-# Connection and synchronization
+# Kết nối và đồng bộ
 # ---------------------------------------------------------------------------
 class HealthConnectRequest(InputSchema):
     share_with_assistant: bool = True
@@ -43,7 +43,7 @@ class HealthConnectionRead(BaseModel):
     share_with_assistant: bool = False
     consented_at: AwareDatetime | None = None
     timezone: str | None = None
-    # Reported by the provider: age, membership_start_date, stride lengths and unit settings.
+    # Do nhà cung cấp báo: tuổi, membership_start_date, chiều dài sải chân và cài đặt đơn vị.
     provider_profile: dict[str, Any] = {}
     last_sync_at: AwareDatetime | None = None
     last_success_at: AwareDatetime | None = None

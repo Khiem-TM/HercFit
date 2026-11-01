@@ -1,4 +1,4 @@
-"""FPT Marketplace OpenAI-compatible chat/tool/stream adapter."""
+"""Adapter chat/tool/stream tương thích OpenAI cho FPT Marketplace."""
 import json
 import re
 from typing import Any
@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_openai import ChatOpenAI
 
-# DeepSeek may emit tool calls as raw DSML text when the endpoint skips parsing.
+# DeepSeek có thể sinh lời gọi tool dưới dạng văn bản DSML thô khi endpoint bỏ qua bước phân tích.
 _BAR = r"[｜|]"
 _DSML_BLOCK = re.compile(rf"<{_BAR}DSML{_BAR}(?:tool|function)_calls>.*?(?:</{_BAR}DSML{_BAR}(?:tool|function)_calls>|$)", re.S)
 _DSML_INVOKE = re.compile(rf"<{_BAR}DSML{_BAR}invoke\s+name=\"([^\"]+)\"\s*>(.*?)</{_BAR}DSML{_BAR}invoke>", re.S)
@@ -25,7 +25,7 @@ def _dsml_value(raw: str, is_string: str | None) -> Any:
 
 
 def recover_dsml_tool_calls(message: AIMessage) -> AIMessage:
-    """Turn DSML tool-call text in content into structured tool_calls."""
+    """Chuyển văn bản lời gọi tool DSML trong content thành tool_calls có cấu trúc."""
     content = message.content
     if message.tool_calls or not isinstance(content, str) or "DSML" not in content:
         return message
@@ -40,7 +40,7 @@ def recover_dsml_tool_calls(message: AIMessage) -> AIMessage:
 
 
 def strip_tool_markup(text: str) -> str:
-    """A user-facing answer never shows DSML tool-call markup the model printed into it."""
+    """Câu trả lời cho người dùng không bao giờ hiển thị markup lời gọi tool DSML mà model đã in vào."""
     return _DSML_BLOCK.sub("", text).strip() if "DSML" in text else text
 
 
@@ -48,8 +48,8 @@ _MARKERS = ("<｜DSML｜", "<|DSML|")
 
 
 class ToolMarkupFilter:
-    """Streams answer tokens but holds back text that may open DSML markup, and drops the
-    markup and everything after it; the final reply (stripped) replaces the preview."""
+    """Stream token câu trả lời nhưng giữ lại phần văn bản có thể mở markup DSML, và bỏ
+    markup cùng mọi thứ phía sau; câu trả lời cuối (đã lọc) thay cho bản xem trước."""
 
     def __init__(self) -> None:
         self.pending, self.blocked = "", False
@@ -73,10 +73,10 @@ class ToolMarkupFilter:
 
 
 class FPTChatOpenAI(ChatOpenAI):
-    """Keep validated Pydantic output via function calling, not JSON-schema mode.
+    """Giữ đầu ra Pydantic đã kiểm tra qua function calling, không dùng chế độ JSON-schema.
 
-    FPT uses its root endpoint (no automatically appended /v1). API credentials
-    are injected as SecretStr by the model factory, never embedded in prompts.
+    FPT dùng endpoint gốc (không tự nối thêm /v1). Thông tin xác thực API
+    được factory của model tiêm vào dưới dạng SecretStr, không bao giờ nhúng vào prompt.
     """
 
     def _get_request_payload(

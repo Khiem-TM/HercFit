@@ -32,7 +32,7 @@ function json(body: unknown): RequestInit {
   return { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
 }
 
-/** Thin client for the health platform API; every call throws HealthApiError on failure. */
+/** Client mỏng cho API nền tảng sức khoẻ; mọi lời gọi ném HealthApiError khi lỗi. */
 export function createHealthApi(fetcher: Fetcher) {
   async function call<T>(url: string, init: RequestInit | undefined, fallback: string): Promise<T> {
     const response = await fetcher(url, init)
@@ -51,8 +51,10 @@ export function createHealthApi(fetcher: Fetcher) {
     operation: (id: string) => call<OperationRead>(`${V2}/operations/${id}`, undefined,
       'Không đọc được tiến độ.'),
     exportSwitch: () => call<ExportSwitch>(`${GH}/export`, undefined, 'Không đọc được trạng thái đồng bộ lên Google.'),
-    /** One switch for syncing to Google. On may answer with Google's consent URL (one screen for every
-     * missing permission); the callback then finishes turning it on. */
+    /**
+     * Một công tắc để đồng bộ lên Google. Bật có thể trả về URL đồng ý của Google (một màn hình cho mọi
+     * quyền còn thiếu); sau đó callback bật nốt.
+     */
     setExportSwitch: (enabled: boolean) => call<ExportSwitch>(`${GH}/export`, { method: 'PUT', ...json({ enabled }) },
       'Không cập nhật được đồng bộ lên Google.'),
     conflicts: () => call<ExportConflict[]>(`${GH}/conflicts`, undefined, 'Không đọc được xung đột.'),
@@ -70,7 +72,7 @@ export function createHealthApi(fetcher: Fetcher) {
 
 export type HealthApi = ReturnType<typeof createHealthApi>
 
-/** Polls an operation until it reaches a final state (or `attempts` runs out). */
+/** Hỏi định kỳ một operation cho đến khi đạt trạng thái cuối (hoặc hết `attempts`). */
 export async function waitForOperation(api: HealthApi, id: string, onUpdate: (op: OperationRead) => void, {
   attempts = 40, delayMs = 3000, sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
 } = {}): Promise<OperationRead | null> {
@@ -103,7 +105,7 @@ const METHOD_TEXT: Record<string, string> = {
   MANUAL: 'nhập tay', PASSIVELY_MEASURED: 'đo tự động', ACTIVELY_MEASURED: 'đo khi tập', DERIVED: 'tính toán',
 }
 
-/** Human label for one recording source: device first, then app, then platform. */
+/** Nhãn dễ đọc cho một nguồn ghi: thiết bị trước, rồi ứng dụng, rồi nền tảng. */
 export function sourceLabel(source: DataSource): string {
   const name = source.device || source.application || PLATFORM_TEXT[source.platform ?? ''] || 'Nguồn không rõ'
   const via = source.device || source.application ? PLATFORM_TEXT[source.platform ?? ''] : undefined

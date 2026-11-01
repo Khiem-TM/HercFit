@@ -1,4 +1,4 @@
-"""Shared request context and HTTP translation for domain services."""
+"""Ngữ cảnh request dùng chung và chuyển đổi HTTP cho service của các miền."""
 
 from typing import TypeVar
 

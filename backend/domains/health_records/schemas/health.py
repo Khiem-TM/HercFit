@@ -1,6 +1,6 @@
-"""Wearable health data (Google Health API) and the unified health profile.
+"""Dữ liệu sức khoẻ từ thiết bị đeo (Google Health API) và hồ sơ sức khoẻ hợp nhất.
 
-Split from schemas.health in the domain reorganization."""
+Tách ra từ schemas.health trong đợt tổ chức lại theo miền."""
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -26,14 +26,14 @@ SampleType = Literal["BLOOD_GLUCOSE", "CORE_BODY_TEMPERATURE"]
 ValueSource = Literal["DECLARED", "MEASURED", "PROVIDER", "DERIVED"]
 
 # ---------------------------------------------------------------------------
-# Shared classifications (pure; also imported by agentic.knowledge_graph.model)
+# Phân loại dùng chung (thuần; agentic.knowledge_graph.model cũng import)
 # ---------------------------------------------------------------------------
-# WHO Asia-Pacific BMI cut-offs, appropriate for Vietnamese adults.
+# Ngưỡng BMI châu Á - Thái Bình Dương của WHO, phù hợp với người trưởng thành Việt Nam.
 BMI_ASIA = ((18.5, "underweight"), (23.0, "normal"), (25.0, "overweight"), (float("inf"), "obese"))
 
 BMI_LABELS = {"underweight": "thiếu cân", "normal": "bình thường", "overweight": "thừa cân", "obese": "béo phì"}
 
-# Tudor-Locke step bands mapped onto the activity levels used by energy targets.
+# Các dải bước chân của Tudor-Locke ánh xạ vào các mức vận động mà mục tiêu năng lượng dùng.
 STEP_LEVELS = ((5000, "sedentary"), (7500, "light"), (10000, "moderate"), (12500, "active"), (float("inf"), "very_active"))
 
 ACTIVITY_LABELS = {"sedentary": "ít vận động", "light": "vận động nhẹ", "moderate": "vận động vừa",
@@ -43,18 +43,18 @@ ACTIVITY_ORDER = tuple(level for _, level in STEP_LEVELS)
 
 WHO_ACTIVE_MINUTES_PER_WEEK = 150
 
-# Exercise minutes per week (logged sessions or device workouts) against the same levels,
-# anchored on the WHO 150/300-minute bands. A phone left at home during a run records few
-# steps, so exercise is the lower bound a step count cannot see.
+# Số phút tập mỗi tuần (buổi đã ghi hoặc buổi vận động của thiết bị) so với cùng các mức,
+# neo theo các dải 150/300 phút của WHO. Điện thoại để ở nhà khi chạy ghi được ít
+# bước, nên buổi tập là cận dưới mà số bước không thấy được.
 EXERCISE_LEVELS = ((60, "sedentary"), (150, "light"), (300, "moderate"), (450, "active"), (float("inf"), "very_active"))
 
-# A resting heart rate this far above the 28-day baseline, or HRV this much below
-# it, is a recovery signal worth mentioning (never a diagnosis).
+# Nhịp tim nghỉ cao hơn đường nền 28 ngày chừng này, hoặc HRV thấp hơn
+# chừng này, là tín hiệu phục hồi đáng nhắc tới (không bao giờ là chẩn đoán).
 RHR_ELEVATION_BPM = 5
 
 HRV_DROP_PCT = 15
 
-# A day counts as worn when a device recorded at least this many steps.
+# Một ngày được tính là có đeo khi thiết bị ghi được ít nhất chừng này bước.
 WORN_DAY_MIN_STEPS = 500
 
 def classify_bmi(bmi: float | None) -> str | None:
@@ -73,7 +73,7 @@ def activity_level_from_exercise(minutes_per_week: float | None) -> str | None:
     return next(level for limit, level in EXERCISE_LEVELS if minutes_per_week < limit)
 
 def recommended_sleep_hours(age: int | None) -> tuple[float, float]:
-    """National Sleep Foundation ranges; adults by default."""
+    """Khoảng khuyến nghị của National Sleep Foundation; mặc định cho người trưởng thành."""
     if age is not None and age < 14:
         return 9.0, 11.0
     if age is not None and age < 18:
@@ -83,7 +83,7 @@ def recommended_sleep_hours(age: int | None) -> tuple[float, float]:
     return 7.0, 9.0
 
 # ---------------------------------------------------------------------------
-# Measured time series
+# Chuỗi thời gian đo được
 # ---------------------------------------------------------------------------
 class DailyHealthRead(EntityRead):
     local_date: date
@@ -170,7 +170,7 @@ class HealthOverviewQuery(InputSchema):
         return self
 
 # ---------------------------------------------------------------------------
-# Derived profile and overview (computed at read time, never stored)
+# Hồ sơ và tổng quan suy ra (tính lúc đọc, không bao giờ lưu)
 # ---------------------------------------------------------------------------
 class ProfileValue(BaseModel):
     value: float | int | str | None

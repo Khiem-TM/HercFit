@@ -11,15 +11,15 @@ const props = defineProps<{ clarification: Clarification; disabled?: boolean }>(
 const emit = defineEmits<{ send: [text: string] }>()
 
 const questions = computed(() => props.clarification.questions)
-// Positions walk the questions asked so far; a show_if question appears once its trigger answer is picked.
+// Vị trí đi qua các câu hỏi đã hỏi đến lúc này; câu hỏi show_if xuất hiện khi câu trả lời kích hoạt nó được chọn.
 const answers = shallowRef<Answer[]>([])
 const order = computed(() => visibleIndexes(props.clarification, answers.value))
 const total = computed(() => order.value.length)
 const single = computed(() => total.value === 1)
-// step === total is the review screen.
+// step === total là màn hình xem lại.
 const step = shallowRef(0)
 const furthest = shallowRef(0)
-// Editing from the review screen returns there instead of walking every later question again.
+// Sửa từ màn hình xem lại thì quay về đó thay vì đi lại mọi câu hỏi phía sau.
 const editing = shallowRef(false)
 const body = useTemplateRef<InstanceType<typeof ClarificationQuestion>>('body')
 
@@ -44,7 +44,7 @@ const complete = computed(() => order.value.every(i => {
   const value = answers.value[i] ?? emptyAnswer()
   return isAnswered(questions.value[i], value, rows(i)) || (!questions.value[i].required && value.skipped)
 }))
-// A lone choice answers on tap, like quick replies; numbers, multiple picks and sets need "Gửi".
+// Lựa chọn duy nhất được trả lời ngay khi chạm, như trả lời nhanh; số, chọn nhiều và set cần nút "Gửi".
 const showNext = computed(() => !(single.value && choosesOnce(current.value)))
 
 function go(position: number) {
@@ -60,7 +60,7 @@ function send() {
 
 function next() {
   if (props.disabled || !answered.value) return
-  // Read after the answer: picking an option may have revealed or hidden later questions.
+  // Đọc sau khi trả lời: chọn một lựa chọn có thể làm hiện hoặc ẩn các câu hỏi phía sau.
   if (single.value) return send()
   go(editing.value ? total.value : step.value + 1)
 }
@@ -82,7 +82,7 @@ function edit(position: number) {
 }
 
 function jump(position: number) {
-  // Jumping away from the review screen is an edit; between questions it keeps the current flow.
+  // Rời màn hình xem lại là một lần sửa; giữa các câu hỏi thì giữ luồng hiện tại.
   if (reviewing.value) editing.value = true
   go(position)
 }
@@ -96,7 +96,7 @@ function shown(questionIndex: number) {
 
 <template>
   <section class="rounded-2xl border border-gold/35 bg-panel-raised p-4" aria-label="Trả lời câu hỏi của HercFit">
-    <!-- Progress: one segment per question, answered ones in gold -->
+    <!-- Tiến độ: mỗi câu hỏi một đoạn, câu đã trả lời tô vàng -->
     <header v-if="!single" class="mb-3 flex items-center gap-3">
       <span class="shrink-0 font-label-telemetry text-[10px] uppercase tracking-[0.16em] text-on-surface-variant" aria-live="polite">
         {{ reviewing ? 'Xem lại' : `Câu ${step + 1}/${total}` }}
@@ -123,7 +123,7 @@ function shown(questionIndex: number) {
       leave-active-class="transition duration-100 ease-in motion-reduce:transition-none"
       leave-to-class="-translate-x-2 opacity-0"
     >
-      <!-- Review all answers before sending one message -->
+      <!-- Xem lại mọi câu trả lời trước khi gửi một tin nhắn -->
       <div v-if="reviewing" key="review">
         <h4 class="font-headline-md text-lg leading-snug text-primary">Kiểm tra lại câu trả lời</h4>
         <ul class="mt-3 divide-y divide-ink/[0.06] rounded-xl border border-ink/[0.08] bg-ink/[0.02]">

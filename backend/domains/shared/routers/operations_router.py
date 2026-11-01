@@ -1,4 +1,4 @@
-"""GET /api/v2/operations/{id}: progress and outcome of an asynchronous command."""
+"""GET /api/v2/operations/{id}: tiến độ và kết quả của một lệnh bất đồng bộ."""
 from datetime import datetime
 from typing import Any
 from uuid import UUID

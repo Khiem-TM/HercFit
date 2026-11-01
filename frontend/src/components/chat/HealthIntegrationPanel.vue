@@ -56,7 +56,7 @@ async function handleDisconnect(): Promise<void> {
 onMounted(async () => {
   await refresh()
   share.value = connection.value?.connected ? connection.value.share_with_assistant : true
-  // The first sync starts right after the consent screen; show its outcome when it lands.
+  // Lần đồng bộ đầu bắt đầu ngay sau màn hình đồng ý; hiển thị kết quả khi nó tới.
   if (props.result === 'connected') for (const delay of [5000, 15000]) timers.push(window.setTimeout(refresh, delay))
 })
 onUnmounted(() => timers.forEach(window.clearTimeout))

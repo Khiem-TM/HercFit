@@ -1,8 +1,8 @@
-"""Read-only training analytics over server-computed item metrics.
+"""Phân tích tập luyện chỉ đọc trên chỉ số theo mục do server tính.
 
-Queries project only the derived columns (plus the small performance JSON for
-top sets/laps). Nothing here is persisted; insights are deterministic rules
-whose thresholds and evidence are returned with each finding.
+Truy vấn chỉ chiếu các cột suy ra (cộng JSON thành tích nhỏ cho
+set nặng nhất/vòng chạy). Không gì ở đây được lưu; insight là các luật tất định
+trả về kèm ngưỡng và bằng chứng của từng phát hiện.
 """
 
 from __future__ import annotations
@@ -36,16 +36,16 @@ ZERO = Decimal(0)
 RACE_DISTANCES = {"1K": 1000, "5K": 5000, "10K": 10000, "HALF": 21097.5, "MARATHON": 42195}
 REP_MAX_TARGETS = (1, 3, 5, 10)
 
-# Rule thresholds (returned as evidence so the agent can cite them).
-ACWR_HIGH, ACWR_DANGER, ACWR_LOW = 1.3, 1.5, 0.8          # Gabbett (2016) "sweet spot" 0.8-1.3
-WEEKLY_RUN_NOTICE, WEEKLY_RUN_WARNING = 0.10, 0.30        # 10% guideline; Nielsen et al. (2014) >30% risk
-EASY_SHARE_MIN = 70.0                                     # Seiler (2010) polarized ~80/20 distribution
-HARD_SETS_LOW, HARD_SETS_HIGH = 10, 20                    # Schoenfeld et al. (2017) weekly set dose-response
+# Ngưỡng của các luật (trả về như bằng chứng để agent trích dẫn).
+ACWR_HIGH, ACWR_DANGER, ACWR_LOW = 1.3, 1.5, 0.8          # "Vùng tối ưu" 0.8-1.3 của Gabbett (2016)
+WEEKLY_RUN_NOTICE, WEEKLY_RUN_WARNING = 0.10, 0.30        # hướng dẫn 10%; Nielsen và cộng sự (2014): rủi ro khi >30%
+EASY_SHARE_MIN = 70.0                                     # phân bố phân cực ~80/20 của Seiler (2010)
+HARD_SETS_LOW, HARD_SETS_HIGH = 10, 20                    # quan hệ liều-đáp ứng của số set mỗi tuần, Schoenfeld và cộng sự (2017)
 MAX_CONSECUTIVE_DAYS = 7
 ADHERENCE_MIN = 70.0
 PROTEIN_G_PER_KG = (1.6, 2.2)                             # ISSN position stand (2017)
-CARB_G_PER_KG_HIGH = (6, 10)                              # ACSM/AND/DC (2016): 1-3 h/day endurance
-CARB_G_PER_KG_MODERATE = (5, 7)                           # ~1 h/day moderate exercise
+CARB_G_PER_KG_HIGH = (6, 10)                              # ACSM/AND/DC (2016): 1-3 giờ/ngày sức bền
+CARB_G_PER_KG_MODERATE = (5, 7)                           # ~1 giờ/ngày vận động vừa
 LONG_SESSION_SECONDS = 90 * 60
 
 
@@ -109,14 +109,14 @@ async def _rows(session, user_id, start: date, end: date, zone: str, *, exercise
     return [Row(*(row[:7]), row[7].value if row[7] is not None else None, *row[8:]) for row in (await session.execute(query)).all()]
 
 
-# Reader v2 (training): device runs join running analytics unless a manual run covers them.
+# Bộ đọc v2 (training): buổi chạy từ thiết bị được đưa vào phân tích chạy bộ trừ khi có buổi nhập tay trùng.
 RUN_EXERCISE_TYPES = frozenset({"RUNNING", "TRAIL_RUN", "INCLINE_RUN", "TREADMILL"})
 SAME_SESSION_START_SECONDS = 15 * 60
 SAME_SESSION_OVERLAP = 0.5
 
 
 def _same_session(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime) -> bool:
-    """Started within 15 min of each other, or overlapping for half of the shorter one."""
+    """Bắt đầu cách nhau trong 15 phút, hoặc chồng lên nhau một nửa thời lượng của buổi ngắn hơn."""
     if abs((a_start - b_start).total_seconds()) <= SAME_SESSION_START_SECONDS:
         return True
     overlap = (min(a_end, b_end) - max(a_start, b_start)).total_seconds()
@@ -129,10 +129,10 @@ def is_device(row: Row) -> bool:
 
 
 async def _device_runs(session, user_id, start: date, end: date, manual: list[Row]) -> list[Row]:
-    """Runs recorded by a device and not logged in HercFit (reader v2 `training`, device consent).
+    """Các buổi chạy thiết bị ghi lại mà không có trong nhật ký HercFit (bộ đọc v2 `training`, consent thiết bị).
 
-    The manual run wins a match: it carries RPE, workout type and laps. A device run gets
-    only what the device measured (distance, moving time, kcal); its intensity stays unknown.
+    Buổi nhập tay thắng khi trùng: nó mang RPE, loại bài và các vòng. Buổi từ thiết bị chỉ
+    có những gì thiết bị đo (quãng đường, thời gian di chuyển, kcal); cường độ vẫn là chưa biết.
     """
     from core.flags import reader_v2
     from domains.health_records.models.device_records import DeviceWorkout
@@ -169,7 +169,7 @@ async def _run_rows(session, user_id, start: date, end: date, zone: str) -> tupl
 
 
 def _sessions(rows: list[Row]) -> dict[Any, Row]:
-    """First row per training carries the session-level fields."""
+    """Dòng đầu tiên của mỗi buổi tập mang các trường cấp buổi."""
     first: dict[Any, Row] = {}
     for row in rows:
         first.setdefault(row.training_id, row)
@@ -177,7 +177,7 @@ def _sessions(rows: list[Row]) -> dict[Any, Row]:
 
 
 async def _planned(session, user_id, start: date, end: date) -> tuple[dict[date, int], set]:
-    """Non-rest entries of non-deleted schedules due in the range, and their ids."""
+    """Các mục không phải nghỉ của lịch chưa xoá đến hạn trong khoảng, và id của chúng."""
     query = (
         select(TrainingPlanEntry.id, TrainingPlanEntry.scheduled_date)
         .join(TrainingPlan, TrainingPlan.id == TrainingPlanEntry.training_plan_id)
@@ -193,11 +193,11 @@ async def _planned(session, user_id, start: date, end: date) -> tuple[dict[date,
     return per_week, ids
 
 
-# ----------------------------------------------------------------- summary
+# ----------------------------------------------------------------- tóm tắt
 
 async def summary(session, user_id, options) -> dict[str, Any]:
     rows = await _rows(session, user_id, options.start_date, options.end_date, options.timezone)
-    # Planned sessions only count once they are due (not in the future).
+    # Buổi theo kế hoạch chỉ được tính khi đã đến hạn (không tính tương lai).
     due_end = min(options.end_date, today_in(options.timezone))
     planned, planned_ids = await _planned(session, user_id, options.start_date, due_end)
     weeks: dict[date, dict[str, Any]] = {}
@@ -248,7 +248,7 @@ async def summary(session, user_id, options) -> dict[str, Any]:
     return {"timezone": options.timezone, "start_date": options.start_date, "end_date": options.end_date, "weeks": result}
 
 
-# ----------------------------------------------------------------- load
+# ----------------------------------------------------------------- tải tập
 
 async def daily_loads(session, user_id, start: date, end: date, zone: str) -> tuple[dict[date, Decimal], int]:
     lower, upper = day_bounds(start, end, zone)
@@ -268,7 +268,7 @@ def _rolling(loads: dict[date, Decimal], day: date, days: int) -> Decimal:
 
 
 def _acwr(loads, day) -> tuple[Decimal, Decimal, float | None]:
-    """Rolling-average ACWR: 7-day load vs 28-day load expressed per week."""
+    """ACWR trung bình trượt: tải 7 ngày so với tải 28 ngày quy về mỗi tuần."""
     acute = _rolling(loads, day, 7)
     chronic = _rolling(loads, day, 28) / 4
     return acute, chronic, round(float(acute / chronic), 2) if chronic else None
@@ -295,7 +295,7 @@ async def load(session, user_id, options) -> dict[str, Any]:
             "monotony_7d": monotony, "strain_7d": strain, "sessions_without_rpe": missing}
 
 
-# ----------------------------------------------------------------- strength
+# ----------------------------------------------------------------- sức mạnh
 
 def _top_set(performance: dict, bodyweight: float | None) -> dict | None:
     best = None
@@ -338,7 +338,7 @@ async def strength_progress(session, user_id, options) -> dict[str, Any]:
 
 
 def _e1rm_change(sessions, end: date) -> float | None:
-    """Best e1RM in the last 14 days vs the 14 days before, in percent."""
+    """e1RM tốt nhất trong 14 ngày gần nhất so với 14 ngày trước đó, tính theo phần trăm."""
     def best(lo, hi):
         values = [s["best_e1rm_kg"] for s in sessions if s["best_e1rm_kg"] is not None and lo <= s["date"] <= hi]
         return max(values, default=None)
@@ -368,13 +368,13 @@ async def strength_records(session, user_id, *, timezone: str, until: date | Non
     return {"records": ordered}
 
 
-# ----------------------------------------------------------------- running
+# ----------------------------------------------------------------- chạy bộ
 
 NON_CONTINUOUS = frozenset({"INTERVAL", "FARTLEK", "HILL", "WALK_RUN"})
 
 
 def _effort_candidates(row: Row) -> list[tuple[float, float]]:
-    """Continuous whole runs, plus every run of consecutive WORK laps (e.g. a 5x1K time trial)."""
+    """Các buổi chạy liên tục trọn vẹn, cộng mọi chuỗi vòng WORK liên tiếp (ví dụ chạy thử 5x1K)."""
     performance = row.performance
     candidates = []
     if performance.get("workout_type") not in NON_CONTINUOUS:
@@ -392,7 +392,7 @@ def _effort_candidates(row: Row) -> list[tuple[float, float]]:
 
 
 def _best_efforts(rows: list[Row]) -> dict[str, dict]:
-    """Efforts within 3% of a standard distance; time scaled to the exact distance."""
+    """Nỗ lực trong phạm vi 3% so với cự ly chuẩn; thời gian được quy đổi về đúng cự ly."""
     best: dict[str, dict] = {}
     for row in rows:
         if not row.is_run:
@@ -409,7 +409,7 @@ def _best_efforts(rows: list[Row]) -> dict[str, dict]:
 
 
 def predictions(best_efforts: dict[str, dict], profile: TrainingProfile | None) -> dict[str, int] | None:
-    """Riegel from the strongest reference effort (best equivalent 10K time)."""
+    """Công thức Riegel từ nỗ lực tham chiếu mạnh nhất (thời gian 10K tương đương tốt nhất)."""
     references = [(RACE_DISTANCES[label], effort["time_seconds"]) for label, effort in best_efforts.items() if label != "1K"]
     if profile and profile.recent_race:
         references.append((profile.recent_race.distance_meters, profile.recent_race.time_seconds))
@@ -435,7 +435,7 @@ async def running_summary(session, user_id, options, profile: TrainingProfile | 
         week["distance_meters"] += row.distance_meters or ZERO
         week["duration_seconds"] += row.duration_seconds or ZERO
         week["longest_run_meters"] = max(week["longest_run_meters"], row.distance_meters or ZERO)
-        if is_device(row):  # intensity unknown: kept out of workout types and the easy share
+        if is_device(row):  # chưa biết cường độ: không tính vào loại bài và tỉ lệ chạy nhẹ
             unclassified += row.duration_seconds or ZERO
             continue
         workout = row.performance.get("workout_type", WorkoutType.EASY.value)
@@ -460,7 +460,7 @@ async def running_summary(session, user_id, options, profile: TrainingProfile | 
 
 
 async def recent_runs(session, user_id, start: date, end: date, zone: str, *, limit: int = 1) -> list[dict[str, Any]]:
-    """Newest runs first: date, distance, duration, pace and workout type (None for device runs)."""
+    """Buổi chạy mới nhất trước: ngày, quãng đường, thời lượng, pace và loại bài (None với buổi từ thiết bị)."""
     manual, device = await _run_rows(session, user_id, start, end, zone)
     rows = sorted(manual + device, key=lambda r: (r.day, str(r.training_id)), reverse=True)
     return [{"date": r.day.isoformat(), "distance_km": round(float(r.distance_meters) / 1000, 2) if r.distance_meters else None,
@@ -470,10 +470,10 @@ async def recent_runs(session, user_id, start: date, end: date, zone: str, *, li
              **({"source": "device" if is_device(r) else "manual"} if device else {})} for r in rows[:limit]]
 
 
-# ----------------------------------------------------------------- profile
+# ----------------------------------------------------------------- hồ sơ
 
 def profile_read(personal_info: dict | None, measured_resting_hr: int | None = None) -> dict[str, Any]:
-    """measured_resting_hr: device 7-day median, used only when none was declared."""
+    """measured_resting_hr: trung vị 7 ngày của thiết bị, chỉ dùng khi chưa khai báo."""
     raw = (personal_info or {}).get("training")
     profile = TrainingProfile.model_validate(raw) if isinstance(raw, dict) else TrainingProfile()
     threshold, source = profile.threshold_pace_s_per_km, "PROFILE" if profile.threshold_pace_s_per_km else None
@@ -491,7 +491,7 @@ def profile_read(personal_info: dict | None, measured_resting_hr: int | None = N
     }
 
 
-# ----------------------------------------------------------------- insights
+# ----------------------------------------------------------------- insight
 
 def _insight(code, severity, discipline, message, **evidence) -> dict[str, Any]:
     return {"code": code, "severity": severity, "discipline": discipline, "message_vi": message,
@@ -505,7 +505,7 @@ async def insights(session, user_id, options, *, profile: TrainingProfile, bodyw
     window = await _rows(session, user_id, end - timedelta(days=41), end, zone)
     sessions = _sessions(window)
 
-    # Load: ACWR on the end date.
+    # Tải: ACWR tại ngày kết thúc.
     loads, missing = await daily_loads(session, user_id, end - timedelta(days=34), end, zone)
     acute, chronic, ratio = _acwr(loads, end)
     if ratio is not None and chronic > 0:
@@ -520,7 +520,7 @@ async def insights(session, user_id, options, *, profile: TrainingProfile, bodyw
     if missing:
         found.append(_insight("MISSING_RPE", "INFO", "GENERAL", f"{missing} buổi gần đây thiếu RPE buổi tập nên tải chưa đầy đủ.", sessions=missing))
 
-    # Consecutive training days.
+    # Số ngày tập liên tiếp.
     trained_days = {row.day for row in sessions.values()}
     streak, day = 0, end
     while day in trained_days:
@@ -529,7 +529,7 @@ async def insights(session, user_id, options, *, profile: TrainingProfile, bodyw
     if streak >= MAX_CONSECUTIVE_DAYS:
         found.append(_insight("NO_REST_DAY", "WARNING", "GENERAL", f"Đã tập {streak} ngày liên tiếp; nên có ít nhất 1 ngày nghỉ.", days=streak))
 
-    # Running: weekly distance jump and intensity distribution.
+    # Chạy bộ: bước nhảy quãng đường theo tuần và phân bố cường độ.
     this_week = [r for r in window if r.is_run and r.day > end - timedelta(days=7)]
     last_week = [r for r in window if r.is_run and end - timedelta(days=14) < r.day <= end - timedelta(days=7)]
     km_now = sum((r.distance_meters or ZERO for r in this_week), ZERO) / 1000
@@ -551,7 +551,7 @@ async def insights(session, user_id, options, *, profile: TrainingProfile, bodyw
             found.append(_insight("TOO_MUCH_INTENSITY", "NOTICE", "RUNNING", f"Chỉ {share:.0f}% thời gian chạy 4 tuần là cường độ nhẹ (khuyến nghị ~80%); thêm buổi easy, bớt buổi nặng.",
                                   easy_share_pct=round(share, 1), target_pct=80, runs=len(recent_runs)))
 
-    # Strength: weekly hard sets per muscle (last 7 days).
+    # Sức mạnh: số set nặng mỗi tuần theo nhóm cơ (7 ngày gần nhất).
     muscles: dict[str, int] = defaultdict(int)
     for row in window:
         if row.kind == "STRENGTH" and row.day > end - timedelta(days=7):
@@ -566,7 +566,7 @@ async def insights(session, user_id, options, *, profile: TrainingProfile, bodyw
         found.append(_insight("HIGH_MUSCLE_VOLUME", "NOTICE", "STRENGTH", "Một số nhóm cơ vượt 20 hard sets/tuần, khó hồi phục: " + ", ".join(f"{m} {n}" for m, n in sorted(high.items())),
                               hard_sets=high, threshold=HARD_SETS_HIGH))
 
-    # Strength: plateau (no new best e1RM in the last 21 days vs the 21 days before) and new PRs.
+    # Sức mạnh: chững lại (không có e1RM tốt nhất mới trong 21 ngày gần nhất so với 21 ngày trước đó) và PR mới.
     by_exercise: dict[Any, list[Row]] = defaultdict(list)
     for row in window:
         if row.kind == "STRENGTH" and row.best_e1rm_kg is not None:
@@ -578,14 +578,14 @@ async def insights(session, user_id, options, *, profile: TrainingProfile, bodyw
             found.append(_insight("STRENGTH_PLATEAU", "NOTICE", "STRENGTH", f"{items[0].name}: e1RM không tăng sau ≥3 tuần ({max(earlier):.1f}→{max(recent):.1f} kg). Cân nhắc tuần giảm tải (deload) hoặc đổi rep range/biến thể.",
                                   exercise=items[0].name, previous_best_e1rm=max(earlier), recent_best_e1rm=max(recent), sessions=len(recent)))
     records = await strength_records(session, user_id, timezone=zone, until=end)
-    # A first-ever log is a baseline, not a record: require earlier history.
+    # Lần ghi đầu tiên là mốc, không phải kỷ lục: cần có lịch sử trước đó.
     history = {row.exercise_id for row in window if row.kind == "STRENGTH" and row.day <= end - timedelta(days=7)}
     for record in records["records"]:
         if record["best_e1rm_date"] and record["best_e1rm_date"] > end - timedelta(days=7) and record["exercise_id"] in history:
             found.append(_insight("NEW_PR", "POSITIVE", "STRENGTH", f"Kỷ lục mới {record['exercise_name']}: e1RM {record['best_e1rm_kg']:.1f} kg.",
                                   exercise=record["exercise_name"], best_e1rm_kg=record["best_e1rm_kg"], date=record["best_e1rm_date"].isoformat()))
 
-    # Plan adherence over the last 14 days.
+    # Mức tuân thủ kế hoạch trong 14 ngày gần nhất.
     planned, planned_ids = await _planned(session, user_id, end - timedelta(days=13), end)
     planned_total = sum(planned.values())
     if planned_total >= 3:
@@ -596,7 +596,7 @@ async def insights(session, user_id, options, *, profile: TrainingProfile, bodyw
             found.append(_insight("LOW_ADHERENCE", "NOTICE", "GENERAL", f"Hoàn thành {len(done)}/{planned_total} buổi theo lịch 2 tuần qua ({adherence:.0f}%). Cân nhắc giảm số buổi/tuần cho vừa lịch.",
                                   planned=planned_total, completed=len(done), adherence_pct=round(adherence, 1)))
 
-    # Nutrition bridge: fuelling guidance scaled by body weight for the last 2 days.
+    # Cầu nối dinh dưỡng: hướng dẫn nạp năng lượng theo cân nặng cho 2 ngày gần nhất.
     recent_load = [row for row in sessions.values() if row.day >= end - timedelta(days=1)]
     if recent_load:
         long_session = max((float(r.session_seconds or 0) for r in recent_load), default=0)

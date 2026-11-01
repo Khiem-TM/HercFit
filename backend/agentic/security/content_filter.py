@@ -1,11 +1,11 @@
-"""Deterministic safety policy for nutrition/fitness conversations.
+"""Chính sách an toàn tất định cho hội thoại dinh dưỡng/thể hình.
 
-Runs before any model call. "block" verdicts skip tools, research and plan
-generation and answer with supportive, safety-first guidance; "caution" verdicts
-keep the normal workflow but constrain the final answer. The checks are
-intentionally conservative keyword/number rules over accent-free text, so they
-are cheap, explainable and testable (see tests/unit/test_safety.py). They do not
-diagnose anything and are not a substitute for professional care.
+Chạy trước mọi lần gọi model. Kết luận "block" bỏ qua tool, tra cứu và sinh
+kế hoạch, trả lời bằng hướng dẫn hỗ trợ, đặt an toàn lên đầu; kết luận "caution"
+giữ luồng bình thường nhưng ràng buộc câu trả lời cuối. Các kiểm tra là
+luật từ khoá/con số cố ý thận trọng trên văn bản không dấu, nên chúng
+rẻ, giải thích được và test được (xem tests/unit/test_safety.py). Chúng không
+chẩn đoán gì và không thay thế cho chăm sóc chuyên môn.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from typing import Literal
 from domains.catalog.models.foods import normalize_food_text
 
 EMERGENCY = "Nếu bạn đang gặp nguy hiểm hoặc có ý định làm hại bản thân, hãy gọi cấp cứu 115 hoặc đến cơ sở y tế gần nhất và báo cho người thân ngay."
-MIN_SAFE_KCAL = 1000          # below this we never help plan an unsupervised diet
+MIN_SAFE_KCAL = 1000          # dưới mức này chúng tôi không bao giờ giúp lập chế độ ăn không có giám sát
 MAX_SAFE_LOSS_KG_PER_WEEK = 1.0
 
 
@@ -49,7 +49,7 @@ _MEDICAL = re.compile(r"\b(mang thai|co bau|dang bau|cho con bu|tieu duong|dai t
 
 
 def assess(text: str) -> SafetyVerdict | None:
-    """Return the most serious verdict for the user's latest message, if any."""
+    """Trả về kết luận nghiêm trọng nhất cho tin nhắn mới nhất của người dùng, nếu có."""
     t = normalize_food_text(text or "")
     if not t:
         return None
@@ -65,7 +65,7 @@ def assess(text: str) -> SafetyVerdict | None:
     for match in _KCAL.finditer(t):
         kcal = int(match.group(1))
         window = t[max(0, match.start() - 40): match.end() + 40]
-        # A daily total, not the energy of one meal ("bữa trưa 650 kcal" is normal logging).
+        # Một tổng trong ngày, không phải năng lượng của một bữa ("bữa trưa 650 kcal" là việc ghi nhật ký bình thường).
         daily = _DAY_WORDS.search(window) and not _MEAL_WORDS.search(window)
         if daily and 0 < kcal < MIN_SAFE_KCAL and _DIET_INTENT.search(t):
             return SafetyVerdict("extreme_deficit", "block",

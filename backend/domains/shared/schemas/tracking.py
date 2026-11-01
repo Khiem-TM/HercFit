@@ -1,4 +1,4 @@
-"""Shared time and numeric contracts for plans and activity history."""
+"""Hợp đồng thời gian và số dùng chung cho kế hoạch và lịch sử hoạt động."""
 
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Annotated
@@ -53,7 +53,7 @@ TimeZoneName = Annotated[str, AfterValidator(validate_timezone)]
 
 
 def day_bounds(start: date, end: date, zone: str) -> tuple[datetime, datetime]:
-    """Inclusive local dates become a half-open UTC interval, including DST days."""
+    """Các ngày địa phương (tính cả hai đầu) trở thành khoảng UTC nửa mở, kể cả ngày đổi giờ mùa hè."""
     tz = ZoneInfo(validate_timezone(zone))
     return (
         datetime.combine(start, time.min, tz).astimezone(timezone.utc),

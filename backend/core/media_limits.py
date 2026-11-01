@@ -1,4 +1,4 @@
-"""Bound multipart bodies before the parser can spool unbounded uploads to disk."""
+"""Giới hạn body multipart trước khi bộ phân tích kịp ghi tràn các upload vô hạn xuống đĩa."""
 from starlette.exceptions import HTTPException
 from starlette.responses import JSONResponse
 from core.settings import settings
@@ -11,7 +11,7 @@ class ImageUploadLimit:
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http' or scope['method'] != 'PUT' or not scope['path'].startswith('/api/media/'):
             return await self.app(scope, receive, send)
-        limit = settings.IMAGE_MAX_BYTES + 64 * 1024  # multipart fields/boundaries
+        limit = settings.IMAGE_MAX_BYTES + 64 * 1024  # trường/ranh giới multipart
         headers = dict(scope.get('headers', []))
         try:
             length = int(headers.get(b'content-length', b'0'))

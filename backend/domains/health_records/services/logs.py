@@ -1,10 +1,10 @@
-"""Personal health logs: hydration, nutrition, symptoms, mood, menstrual periods, ovulation tests.
+"""Nhật ký sức khoẻ cá nhân: nước uống, dinh dưỡng, triệu chứng, tâm trạng, kỳ kinh, que thử rụng trứng.
 
-* `source` is MANUAL for the user and AI_CONFIRMED when the assistant writes after
-  the user confirmed (the principal decides, not the client).
-* Snapshots are versioned: edits require `expected_version_id`; deletes are soft.
-* Every write calls the export hooks in the same transaction (M6): if the user
-  enabled exporting this group to Google, an outbox row is written atomically.
+* `source` là MANUAL khi người dùng ghi và AI_CONFIRMED khi trợ lý ghi sau khi
+  người dùng xác nhận (principal quyết định, không phải client).
+* Ảnh chụp có phiên bản: sửa cần `expected_version_id`; xoá là xoá mềm.
+* Mọi lệnh ghi gọi hook xuất trong cùng transaction (M6): nếu người dùng
+  đã bật xuất nhóm này lên Google, một dòng outbox được ghi nguyên tử.
 """
 from __future__ import annotations
 
@@ -138,7 +138,7 @@ def _values(kind: str, payload: BaseModel) -> dict[str, Any]:
 
 
 async def _read_access(session, user_id: UUID, kind: str) -> None:
-    """The assistant reads sensitive logs only with the separate `sensitive` consent."""
+    """Trợ lý chỉ đọc nhật ký nhạy cảm khi có consent `sensitive` riêng."""
     if KINDS[kind]["sensitive"] and principals.is_agent():
         from domains.identity import consent
 
@@ -152,7 +152,7 @@ def _transient(kind: str, user_id: UUID, payload: dict[str, Any]) -> Any:
 
 
 async def preview(session, user_id: UUID, kind: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """What a create would store locally and send to Google; nothing is written."""
+    """Những gì một lệnh tạo sẽ lưu cục bộ và gửi lên Google; không ghi gì."""
     from domains.shared import write_hooks
 
     entity = _transient(kind, user_id, {k: v for k, v in payload.items() if k != "preview_sha256"})
@@ -165,7 +165,7 @@ async def preview(session, user_id: UUID, kind: str, payload: dict[str, Any]) ->
 async def create(session, user_id: UUID, kind: str, payload: dict[str, Any]) -> Any:
     expected = payload.get("preview_sha256")
     if expected is not None:
-        # The confirmed card is bound to exactly what it showed (local row and Google effects).
+        # Thẻ đã xác nhận gắn đúng với những gì nó hiển thị (dòng cục bộ và tác động lên Google).
         current = await preview(session, user_id, kind, payload)
         if current["preview_sha256"] != expected:
             from fastapi.encoders import jsonable_encoder
@@ -216,14 +216,14 @@ async def replace(session, user_id: UUID, kind: str, log_id: UUID, payload: dict
     for key, value in data.items():
         setattr(entity, key, value)
     await session.flush()
-    entity.version_id  # noqa: B018  (flushed version is the exported aggregate version)
+    entity.version_id  # noqa: B018  (phiên bản sau flush là phiên bản aggregate được xuất)
     await _emit(session, user_id, kind, entity, "UPDATE")
     return entity
 
 
 async def delete(session, user_id: UUID, kind: str, log_id: UUID, expected_version_id: int, *,
                  remote: bool = False) -> None:
-    """Soft delete. The copy at Google is deleted only when the user explicitly asks (`remote`)."""
+    """Xoá mềm. Bản trên Google chỉ bị xoá khi người dùng yêu cầu tường minh (`remote`)."""
     entity = await get(session, user_id, kind, log_id)
     if entity.version_id != expected_version_id:
         raise HTTPException(409, "Version has changed; reload before editing")

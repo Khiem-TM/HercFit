@@ -1,4 +1,4 @@
-"""Actual meals: complete immutable snapshots."""
+"""Bữa ăn thực tế: ảnh chụp bất biến đầy đủ."""
 from uuid import UUID
 
 from fastapi import APIRouter, Response

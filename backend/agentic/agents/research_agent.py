@@ -1,4 +1,4 @@
-"""Bounded reusable research graph; no node has access to write tools."""
+"""Graph tra cứu có giới hạn, dùng lại được; không node nào có quyền dùng tool ghi."""
 from agentic.components.hybrid_retriever import retrieve_knowledge
 from agentic.components.context_filter import bounded_documents
 from agentic.security.output_validation import parse_draft, check_claims, verify_claims, verified_claims, related_claims
@@ -32,7 +32,7 @@ PROMPT = get_prompt('research.extract')
 
 
 def findings(claims,documents,heading):
-    """Bulleted claims with numbered references, one per source."""
+    """Các khẳng định dạng gạch đầu dòng với tài liệu tham khảo đánh số, mỗi nguồn một số."""
     references={}; lines=[]
     for claim in claims[:8]:
         source=documents[claim.source_id]
@@ -47,14 +47,14 @@ def findings(claims,documents,heading):
 
 
 def book_location(source):
-    """Chapter and printed page of a curated passage; physical file pages mean nothing to a reader."""
+    """Chương và số trang in của một đoạn trích đã tuyển chọn; số trang của file vật lý không có ý nghĩa với người đọc."""
     parts=[source.get('heading')]
     if source.get('page_label'): parts.append(f"tr. {source['page_label']}")
     return ', '.join(p for p in parts if p) or f"phiên bản {source.get('version','?')}"
 
 
 def research_evidence(claims,documents,status):
-    """Numbered verified claims and their references, which a personalized answer cites as [n]."""
+    """Các khẳng định đã kiểm chứng được đánh số cùng tài liệu tham khảo, để câu trả lời cá nhân hoá trích dạng [n]."""
     numbers,references,items={},[],[]
     for claim in claims[:10]:
         source=documents[claim.source_id]
@@ -73,7 +73,7 @@ def consulted(documents,limit=4):
 
 
 def partial_answer(target,claims,documents,weak=False):
-    """What the sources say when they do not settle a knowledge question; never a guess of our own."""
+    """Những gì các nguồn nói khi chúng không giải quyết được câu hỏi tri thức; không bao giờ là phỏng đoán của chính ta."""
     if not claims:
         return '\n'.join([f'Mình đã xem {len(documents)} nguồn trên web nhưng không thấy thông tin đủ tin cậy về "{target}".',
                           '',*consulted(documents)]).strip()
@@ -84,10 +84,10 @@ def partial_answer(target,claims,documents,weak=False):
 
 
 def catalog_followup(domain,target,claims,documents,product):
-    """(reply, form, estimate choice) after catalog research could not build a savable record."""
+    """(câu trả lời, form, lựa chọn ước tính) sau khi tra cứu catalog không dựng được bản ghi lưu được."""
     searched=f'Mình đã tìm {len(documents)} nguồn trên web cho "{target}"'
-    # Only facts the record needs, about the item itself ("it is a drink of avocado and coconut", or the
-    # calories of one ingredient, do not help logging it); food facts are numbers.
+    # Chỉ những dữ kiện bản ghi cần, về chính món đó ("đó là đồ uống từ bơ và dừa", hay
+    # calo của một nguyên liệu, không giúp ghi nó); dữ kiện về thực phẩm là các con số.
     claims=[c for c in claims if relevance(target,c.quote)>=.5 and not catalog_choice.QUESTION.search(normalize_food_text(c.quote)) and (
         c.field in NUTRITION_FIELDS and re.search(r'\d',c.quote) if domain=='foods' else c.field.startswith(('configuration','muscle')))]
     if domain=='foods':
@@ -120,7 +120,7 @@ class ResearchV2:
         graph.add_node('research_synthesize',observed(self.synthesize,'research_synthesize'))
         graph.add_node('research_validate',observed(self.validate,'research_validate'))
         graph.add_edge(START,'research_plan')
-        # Similar catalog records end the round with a choice instead of spending web budget.
+        # Các bản ghi catalog tương tự kết thúc vòng bằng một lựa chọn thay vì tiêu ngân sách web.
         graph.add_conditional_edges('research_plan',lambda s:END if s['research_work'].get('choice') else 'research_gather',
                                     {END:END,'research_gather':'research_gather'})
         graph.add_edge('research_gather','research_synthesize'); graph.add_edge('research_synthesize','research_validate')
@@ -133,7 +133,7 @@ class ResearchV2:
                 raise BudgetExceeded('Tool limit')
             async with research_lease(self.store,state):
                 await reserve(self.store,state['run_id'],'rounds')
-                timeout=60  # Runtime's enclosing timeout also cancels this subgraph.
+                timeout=60  # Timeout bao ngoài của runtime cũng huỷ subgraph này.
                 async with asyncio.timeout(timeout):
                     result=await self.graph.ainvoke(state)
                 async with self.store.pool.connection() as conn:
@@ -145,13 +145,13 @@ class ResearchV2:
                   'research_evidence','route_trace')
             return {**{k:result[k] for k in keys if k in result},'research_count':state.get('research_count',0)+1}
         except Exception as exc:
-            # Only what the user can act on asks them: an exhausted budget, a missing web provider
-            # or a clinical topic. A processing failure is a failure, never a form.
+            # Chỉ hỏi người dùng những gì họ có thể xử lý: hết ngân sách, thiếu nhà cung cấp web
+            # hoặc chủ đề lâm sàng. Lỗi xử lý là lỗi, không bao giờ là một form.
             asks=isinstance(exc,(BudgetExceeded,TavilyUnavailable,ClinicalQuestion))
             annotate(error_code=type(exc).__name__, budget_exceeded=isinstance(exc, BudgetExceeded), status='needs_input' if asks else 'failed')
             status=ResearchStatus.NEEDS_USER_INPUT if asks else ResearchStatus.FAILED
             if state['decision'].get('personalize') and not isinstance(exc,ClinicalQuestion):
-                # A personalized answer still comes from the user's data; research just adds no evidence.
+                # Câu trả lời cá nhân hoá vẫn lấy từ dữ liệu của người dùng; tra cứu chỉ là không thêm bằng chứng.
                 return {'research_count':state.get('research_count',0)+1,'status':'running','error':None,
                         'research_result':ResearchResult(status=status,error_code=type(exc).__name__).model_dump(mode='json'),
                         'research_evidence':{'status':'unavailable','claims':[],'references':[]},
@@ -168,11 +168,11 @@ class ResearchV2:
                     'status':'needs_input' if asks else 'failed','error':error}
 
     async def evaluate(self,state,phase,projection,questions):
-        """Jev is advisory evidence validation, never a source or a writer."""
+        """Jev là bước kiểm chứng bằng chứng mang tính tư vấn, không bao giờ là nguồn hay bên ghi dữ liệu."""
         if self.jev is None:
             return {'status':'unknown','enforced':False,'mode':'off','reason':'disabled'}, list(state.get('jev_events',[]))
         result=await self.jev.evaluate(state,phase=phase,projection=projection,questions=questions)
-        # Metadata only: no draft, source passages, identifiers or question text.
+        # Chỉ metadata: không có bản nháp, đoạn trích nguồn, định danh hay nội dung câu hỏi.
         event={'phase':phase,**{k:result[k] for k in ('status','mode','enforced','reason','model','usage','cost','duration_ms','cached','fingerprint') if k in result}}
         event['answers']=result.get('answers',{})
         return result,[*state.get('jev_events',[]),event]
@@ -184,7 +184,7 @@ class ResearchV2:
 
     @staticmethod
     def evidence_projection(work):
-        # Pass only public evidence, retaining the exact passages used for synthesis.
+        # Chỉ chuyển bằng chứng công khai, giữ đúng các đoạn trích đã dùng để tổng hợp.
         return [{k:v for k,v in source.items() if k in {'source_id','title','url','content','version','page','published_at'}}
                 for source in work['documents'].values()]
 
@@ -209,7 +209,7 @@ class ResearchV2:
         work={'plan':plan.model_dump(),'qa':qa,'documents':{},'lookup':lookup,'distinct':distinct}
         update={'research_work':work,'research_answer':None}
         if lookup and lookup['status']!='MISSING' and not distinct:
-            # Database-first: the user picks an existing record or confirms a new variant before any web call.
+            # Ưu tiên database: người dùng chọn một bản ghi có sẵn hoặc xác nhận biến thể mới trước mọi lần gọi web.
             clarification,choice=catalog_choice.form(domain,query,{'query':lookup,'name':None})
             work['choice']=True
             noun='món' if domain=='foods' else 'bài tập'
@@ -229,16 +229,16 @@ class ResearchV2:
             descriptor=personal_context.retrieval_descriptor(state.get('user_context'),decision.get('topic') or 'general') \
                 if decision.get('personalize') else None
             if descriptor:
-                # Internal knowledge base only (never the web): passages for this user's level.
+                # Chỉ cơ sở tri thức nội bộ (không bao giờ web): các đoạn trích phù hợp trình độ của người dùng này.
                 english=next((q for q in queries if q.isascii()),query)
                 queries=[(descriptor+'. '+english)[:300],*queries][:3]
             try:
-                # The router's paraphrases (one in English for the English corpus) widen recall.
+                # Các cách diễn đạt lại của router (một bản tiếng Anh cho kho tiếng Anh) mở rộng độ phủ khi truy hồi.
                 docs, work['retrieval_status'] = await retrieve_knowledge(ctx.backend, ctx.token, query, queries=queries,
                                                                           limit=6 if descriptor else 4)
             except Exception:
                 work['retrieval_status']='unavailable'
-        # Local evidence is graded first. Web is only used now if local retrieval is empty.
+        # Bằng chứng nội bộ được chấm điểm trước. Web chỉ được dùng lúc này nếu truy hồi nội bộ rỗng.
         if docs:
             allowed=await reserve_documents(self.store,state['run_id'],list(docs))
             docs={k:v for k,v in docs.items() if k in allowed}
@@ -253,7 +253,7 @@ class ResearchV2:
             work['jev_local_enforced']=bool(evaluation.get('enforced'))
             probability=self.probability(evaluation,'local_insufficient')
             if evaluation.get('enforced') and probability is not None and probability>=.90:
-                # Reserve documents durably before adding web sources, retaining useful KB passages.
+                # Đặt chỗ tài liệu một cách bền vững trước khi thêm nguồn web, giữ lại các đoạn trích KB hữu ích.
                 web=await self.web(state,work['plan']['queries'])
                 work['documents']={**docs,**web}
                 work['web_fallback_done']=True
@@ -273,7 +273,7 @@ class ResearchV2:
         rows = rank_sources(rows, target, domain=catalog, product=product)
         allowed=await reserve_documents(self.store,state['run_id'],[r['url'] for r in rows])
         rows=[r for r in rows if r['url'] in allowed]
-        # Full text only where it can be fetched: social pages block extraction and are opinions anyway.
+        # Chỉ lấy toàn văn ở nơi lấy được: trang mạng xã hội chặn trích xuất và dù sao cũng chỉ là ý kiến.
         thin=[r['url'] for r in rows if len(r.get('content',''))<600 and not social(r['url'])][:3]
         extracted=await self.tavily.extract(thin,reserve=budget) if thin else []
         content={r['url']:r['raw_content'] for r in extracted}
@@ -285,11 +285,11 @@ class ResearchV2:
         domain=state['decision'].get('domain')
         schema='' if work['qa'] else '\nSchema backend của payload: '+json.dumps(
             (FoodCreate if domain=='foods' else ExerciseCreate).model_json_schema(),ensure_ascii=False)
-        # Bounded evidence context; private history/profile is never sent to research.
+        # Ngữ cảnh bằng chứng có giới hạn; lịch sử/hồ sơ riêng tư không bao giờ được gửi sang bước tra cứu.
         documents = bounded_documents(work['documents'])
-        # Verification sees exactly the passages the model was given.
+        # Bước kiểm chứng thấy đúng các đoạn trích mà model đã được đưa.
         work['documents']={r['source_id']:r for r in documents}
-        # Plain-text sources under short labels: the model copies "S2" reliably, a long URL not always.
+        # Nguồn dạng văn bản thuần dưới nhãn ngắn: model chép "S2" chính xác, còn URL dài thì không phải lúc nào cũng vậy.
         labels={f'S{i}':row['source_id'] for i,row in enumerate(documents,1)}
         plan=work['plan']
         task='Trả lời câu hỏi kiến thức bằng claims có nguồn.' if work['qa'] else f'Dựng payload {domain} cho catalog HercFit từ các claims.'
@@ -306,12 +306,12 @@ class ResearchV2:
         if not work['documents']:
             work['draft']=ResearchDraft(missing_fields=['nguồn xác minh']).model_dump(); return {'research_work':work}
         draft=await self.draft(state,work)
-        # A personalized request needs principles, not a full answer to the user's own goal: verified
-        # knowledge-base claims are kept, and the web is searched only when the books gave none.
+        # Yêu cầu cá nhân hoá cần nguyên tắc, không cần câu trả lời đầy đủ cho mục tiêu riêng của người dùng: các
+        # khẳng định đã kiểm chứng từ cơ sở tri thức được giữ, và chỉ tìm trên web khi sách không có gì.
         personal_evidence=state['decision'].get('personalize') and draft.claims
         if (work['qa'] and not draft.sufficient and not work.get('web_fallback_done') and not personal_evidence
                 and any(k.startswith('kb:') for k in work['documents'])):
-            # One adaptive fallback, with the same durable budget and deadline.
+            # Một phương án dự phòng thích ứng, với cùng ngân sách bền vững và hạn chót.
             web=await self.web(state,work['plan']['queries'])
             work['documents']={**work['documents'],**web} if work.get('jev_local_enforced') else web
             if work['documents']: draft=await self.draft(state,work)
@@ -323,8 +323,8 @@ class ResearchV2:
         domain=state['decision'].get('domain')
         product=work['plan']['target'] if domain=='foods' and not work['qa'] else None
         def url_of(source_id): return str((work['documents'].get(source_id) or {}).get('url') or '')
-        # Authority is the source registry's rating of the publisher; the model's own label is discarded.
-        # A knowledge answer may restate the question's own numbers; catalog values must be quoted.
+        # Độ tin cậy là đánh giá của sổ đăng ký nguồn về nhà xuất bản; nhãn do model tự đặt bị bỏ.
+        # Câu trả lời tri thức có thể nhắc lại các con số của chính câu hỏi; giá trị catalog phải được trích dẫn.
         context=work['plan']['target'] if work['qa'] else ''
         checked=[c.model_copy(update={'authority':rate(c.source_id,url_of(c.source_id),product).tier})
                  for c in verify_claims(draft.claims,work['documents'],strict=not work['qa'],context=context)]
@@ -337,11 +337,11 @@ class ResearchV2:
         candidate=None
         if not work['qa']:
             schema=FoodCreate if domain=='foods' else ExerciseCreate
-            draft.payload.pop('image_url',None)  # images are imported to Cloudinary after confirmation
+            draft.payload.pop('image_url',None)  # ảnh được nhập lên Cloudinary sau khi xác nhận
             cleared=[]
             try:
                 payload=schema.model_validate(draft.payload).model_dump(mode='json')
-                # Values without field-level evidence are cleared to null/default, never kept on trust.
+                # Giá trị không có bằng chứng ở mức trường được xoá về null/mặc định, không bao giờ giữ vì tin tưởng.
                 payload,needed,cleared=audit(domain,payload,checked,url_of)
                 payload=schema.model_validate(payload).model_dump(mode='json')
                 missing.extend(needed)
@@ -362,8 +362,8 @@ class ResearchV2:
             projection={'request':work['plan']['target'],'sources':self.evidence_projection(work),'draft':draft.model_dump(mode='json')}
             fingerprint=hashlib.sha256(json.dumps(projection,sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
             evaluation,events=await self.evaluate(state,'final',projection,get_questions("research.final"))
-            # A known refusal is a property of this exact evidence/draft. Switching
-            # mode or exhausting the ledger must not turn it into an approval.
+            # Một lần từ chối đã biết là thuộc tính của đúng bằng chứng/bản nháp này. Đổi
+            # chế độ hay cạn sổ ngân sách không được biến nó thành chấp thuận.
             rejection=rejections.get(fingerprint,{})
             if evaluation.get('enforced'):
                 supported=self.probability(evaluation,'supported'); conflict=self.probability(evaluation,'conflict')
@@ -385,7 +385,7 @@ class ResearchV2:
             elif work.get('distinct') and catalog_choice.name_taken(found):
                 missing.append('name_vi: trùng tên bản ghi có sẵn, cần tên phân biệt')
             else:
-                # Persisted and signed only after the deterministic AND Jev gates.
+                # Chỉ lưu và ký sau khi qua cả cổng tất định LẪN cổng Jev.
                 candidate['research_id']=await self.store.research(state,candidate)
                 candidate['attestation']=catalog_choice.attest(candidate,state['user_id'],secret.get_secret_value())
                 resolution,existing=catalog_choice.settle(found,'create_distinct' if work.get('distinct') else 'create')
@@ -398,7 +398,7 @@ class ResearchV2:
         result=ResearchResult(status=status,claims=checked,missing_fields=missing,conflicts=conflicts)
         annotate(source_count=len(work['documents']), citation_count=len(checked), dropped_claims=max(0, dropped),
                  missing_count=len(missing), conflict_count=len(conflicts), sufficient=not missing and not conflicts)
-        # Verified quotes about another size/recipe: never saved as facts, shown as estimates.
+        # Trích dẫn đã kiểm chứng về khẩu phần/công thức khác: không bao giờ lưu như dữ kiện, chỉ hiển thị như ước tính.
         related=[c.model_copy(update={'authority':rate(c.source_id,url_of(c.source_id),product).tier})
                  for c in related_claims(draft.claims,work['documents'],context)]
         complete=status==ResearchStatus.COMPLETED
@@ -425,7 +425,7 @@ class ResearchV2:
                 'status':'running' if complete else 'needs_input',
                 'error':None if complete else 'Chưa đủ căn cứ: '+', '.join(missing+conflicts)}
         if work['qa'] and state['decision'].get('personalize'):
-            # The answer node writes the reply from the user's data plus this evidence; no prepared text.
+            # Node trả lời viết câu trả lời từ dữ liệu của người dùng cộng với bằng chứng này; không có văn bản soạn sẵn.
             rejected=any(rejection for rejection in rejections.values()) and any(c.startswith('Jev') for c in conflicts+missing)
             evidence=research_evidence([] if rejected else (checked or related),work['documents'],
                                        'verified' if complete else 'partial')
@@ -435,14 +435,14 @@ class ResearchV2:
                               'documents':len(work['documents']),'claims':len(draft.claims),'verified':len(checked)}])
             return update
         if work['qa'] and not complete:
-            # A knowledge question gets what the sources do say, marked as unconfirmed, instead of a form.
-            # Claims Jev found unsupported or contradicted are not repeated, only the sources consulted.
+            # Câu hỏi tri thức nhận được những gì các nguồn thực sự nói, đánh dấu là chưa xác nhận, thay vì một form.
+            # Những khẳng định Jev thấy không có căn cứ hoặc mâu thuẫn thì không nhắc lại, chỉ nêu các nguồn đã tham khảo.
             rejected=any(rejection for rejection in rejections.values()) and any(c.startswith('Jev') for c in conflicts+missing)
             update.update(status='running',error=None,research_answer=partial_answer(
                 work['plan']['target'],[] if rejected else [*checked,*related],work['documents'],weak=bool(conflicts)))
         elif candidate is not None and not complete and not choice:
-            # Human in the loop with what research found: pick a sourced estimate or give label values.
-            # Sources that disagree are exactly when the person should choose, so disputed figures stay.
+            # Con người tham gia quyết định với những gì tra cứu tìm được: chọn một ước tính có nguồn hoặc nhập giá trị trên nhãn.
+            # Khi các nguồn bất đồng chính là lúc người dùng nên chọn, nên các con số còn tranh cãi được giữ lại.
             material=[c.model_copy(update={'authority':rate(c.source_id,url_of(c.source_id),product).tier})
                       for c in verified_claims(draft.claims,work['documents'])]
             reply,form,estimates=catalog_followup(domain,work['plan']['target'],material,work['documents'],product)

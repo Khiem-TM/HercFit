@@ -1,4 +1,4 @@
-"""Shared authenticated service and validated query dependencies."""
+"""Phụ thuộc service đã xác thực và query đã kiểm tra, dùng chung."""
 
 from datetime import date
 from typing import Literal, Annotated

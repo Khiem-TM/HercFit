@@ -1,7 +1,7 @@
-"""Immutable plan versions and dated meal/training schedules.
+"""Phiên bản kế hoạch bất biến và lịch bữa ăn/lịch tập theo ngày.
 
-Scoped methods flush but never commit: callers retain transaction ownership.
-All lifecycle writers serialize on the same User row as Goal confirmation.
+Các phương thức có phạm vi chỉ flush, không bao giờ commit: bên gọi giữ quyền sở hữu transaction.
+Mọi lệnh ghi vòng đời đều tuần tự hoá trên cùng dòng User như bước xác nhận Goal.
 """
 
 from __future__ import annotations
@@ -181,8 +181,8 @@ class Plan(PlanLifecycleMixin, BaseModel):
         goal = await Goal.get_for_user(session, payload.goal_id, user_id=user_id)
         if goal is None:
             raise HTTPException(status_code=404, detail="Goal not found")
-        # The identity map may predate a concurrent Goal transition that held
-        # the same User lock; always evaluate and snapshot the refreshed row.
+        # Identity map có thể có từ trước một lần chuyển trạng thái Goal đồng thời đã giữ
+        # cùng khoá User; luôn đánh giá và chụp dòng đã làm mới.
         await session.refresh(goal)
         if goal.status != GoalStatus.IN_PROGRESS:
             raise HTTPException(status_code=409, detail="Goal has already ended")
@@ -244,13 +244,13 @@ class Plan(PlanLifecycleMixin, BaseModel):
                 if entity.end_date < now.astimezone(ZoneInfo(entity.timezone)).date():
                     await entity._end(session, "EXPIRED", now=now)
                     count += 1
-            # Flush the master cascade before selecting active detail schedules.
+            # Flush dây chuyền của bản chính trước khi chọn các lịch chi tiết đang hoạt động.
             await session.flush()
         return count
 
     @classmethod
     async def end_for_goal(cls, session: AsyncSession, *, user_id: PyUUID, goal_id: PyUUID, reason: str):
-        """Called inside Goal lifecycle transactions; safe for direct service use too."""
+        """Được gọi bên trong transaction vòng đời của Goal; cũng an toàn khi service gọi trực tiếp."""
         async with session.begin_nested():
             await lock_user(session, user_id)
             result = await session.execute(

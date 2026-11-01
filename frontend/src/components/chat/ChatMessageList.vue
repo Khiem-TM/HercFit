@@ -41,10 +41,10 @@ watch(
   { deep: true },
 )
 
-// Options stay answerable only on the latest agent turn.
+// Các lựa chọn chỉ còn trả lời được ở lượt agent mới nhất.
 const lastMessageId = computed(() => props.messages[props.messages.length - 1]?.id)
 
-// While the form is open the bubble shows its intro; the questions themselves are in the form.
+// Khi form đang mở, bong bóng chat hiển thị lời dẫn của nó; các câu hỏi nằm trong form.
 function asksForm(msg: ChatMessage): boolean {
   return Boolean(msg.clarification?.questions.length) && msg.status === 'needs_input' && msg.id === lastMessageId.value
 }
@@ -71,7 +71,7 @@ function host(url: string): string {
         class="flex w-full"
         :class="msg.role === 'human' ? 'justify-end' : 'justify-start'"
       >
-        <!-- Human Message Bubble -->
+        <!-- Bong bóng tin nhắn của người dùng -->
         <div
           v-if="msg.role === 'human'"
           class="max-w-[82%] rounded-2xl rounded-tr-sm border border-ink/10 bg-panel-hover px-4 py-3 text-sm leading-relaxed text-primary shadow-md"
@@ -79,9 +79,9 @@ function host(url: string): string {
           <p class="whitespace-pre-wrap">{{ msg.content }}</p>
         </div>
 
-        <!-- AI Agent Message Block -->
+        <!-- Khối tin nhắn của AI Agent -->
         <div v-else class="msg-enter flex w-full max-w-[92%] items-start gap-3.5">
-          <!-- Mini Kinetic Orb Avatar -->
+          <!-- Avatar quả cầu Kinetic thu nhỏ -->
           <div
             class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-ink/20 shadow-inner"
             style="background: radial-gradient(circle at 30% 30%, #4b4e54 0%, #18191c 70%, #0b0b0c 100%);"
@@ -109,17 +109,17 @@ function host(url: string): string {
               </span>
             </div>
 
-            <!-- Message Text -->
+            <!-- Nội dung tin nhắn -->
             <div
               class="rounded-2xl rounded-tl-sm border border-ink/[0.08] bg-panel/90 px-5 py-4 text-sm leading-relaxed text-on-surface"
               :aria-busy="msg.status === 'streaming'"
             >
-              <!-- renderMarkdown escapes all HTML first and emits a fixed tag allowlist. -->
+              <!-- renderMarkdown escape toàn bộ HTML trước rồi mới sinh các thẻ trong danh sách cho phép cố định. -->
               <div
                 class="md"
                 v-html="renderMarkdown(asksForm(msg) && msg.clarification?.intro ? msg.clarification.intro : msg.content)"
               />
-              <!-- Questions may refer to the reply ("trong danh sách trên"), so it stays one tap away. -->
+              <!-- Câu hỏi có thể nhắc tới câu trả lời ("trong danh sách trên"), nên nó luôn cách một chạm. -->
               <details v-if="hidesReply(msg)" class="mt-2">
                 <summary class="cursor-pointer text-xs text-outline hover:text-on-surface">Xem toàn bộ tin nhắn</summary>
                 <div class="md mt-2 border-t border-ink/[0.06] pt-2" v-html="renderMarkdown(msg.content)" />
@@ -128,13 +128,13 @@ function host(url: string): string {
               <p v-if="msg.status === 'stopped'" class="mt-2 text-xs text-outline">Đã dừng theo yêu cầu.</p>
             </div>
 
-            <!-- Research illustration (web picture; stored only after a confirmed import) -->
+            <!-- Ảnh minh hoạ từ tra cứu (ảnh trên web; chỉ được lưu sau khi xác nhận nhập) -->
             <figure v-if="msg.illustrations && msg.illustrations.length" class="max-w-xs overflow-hidden rounded-xl border border-ink/[0.08] bg-panel">
               <CatalogImage :src="msg.illustrations[0].url" :alt="msg.illustrations[0].description || 'Ảnh minh hoạ'" rounded="rounded-none" class="aspect-[4/3] w-full" />
               <figcaption class="px-3 py-2 text-[11px] text-outline">Ảnh minh hoạ · {{ host(msg.illustrations[0].url) }}</figcaption>
             </figure>
 
-            <!-- Human-in-the-loop options -->
+            <!-- Các lựa chọn để con người quyết định -->
             <Transition appear enter-active-class="transition duration-200 ease-out motion-reduce:transition-none" enter-from-class="translate-y-1 opacity-0">
               <ClarificationCard
                 v-if="asksForm(msg) && msg.clarification"
@@ -144,7 +144,7 @@ function host(url: string): string {
               />
             </Transition>
 
-            <!-- Research Sources -->
+            <!-- Nguồn tra cứu -->
             <div
               v-if="msg.sources && msg.sources.length > 0"
               class="flex flex-wrap gap-2 pt-1"
@@ -165,7 +165,7 @@ function host(url: string): string {
         </div>
       </div>
 
-      <!-- Active Pending Confirmation Card -->
+      <!-- Thẻ xác nhận đang chờ -->
       <Transition appear enter-active-class="transition duration-200 ease-out motion-reduce:transition-none" enter-from-class="translate-y-1 opacity-0">
         <div v-if="pendingAction" :key="pendingAction.action_id" class="ml-11">
           <ConfirmationCard
@@ -176,7 +176,7 @@ function host(url: string): string {
         </div>
       </Transition>
 
-      <!-- Streaming Progress Indicator (hidden once answer tokens are visible) -->
+      <!-- Chỉ báo tiến độ stream (ẩn khi token câu trả lời đã hiển thị) -->
       <div v-if="isStreaming && messages[messages.length - 1]?.status !== 'streaming'" class="flex items-center gap-3.5">
         <div
           class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-ink/20 bg-panel-raised"
@@ -196,7 +196,7 @@ function host(url: string): string {
 
 
 <style scoped>
-/* New replies fade in once; an updated (streamed -> final) bubble keeps its node and does not replay this. */
+/* Câu trả lời mới hiện mờ dần một lần; bong bóng được cập nhật (stream -> bản cuối) giữ nguyên node và không chạy lại hiệu ứng. */
 .msg-enter { animation: msg-enter 180ms ease-out; }
 @keyframes msg-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .msg-enter { animation: none; } }

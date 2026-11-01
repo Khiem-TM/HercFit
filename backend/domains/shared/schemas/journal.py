@@ -1,6 +1,6 @@
-"""Actual food/training logs; callers cannot supply totals or legacy flags.
+"""Nhật ký ăn uống/tập luyện thực tế; bên gọi không được truyền tổng hay cờ cũ.
 
-Split from schemas.journals in the domain reorganization."""
+Tách ra từ schemas.journals trong đợt tổ chức lại theo miền."""
 from datetime import timezone
 from typing import Literal
 from uuid import UUID

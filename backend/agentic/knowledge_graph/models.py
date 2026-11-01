@@ -7,9 +7,9 @@ from pydantic import BaseModel, Field
 
 class GraphContext(BaseModel):
     facts: list[dict[str, Any]] = Field(default_factory=list)
-    # Recent conversation turns (gated by live session generations).
+    # Các lượt hội thoại gần đây (lọc theo thế hệ phiên đang sống).
     episodes: list[dict[str, Any]] = Field(default_factory=list)
-    # Derived user model (knowledge_graph.model) and the sections relevant to the request.
+    # Model người dùng suy ra (knowledge_graph.model) và các mục liên quan đến yêu cầu.
     model: dict[str, Any] | None = None
     sections: list[str] = Field(default_factory=list)
     domains: list[str] = Field(default_factory=list)

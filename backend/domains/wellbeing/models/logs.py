@@ -1,9 +1,9 @@
-"""Symptom, mood, menstrual period and ovulation test logs (migration 0020).
+"""Nhật ký triệu chứng, tâm trạng, kỳ kinh và que thử rụng trứng (migration 0020).
 
-Google Health accepts these only as writes (no read scope in the guide), so
-HercFit is the system of record: history cannot be imported, only exported.
-They are sensitive: never projected into the knowledge graph, and the assistant
-needs the separate `sensitive` consent to read them.
+Google Health chỉ nhận các loại này dưới dạng ghi (hướng dẫn không có scope đọc), nên
+HercFit là hệ thống lưu trữ gốc: lịch sử không nhập về được, chỉ xuất đi được.
+Chúng nhạy cảm: không bao giờ được chiếu vào knowledge graph, và trợ lý
+cần consent `sensitive` riêng để đọc.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from domains.shared.models.basemodel import BaseModel
 
 SOURCES = ("MANUAL", "AI_CONFIRMED")
-# Enumerations pinned to the discovery snapshot (tests/test_google_health_contract.py checks them).
+# Các enum được ghim theo ảnh chụp discovery (tests/test_google_health_contract.py kiểm tra chúng).
 SYMPTOMS = ('CRAMPS', 'HEADACHE', 'TENDER_BREASTS', 'ACNE', 'SICK', 'BLOATED', 'HOT_FLASHES', 'PMS', 'COUGH', 'FEVER', 'DIFFICULTY_BREATHING', 'BACK_PAIN', 'SHAKINESS', 'HUNGER', 'SWEATING', 'ANXIETY', 'THIRST', 'FREQUENT_URINATION', 'BLURRED_VISION', 'OTHER', 'SEX_DRIVE_HIGH', 'SEX_DRIVE_MEDIUM', 'SEX_DRIVE_LOW', 'HEART_PALPITATIONS', 'FAINTING', 'CHEST_PAIN', 'FATIGUE', 'CONFUSION', 'DIZZINESS', 'ABDOMINAL_PAIN', 'BLADDER_LEAKS', 'BLEEDING_GUMS', 'BRAIN_FOG', 'BURNING_MOUTH', 'CONSTIPATION', 'CRAVINGS', 'DECREASED_APPETITE', 'DIARRHEA', 'DRAWING_PAIN', 'DRY_EYES', 'DRY_HAIR', 'DRY_SKIN', 'EXHAUSTION', 'FEEL_GOOD', 'FOOD_AVERSIONS', 'HAIR_LOSS', 'HEARTBURN', 'HYPERPIGMENTATION', 'INCREASED_APPETITE', 'INCREASED_APPETITE_V2', 'INSOMNIA', 'JOINT_PAIN', 'LEG_CRAMPS', 'MILKY_NIPPLE_DISCHARGE', 'NAUSEA', 'NIGHT_SWEATS', 'NORMAL_DIGESTION', 'NORMAL_STOOL', 'PERINEUM_PAIN', 'SLEEPINESS', 'STRETCH_MARKS', 'SWELLING', 'VAGINAL_DRYNESS', 'VAGINAL_ITCHING', 'VOMITING')
 MOODS = ('AMAZED', 'AMUSED', 'ANGRY', 'ANNOYED', 'ANXIOUS', 'HAPPY', 'CONTENT', 'SAD', 'WORRIED', 'FRUSTRATED', 'EXCITED', 'CALM', 'STRESSED', 'ASHAMED', 'BRAVE', 'CONFIDENT', 'DISAPPOINTED', 'DISCOURAGED', 'DISGUSTED', 'DRAINED', 'EMBARRASSED', 'GRATEFUL', 'GUILTY', 'HOPEFUL', 'HOPELESS', 'INDIFFERENT', 'IRRITATED', 'JEALOUS', 'JOYFUL', 'LONELY', 'OVERWHELMED', 'PASSIONATE', 'PEACEFUL', 'PROUD', 'RELIEVED', 'SATISFIED', 'SCARED', 'SURPRISED', 'ENERGIZED', 'FATIGUED', 'VERY_CALM', 'VERY_STRESSED', 'NEUTRAL', 'AFRAID', 'HURTING', 'BORED', 'BITTER', 'ENVIOUS', 'CONFUSED', 'CURIOUS', 'AWESTRUCK', 'INSPIRED', 'LONGING', 'ACCOMPLISHED', 'LOVING', 'COMPASSIONATE', 'DEPRESSED', 'GOOD', 'LOW_ENERGY', 'OBSESSIVE_THOUGHTS', 'PANIC', 'PLAYFUL', 'PLEASED', 'SENSITIVE', 'SLEEPY', 'SWINGS', 'UNHAPPY', 'VERY_SELF_CRITICAL')
 VALENCES = ('UNPLEASANT', 'BASELINE', 'PLEASANT')

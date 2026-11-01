@@ -1,4 +1,4 @@
-"""Manual master plan lifecycle and versioned replacement."""
+"""Vòng đời kế hoạch chính thủ công và thay thế có phiên bản."""
 from uuid import UUID
 
 from fastapi import APIRouter, Response

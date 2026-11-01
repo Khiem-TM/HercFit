@@ -1,7 +1,9 @@
 import { computed, ref } from 'vue'
 
-/** Dark is HercFit's default look; light and "follow the system" are opt-in. The choice lives in
- * localStorage, and index.html applies it before the first paint so there is no flash. */
+/**
+ * Tối là giao diện mặc định của HercFit; sáng và "theo hệ thống" là tuỳ chọn. Lựa chọn được lưu trong
+ * localStorage, và index.html áp dụng nó trước lần vẽ đầu tiên nên không bị nháy.
+ */
 export type ThemeMode = 'dark' | 'light' | 'system'
 
 const KEY = 'hercfit:theme'
@@ -45,12 +47,12 @@ export function useTheme() {
     try {
       localStorage.setItem(KEY, next)
     } catch {
-      // Private mode: the choice lasts for this page only.
+      // Chế độ riêng tư: lựa chọn chỉ có hiệu lực trong trang này.
     }
     apply()
   }
 
-  /** Flip between the two looks (an explicit choice, so it stops following the system). */
+  /** Chuyển qua lại giữa hai giao diện (một lựa chọn tường minh, nên ngừng theo hệ thống). */
   function toggle(): void {
     setMode(resolved.value === 'light' ? 'dark' : 'light')
   }

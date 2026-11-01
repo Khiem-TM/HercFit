@@ -47,14 +47,14 @@ const suggestionCards = [
 
 <template>
   <div class="mx-auto flex w-full max-w-3xl flex-col items-center justify-center px-4 py-8">
-    <!-- Center Kinetic Orbital Sphere (Olympus Aesthetic + Reference Sphere) -->
+    <!-- Quả cầu quỹ đạo Kinetic ở giữa (phong cách Olympus + quả cầu tham chiếu) -->
     <div class="relative mb-6 flex h-28 w-28 items-center justify-center">
-      <!-- Outer Subtle Glow -->
+      <!-- Quầng sáng mờ bên ngoài -->
       <div
         class="pointer-events-none absolute inset-0 rounded-full bg-ink/[0.06] blur-2xl"
       />
 
-      <!-- Rotating Orbital SVG Rings -->
+      <!-- Các vòng quỹ đạo SVG xoay -->
       <svg
         class="pointer-events-none absolute inset-0 h-full w-full animate-[spin_28s_linear_infinite] opacity-45"
         viewBox="0 0 120 120"
@@ -95,7 +95,7 @@ const suggestionCards = [
         </defs>
       </svg>
 
-      <!-- 3D Metallic Obsidian Sphere Core -->
+      <!-- Lõi quả cầu obsidian kim loại 3D -->
       <div
         class="relative h-16 w-16 overflow-hidden rounded-full border border-ink/25 shadow-[0_12px_36px_rgb(var(--c-shadow)/calc(0.85*var(--shadow-k))),inset_0_2px_12px_rgba(255,255,255,0.35)]"
         style="background: radial-gradient(circle at 32% 28%, #5a5d64 0%, #232529 42%, #0b0b0d 82%, #1f2024 100%);"
@@ -109,7 +109,7 @@ const suggestionCards = [
       </div>
     </div>
 
-    <!-- Greeting Headlines -->
+    <!-- Dòng chào mừng -->
     <div class="mb-7 text-center">
       <p class="font-headline-md text-xl font-normal tracking-tight text-on-surface-variant md:text-2xl">
         Xin chào, {{ displayName }}
@@ -119,13 +119,13 @@ const suggestionCards = [
       </h1>
     </div>
 
-    <!-- Composer Slot (Centered in Empty State) -->
+    <!-- Ô soạn tin (căn giữa khi trống) -->
     <div class="w-full">
       <slot name="composer" />
     </div>
 
-    <!-- 3 Quick-Action Suggestion Cards -->
-    <!-- Sized by the chat column, which narrows when the knowledge panel is dragged wider. -->
+    <!-- 3 thẻ gợi ý thao tác nhanh -->
+    <!-- Kích thước theo cột chat, cột này hẹp lại khi bảng tri thức được kéo rộng ra. -->
     <div class="mt-4 grid w-full grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3.5">
       <button
         v-for="card in suggestionCards"

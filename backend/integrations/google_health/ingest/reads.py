@@ -1,17 +1,17 @@
-"""How each Google Health data type is read for a civil-date window.
+"""Cách đọc từng loại dữ liệu Google Health cho một cửa sổ ngày địa phương.
 
-Filters follow the list method's documented grammar (discovery revision in
-contract/registry.py): only `>=` and `<` with AND, on
+Filter theo ngữ pháp đã mô tả của phương thức list (revision discovery trong
+contract/registry.py): chỉ `>=` và `<` kết hợp AND, trên
 
-* `{type}.date` for daily points,
-* `{type}.sample_time.civil_time` for samples,
-* `{type}.interval.civil_start_time` for intervals and sessions,
-* `sleep.interval.civil_end_time` (sleep belongs to the date the user woke up),
-* `electrocardiogram.interval.start_time >=` only (no upper bound is supported;
-  the caller drops points after the window).
+* `{type}.date` cho điểm theo ngày,
+* `{type}.sample_time.civil_time` cho mẫu,
+* `{type}.interval.civil_start_time` cho khoảng và phiên,
+* `sleep.interval.civil_end_time` (giấc ngủ thuộc ngày người dùng thức dậy),
+* chỉ `electrocardiogram.interval.start_time >=` (không hỗ trợ cận trên;
+  bên gọi bỏ các điểm sau cửa sổ).
 
-Civil filters select by the wall-clock date recorded with each point, so the
-user's current timezone never decides which history a window contains.
+Filter theo giờ địa phương chọn theo ngày đồng hồ được ghi cùng mỗi điểm, nên
+múi giờ hiện tại của người dùng không bao giờ quyết định một cửa sổ chứa lịch sử nào.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from typing import Iterator
 from integrations.google_health.contract import discovery
 from integrations.google_health.contract.registry import DataTypeSpec, Op, spec
 
-# Earliest UTC offset in use (UTC+14): a physical lower bound that cannot miss a civil date.
+# Độ lệch UTC sớm nhất đang dùng (UTC+14): cận dưới vật lý không thể bỏ sót một ngày địa phương.
 MAX_AHEAD = timedelta(hours=14)
 MAX_PAGES = 50
 
@@ -30,10 +30,10 @@ MAX_PAGES = 50
 @dataclass(frozen=True)
 class ReadPlan:
     data_type: str
-    method: str                 # "dailyRollUp" or "list"
+    method: str                 # "dailyRollUp" hoặc "list"
     page_size: int
-    chunk_days: int | None      # dailyRollUp ranges are capped per type
-    filter_fn: str              # which filter builder applies (for logging and tests)
+    chunk_days: int | None      # khoảng dailyRollUp bị giới hạn theo từng loại
+    filter_fn: str              # bộ dựng filter nào được áp dụng (cho log và test)
 
 
 def _shape(item: DataTypeSpec, api_version: str) -> str:

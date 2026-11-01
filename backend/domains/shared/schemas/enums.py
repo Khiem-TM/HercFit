@@ -1,4 +1,4 @@
-"""Value types shared by schemas and SQLAlchemy models, without ORM imports."""
+"""Kiểu giá trị dùng chung cho schema và model SQLAlchemy, không import ORM."""
 
 from enum import StrEnum
 

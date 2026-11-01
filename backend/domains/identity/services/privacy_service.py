@@ -1,10 +1,10 @@
-"""Data-subject rights: export everything a user owns, or erase the account.
+"""Quyền của chủ thể dữ liệu: xuất mọi thứ người dùng sở hữu, hoặc xoá tài khoản.
 
-Erasure deletes the users row; foreign keys cascade to every owned table and the
-knowledge-graph capture triggers emit delete events, so the Neo4j projection is
-cleaned by the worker. A Google Health grant is revoked at Google first. Images attached to the user's records are queued for
-Cloudinary removal first. Conversation data lives in the agent service, which
-exposes its own purge endpoint (DELETE /api/v1/chat/me).
+Việc xoá sẽ xoá dòng users; khoá ngoại xoá dây chuyền tới mọi bảng sở hữu và các
+trigger ghi nhận knowledge graph phát sự kiện xoá, nên phép chiếu Neo4j được
+worker dọn. Quyền Google Health được thu hồi tại Google trước. Ảnh gắn với bản ghi của người dùng được xếp hàng
+để xoá trên Cloudinary trước. Dữ liệu hội thoại nằm trong service agent, service này
+có endpoint dọn dữ liệu riêng (DELETE /api/v1/chat/me).
 """
 from datetime import datetime, timezone
 
@@ -14,7 +14,7 @@ from sqlalchemy import text
 from core.settings import settings
 
 EXPORT_FORMAT_VERSION = 1
-# Constant SQL only; :uid is the authenticated user's id.
+# Chỉ dùng SQL hằng; :uid là id của người dùng đã xác thực.
 EXPORT_QUERIES: tuple[tuple[str, str], ...] = (
     ("profile", "SELECT id, email, fullname, nick_name, avatar_url, email_verified, last_login_at, is_onboarding, "
                 "age, sex, personal_info, created_at, updated_at FROM users WHERE id = :uid"),
@@ -42,7 +42,7 @@ EXPORT_QUERIES: tuple[tuple[str, str], ...] = (
                             "ORDER BY e.scheduled_date, i.position"),
     ("custom_foods", "SELECT * FROM foods WHERE owner_user_id = :uid ORDER BY created_at"),
     ("custom_exercises", "SELECT * FROM exercises WHERE owner_user_id = :uid ORDER BY created_at"),
-    # Provider credentials are never exported; only the grant's metadata.
+    # Thông tin xác thực nhà cung cấp không bao giờ được xuất; chỉ metadata của quyền đã cấp.
     ("health_connections", "SELECT provider, account_email, granted_scopes, status, share_with_assistant, consented_at, "
                            "timezone, provider_profile, last_sync_at, last_success_at, created_at "
                            "FROM health_connections WHERE user_id = :uid"),
@@ -69,10 +69,10 @@ async def export_user_data(session, user_id) -> dict:
 
 
 async def erase_user(session, user_id) -> dict:
-    """Hard-delete the account in the caller's transaction; returns counts for the receipt."""
+    """Xoá cứng tài khoản trong transaction của bên gọi; trả về số đếm cho biên nhận."""
     from domains.health_records import ports
 
-    # Revoke provider grants first (best effort); the rows themselves cascade.
+    # Thu hồi quyền tại nhà cung cấp trước (cố gắng hết mức); bản thân các dòng sẽ bị xoá dây chuyền.
     await ports.before_account_erasure(session, user_id)
     images = 0
     if settings.CLOUDINARY_CLOUD_NAME:

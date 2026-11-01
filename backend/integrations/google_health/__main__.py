@@ -1,4 +1,4 @@
-"""python -m services.google_health [--connection-id UUID]: sync due connections once."""
+"""python -m integrations.google_health [--connection-id UUID]: đồng bộ các kết nối đến hạn một lần."""
 import argparse
 import asyncio
 import json

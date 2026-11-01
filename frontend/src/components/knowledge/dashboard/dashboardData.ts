@@ -7,8 +7,8 @@ export function detail(node: KnowledgeNode, label: string): string | undefined {
   return node.details.find(item => item.label === label)?.value
 }
 
-// The map exposes formatted facts, with a dot or comma as the decimal separator.
-// Missing values must remain missing (especially for nutrition), never become zero.
+// Bản đồ đưa ra dữ kiện đã định dạng, với dấu chấm hoặc dấu phẩy làm dấu thập phân.
+// Giá trị thiếu phải giữ là thiếu (đặc biệt với dinh dưỡng), không bao giờ thành số 0.
 export function numericDetail(node: KnowledgeNode, label: string): number | null {
   const raw = detail(node, label)?.trim().match(/^(-?\d+(?:[.,]\d+)?)(?:\s|$)/)?.[1]
   const value = raw == null ? NaN : Number(raw.replace(',', '.'))

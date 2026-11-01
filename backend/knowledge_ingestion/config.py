@@ -1,4 +1,4 @@
-"""Ingestion settings; secrets come from environment or ignored .env files."""
+"""Thiết lập tiếp nhận; secret lấy từ biến môi trường hoặc các file .env bị bỏ qua khỏi Git."""
 from functools import lru_cache
 from pathlib import Path
 
@@ -9,7 +9,7 @@ from embedding.config import EmbeddingSettings
 
 LOCAL_ROOT = Path(__file__).resolve().parent
 BACKEND_ROOT = LOCAL_ROOT.parent
-# Source books, prepared bundles and the tokenizer cache are never versioned.
+# Sách nguồn, gói đã chuẩn bị và cache tokenizer không bao giờ được đưa vào quản lý phiên bản.
 DATA_ROOT = LOCAL_ROOT / 'data'
 
 

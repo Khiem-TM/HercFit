@@ -1,4 +1,4 @@
-"""Cloudinary images and durable cleanup of replaced/abandoned uploads."""
+"""Ảnh Cloudinary và dọn dẹp bền vững các ảnh tải lên đã bị thay thế/bỏ dở."""
 from alembic import op
 
 revision = "0009_cloudinary_images"

@@ -1,6 +1,6 @@
-/** Presentation helpers for confirmation cards. Values come from the server dry-run (display). */
+/** Hàm hỗ trợ trình bày cho thẻ xác nhận. Giá trị lấy từ kết quả chạy thử của server (display). */
 
-/** Card frames: a server dry-run drawn by its own card, or the labelled fields of the payload. */
+/** Khung thẻ: một kết quả chạy thử của server được vẽ bằng thẻ riêng của nó, hoặc các trường có nhãn của payload. */
 export type CardKind = 'meal' | 'training' | 'plan' | 'catalog' | 'fields'
 export type MediaKind = 'foods' | 'meals' | 'exercises' | 'trainings'
 type Row = Record<string, any>
@@ -15,7 +15,7 @@ const TOOL_KIND: Record<string, CardKind> = {
   finalize_exercises: 'catalog',
 }
 
-/** Which saved record a confirmation can attach a Cloudinary image to. */
+/** Bản ghi đã lưu nào mà một lần xác nhận có thể gắn ảnh Cloudinary vào. */
 export const MEDIA_TARGET: Record<string, MediaKind> = {
   create_meals: 'meals',
   create_trainings: 'trainings',
@@ -54,7 +54,7 @@ export const TOOL_TITLES: Record<string, string> = {
   update_training_profile: 'Cập nhật hồ sơ vận động viên',
 }
 
-/** What a write without a dry-run does, said on its card. */
+/** Một lệnh ghi không có chạy thử làm gì, được nói trên thẻ của nó. */
 export const ACTION_NOTES: Record<string, string> = {
   update_meals: 'Bữa ăn được lưu thành bản mới; bản cũ vẫn có trong lịch sử.',
   delete_meals: 'Bữa ăn sẽ bị xoá khỏi nhật ký.',
@@ -68,13 +68,13 @@ export const ACTION_NOTES: Record<string, string> = {
   end_training_plan: 'Lịch tập sẽ kết thúc; các buổi đã ghi được giữ nguyên.',
 }
 
-/** Card title for a catalog write; a reused record is not a new catalog entry. */
+/** Tiêu đề thẻ cho lệnh ghi catalog; bản ghi được dùng lại không phải mục catalog mới. */
 export function catalogTitle(tool: string, display?: Row | null): string {
   if (display?.resolution === 'reuse') return display.domain === 'exercises' ? 'Dùng bài tập có sẵn' : 'Dùng món có sẵn'
   return TOOL_TITLES[tool] || tool
 }
 
-/** Source tiers are rated by HercFit's source registry, never by the model. */
+/** Hạng nguồn do sổ đăng ký nguồn của HercFit đánh giá, không bao giờ do model. */
 export const AUTHORITY: Record<string, string> = {
   primary: 'Chính thống', professional: 'Chuyên môn', secondary: 'Tham khảo', unknown: 'Chưa xếp hạng',
 }
@@ -95,7 +95,7 @@ export function unverifiedText(fields: unknown): string {
   return [...new Set(fields.map(field => FIELD_LABELS[field] || field))].join(', ')
 }
 
-/** Why a dry-run cannot be drawn by its card frame, or null; such a display falls back to the fields card. */
+/** Lý do một kết quả chạy thử không vẽ được bằng khung thẻ của nó, hoặc null; khi đó hiển thị quay về thẻ trường dữ liệu. */
 export function displayError(kind: CardKind, display?: Row | null): string | null {
   if (!display || typeof display !== 'object') return 'thiếu dữ liệu xem trước'
   const list = (value: unknown) => (Array.isArray(value) ? (value as Row[]) : null)
@@ -145,12 +145,12 @@ const FIELD_UNITS: Record<string, string> = {
   weight_kg: 'kg', height_cm: 'cm', body_fat_pct: '%', muscle_mass_kg: 'kg', energy_kcal: 'kcal', protein_g: 'g',
   resting_hr: 'bpm', max_hr: 'bpm',
 }
-// Identity, versioning and provenance fields are for the API, not for the person confirming.
+// Các trường định danh, phiên bản và nguồn gốc dành cho API, không dành cho người đang xác nhận.
 const HIDDEN = new Set(['resource_id', 'expected_version_id', 'source_entry_id', 'data_quality', 'attestation', 'context',
   'additional_metrics', 'payload_hash'])
 const isId = (key: string) => key === 'id' || key.endsWith('_id') || key.endsWith('_ids')
 const OPERATORS: Record<string, string> = { eq: '=', gte: '≥', lte: '≤' }
-// Codes the backend stores, as the person reads them (goal types are lowercase in the API, any case accepted).
+// Các mã backend lưu, theo cách người dùng đọc chúng (loại mục tiêu là chữ thường trong API, chấp nhận mọi kiểu chữ).
 const VALUE_LABELS: Record<string, Record<string, string>> = {
   goal_types: { fat_loss: 'Giảm mỡ', muscle_gain: 'Tăng cơ', maintenance: 'Duy trì', fitness: 'Khoẻ hơn' },
   discipline: { strength: 'Gym', endurance: 'Sức bền', sport: 'Thể thao', mixed: 'Kết hợp' },
@@ -170,7 +170,7 @@ function day(value: string): string {
   return `${date}/${month}/${year}`
 }
 
-/** One payload value as the person reads it: units, local times, "Có/Không", counts for lists of records. */
+/** Một giá trị payload theo cách người dùng đọc: đơn vị, giờ địa phương, "Có/Không", số đếm cho danh sách bản ghi. */
 export function fieldText(key: string, value: unknown): string {
   if (value === null || value === undefined || value === '') return ''
   if (typeof value === 'boolean') return value ? 'Có' : 'Không'
@@ -198,7 +198,7 @@ export function fieldText(key: string, value: unknown): string {
   return String(value)
 }
 
-/** Labelled rows of a write that has no dry-run card; ids and versions stay hidden. */
+/** Các dòng có nhãn của một lệnh ghi không có thẻ chạy thử; id và phiên bản được ẩn. */
 export function fieldRows(payload?: Row | null): FieldRow[] {
   return Object.entries(payload || {})
     .filter(([key]) => !HIDDEN.has(key) && !isId(key))
@@ -267,7 +267,7 @@ export function portion(item: Row): string {
   return `${quantity} ${UNIT[item.unit] || item.unit || ''}`.trim()
 }
 
-/** Share of energy from protein/carb/fat (4/4/9 kcal per g); null when any macro is unknown. */
+/** Tỉ lệ năng lượng từ protein/carb/chất béo (4/4/9 kcal mỗi g); null khi có macro chưa biết. */
 export function macroShare(record: Row): { protein: number; carb: number; fat: number } | null {
   const p = num(record.protein_g)
   const c = num(record.carbohydrate_g)
@@ -315,7 +315,7 @@ export function setTarget(target: Row): string {
 
 export interface StepBar { grow: number; tone: 'easy' | 'hard' | 'calm'; label: string }
 
-/** Flatten endurance steps into proportional bar segments (duration, or distance at ~6 min/km). */
+/** Làm phẳng các bước sức bền thành các đoạn thanh tỉ lệ (thời lượng, hoặc quãng đường ở ~6 phút/km). */
 export function stepBars(prescription: Row): StepBar[] {
   const bars: StepBar[] = []
   const add = (step: Row) => {

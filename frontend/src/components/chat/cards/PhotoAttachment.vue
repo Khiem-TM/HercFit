@@ -5,7 +5,7 @@ import { Camera, X } from 'lucide-vue-next'
 const props = defineProps<{ label: string; disabled?: boolean }>()
 const model = defineModel<File | null>({ default: null })
 
-// Mirrors the server limits (core/settings IMAGE_MAX_BYTES, prepare_image formats).
+// Khớp với giới hạn của server (core/settings IMAGE_MAX_BYTES, định dạng của prepare_image).
 const MAX_BYTES = 5 * 1024 * 1024
 const TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const input = useTemplateRef<HTMLInputElement>('input')

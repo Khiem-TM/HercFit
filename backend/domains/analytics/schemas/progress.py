@@ -1,4 +1,4 @@
-"""Read-only comparisons; no persisted progress counters or calorie estimates."""
+"""So sánh chỉ đọc; không lưu bộ đếm tiến độ hay ước tính calo nào."""
 
 from datetime import date
 from decimal import Decimal
@@ -26,11 +26,11 @@ class DailyProgressRead(ReadSchema):
     carbohydrate_g: MetricProgress
     fat_g: MetricProgress
     fiber_g: MetricProgress
-    # Session-RPE load (Foster); lets nutrition advice scale with training stress.
+    # Tải session-RPE (Foster); giúp tư vấn dinh dưỡng điều chỉnh theo áp lực tập luyện.
     training_load: Decimal = Decimal(0)
     calories_out_target: Decimal | None
-    # Total daily expenditure measured by a connected device (Google Health); exercise
-    # logs alone cannot measure it, so it stays null without one.
+    # Tổng tiêu hao mỗi ngày đo bởi thiết bị đã kết nối (Google Health); riêng nhật ký tập
+    # không đo được nó, nên khi không có thiết bị thì giá trị là null.
     calories_out_actual: Decimal | None = None
 
 

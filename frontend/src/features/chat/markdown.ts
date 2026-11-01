@@ -1,10 +1,10 @@
 /**
- * Minimal, safe Markdown for assistant replies.
+ * Markdown tối giản, an toàn cho câu trả lời của trợ lý.
  *
- * The whole text is HTML-escaped first; only a fixed set of tags is produced
- * afterwards (p, br, strong, em, code, ul/ol/li, a). Links accept http(s) only and
- * open in a new tab with rel="noopener noreferrer", so model output can never
- * inject markup or script.
+ * Toàn bộ văn bản được escape HTML trước; sau đó chỉ sinh một tập thẻ cố định
+ * (p, br, strong, em, code, ul/ol/li, a). Liên kết chỉ nhận http(s) và
+ * mở trong tab mới với rel="noopener noreferrer", nên đầu ra của model không bao giờ
+ * chèn được markup hay script.
  */
 const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 

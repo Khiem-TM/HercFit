@@ -49,7 +49,7 @@ export function useChat() {
       const data = await resp.json()
       sessions.value = Array.isArray(data.sessions) ? data.sessions : []
     } catch {
-      // Ignore transient session list errors
+      // Bỏ qua lỗi tạm thời khi tải danh sách phiên
     }
   }
 
@@ -81,7 +81,7 @@ export function useChat() {
           role: m.role === 'human' ? 'human' : 'ai',
           content: m.content,
           name: m.name || null,
-          // History carries no per-message time unless the server provides it.
+          // Lịch sử không mang thời gian theo từng tin nhắn trừ khi server cung cấp.
           timestamp: m.created_at ?? '',
         }),
       )
@@ -106,7 +106,7 @@ export function useChat() {
       if (lastAi) {
         if (Array.isArray(data.sources) && data.sources.length > 0) lastAi.sources = data.sources
         if (data.status === 'needs_input') {
-          // The form only opens on a needs_input message; without the status a reload left typing as the only way to answer.
+          // Form chỉ mở ở tin nhắn needs_input; khi thiếu trạng thái này, tải lại trang chỉ còn cách trả lời bằng gõ chữ.
           lastAi.clarification = normalizeClarification(data.clarification)
           lastAi.status = 'needs_input'
         }
@@ -160,7 +160,7 @@ export function useChat() {
     activeNode.value = 'orchestrator'
     const controller = new AbortController()
     streamController = controller
-    // Index of the assistant bubble being filled by streamed tokens, if any.
+    // Chỉ số của bong bóng trợ lý đang được điền bằng token stream, nếu có.
     let streamingIndex = -1
 
     try {
@@ -224,10 +224,10 @@ export function useChat() {
               const pending: PendingAction | null = event.pending_action || null
               pendingAction.value = pending
               const final: ChatMessage = {
-                // Keep the streamed bubble's identity: Vue updates it in place instead of replacing the node.
+                // Giữ định danh của bong bóng đang stream: Vue cập nhật tại chỗ thay vì thay node.
                 id: streamingIndex >= 0 ? messages.value[streamingIndex].id : event.run_id || crypto.randomUUID(),
                 role: 'ai',
-                // The final event is authoritative; streamed text was a preview of it.
+                // Sự kiện cuối có thẩm quyền; văn bản stream chỉ là bản xem trước của nó.
                 content: event.reply || '',
                 sources: Array.isArray(event.sources) ? event.sources : [],
                 pending_action: pending,
@@ -242,8 +242,8 @@ export function useChat() {
             } else if (event.type === 'error') {
               const errMsg =
                 event.reply || event.detail || 'Đã xảy ra lỗi khi xử lý yêu cầu.'
-              // The banner is for failures outside a run (HTTP, auth, service down); a failed
-              // run's reply is shown once, as its message.
+              // Banner dành cho lỗi ngoài một lượt chạy (HTTP, xác thực, dịch vụ ngừng); câu trả lời
+              // của lượt chạy thất bại chỉ hiển thị một lần, dưới dạng tin nhắn của nó.
               if (!event.run_id) error.value = errMsg
               const failed: ChatMessage = {
                 id: streamingIndex >= 0 ? messages.value[streamingIndex].id : event.run_id || crypto.randomUUID(),
@@ -253,13 +253,13 @@ export function useChat() {
                 status: 'failed',
                 timestamp: new Date().toISOString(),
               }
-              // Like a final message, it replaces the streamed preview instead of adding a copy.
+              // Giống tin nhắn cuối, nó thay bản xem trước đang stream thay vì thêm một bản sao.
               if (streamingIndex >= 0) messages.value.splice(streamingIndex, 1, failed)
               else messages.value.push(failed)
               streamingIndex = -1
             }
           } catch {
-            // Skip malformed SSE frame
+            // Bỏ qua frame SSE sai định dạng
           }
         }
       }
@@ -267,7 +267,7 @@ export function useChat() {
       await loadSessions()
     } catch (err) {
       if (controller.signal.aborted) {
-        // User pressed stop: keep what was already shown and mark it as stopped.
+        // Người dùng nhấn dừng: giữ những gì đã hiển thị và đánh dấu là đã dừng.
         if (streamingIndex >= 0) messages.value[streamingIndex].status = 'stopped'
         else messages.value.push({ id: crypto.randomUUID(), role: 'ai', content: '', status: 'stopped', timestamp: new Date().toISOString() })
       } else {
@@ -282,12 +282,12 @@ export function useChat() {
     }
   }
 
-  /** Cancel the running reply; the server stops the run when the stream closes. */
+  /** Huỷ câu trả lời đang chạy; server dừng lượt chạy khi stream đóng. */
   function stopStreaming(): void {
     streamController?.abort()
   }
 
-  /** Saved record of the approved action (the write's output carries its action_id). */
+  /** Bản ghi đã lưu của hành động đã duyệt (output của lệnh ghi mang action_id của nó). */
   function savedRecord(result: ChatResponse, actionId: string): { id: string; version_id: number } | null {
     const output = result.tool_outputs?.find((o) => o.action_id === actionId && o.ok)?.output as Record<string, unknown> | undefined
     return output && typeof output.id === 'string' && typeof output.version_id === 'number'
@@ -295,7 +295,7 @@ export function useChat() {
       : null
   }
 
-  /** After a successful save: upload the user's photo or import the chosen research picture to Cloudinary. */
+  /** Sau khi lưu thành công: tải ảnh của người dùng hoặc nhập ảnh tra cứu đã chọn lên Cloudinary. */
   async function attachImage(action: PendingAction, result: ChatResponse, extras: ConfirmExtras): Promise<void> {
     const kind = MEDIA_TARGET[action.tool]
     const wantsPhoto = Boolean(extras.photo) && (kind === 'meals' || kind === 'trainings')
@@ -330,7 +330,7 @@ export function useChat() {
       if (!resp.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'Không thể lưu ảnh.')
       note(wantsPhoto ? 'Đã lưu ảnh của bạn lên Cloudinary.' : 'Đã lưu ảnh minh hoạ lên Cloudinary.')
     } catch (err) {
-      // The record itself is already saved; only the picture failed.
+      // Bản thân bản ghi đã được lưu; chỉ ảnh bị lỗi.
       note(`Đã lưu bản ghi, nhưng chưa lưu được ảnh: ${err instanceof Error ? err.message : 'lỗi không xác định'}. Bạn có thể thử lại trong mục Ảnh.`, true)
     } finally {
       isSavingImage.value = false
@@ -365,7 +365,7 @@ export function useChat() {
 
       const result: ChatResponse = await resp.json()
       pendingAction.value = result.pending_action || null
-      // The request the user just answered no longer needs confirmation; its badge says what was decided.
+      // Yêu cầu người dùng vừa trả lời không còn cần xác nhận; huy hiệu của nó cho biết đã quyết định gì.
       const asked = messages.value.find((m) => m.status === 'pending_confirmation' && m.pending_action?.action_id === action.action_id)
       if (asked) asked.status = decision === 'reject' ? 'rejected' : result.status === 'failed' ? 'completed' : 'confirmed'
 

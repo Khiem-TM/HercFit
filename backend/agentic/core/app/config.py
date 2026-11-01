@@ -6,8 +6,8 @@ from agentic.core.app.env_sources import JevDotEnvSettingsSource, canonical_sour
 
 # Định nghĩa cấu hình cho Agentic Service
 class AgentSettings(BaseSettings):
-    # Agent-specific values override shared defaults, matching both Compose files.
-    # Explicit process environment remains the highest-priority environment source.
+    # Giá trị riêng của agent ghi đè giá trị mặc định dùng chung, khớp với cả hai file Compose.
+    # Biến môi trường tường minh của tiến trình vẫn có độ ưu tiên cao nhất.
     model_config = SettingsConfigDict(env_file=(str(BACKEND_ROOT / '.env'), str(AGENTIC_ROOT / '.env')), extra='ignore', env_ignore_empty=True)
     MODE: str = 'dev'
     AGENT_PORT: int = 8081
@@ -25,25 +25,25 @@ class AgentSettings(BaseSettings):
     FPT_BASE_URL: str = 'https://mkp-api.fptcloud.com'
     MODEL_BASE_URL: str = 'https://api.openai.com/v1'
     MODEL_TIMEOUT_SECONDS: float = 30
-    # Per-role timeouts: routing/tool/clarify calls return small JSON and should
-    # fail over quickly; a hung call previously cost 30 s twice (≈60 s tails).
+    # Timeout theo vai trò: các lần gọi routing/tool/clarify trả về JSON nhỏ và nên
+    # chuyển dự phòng nhanh; trước đây một lần gọi bị treo tốn 30 s hai lần (đuôi ≈60 s).
     ROUTING_TIMEOUT_SECONDS: float = Field(default=12, gt=0)
-    # Tool calls write whole payloads (a meal's items, a food's nutrition): p95 13.6 s over 500 stored tool steps,
-    # so 12 s failed ~5% of them, three attempts at a time (run 195ff084 timed out after a confirmed write).
+    # Lần gọi tool ghi cả payload (các món của bữa ăn, dinh dưỡng của thực phẩm): p95 là 13,6 s trên 500 bước tool đã lưu,
+    # nên 12 s làm hỏng ~5% số đó, mỗi lần ba lượt thử (lượt chạy 195ff084 bị timeout sau một lệnh ghi đã xác nhận).
     TOOL_TIMEOUT_SECONDS: float = Field(default=30, gt=0)
     RESPONSE_TIMEOUT_SECONDS: float = Field(default=30, gt=0)
     RESEARCH_TIMEOUT_SECONDS: float = Field(default=45, gt=0)
     MODEL_MAX_RETRIES: int = Field(default=1, ge=0, le=3)
     CLARIFY_MODEL: str | None = None
-    # Optional second OpenAI-compatible endpoint tried when the primary errors or times out.
+    # Endpoint tương thích OpenAI thứ hai (tuỳ chọn), dùng khi endpoint chính lỗi hoặc timeout.
     FALLBACK_PROVIDER: Literal['fpt', 'openai', 'openai_compatible'] | None = None
     FALLBACK_MODEL: str | None = None
     FALLBACK_BASE_URL: str | None = None
     FALLBACK_API_KEY: SecretStr | None = None
-    # Stream answer tokens to the client (only the answer model streams; tool and
-    # routing calls stay non-streaming so provider tool-call recovery keeps working).
+    # Stream token câu trả lời tới client (chỉ model trả lời được stream; các lần gọi tool và
+    # định tuyến không stream để cơ chế khôi phục lời gọi tool của nhà cung cấp vẫn hoạt động).
     STREAM_RESPONSE_TOKENS: bool = True
-    # Ask the provider for usage in streamed responses (stream_options.include_usage).
+    # Yêu cầu nhà cung cấp gửi số liệu sử dụng trong phản hồi stream (stream_options.include_usage).
     MODEL_STREAM_USAGE: bool = False
     SSE_HEARTBEAT_SECONDS: float = Field(default=15, gt=0)
     TAVILY_API_KEY: SecretStr | None = None
@@ -53,18 +53,18 @@ class AgentSettings(BaseSettings):
     RUN_TIMEOUT_SECONDS: float = Field(default=120, gt=0)
     CONFIRMATION_TTL_SECONDS: int = Field(default=1800, gt=0)
     RESEARCH_SOURCE_DOMAINS: list[str] = []
-    # DeepSeek on FPT thinks ~9k tokens per extraction at default effort (25-70 s); "low" keeps
-    # the same claims in 5-12 s. Applied to the FPT research client only (None disables).
+    # DeepSeek trên FPT suy nghĩ ~9k token cho mỗi lần trích xuất ở mức mặc định (25-70 s); "low" giữ
+    # nguyên các khẳng định trong 5-12 s. Chỉ áp dụng cho client tra cứu FPT (None để tắt).
     RESEARCH_REASONING_EFFORT: Literal['low', 'medium', 'high'] | None = 'low'
-    # Shared with the backend (backend/.env): signs verified research finalization commands.
+    # Dùng chung với backend (backend/.env): ký các lệnh finalize tra cứu đã kiểm chứng.
     RESEARCH_ATTESTATION_SECRET: SecretStr | None = None
-    # Shared with the backend (backend/.env): proves this service when it exchanges a user
-    # token for a short-lived delegated token (POST /api/v2/auth/delegations).
+    # Dùng chung với backend (backend/.env): chứng minh service này khi đổi token người dùng
+    # lấy token uỷ quyền ngắn hạn (POST /api/v2/auth/delegations).
     AGENT_SERVICE_SECRET: SecretStr | None = None
-    # Forget health tool outputs, context cards and session memory when the user revokes consent.
+    # Quên output của tool sức khoẻ, thẻ ngữ cảnh và bộ nhớ phiên khi người dùng thu hồi consent.
     CONSENT_PURGE_ENABLED: bool = True
-    # Same switch as the backend (backend/.env, core/flags.py). "agent": health is read through
-    # the context API; raw tools whose v1 routes are superseded are not offered.
+    # Cùng công tắc với backend (backend/.env, core/flags.py). "agent": dữ liệu sức khoẻ được đọc qua
+    # context API; các tool thô có route v1 đã được thay thế thì không được cung cấp.
     READER_V2_DOMAINS: list[str] = []
     JEV_MODE: Literal['off', 'shadow', 'enforce'] = 'off'
     JEV_BASE_URL: str = Field(default='https://litellm.otanicloud.link/v1',
@@ -78,10 +78,10 @@ class AgentSettings(BaseSettings):
     JEV_OUTPUT_PRICE_PER_MILLION: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     RAG_ENABLED: bool = False
     LANGSMITH_ENABLED: bool = False
-    # The knowledge graph is always part of the agent context; an unreachable Neo4j
-    # only degrades a turn to the backend tools (KG_RETRIEVAL_TIMEOUT_MS, fail-open).
-    # Strict full-message templates for common reads (progress, current goal, latest
-    # measurement, profile, calorie targets): one answer call instead of four.
+    # Knowledge graph luôn là một phần ngữ cảnh của agent; Neo4j không truy cập được
+    # chỉ hạ lượt chạy xuống dùng tool backend (KG_RETRIEVAL_TIMEOUT_MS, fail-open).
+    # Mẫu toàn tin nhắn chặt chẽ cho các lệnh đọc phổ biến (tiến độ, mục tiêu hiện tại, số đo
+    # gần nhất, hồ sơ, mục tiêu calo): một lần gọi trả lời thay vì bốn.
     FAST_READ_ENABLED: bool = True
     NEO4J_URI: str = 'bolt://localhost:7687'
     NEO4J_USER: str = 'neo4j'
@@ -98,29 +98,29 @@ class AgentSettings(BaseSettings):
     KG_WORKER_BATCH_SIZE: int = Field(default=100, ge=1, le=1000)
     KG_RECONCILE_SECONDS: float = Field(default=5, gt=0)
     AGENT_DATABASE_POOL_SIZE: int = Field(default=10, ge=2)
-    # Deprecated: sessions now use a timed lease row instead of a held advisory-lock connection.
+    # Không còn dùng: phiên giờ dùng một dòng lease có thời hạn thay vì kết nối giữ advisory lock.
     AGENT_SESSION_POOL_SIZE: int = Field(default=10, ge=1)
-    # How long a second request for the same conversation waits before 409.
+    # Thời gian một request thứ hai cho cùng cuộc trò chuyện chờ trước khi trả 409.
     SESSION_LEASE_WAIT_SECONDS: float = Field(default=30, ge=0, le=300)
-    # Abuse and cost guards (OWASP LLM10). 0 disables a limit.
+    # Chốt chặn lạm dụng và chi phí (OWASP LLM10). 0 để tắt một giới hạn.
     AGENT_RATE_LIMIT_PER_MINUTE: int = Field(default=20, ge=0)
     AGENT_DAILY_TURN_LIMIT: int = Field(default=300, ge=0)
     AGENT_DAILY_TOKEN_LIMIT: int = Field(default=2_000_000, ge=0)
-    # Verified identities are cached briefly to avoid one backend hop per request.
+    # Danh tính đã kiểm chứng được cache ngắn hạn để tránh mỗi request một lượt gọi backend.
     IDENTITY_CACHE_SECONDS: float = Field(default=60, ge=0, le=600)
-    # Run the checkpoint reconciler and memory purge in this process (disable on extra replicas).
+    # Chạy bộ đối soát checkpoint và dọn bộ nhớ trong tiến trình này (tắt trên các bản sao phụ).
     AGENT_BACKGROUND_TASKS: bool = True
     KG_RECONCILE_GRACE_SECONDS: float = Field(default=180, gt=0)
     CHECKPOINT_RETENTION_DAYS: int = Field(default=30, ge=1)
-    # Redis session memory is an optional, rebuildable tier over checkpoints.
-    # Promote off -> shadow -> on; any Redis failure falls back to checkpoints.
+    # Bộ nhớ phiên Redis là tầng tuỳ chọn, dựng lại được, nằm trên checkpoint.
+    # Nâng dần off -> shadow -> on; mọi lỗi Redis đều quay về dùng checkpoint.
     REDIS_URL: SecretStr | None = None
     REDIS_KEY_PREFIX: str = Field(default='hf:agent', min_length=1, max_length=64)
     REDIS_TIMEOUT_MS: int = Field(default=100, ge=10, le=2000)
     SESSION_MEMORY_MODE: Literal['off', 'shadow', 'on'] = 'off'
     SESSION_MEMORY_TTL_SECONDS: int = Field(default=30 * 24 * 3600, gt=0)
     SESSION_MEMORY_MAX_TURNS: int = Field(default=200, ge=10, le=1000)
-    # Verbatim messages carried into each turn; 40 matches the checkpoint-only behaviour.
+    # Số tin nhắn nguyên văn mang vào mỗi lượt; 40 khớp với hành vi chỉ dùng checkpoint.
     SESSION_MEMORY_WINDOW_MESSAGES: int = Field(default=40, ge=4, le=200)
     SESSION_MEMORY_SUMMARY_ENABLED: bool = True
     SESSION_MEMORY_SUMMARY_TRIGGER_TURNS: int = Field(default=4, ge=1, le=50)
@@ -171,7 +171,7 @@ class AgentSettings(BaseSettings):
 
     @property
     def session_lease_seconds(self):
-        # Covers the whole run plus journaling; an abandoned lease simply expires.
+        # Bao trùm cả lượt chạy cùng phần ghi nhật ký; lease bị bỏ dở sẽ tự hết hạn.
         return self.RUN_TIMEOUT_SECONDS + 60
 
 agent_settings = AgentSettings()

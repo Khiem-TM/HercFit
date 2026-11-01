@@ -1,12 +1,12 @@
-"""Operational metrics for the health platform, computed from PostgreSQL (no extra infrastructure).
+"""Số liệu vận hành của nền tảng sức khoẻ, tính từ PostgreSQL (không cần thêm hạ tầng).
 
     python -m workers metrics
 
-queue age per kind, jobs by state, per-type sync lag, retries, needs-attention,
-export states (UNCERTAIN / CONFLICT / BLOCKED), webhook backlog, knowledge-graph
-outbox lag, superseded /api (v1) route traffic and the SLOs:
-  webhook ack p95 < 2 s, data available p95 < 5 min, context API p95 < 500 ms.
-Values are counts and durations only: never tokens or health values.
+tuổi hàng đợi theo loại job, job theo trạng thái, độ trễ đồng bộ theo loại, số lần thử lại, cần xử lý,
+trạng thái xuất (UNCERTAIN / CONFLICT / BLOCKED), tồn đọng webhook, độ trễ outbox
+của knowledge graph, lưu lượng các route /api (v1) đã bị thay thế và các SLO:
+  ack webhook p95 < 2 s, dữ liệu sẵn sàng p95 < 5 phút, context API p95 < 500 ms.
+Giá trị chỉ là số đếm và thời lượng: không bao giờ có token hay giá trị sức khoẻ.
 """
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ async def collect() -> dict[str, Any]:
             try:
                 async with session.begin_nested():
                     rows = (await session.execute(text(sql))).mappings().all()
-            except Exception as exc:  # a table may not exist on an older schema
+            except Exception as exc:  # một bảng có thể chưa tồn tại trên schema cũ hơn
                 result[name] = {"error": type(exc).__name__}
                 continue
             result[name] = [{key: (float(value) if hasattr(value, "is_finite") else value) for key, value in row.items()}
@@ -71,7 +71,7 @@ async def collect() -> dict[str, Any]:
             async with session.begin_nested():
                 result["legacy_routes"] = await legacy_routes(session)
                 result["slo"] = await slo(session, result.get("webhook_to_data_p95_seconds"))
-        except Exception as exc:  # api_route_usage arrives with migration 0022
+        except Exception as exc:  # api_route_usage có từ migration 0022
             result["legacy_routes"] = result["slo"] = {"error": type(exc).__name__}
     return result
 
@@ -88,7 +88,7 @@ async def _buckets(session, routes: tuple[str, ...], since: date, method: str | 
 
 
 async def legacy_routes(session, today: date | None = None) -> dict[str, Any]:
-    """Superseded v1 routes: traffic over the quiet window and whether removal is allowed yet."""
+    """Các route v1 đã bị thay thế: lưu lượng trong cửa sổ yên lặng và đã được phép gỡ chưa."""
     today = today or date.today()
     since = today - timedelta(days=REMOVAL_QUIET_DAYS)
     first = (await session.execute(text("SELECT min(day) FROM api_route_usage"))).scalar_one_or_none()

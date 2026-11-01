@@ -1,9 +1,9 @@
-"""Operations: the user-visible handle of an asynchronous command (sync, export, history export).
+"""Operation: tay cầm hiển thị với người dùng của một lệnh bất đồng bộ (sync, xuất, xuất lịch sử).
 
-An operation's state is derived from its jobs, so it can never disagree with them:
-PENDING (nothing started), RUNNING, SUCCEEDED, PARTIAL (some jobs need attention or
-were cancelled), FAILED (none succeeded), UNCERTAIN (an export whose outcome at the
-provider could not be verified).
+Trạng thái operation suy ra từ các job của nó, nên không bao giờ mâu thuẫn với chúng:
+PENDING (chưa bắt đầu gì), RUNNING, SUCCEEDED, PARTIAL (một số job cần xử lý hoặc
+đã bị huỷ), FAILED (không job nào thành công), UNCERTAIN (lệnh xuất mà kết quả tại
+nhà cung cấp không kiểm chứng được).
 """
 from __future__ import annotations
 

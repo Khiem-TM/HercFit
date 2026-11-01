@@ -1,1 +1,1 @@
-"""Background workers: `python -m workers run` (see workers/runner.py and workers/scheduler.py)."""
+"""Worker nền: `python -m workers run` (xem workers/runner.py và workers/scheduler.py)."""

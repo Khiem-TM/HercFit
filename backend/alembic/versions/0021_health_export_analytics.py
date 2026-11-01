@@ -1,22 +1,22 @@
-"""Health platform M3d: two-way sync bookkeeping, analytics and assistant context.
+"""Nền tảng sức khoẻ M3d: sổ sách đồng bộ hai chiều, phân tích và ngữ cảnh trợ lý.
 
-Export (HercFit -> Google):
-* google_export_settings: which export groups the user turned on (per connection).
-* export_outbox: one row per business change to send, written in the business
-  transaction; idempotency key, aggregate version, payload hash and a state machine
+Xuất (HercFit -> Google):
+* google_export_settings: các nhóm xuất mà người dùng đã bật (theo kết nối).
+* export_outbox: mỗi thay đổi nghiệp vụ cần gửi một dòng, ghi trong transaction
+  nghiệp vụ; khoá idempotency, phiên bản aggregate, băm payload và máy trạng thái
   (PENDING, DISPATCHING, SUBMITTED, VERIFYING, CONFIRMED, UNCERTAIN, CONFLICT,
   BLOCKED_PERMISSION, FAILED, SUPERSEDED).
-* google_resource_mappings: which Google data point a HercFit record became, and
-  whether HercFit owns it (only owned records are ever patched or deleted).
-* export_conflicts: local and remote versions that diverged, until the user picks.
+* google_resource_mappings: bản ghi HercFit đã trở thành data point Google nào, và
+  HercFit có sở hữu nó không (chỉ bản ghi được sở hữu mới bị patch hoặc xoá).
+* export_conflicts: phiên bản cục bộ và từ xa đã lệch nhau, cho tới khi người dùng chọn.
 
-Analytics and context:
-* health_coverage: per day and type, OBSERVED / ZERO / NO_DATA / NOT_GRANTED /
-  UNSUPPORTED / NOT_SYNCED, so "no data" is never confused with "zero".
-* health_baselines, derived_metrics: computed values with method and algorithm version.
-* context_snapshots: precomputed assistant context per topic and period, tied to
-  the consent version it was built under.
-* shadow_diffs: differences found while the new pipeline runs in shadow mode.
+Phân tích và ngữ cảnh:
+* health_coverage: theo ngày và loại, OBSERVED / ZERO / NO_DATA / NOT_GRANTED /
+  UNSUPPORTED / NOT_SYNCED, để "không có dữ liệu" không bao giờ bị nhầm với "bằng 0".
+* health_baselines, derived_metrics: giá trị đã tính kèm phương pháp và phiên bản thuật toán.
+* context_snapshots: ngữ cảnh trợ lý tính sẵn theo chủ đề và khoảng thời gian, gắn với
+  phiên bản consent lúc dựng.
+* shadow_diffs: các khác biệt tìm thấy khi pipeline mới chạy ở chế độ shadow.
 """
 from alembic import op
 

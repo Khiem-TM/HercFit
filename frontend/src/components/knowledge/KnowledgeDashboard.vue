@@ -20,9 +20,11 @@ import VitalsStrip from './health/VitalsStrip.vue'
 import { dayLabel, moment } from './health/healthFormat'
 import { useHealthData } from './health/useHealthData'
 
-/** One overview of what HercFit knows about the user: profile, vitals, then each area in detail.
- * Records from the knowledge graph (meals, trainings, weigh-ins) and device data from Google
- * Health sit side by side per area, each card naming its source. */
+/**
+ * Một bản tổng quan những gì HercFit biết về người dùng: hồ sơ, chỉ số sinh tồn, rồi chi tiết từng mảng.
+ * Bản ghi từ knowledge graph (bữa ăn, buổi tập, lần cân) và dữ liệu thiết bị từ Google
+ * Health nằm cạnh nhau theo từng mảng, mỗi thẻ ghi rõ nguồn của nó.
+ */
 const props = defineProps<{ graph: KnowledgeGraph }>()
 const emit = defineEmits<{ explore: [id: string]; connect: []; 'edit-profile': [] }>()
 
@@ -228,7 +230,7 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
 .spinning { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes stretch { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-/* Arranged by the panel's width, which the user can drag; see KnowledgePanel. */
+/* Bố cục theo độ rộng của bảng, người dùng có thể kéo; xem KnowledgePanel. */
 @container observatory (max-width: 480px) { .cta { flex-direction: column; align-items: flex-start; } }
 @container observatory (max-width: 520px) { .intent { grid-template-columns: minmax(100px, 1.1fr) 1fr 24px; gap: 8px; } }
 @container observatory (min-width: 760px) {

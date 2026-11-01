@@ -1,6 +1,6 @@
-"""Actual food/training logs; callers cannot supply totals or legacy flags.
+"""Nhật ký ăn uống/tập luyện thực tế; bên gọi không được truyền tổng hay cờ cũ.
 
-Split from schemas.journals in the domain reorganization."""
+Tách ra từ schemas.journals trong đợt tổ chức lại theo miền."""
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -23,7 +23,7 @@ class TrainingCreate(InputSchema):
     timezone: TimeZoneName = DEFAULT_TIMEZONE
     note: str | None = None
     source_entry_id: UUID | None = None
-    # Session RPE (CR-10) drives the sRPE training load shared by all disciplines.
+    # RPE buổi tập (CR-10) quyết định tải sRPE dùng chung cho mọi bộ môn.
     session_rpe: Annotated[Decimal, Field(ge=0, le=10, max_digits=4, decimal_places=2)] | None = None
     items: Annotated[list[ExerciseActivityInput], Field(min_length=1)]
 

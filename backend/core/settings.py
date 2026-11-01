@@ -16,7 +16,7 @@ class LogLevel(StrEnum):
     CRITICAL = "CRITICAL"
 
     def to_logging_level(self) -> int:
-        """Convert to Python logging level constant."""
+        """Chuyển thành hằng số mức log của Python."""
         import logging
 
         mapping = {
@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     JWT_SECRET_KEY: SecretStr | None = None
     JWT_SECRET: SecretStr | None = None
-    # Retired signing keys still accepted for verification during a key rotation.
+    # Các khoá ký đã nghỉ vẫn được chấp nhận để xác minh trong lúc xoay khoá.
     JWT_PREVIOUS_SECRET_KEYS: list[SecretStr] = []
     JWT_ALGORITHM: str = "HS256"
     JWT_ISSUER: str = "hercfit"
@@ -60,12 +60,12 @@ class Settings(BaseSettings):
     JWT_LEEWAY_SECONDS: int = Field(default=10, ge=0, le=300)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    # A refresh token replaced this recently may be presented once more by a
-    # concurrent request (parallel tabs or retries) without revoking the family.
+    # Refresh token vừa bị thay gần đây có thể được gửi thêm một lần bởi
+    # request đồng thời (nhiều tab song song hay lần thử lại) mà không thu hồi cả họ token.
     REFRESH_REUSE_GRACE_SECONDS: int = Field(default=30, ge=0, le=300)
-    # None keeps the historical default: Secure cookies everywhere except MODE=dev.
+    # None giữ mặc định lịch sử: cookie Secure ở mọi nơi trừ MODE=dev.
     COOKIE_SECURE: bool | None = None
-    # Per-client limit for /api/auth/*; 0 disables the limiter.
+    # Giới hạn theo client cho /api/auth/*; 0 để tắt bộ giới hạn.
     AUTH_RATE_LIMIT_PER_MINUTE: int = Field(default=30, ge=0)
 
     # Google OAuth
@@ -78,77 +78,77 @@ class Settings(BaseSettings):
     ]
     FRONTEND_URL: str = "http://localhost:5173"
 
-    # Google Health API (successor of the Google Fit REST API). Reuses the login
-    # OAuth client; the callback is served by the backend through the frontend origin.
+    # Google Health API (kế nhiệm Google Fit REST API). Dùng lại OAuth client
+    # của phần đăng nhập; callback được backend phục vụ qua origin của frontend.
     GOOGLE_HEALTH_ENABLED: bool = True
     GOOGLE_HEALTH_REDIRECT_URI: str | None = None
     GOOGLE_HEALTH_SYNC_LOOP: bool = True
     GOOGLE_HEALTH_SYNC_INTERVAL_MINUTES: int = Field(default=360, ge=15, le=7 * 24 * 60)
     GOOGLE_HEALTH_BACKFILL_DAYS: int = Field(default=30, ge=1, le=90)
-    # Google Health API root. Overridden only for tests or an emulator: https, or plain http
-    # on localhost (a user's access token is never sent over plain http to another host).
+    # Gốc Google Health API. Chỉ ghi đè cho test hoặc emulator: https, hoặc http thường
+    # trên localhost (access token của người dùng không bao giờ gửi qua http thường tới host khác).
     GOOGLE_HEALTH_API_ROOT: str = Field(
         default="https://health.googleapis.com",
         pattern=r"^(https://[A-Za-z0-9.-]+(:[0-9]+)?|http://(localhost|127\.0\.0\.1)(:[0-9]+)?)/?$")
-    # Health platform (docs/google_health/). Capabilities confirmed with a real Google
-    # test account, as "data-type:op" (e.g. "weight:create"); writes stay off otherwise.
+    # Nền tảng sức khoẻ (docs/google_health/). Các khả năng đã xác nhận bằng tài khoản Google
+    # thử nghiệm thật, dạng "data-type:op" (ví dụ "weight:create"); nếu không thì lệnh ghi luôn tắt.
     GOOGLE_HEALTH_VERIFIED_CAPABILITIES: list[str] = []
-    # v4beta is used per data type, only for types listed here (M7).
+    # v4beta được dùng theo từng loại dữ liệu, chỉ cho các loại liệt kê ở đây (M7).
     GH_V4BETA_TYPES: list[str] = []
-    # off: legacy in-process sync only; shadow: the job pipeline also writes the source
-    # layer for comparison; primary: the job pipeline owns business tables (M4).
+    # off: chỉ dùng sync cũ trong tiến trình; shadow: pipeline job ghi thêm lớp nguồn
+    # để so sánh; primary: pipeline job sở hữu các bảng nghiệp vụ (M4).
     GH_INGEST_V2: Literal["off", "shadow", "primary"] = "off"
-    # true: the API never runs Google calls in-process (callback/sync enqueue jobs for workers).
+    # true: API không bao giờ gọi Google trong tiến trình (callback/sync xếp job cho worker).
     GH_WORKER_EXTERNAL: bool = False
     GH_WEBHOOK_ENABLED: bool = False
-    # Webhook endpoint secret(s) configured as the subscriber's endpointAuthorization.
+    # (Các) secret của endpoint webhook, cấu hình làm endpointAuthorization của subscriber.
     GH_WEBHOOK_SECRET: SecretStr | None = None
     GH_WEBHOOK_PREVIOUS_SECRETS: list[SecretStr] = []
     GH_WEBHOOK_VERIFY_SIGNATURE: bool = True
     GH_WEBHOOK_KEYSET_URL: str = "https://www.gstatic.com/googlehealthapi/webhooks/webhooks_public_keyset.json"
-    # Webhook subscriber provisioning (python -m integrations.google_health.subscriptions). The admin
-    # credential is a Cloud access token passed at run time (GH_ADMIN_ACCESS_TOKEN), never stored.
+    # Tạo subscriber webhook (python -m integrations.google_health.subscriptions). Thông tin xác thực
+    # quản trị là Cloud access token truyền vào lúc chạy (GH_ADMIN_ACCESS_TOKEN), không bao giờ được lưu.
     GH_PROJECT_NUMBER: str | None = None
     GH_SUBSCRIBER_ID: str = Field(default="hercfit-main", pattern=r"^[a-z]([a-z0-9-]{2,34}[a-z0-9])$")
     GH_WEBHOOK_PUBLIC_URL: str | None = None
-    # Kill switch and allowed groups for HercFit -> Google writes (M6).
+    # Công tắc ngắt khẩn cấp và các nhóm được phép cho lệnh ghi HercFit -> Google (M6).
     GH_EXPORT_DISPATCH: bool = False
     GH_EXPORT_GROUPS: list[str] = []
     HEALTH_RETENTION_ENFORCE: bool = False
-    # Requests per minute to Google per user and for the whole project (quota guard).
+    # Số request mỗi phút tới Google theo người dùng và cho cả project (chốt quota).
     GH_USER_RPM: int = Field(default=300, ge=1, le=10_000)
     GH_PROJECT_RPM: int = Field(default=3_000, ge=1, le=1_000_000)
-    # Per-route request counts and latency (api_route_usage), flushed once a minute.
+    # Số request và độ trễ theo route (api_route_usage), ghi xuống mỗi phút một lần.
     API_ROUTE_METRICS: bool = True
-    # Reader switches per domain while consumers move to the new health records (core/flags.py).
+    # Công tắc bộ đọc theo miền trong khi các bên dùng chuyển sang bản ghi sức khoẻ mới (core/flags.py).
     READER_V2_DOMAINS: list[ReaderDomain] = []
-    # Delegated identity for the agent service: it proves itself with an HMAC over each
-    # delegation request; the backend then issues a short-lived delegated token.
+    # Danh tính uỷ quyền cho service agent: nó chứng minh danh tính bằng HMAC trên mỗi
+    # request uỷ quyền; sau đó backend cấp một token uỷ quyền ngắn hạn.
     AGENT_SERVICE_SECRET: SecretStr | None = None
     AGENT_SERVICE_PREVIOUS_SECRETS: list[SecretStr] = []
     AGENT_TOKEN_AUDIENCE: str = "hercfit-agent"
     AGENT_DELEGATION_MINUTES: int = Field(default=10, ge=1, le=60)
-    # true: a user token with the self-declared X-HercFit-Client: agent header is refused.
+    # true: token người dùng có header tự khai báo X-HercFit-Client: agent bị từ chối.
     AGENT_DELEGATION_REQUIRED: bool = False
-    # Fernet keys (urlsafe base64, 32 bytes) for provider tokens at rest. The first
-    # key encrypts; previous keys still decrypt during a rotation.
+    # Khoá Fernet (base64 an toàn cho URL, 32 byte) cho token nhà cung cấp được lưu trữ. Khoá đầu
+    # tiên dùng để mã hoá; các khoá trước vẫn giải mã được trong lúc xoay khoá.
     TOKEN_ENCRYPTION_KEY: SecretStr | None = None
     TOKEN_ENCRYPTION_PREVIOUS_KEYS: list[SecretStr] = []
 
-    # Optional image storage; secrets are used only by the backend.
+    # Lưu trữ ảnh tuỳ chọn; secret chỉ được backend dùng.
     CLOUDINARY_CLOUD_NAME: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]+$")
     CLOUDINARY_API_KEY: SecretStr | None = None
     CLOUDINARY_API_SECRET: SecretStr | None = None
     CLOUDINARY_FOLDER: str = Field(default="hercfit", pattern=r"^[a-zA-Z0-9_-]+$")
-    # Shared with the agent service, which signs research finalization commands with it.
-    # Without it /research-finalizations refuses every command (agentic/research/attestation.py).
+    # Dùng chung với service agent, service này ký các lệnh finalize tra cứu bằng nó.
+    # Thiếu nó thì /research-finalizations từ chối mọi lệnh (agentic/research/attestation.py).
     RESEARCH_ATTESTATION_SECRET: SecretStr | None = None
     RESEARCH_ATTESTATION_PREVIOUS_SECRETS: list[SecretStr] = []
     RESEARCH_ATTESTATION_MAX_AGE_HOURS: int = Field(default=24, ge=1, le=168)
     IMAGE_MAX_BYTES: int = Field(default=5 * 1024 * 1024, ge=1024, le=10 * 1024 * 1024)
     IMAGE_MAX_PIXELS: int = Field(default=20_000_000, ge=1, le=40_000_000)
 
-    # PostgreSQL Configuration
+    # Cấu hình PostgreSQL
     POSTGRES_USER: str | None = None
     POSTGRES_PASSWORD: SecretStr | None = None
     POSTGRES_HOST: str | None = None
@@ -169,7 +169,7 @@ class Settings(BaseSettings):
 
     @property
     def jwt_verification_secrets(self) -> list[str]:
-        """Current signing secret first, then retired secrets kept for rotation."""
+        """Secret ký hiện tại đứng trước, rồi đến các secret đã nghỉ được giữ để xoay khoá."""
         return [self.jwt_secret_value, *(s.get_secret_value() for s in self.JWT_PREVIOUS_SECRET_KEYS if s.get_secret_value())]
 
     @property

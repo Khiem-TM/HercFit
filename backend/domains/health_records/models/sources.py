@@ -1,8 +1,8 @@
-"""The source layer: provider records as received, and compressed dense series (migration 0019).
+"""Lớp nguồn: bản ghi nhà cung cấp như đã nhận, và chuỗi dày đã nén (migration 0019).
 
-Provider-agnostic: a row names its connection, data type and the provider's
-resource name. Business rows point back here (`source_record_id`), so every
-number HercFit shows or gives the assistant can be traced to what was received.
+Không phụ thuộc nhà cung cấp: mỗi dòng nêu kết nối, loại dữ liệu và tên tài nguyên
+của nhà cung cấp. Dòng nghiệp vụ trỏ ngược về đây (`source_record_id`), nên mọi
+con số HercFit hiển thị hay đưa cho trợ lý đều truy được về dữ liệu đã nhận.
 """
 from __future__ import annotations
 

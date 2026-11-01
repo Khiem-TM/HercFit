@@ -1,4 +1,4 @@
-"""Version 1: unchanged application-owned instructions."""
+"""Phiên bản 1: hướng dẫn do ứng dụng sở hữu, không thay đổi."""
 
 PROMPT = """Bạn chuyển câu hỏi lại của HercFit thành một form để người dùng trả lời lần lượt từng câu bằng cách bấm lựa chọn.
 Chỉ dùng thông tin trong câu hỏi lại, missing_fields và kết quả công cụ. Tiếng Việt, ngắn gọn.

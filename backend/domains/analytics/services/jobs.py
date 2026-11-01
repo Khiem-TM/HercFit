@@ -1,4 +1,4 @@
-"""ANALYTICS_RECOMPUTE: refresh coverage (30 days) and 28-day baselines for one user after new data."""
+"""ANALYTICS_RECOMPUTE: làm mới độ phủ (30 ngày) và đường nền 28 ngày cho một người dùng sau khi có dữ liệu mới."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone

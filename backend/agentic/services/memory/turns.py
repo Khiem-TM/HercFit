@@ -1,16 +1,16 @@
-"""Structured summary of one conversation turn for the knowledge graph.
+"""Bản tóm tắt có cấu trúc của một lượt hội thoại cho knowledge graph.
 
-Only routing facts are kept: the first decision's domain/action, which tools
-ran, whether a write was made or requested, the final status and a label-only
-routing trace. Messages, replies, tool arguments and the model's free-form
-intent text never leave. The knowledge graph projects only its own Run fields.
+Chỉ giữ dữ kiện định tuyến: miền/hành động của quyết định đầu tiên, các tool đã
+chạy, có ghi hoặc yêu cầu ghi không, trạng thái cuối và vết định tuyến chỉ gồm
+nhãn. Tin nhắn, câu trả lời, tham số tool và văn bản ý định tự do của model
+không bao giờ ra ngoài. Knowledge graph chỉ chiếu các trường Run của riêng nó.
 """
 from agentic.tools.registry import REGISTRY
 from agentic.knowledge_graph.intents import classify
 from agentic.knowledge_graph.service import render_lines
 from agentic.research.contracts import Intent
 
-# Route labels kept in the trace; any other model-written intent is recorded as OTHER.
+# Nhãn tuyến giữ trong vết; mọi ý định khác do model viết được ghi là OTHER.
 ROUTE_INTENTS = {i.value for i in Intent} | {
     'BODY_REVIEW', 'ACTIVITY_REVIEW', 'SLEEP_REVIEW', 'RECOVERY_REVIEW', 'ENERGY_BALANCE', 'PROFILE_REVIEW',
     'PROFILE_UPDATE', 'READ', 'SAFETY', 'clarification', 'error', 'limit', 'catalog_lookup', 'catalog_research',
@@ -18,8 +18,8 @@ ROUTE_INTENTS = {i.value for i in Intent} | {
 
 
 def route_summary(state):
-    """How the turn was routed: the router's labels, the code rules that changed them, the personal
-    context reads and the research outcome. Labels and flags only, never text."""
+    """Lượt được định tuyến thế nào: nhãn của router, các luật code đã thay đổi chúng, các lần đọc
+    ngữ cảnh cá nhân và kết quả tra cứu. Chỉ nhãn và cờ, không bao giờ có văn bản."""
     trace = state.get('route_trace') or []
     def labels(step):
         if not step:
@@ -43,7 +43,7 @@ def route_summary(state):
 
 
 def graph_summary(state):
-    """What the knowledge graph gave this turn: statuses, domains, sections and counts, never facts."""
+    """Những gì knowledge graph cung cấp cho lượt này: trạng thái, miền, mục và số đếm, không bao giờ có dữ kiện."""
     retrieval = (state.get('telemetry') or {}).get('retrieval') if (state.get('telemetry') or {}).get('run_id') == state.get('run_id') else None
     if not retrieval:
         return None
@@ -54,8 +54,8 @@ def graph_summary(state):
             'domains': list((context or {}).get('domains') or retrieval.get('domains') or [])[:8],
             'sections': [section for section in (context or {}).get('sections') or []][:12],
             'facts': len((context or {}).get('facts') or []), 'episodes': len((context or {}).get('episodes') or []),
-            # A line count, not bytes: day labels ("hôm nay") change with the clock, so a record
-            # rebuilt from the same checkpoint on reconciliation must not look different.
+            # Đếm theo dòng, không theo byte: nhãn ngày ("hôm nay") đổi theo đồng hồ, nên một bản ghi
+            # dựng lại từ cùng checkpoint khi đối soát không được trông khác đi.
             'lines': len(lines)}
 
 TERMINAL = {'completed', 'needs_input', 'pending_confirmation', 'failed'}

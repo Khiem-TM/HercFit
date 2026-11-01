@@ -1,9 +1,9 @@
-"""Transactional, allowlisted PostgreSQL projection events for the knowledge graph.
+"""Sự kiện chiếu PostgreSQL có transaction, theo danh sách cho phép, cho knowledge graph.
 
-Capture is implemented in PostgreSQL so ORM, bulk SQL, API calls and catalog
-imports have the same contract. No network operation runs in a business write.
-The graph version is independent of ORM optimistic-lock versions: changing a
-meal item advances its *meal* aggregate even when the header is unchanged.
+Việc ghi nhận được cài trong PostgreSQL để ORM, SQL hàng loạt, lời gọi API và import catalog
+có cùng hợp đồng. Không thao tác mạng nào chạy trong một lệnh ghi nghiệp vụ.
+Phiên bản graph độc lập với phiên bản khoá lạc quan của ORM: đổi một
+món trong bữa ăn làm tăng aggregate *bữa ăn* kể cả khi phần đầu không đổi.
 """
 
 from sqlalchemy import event
@@ -43,10 +43,10 @@ PAYLOAD_FIELDS = {
         "position", "exercise_id", "kind", "duration_seconds", "distance_meters",
         "volume_kg", "best_e1rm_kg", "hard_sets", "energy_kcal",
     ),
-    # Only catalog identity is projected from an exercise snapshot.
+    # Chỉ định danh catalog được chiếu từ ảnh chụp bài tập.
     "ExerciseRef": ("id", "code", "name_vi", "name_en", "kind", "source_type"),
-    # Wearable data: day rollups and sessions only. Spot vitals (health_samples),
-    # per-second heart rate and provider credentials never reach the graph.
+    # Dữ liệu thiết bị đeo: chỉ tổng hợp ngày và các phiên. Chỉ số sinh tồn rời (health_samples),
+    # nhịp tim từng giây và thông tin xác thực nhà cung cấp không bao giờ đến graph.
     "DailyHealth": COMMON_FIELDS + (
         "user_id", "local_date", "source", "steps", "distance_m", "floors", "active_minutes",
         "active_zone_minutes", "total_kcal", "active_kcal", "resting_hr_bpm", "hr_avg_bpm", "hrv_ms",
@@ -61,10 +61,10 @@ PAYLOAD_FIELDS = {
         "active_seconds", "energy_kcal", "distance_m", "steps", "avg_hr_bpm", "active_zone_minutes",
     ),
 }
-# Structured personalization: users.age, users.sex and the declared activity level
-# (energy-equation inputs) and the TrainingProfile-validated subset of
-# personal_info['training']. Names, contact data, injuries, declared heart rates and
-# every other free-form personal_info key stay out.
+# Cá nhân hoá có cấu trúc: users.age, users.sex và mức vận động đã khai báo
+# (đầu vào của phương trình năng lượng) và tập con đã qua kiểm tra TrainingProfile của
+# personal_info['training']. Tên, thông tin liên lạc, chấn thương, nhịp tim tự khai và
+# mọi khoá personal_info tự do khác đều không được đưa vào.
 PROFILE_USER_FIELDS = ("age", "sex")
 TRAINING_PROFILE_FIELDS = ("experience_level", "primary_focus", "available_days", "session_minutes", "equipment")
 ACTIVITY_LEVELS = ("sedentary", "light", "moderate", "active", "very_active")
@@ -73,13 +73,13 @@ SOURCE_TABLES = {
     "Food": "foods", "Meal": "meals", "Training": "trainings",
 }
 CHILD_TABLES = {"MealItem": "meal_items", "TrainingItem": "training_items"}
-# Created by migration 0014. Earlier migrations reinstall this module's current DDL,
-# so triggers on these tables are only created once the tables exist.
+# Được tạo bởi migration 0014. Các migration cũ hơn cài lại DDL hiện tại của module này,
+# nên trigger trên các bảng này chỉ được tạo khi bảng đã tồn tại.
 HEALTH_TABLES = {"DailyHealth": "daily_health_summaries", "SleepSession": "sleep_sessions",
                  "DeviceWorkout": "device_workouts"}
 
-# Keep this envelope compatible with the agent database migration. It deliberately
-# has no FK to users/sessions: the outbox must survive deletion of its source.
+# Giữ phong bì này tương thích với migration database của agent. Nó cố ý
+# không có FK tới users/sessions: outbox phải sống sót khi nguồn của nó bị xoá.
 OUTBOX_DDL = """
 CREATE TABLE IF NOT EXISTS kg_outbox (
     event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS kg_source_versions (
 
 
 def _payload_function_sql(profile: bool = True) -> str:
-    # Names and field lists are constants, never request or model-generated SQL.
+    # Tên và danh sách trường là hằng số, không bao giờ là SQL từ request hay do model sinh.
     fields_by_kind = {**PAYLOAD_FIELDS, "User": PAYLOAD_FIELDS["User"] + (PROFILE_USER_FIELDS if profile else ())}
     branches = "\n".join(
         "WHEN '" + kind + "' THEN ARRAY["
@@ -399,7 +399,7 @@ END $$;
 
 
 def _guarded(table: str, statement: str) -> str:
-    """Run DDL only when the table exists (earlier migrations reinstall current DDL)."""
+    """Chỉ chạy DDL khi bảng tồn tại (các migration cũ hơn cài lại DDL hiện tại)."""
     return f"DO $guard$ BEGIN IF to_regclass('{table}') IS NOT NULL THEN {statement} END IF; END $guard$;"
 
 
@@ -427,7 +427,7 @@ def _publish_sql(profile: bool = True) -> str:
 
 
 def installation_statements(profile: bool = True, health: bool = True) -> tuple[str, ...]:
-    """DDL shared by Alembic and dedicated test/development metadata creation."""
+    """DDL dùng chung cho Alembic và việc tạo metadata riêng cho test/phát triển."""
     triggers = tuple(
         f"DROP TRIGGER IF EXISTS kg_capture ON {table}; "
         f"CREATE TRIGGER kg_capture AFTER INSERT OR UPDATE OR DELETE ON {table} "
@@ -445,7 +445,7 @@ def install_backend_outbox(connection) -> None:
 
 
 def register_metadata_hooks(metadata) -> None:
-    """Ensure Base.metadata.create_all has the same capture as Alembic databases."""
+    """Đảm bảo Base.metadata.create_all có cùng phần ghi nhận như database dựng bằng Alembic."""
     def install(_metadata, connection, **_kwargs):
         if connection.dialect.name == "postgresql":
             install_backend_outbox(connection)
@@ -454,9 +454,9 @@ def register_metadata_hooks(metadata) -> None:
 
 
 def backend_snapshot_events(connection) -> int:
-    """Enqueue source snapshots; call inside the caller's PostgreSQL transaction.
+    """Xếp hàng ảnh chụp nguồn; gọi bên trong transaction PostgreSQL của bên gọi.
 
-    Accepts a SQLAlchemy sync Connection (AsyncConnection.run_sync also works).
-    Psycopg workers can instead execute SELECT kg_enqueue_snapshot() directly.
+    Nhận một Connection đồng bộ của SQLAlchemy (AsyncConnection.run_sync cũng được).
+    Worker psycopg có thể chạy trực tiếp SELECT kg_enqueue_snapshot() thay thế.
     """
     return int(connection.exec_driver_sql("SELECT kg_enqueue_snapshot()").scalar_one())

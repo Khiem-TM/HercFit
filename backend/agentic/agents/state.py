@@ -51,7 +51,7 @@ class AgentState(TypedDict, total=False):
     catalog_choice: dict[str, Any] | None
     catalog_draft: dict[str, Any] | None
     prepared_reply: str | None
-    # The previous turn asked through a form, so this message answers it rather than starting a new request.
+    # Lượt trước đã hỏi qua một form, nên tin nhắn này là câu trả lời cho form đó chứ không mở yêu cầu mới.
     replying_to_form: bool
     illustrations: list[dict[str, Any]]
     approved: bool
@@ -73,8 +73,8 @@ class AgentState(TypedDict, total=False):
     execution_records: list[dict[str, Any]]
     session_memory: dict[str, Any] | None
     safety: dict[str, Any] | None
-    # Personal context (code-owned): the user's context card for this run, whether the
-    # topic's deep reads ran, research evidence for a personalized answer, and the routing trace.
+    # Ngữ cảnh cá nhân (do code quản lý): thẻ ngữ cảnh của người dùng cho lượt chạy này, việc các lần đọc sâu
+    # của chủ đề đã chạy hay chưa, bằng chứng tra cứu cho câu trả lời cá nhân hoá và vết định tuyến.
     user_context: dict[str, Any] | None
     user_context_run_id: str | None
     personal_reads_done: bool

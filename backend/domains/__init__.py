@@ -1,6 +1,6 @@
-"""Business domains (see docs/module-map.json).
+"""Các miền nghiệp vụ (xem docs/module-map.json).
 
-Importing any `domains.<name>.models` package registers every ORM model first
-(domains.registry), as the old `models` package did. Schemas stay importable
-without SQLAlchemy models, settings or a database.
+Import bất kỳ package `domains.<name>.models` nào cũng đăng ký mọi model ORM trước
+(domains.registry). Schema vẫn import được
+mà không cần model SQLAlchemy, settings hay database.
 """

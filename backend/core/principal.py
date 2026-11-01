@@ -1,15 +1,15 @@
-"""Who is reading: the user, or the assistant acting for the user.
+"""Ai đang đọc: người dùng, hay trợ lý hành động thay người dùng.
 
-The authentication dependency sets the principal for the request. Domain reads
-of health data ask `current()` instead of inspecting headers, so the decision
-"may the assistant see this?" has one input everywhere.
+Phụ thuộc xác thực đặt principal cho request. Các lần đọc dữ liệu sức khoẻ
+trong miền hỏi `current()` thay vì xem header, nên quyết định
+"trợ lý có được thấy điều này không?" ở mọi nơi chỉ có một đầu vào.
 
-* USER: a normal access token.
-* AGENT: a delegated token the backend issued to the agent service after it
-  proved itself (POST /api/v2/auth/delegations). During the transition a user
-  token carrying the self-declared header `X-HercFit-Client: agent` is also
-  treated as AGENT (never with more rights than the user); with
-  settings.AGENT_DELEGATION_REQUIRED such tokens are refused.
+* USER: một access token bình thường.
+* AGENT: token uỷ quyền mà backend cấp cho service agent sau khi nó
+  chứng minh danh tính (POST /api/v2/auth/delegations). Trong giai đoạn chuyển tiếp, token người dùng
+  mang header tự khai báo `X-HercFit-Client: agent` cũng được
+  coi là AGENT (không bao giờ có nhiều quyền hơn người dùng); khi bật
+  settings.AGENT_DELEGATION_REQUIRED thì các token đó bị từ chối.
 """
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ class PrincipalKind(StrEnum):
 class Principal:
     kind: PrincipalKind
     user_id: UUID
-    delegated: bool = False           # True only for backend-issued delegated tokens
-    consent_version: int | None = None  # consent version seen when the delegation was issued
+    delegated: bool = False           # True chỉ với token uỷ quyền do backend cấp
+    consent_version: int | None = None  # phiên bản consent thấy được lúc cấp uỷ quyền
 
     @property
     def is_agent(self) -> bool:

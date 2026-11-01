@@ -1,4 +1,4 @@
-"""Explicit configuration shared by APIs and workers; never auto-enable SDK capture."""
+"""Cấu hình tường minh dùng chung cho API và worker; không bao giờ tự bật thu thập của SDK."""
 import hashlib
 import hmac
 from pathlib import Path
@@ -29,17 +29,17 @@ class ObservabilitySettings(BaseSettings):
     LANGSMITH_ALERT_WEBHOOK_URL: SecretStr | None = None
     LANGSMITH_COST_ALERT_USD: float | None = Field(default=None, gt=0)
 
-    # 'explicit' when set in the environment, 'derived' when computed from the API key.
+    # 'explicit' khi đặt trong biến môi trường, 'derived' khi tính từ API key.
     _secret_sources: dict = PrivateAttr(default_factory=dict)
 
     @model_validator(mode='after')
     def derive_missing_secrets(self):
-        """Pseudonym and propagation secrets are optional.
+        """Secret bí danh và lan truyền là tuỳ chọn.
 
-        When unset they are derived from LANGSMITH_API_KEY with HMAC-SHA256 and a distinct
-        label per purpose, so user/session IDs are still pseudonymised and service-to-service
-        trace headers are still signed. Every service reading the same API key derives the same
-        values. Rotating the API key changes pseudonyms; set the variables explicitly to avoid that.
+        Khi chưa đặt, chúng được suy ra từ LANGSMITH_API_KEY bằng HMAC-SHA256 với một
+        nhãn riêng cho từng mục đích, nên ID người dùng/phiên vẫn được đặt bí danh và header trace
+        service-tới-service vẫn được ký. Mọi service đọc cùng API key đều suy ra cùng
+        giá trị. Xoay API key sẽ đổi bí danh; đặt biến tường minh để tránh điều đó.
         """
         key = self.LANGSMITH_API_KEY.get_secret_value() if self.LANGSMITH_API_KEY else ''
         sources = {}

@@ -7,9 +7,9 @@ import CatalogImage from './CatalogImage.vue'
 import NumberField from './NumberField.vue'
 import SetsEditor from './SetsEditor.vue'
 
-/** One card frame. Every answer is picked on the card (options, a number, sets); nothing is typed as free text. */
+/** Một khung trên thẻ. Mọi câu trả lời đều được chọn trên thẻ (lựa chọn, một con số, các set); không gõ văn bản tự do. */
 const props = defineProps<{ question: ClarifyQuestion; rows?: SetRow[]; disabled?: boolean; showLabel?: boolean }>()
-/** Fired when the user is done with this question (option tapped, or Enter in the number field). */
+/** Phát ra khi người dùng xong câu hỏi này (chạm một lựa chọn, hoặc Enter trong ô nhập số). */
 const emit = defineEmits<{ commit: [] }>()
 const answer = defineModel<Answer>({ required: true })
 
@@ -27,7 +27,7 @@ const hint = computed(() => {
   }
 })
 const picked = (id: string) => answer.value.optionIds.includes(id)
-// Sets groups out of range are named; an untouched editor shows no message.
+// Nhóm set ngoài phạm vi được nêu tên; trình sửa chưa đụng tới thì không hiện thông báo.
 const setsMessage = computed(() => props.question.mode === 'sets' && props.rows?.length
   ? props.rows.flatMap(row => groupsFor(answer.value, row)).map(groupError).find(Boolean) ?? null : null)
 const emptyRows = computed(() => props.question.mode === 'sets' && !props.rows?.length)
@@ -64,7 +64,7 @@ defineExpose({ focus: () => heading.value?.focus(), error: () => answerError(pro
       {{ question.question }}
     </h4>
 
-    <!-- Number with its unit and range -->
+    <!-- Con số kèm đơn vị và khoảng -->
     <NumberField
       v-if="question.mode === 'number' && question.number"
       :frame="question.number"
@@ -75,14 +75,14 @@ defineExpose({ focus: () => heading.value?.focus(), error: () => answerError(pro
       @commit="emit('commit')"
     />
 
-    <!-- Sets × reps × kg for each exercise -->
+    <!-- Sets × reps × kg cho từng bài tập -->
     <template v-else-if="question.mode === 'sets'">
       <SetsEditor v-if="!emptyRows" :rows="rows ?? []" :answer="answer" :disabled="disabled" @change="editSets" />
       <p v-else class="mt-3 text-xs text-on-surface-variant">Chọn bài tập ở câu trước để nhập số hiệp.</p>
       <p v-if="setsMessage" class="mt-2 text-[11px] text-amber-300" aria-live="polite">{{ setsMessage }}</p>
     </template>
 
-    <!-- Catalog choices with pictures -->
+    <!-- Lựa chọn catalog có ảnh -->
     <div v-else-if="withImages" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
       <button
         v-for="option in question.options"
@@ -104,7 +104,7 @@ defineExpose({ focus: () => heading.value?.focus(), error: () => answerError(pro
       </button>
     </div>
 
-    <!-- Chips for choices and quick replies -->
+    <!-- Chip cho lựa chọn và trả lời nhanh -->
     <div v-else class="mt-3 flex flex-wrap gap-2">
       <button
         v-for="option in question.options"

@@ -30,9 +30,9 @@ def uuid7(_ctx: Any | None = None) -> uuid.UUID:
 
         timestamp_ms = int(time.time() * 1000)
         rand = bytearray(os.urandom(10))
-        # Version 7 (0111) in bits 48..51
+        # Phiên bản 7 (0111) ở các bit 48..51
         rand[0] = (rand[0] & 0x0F) | 0x70
-        # Variant 1 (10) in bits 64..65
+        # Biến thể 1 (10) ở các bit 64..65
         rand[2] = (rand[2] & 0x3F) | 0x80
         raw_bytes = timestamp_ms.to_bytes(6, byteorder="big") + bytes(rand)
         return uuid.UUID(bytes=raw_bytes)

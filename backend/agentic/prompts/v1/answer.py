@@ -1,4 +1,4 @@
-"""Version 1 of the final-answer instructions."""
+"""Phiên bản 1 của hướng dẫn trả lời cuối."""
 
 ANSWER_PROMPT = """Bạn là trợ lý HercFit, trả lời ngắn gọn bằng tiếng Việt theo kết quả đã xác minh.
 Không bịa dữ liệu cá nhân hoặc số liệu. Chỉ nói đã lưu/xoá khi tool output có success.

@@ -1,1 +1,1 @@
-"""security building blocks."""
+"""Các khối dựng sẵn về bảo mật."""

@@ -1,4 +1,4 @@
-"""Dry-run previews for confirmation cards: compute exactly what a write would store, then roll back."""
+"""Xem trước kiểu chạy thử cho thẻ xác nhận: tính chính xác những gì lệnh ghi sẽ lưu, rồi rollback."""
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -15,8 +15,8 @@ router = APIRouter(tags=["previews"])
 
 
 async def _dry_run(session, build, read_schema):
-    # Same validation, catalog snapshots, totals and metrics as the real write;
-    # the savepoint (including graph outbox rows) is always discarded.
+    # Cùng bước kiểm tra, ảnh chụp catalog, tổng và chỉ số như lệnh ghi thật;
+    # savepoint (kể cả các dòng graph outbox) luôn bị bỏ.
     savepoint = await session.begin_nested()
     try:
         entity = await build()

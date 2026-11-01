@@ -1,4 +1,4 @@
-"""Exact E5 tokenizer; only tokenizer.json is downloaded, never model weights."""
+"""Tokenizer E5 chính xác; chỉ tải tokenizer.json, không bao giờ tải trọng số model."""
 from pathlib import Path
 
 import httpx
@@ -17,7 +17,7 @@ def fetch_tokenizer(path):
         response.raise_for_status()
     temporary = path.with_suffix('.download')
     temporary.write_bytes(response.content)
-    # Fail before promoting an incomplete or unexpected download.
+    # Thất bại trước khi nâng một bản tải về chưa đầy đủ hoặc bất thường.
     from tokenizers import Tokenizer
     Tokenizer.from_file(str(temporary))
     temporary.replace(path)
@@ -34,20 +34,20 @@ class E5Tokenizer:
         self.tokenizer.no_padding()
 
     def count(self, content, prefix=''):
-        """Tokens of the exact embedding input: 'passage: ', an optional context header, the passage."""
+        """Token của đúng đầu vào embedding: 'passage: ', một phần đầu ngữ cảnh tuỳ chọn, rồi đoạn văn."""
         return len(self.tokenizer.encode('passage: ' + prefix + content).ids)
 
     def split(self, content, max_tokens=480, overlap_tokens=64, prefix=''):
-        """(piece, token_count) windows; see spans() for their character offsets."""
+        """Các cửa sổ (đoạn, số token); xem spans() để biết vị trí ký tự của chúng."""
         for _, _, piece, count in self.spans(content, max_tokens, overlap_tokens, prefix):
             yield piece, count
 
     def spans(self, content, max_tokens=480, overlap_tokens=64, prefix=''):
-        """(start, end, piece, token_count): content[start:end] == piece, counted with `prefix`."""
+        """(start, end, piece, token_count): content[start:end] == piece, đếm cùng `prefix`."""
         if not 32 <= max_tokens <= 512 or not 0 <= overlap_tokens < max_tokens // 2:
             raise ValueError('Require 32 <= max_tokens <= 512 and overlap < half the budget')
         reserved = self.count('', prefix) - self.count('')
-        # Offset boundaries preserve source spelling; decoding subwords can alter whitespace.
+        # Ranh giới theo vị trí giữ nguyên cách viết của nguồn; giải mã subword có thể làm đổi khoảng trắng.
         encoding = self.tokenizer.encode(content, add_special_tokens=False)
         offsets = encoding.offsets
         start = 0
@@ -60,7 +60,7 @@ class E5Tokenizer:
                 end -= 1
             if end <= start:
                 raise ValueError('Cannot fit a token span into embedding budget')
-            # Prefer a paragraph/sentence boundary in the last quarter of the window.
+            # Ưu tiên ranh giới đoạn/câu trong một phần tư cuối của cửa sổ.
             if end < len(offsets):
                 import re
                 boundaries = list(re.finditer(r'\n\n|[.!?][\"\u201d\u2019]?\s+', piece))
@@ -77,7 +77,7 @@ class E5Tokenizer:
             yield begin, begin + len(piece), piece, self.count(piece, prefix)
             if end == len(offsets):
                 break
-            # Avoid overlapping windows beginning inside a word.
+            # Tránh cửa sổ chồng lấn bắt đầu giữa một từ.
             next_start = max(start + 1, end - overlap_tokens)
             while next_start < end - 1 and offsets[next_start][0] > 0 and content[offsets[next_start][0] - 1].isalnum():
                 next_start += 1

@@ -1,4 +1,4 @@
-"""Immutable body measurements and corrections belonging to the current user."""
+"""Số đo cơ thể bất biến và các lần sửa thuộc về người dùng hiện tại."""
 
 from uuid import UUID
 
@@ -36,7 +36,7 @@ async def get_body_metric(metric_id: UUID, service: UserDataServiceDep):
 @router.put("/{metric_id}", response_model=BodyMetricRead)
 @transaction
 async def replace_body_metric(metric_id: UUID, payload: BodyMetricReplace, service: UserDataServiceDep):
-    """Return a new snapshot ID, preserving recorded_at when omitted."""
+    """Trả về ID ảnh chụp mới, giữ recorded_at khi không truyền."""
     return await service.replace_metric(metric_id, payload)
 
 

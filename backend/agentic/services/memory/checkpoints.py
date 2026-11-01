@@ -7,7 +7,7 @@ from agentic.migrations.runner import migrate_pool
 
 @asynccontextmanager
 async def persistence(settings):
-    # One pool: conversation leases no longer pin a connection for the duration of a run.
+    # Một pool: lease của cuộc trò chuyện không còn ghim một kết nối suốt cả lượt chạy.
     async with AsyncConnectionPool(settings.AGENT_DATABASE_URL.get_secret_value(), min_size=1,
                                    max_size=getattr(settings,'AGENT_DATABASE_POOL_SIZE',10),
                                    open=False, kwargs={'autocommit': True, 'row_factory': dict_row}) as pool:

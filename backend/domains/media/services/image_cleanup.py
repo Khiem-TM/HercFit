@@ -1,4 +1,4 @@
-"""Run once with `python -m services.image_cleanup`; schedule every few minutes."""
+"""Chạy một lần bằng `python -m domains.media.services.image_cleanup`; lên lịch vài phút một lần."""
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
@@ -23,7 +23,7 @@ async def cleanup_images(limit=50):
             ).order_by(ImageCleanup.available_at).limit(1).with_for_update(skip_locked=True))
             if ticket is None:
                 break
-            # Protect any attached asset, including inactive historical snapshots.
+            # Bảo vệ mọi tài sản đang được gắn, kể cả ảnh chụp lịch sử không còn hoạt động.
             attached = False
             for model in MODELS.values():
                 if await session.scalar(select(model.id).where(model.image_public_id == ticket.public_id).limit(1)):
@@ -51,7 +51,7 @@ async def main():
 
 
 async def cleanup_loop():
-    """Each API worker may run this; SKIP LOCKED distributes cleanup safely."""
+    """Mỗi worker API đều có thể chạy hàm này; SKIP LOCKED phân phối việc dọn dẹp an toàn."""
     while True:
         try:
             await cleanup_images()

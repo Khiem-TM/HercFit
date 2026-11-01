@@ -1,12 +1,12 @@
-"""Training v2: derived metric columns, session load and prescription-based schedules.
+"""Training v2: cột chỉ số suy ra, tải buổi tập và lịch dựa trên chỉ định.
 
-Specialised Gym/Running detail stays in validated JSONB; only aggregate metrics
-become columns so analytics are plain indexed SUM/MAX queries.
+Chi tiết chuyên biệt của Gym/Running nằm trong JSONB đã kiểm tra; chỉ chỉ số tổng hợp
+mới thành cột để phân tích chỉ là các truy vấn SUM/MAX có chỉ mục đơn giản.
 
-The meal and training schedule tables still had their pre-ORM layout
-(session_name, planned_sets, target_weekly_workouts, no dates on headers), so
-no schedule could be stored and Plan lifecycle queries failed. They are rebuilt
-to the ORM contract; the migration refuses to run if any of them has rows.
+Các bảng lịch bữa ăn và lịch tập vẫn mang bố cục trước ORM
+(session_name, planned_sets, target_weekly_workouts, header không có ngày), nên
+không lịch nào lưu được và các truy vấn vòng đời Plan thất bại. Chúng được dựng lại
+theo hợp đồng ORM; migration từ chối chạy nếu bất kỳ bảng nào có dữ liệu.
 """
 
 from alembic import op
@@ -202,7 +202,7 @@ def _rebuild_meal_schedules():
 
 
 def upgrade():
-    # Derived per-item metrics (server computed, immutable with the snapshot).
+    # Chỉ số suy ra theo từng mục (server tính, bất biến cùng ảnh chụp).
     op.execute("""ALTER TABLE training_items
         ADD COLUMN kind exercise_kind,
         ADD COLUMN duration_seconds numeric(12,3),
@@ -216,7 +216,7 @@ def upgrade():
         op.execute(f"ALTER TABLE training_items ADD CONSTRAINT ck_training_items_{field} CHECK ({field} IS NULL OR {field} >= 0)")
     op.execute("CREATE INDEX ix_training_items_exercise ON training_items (exercise_id)")
 
-    # Session-level discipline and sRPE load.
+    # Bộ môn ở cấp buổi tập và tải sRPE.
     op.execute("""ALTER TABLE trainings
         ADD COLUMN discipline varchar(10) NOT NULL DEFAULT 'MIXED',
         ADD COLUMN session_rpe numeric(4,2),
@@ -230,11 +230,11 @@ def upgrade():
     _rebuild_schedules()
     _rebuild_meal_schedules()
 
-    # Endurance activity became an enum; legacy free text maps to OTHER.
+    # Hoạt động sức bền chuyển thành enum; văn bản tự do cũ ánh xạ sang OTHER.
     op.execute("""UPDATE exercises SET configuration = jsonb_set(configuration, '{activity}', '"OTHER"')
         WHERE kind = 'ENDURANCE' AND NOT (configuration->>'activity' = ANY (ARRAY['RUN','WALK','HIKE','CYCLE','SWIM','ROW','OTHER']))""")
 
-    # Re-install graph capture so trainings and their items publish projections.
+    # Cài lại phần ghi nhận graph để trainings và các mục của chúng phát phép chiếu.
     for statement in installation_statements():
         op.execute(statement)
 
@@ -248,5 +248,5 @@ def downgrade():
         DROP COLUMN discipline, DROP COLUMN session_rpe, DROP COLUMN training_load""")
     op.execute("DROP INDEX IF EXISTS ix_training_items_exercise")
     op.execute("ALTER TABLE training_items " + ", ".join(f"DROP COLUMN {field}" for field in ("kind", *ITEM_METRICS)))
-    # The rebuilt schedule tables match the ORM and are kept; the legacy layout
-    # could not store schedules, so restoring it would only reintroduce the drift.
+    # Các bảng lịch tập dựng lại khớp với ORM và được giữ; bố cục cũ
+    # không lưu được lịch, nên khôi phục nó chỉ đưa lại độ lệch.

@@ -1,4 +1,4 @@
-"""Only signed service-to-service headers may continue a trace."""
+"""Chỉ header service-tới-service có chữ ký mới được tiếp tục một trace."""
 import hashlib
 import hmac
 import json

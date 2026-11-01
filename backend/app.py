@@ -1,4 +1,4 @@
-"""HercFit CRUD application; independent of Agent providers and memory stores."""
+"""Ứng dụng CRUD của HercFit; không phụ thuộc nhà cung cấp Agent hay kho bộ nhớ."""
 
 import asyncio
 from contextlib import asynccontextmanager, suppress
@@ -28,7 +28,7 @@ from domains.shared.services.common import request_validation_error
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings.jwt_secret_value  # Authentication must be configured even without an AI provider.
+    settings.jwt_secret_value  # Xác thực phải được cấu hình kể cả khi không có nhà cung cấp AI.
     get_async_engine()
     observer()
     from embedding.config import settings as embedding_settings
@@ -41,13 +41,13 @@ async def lifespan(app: FastAPI):
             if embedding_settings().RERANK_ENABLED:
                 app.state.rerank_client = RerankClient(embedding_settings())
         except ValueError:
-            pass  # Optional RAG configuration cannot disable CRUD/chat.
+            pass  # Cấu hình RAG tuỳ chọn không thể tắt CRUD/chat.
     cleanup_task = None
     if all((settings.CLOUDINARY_CLOUD_NAME, settings.CLOUDINARY_API_KEY, settings.CLOUDINARY_API_SECRET)):
         from domains.media.services.image_cleanup import cleanup_loop
         cleanup_task = asyncio.create_task(cleanup_loop())
     health_task = None
-    # With an external worker (python -m workers run) the API never calls Google in-process.
+    # Khi có worker riêng (python -m workers run), API không bao giờ gọi Google trong tiến trình.
     if settings.google_health_configured and settings.GOOGLE_HEALTH_SYNC_LOOP and not settings.GH_WORKER_EXTERNAL:
         from integrations.google_health.scheduler import health_sync_loop
         health_task = asyncio.create_task(health_sync_loop())
@@ -55,13 +55,13 @@ async def lifespan(app: FastAPI):
     if settings.API_ROUTE_METRICS:
         from core.database import get_db_session
         from core.route_metrics import flush_loop
-        app.openapi()  # build (and cache) the schema the route table reads, before the first request
+        app.openapi()  # dựng (và cache) schema mà bảng route đọc, trước request đầu tiên
         metrics_task = asyncio.create_task(flush_loop(metrics_stop, get_db_session))
     try:
         yield
     finally:
         if metrics_task is not None:
-            metrics_stop.set()  # last flush before the pool closes
+            metrics_stop.set()  # flush lần cuối trước khi đóng pool
             with suppress(asyncio.CancelledError, asyncio.TimeoutError):
                 await asyncio.wait_for(metrics_task, 5)
         for task in (cleanup_task, health_task):
@@ -85,7 +85,7 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Idempotency-Key"], expose_headers=["Location", "X-Request-ID", "X-Trace-ID"],
     )
-    # Outermost: per-route counts and latency for every /api request (core/route_metrics.py).
+    # Lớp ngoài cùng: số đếm và độ trễ theo route cho mọi request /api (core/route_metrics.py).
     app.add_middleware(RouteMetricsMiddleware)
     app.include_router(api_v2_router, prefix="/api/v2")
     app.include_router(api_router, prefix="/api")

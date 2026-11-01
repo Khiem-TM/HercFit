@@ -1,16 +1,16 @@
-"""Knowledge retrieval: language-aware weighted full-text search and page spans.
+"""Truy hồi tri thức: tìm kiếm toàn văn có trọng số theo ngôn ngữ và khoảng trang.
 
-* knowledge_document(lang, heading, content) builds the chunk tsvector: the chapter
-  heading weighs 'A' and the passage 'B'; English documents use the stemming
-  'english' configuration (stop words removed), others stay on 'simple'.
-* knowledge_query(lang, q) turns a natural-language question into an OR of its
-  lexemes. The former plainto_tsquery AND required every word of the question in
-  one chunk and matched almost nothing.
-* knowledge_chunks gains page_end (a chunk may span pages) and page_label (the
-  printed page, when the source spec can map it).
+* knowledge_document(lang, heading, content) dựng tsvector của chunk: tiêu đề chương
+  có trọng số 'A' và đoạn văn 'B'; tài liệu tiếng Anh dùng cấu hình 'english'
+  có rút gọn từ (bỏ stop word), các tài liệu khác giữ 'simple'.
+* knowledge_query(lang, q) biến một câu hỏi tự nhiên thành phép OR của các
+  lexeme. plainto_tsquery AND trước đây đòi mọi từ của câu hỏi nằm trong
+  một chunk và gần như không khớp gì.
+* knowledge_chunks có thêm page_end (một chunk có thể trải nhiều trang) và page_label (số
+  trang in, khi đặc tả nguồn ánh xạ được).
 
-Text is normalized in Python (lower case, no diacritics) before it reaches these
-functions, at ingestion and at query time, exactly as before.
+Văn bản được chuẩn hoá trong Python (chữ thường, bỏ dấu) trước khi tới các
+hàm này, lúc tiếp nhận và lúc truy vấn, đúng như trước.
 """
 import unicodedata
 
@@ -23,7 +23,7 @@ branch_labels = depends_on = None
 
 
 def normalize(value):
-    # Frozen copy of models.catalog.normalize_food_text, so later app changes cannot alter this migration.
+    # Bản sao đóng băng của models.catalog.normalize_food_text, để thay đổi sau này của app không làm đổi migration này.
     value = unicodedata.normalize("NFD", (value or "").lower().replace("đ", "d"))
     return " ".join("".join(char for char in value if not unicodedata.combining(char)).split())
 
@@ -38,8 +38,8 @@ def upgrade():
         LANGUAGE sql IMMUTABLE PARALLEL SAFE AS
         $$ SELECT setweight(to_tsvector(knowledge_ts_config(lang), coalesce(heading, '')), 'A')
                   || setweight(to_tsvector(knowledge_ts_config(lang), coalesce(content, '')), 'B') $$""")
-    # '&' binds tighter than '|' and '<->' tighter than both, so hyphenated phrases stay intact.
-    # A question of stop words only yields NULL, which matches nothing (an empty tsquery logs a NOTICE).
+    # '&' gắn chặt hơn '|' và '<->' gắn chặt hơn cả hai, nên cụm từ có gạch nối được giữ nguyên.
+    # Câu hỏi chỉ gồm stop word cho ra NULL, không khớp gì (tsquery rỗng sẽ ghi một NOTICE).
     op.execute("""CREATE OR REPLACE FUNCTION knowledge_query(lang text, q text) RETURNS tsquery
         LANGUAGE sql IMMUTABLE PARALLEL SAFE AS
         $$ SELECT CASE WHEN numnode(plainto_tsquery(knowledge_ts_config(lang), q)) = 0 THEN NULL::tsquery

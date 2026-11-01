@@ -1,10 +1,10 @@
-"""Derived health profile and overview: pure functions over declared and measured data.
+"""Hồ sơ và tổng quan sức khoẻ suy ra: hàm thuần trên dữ liệu khai báo và đo lường.
 
-Nothing here is stored. Each profile value names where it came from (DECLARED by
-the user, MEASURED by a device, reported by the PROVIDER, or DERIVED), and
-disagreements between what the user declared and what devices measured are
-reported as conflicts instead of being silently resolved. Rows are ORM objects or
-any objects with the same attributes (tests use SimpleNamespace).
+Không gì ở đây được lưu. Mỗi giá trị hồ sơ nêu nguồn gốc của nó (người dùng KHAI BÁO,
+thiết bị ĐO, NHÀ CUNG CẤP báo, hoặc SUY RA), và
+chênh lệch giữa điều người dùng khai báo và điều thiết bị đo được
+báo thành xung đột thay vì âm thầm tự giải quyết. Các dòng là đối tượng ORM hoặc
+bất kỳ đối tượng nào có cùng thuộc tính (test dùng SimpleNamespace).
 """
 from collections import Counter
 from datetime import date, datetime, timedelta
@@ -59,7 +59,7 @@ def worn_days(daily) -> list:
 
 
 def build_profile(*, today: date, zone: str, user, metrics, daily, connection=None) -> HealthProfileRead:
-    """metrics: body_metrics newest first; daily: daily summaries of the last 28 days."""
+    """metrics: body_metrics mới nhất trước; daily: tổng hợp ngày của 28 ngày gần nhất."""
     personal = user.personal_info or {}
     training = personal.get("training") or {}
     provider = (connection.provider_profile if connection is not None else None) or {}
@@ -134,7 +134,7 @@ def build_profile(*, today: date, zone: str, user, metrics, daily, connection=No
 
 
 def effective_activity_level(profile: HealthProfileRead) -> str | None:
-    """Declared level first; the device-observed level fills a missing declaration."""
+    """Ưu tiên mức đã khai báo; mức thiết bị quan sát được điền vào khi chưa khai báo."""
     for value in (profile.activity_level, profile.observed_activity_level):
         if value is not None and value.value in ACTIVITY_ORDER:
             return str(value.value)
@@ -142,7 +142,7 @@ def effective_activity_level(profile: HealthProfileRead) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Overview
+# Tổng quan
 # ---------------------------------------------------------------------------
 def _activity(daily, workouts, end: date) -> ActivityOverview:
     worn = worn_days(daily)
@@ -171,7 +171,7 @@ def _activity(daily, workouts, end: date) -> ActivityOverview:
 def _bedtime_minutes(session, zone: ZoneInfo) -> float:
     local = session.start_at.astimezone(zone)
     minutes = local.hour * 60 + local.minute
-    return minutes + 1440 if minutes < 12 * 60 else minutes  # 01:00 sorts after 23:00
+    return minutes + 1440 if minutes < 12 * 60 else minutes  # 01:00 được xếp sau 23:00
 
 
 def _sleep(sessions, end: date, age: int | None, zone: str) -> SleepOverview:
@@ -235,7 +235,7 @@ def _energy(daily, intake: dict[date, float], weights: list[tuple[date, float]],
 
 def build_overview(*, start: date, end: date, zone: str, connected: bool, age: int | None, daily, sleep, workouts,
                    intake: dict[date, float], weights: list[tuple[date, float]]) -> HealthOverviewRead:
-    """intake: complete-day meal energy by date; weights: (date, kg) oldest first."""
+    """intake: năng lượng bữa ăn của các ngày trọn theo ngày; weights: (ngày, kg) cũ nhất trước."""
     notes = []
     if not connected:
         notes.append("Chưa kết nối Google Health: vào Cài đặt → Kết nối để đồng bộ dữ liệu từ thiết bị.")

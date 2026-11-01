@@ -1,4 +1,4 @@
-"""Prepare reproducible book artifacts without calling an API or opening the DB."""
+"""Chuẩn bị sản phẩm sách tái tạo được mà không gọi API hay mở DB."""
 import bisect
 import hashlib
 import json
@@ -16,7 +16,7 @@ class Chapter(BaseModel):
     model_config = ConfigDict(extra='forbid')
     page: int = Field(ge=1)
     title: str
-    # Printed page number from the table of contents; maps physical source pages to citable ones.
+    # Số trang in lấy từ mục lục; ánh xạ trang nguồn vật lý sang trang trích dẫn được.
     printed_page: int | None = Field(default=None, ge=1)
 
 
@@ -38,9 +38,9 @@ class DocumentSpec(BaseModel):
     chapters: list[Chapter] = Field(default_factory=list)
     sections: list[Chapter] = Field(default_factory=list)
     exclude_pages: list[int] = Field(default_factory=list)
-    # Join consecutive pages of one chapter so paragraphs are not cut at page breaks.
+    # Nối các trang liên tiếp của một chương để đoạn văn không bị cắt ở chỗ ngắt trang.
     join_pages: bool = True
-    # Embed each passage after "<title> — <heading>", the context an isolated passage lacks.
+    # Embed mỗi đoạn sau "<tiêu đề> — <đề mục>", ngữ cảnh mà một đoạn đứng riêng còn thiếu.
     contextual_header: bool = True
 
 
@@ -52,7 +52,7 @@ def sha256(data):
 
 
 def header(title, heading):
-    """Context line embedded before a passage; the stored passage itself is unchanged."""
+    """Dòng ngữ cảnh được embed trước một đoạn; bản thân đoạn đã lưu không đổi."""
     return f'{title} — {heading}\n' if heading and heading != title else f'{title}\n'
 
 
@@ -61,23 +61,23 @@ def embedding_text(title, heading, content, contextual=True):
 
 
 def page_join(previous, following):
-    """Separator between consecutive pages: a sentence that runs on stays one paragraph."""
+    """Ký tự phân cách giữa các trang liên tiếp: một câu chạy tiếp vẫn nằm trong một đoạn."""
     if re.search(r'[A-Za-z]{2,}-$', previous) and re.match(r'[a-z]', following):
-        return None  # word hyphenated across the page break
+        return None  # từ bị gạch nối qua chỗ ngắt trang
     if re.search(r'[.!?:;"\u201d)\]]$', previous) or not re.match(r'[a-z(]', following):
         return '\n\n'
     return ' '
 
 
 def streams(pages, boundaries, join):
-    """(chapter, text, [(char_offset, page)]) runs of consecutive pages within one chapter."""
+    """Các chuỗi (chương, văn bản, [(vị trí ký tự, trang)]) gồm các trang liên tiếp trong một chương."""
     runs = []
     for page in pages:
         chapter = next((c for c in reversed(boundaries) if c.page <= page.page), None)
         last = runs[-1] if runs else None
         if join and last and last[0] is chapter and last[2][-1][1] == page.page - 1:
             separator = page_join(last[1], page.content)
-            # A hyphenated word rejoins at the hyphen; otherwise the next page starts after the separator.
+            # Từ có gạch nối được nối lại tại dấu gạch; nếu không thì trang sau bắt đầu sau ký tự phân cách.
             offset = len(last[1]) - 1 if separator is None else len(last[1]) + len(separator)
             runs[-1] = (chapter, last[1][:offset] + page.content if separator is None else last[1] + separator + page.content,
                         last[2] + [(offset, page.page)])
@@ -87,7 +87,7 @@ def streams(pages, boundaries, join):
 
 
 def printed_label(chapter, first, last):
-    """Printed page(s) of physical pages first..last, when the chapter's printed start is known."""
+    """(Các) trang in của các trang vật lý first..last, khi biết trang in bắt đầu của chương."""
     if not chapter or chapter.printed_page is None:
         return None
     offset = chapter.page - chapter.printed_page
@@ -103,7 +103,7 @@ def prepare(source, output, spec_path, settings):
     if source.stat().st_size > settings.KNOWLEDGE_MAX_FILE_BYTES:
         raise ValueError('Source exceeds byte limit')
     raw_bytes = source.read_bytes()
-    # PDF/HTML/Markdown go through the same bounded extractor; text sources keep their exact bytes.
+    # PDF/HTML/Markdown đi qua cùng bộ trích xuất có giới hạn; nguồn văn bản giữ nguyên từng byte.
     raw = extract_text(source, settings.KNOWLEDGE_MAX_FILE_BYTES, settings.KNOWLEDGE_MAX_EXTRACTED_CHARS)
     spec = DocumentSpec.model_validate_json(Path(spec_path).read_text())
     last_page = spec.last_page or len(raw.split('\f'))
@@ -121,7 +121,7 @@ def prepare(source, output, spec_path, settings):
                                [c.page for c in boundaries], spec.exclude_pages)
     rows = []
     duplicate_count = 0
-    # Deduplicate only identical chunks within the same run, never across contexts.
+    # Chỉ khử trùng các chunk giống hệt trong cùng một chuỗi, không bao giờ giữa các ngữ cảnh.
     seen = set()
     runs = streams(pages, boundaries, spec.join_pages)
     for chapter, text, starts in runs:
@@ -142,7 +142,7 @@ def prepare(source, output, spec_path, settings):
     if not rows:
         raise ValueError('No chunks produced')
     output.mkdir(parents=True, exist_ok=True)
-    # One form feed per run of joined pages; every chunk is a substring of exactly one run.
+    # Mỗi chuỗi trang đã nối một form feed; mọi chunk là chuỗi con của đúng một chuỗi.
     clean_bytes = '\f'.join(text for _, text, _ in runs).encode()
     chunks_bytes = ''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows).encode()
     processing = {
@@ -175,7 +175,7 @@ def prepare(source, output, spec_path, settings):
         'warnings': [{'page': p.page, 'reasons': p.warnings} for p in pages if p.warnings],
         'profile_id': settings.profile_id,
     })
-    # Deterministic artifacts; a checksum mismatch makes partial writes fail closed at enqueue.
+    # Sản phẩm tất định; checksum không khớp khiến lần ghi dở bị từ chối an toàn khi xếp hàng.
     (output / 'cleaned.txt').write_bytes(clean_bytes)
     (output / 'chunks.jsonl').write_bytes(chunks_bytes)
     (output / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
@@ -184,7 +184,7 @@ def prepare(source, output, spec_path, settings):
 
 
 def load_prepared(settings, manifest):
-    """Validate the exact artifacts that will be inserted, before opening a write transaction."""
+    """Kiểm tra đúng các sản phẩm sẽ được chèn, trước khi mở transaction ghi."""
     root = Path(settings.KNOWLEDGE_INGEST_ROOT).resolve()
     def read(name):
         path = (root / name).resolve()

@@ -1,11 +1,11 @@
-"""Field-level evidence policy for researched catalog payloads.
+"""Chính sách bằng chứng theo từng trường cho payload catalog đã tra cứu.
 
-A verbatim quote proves that a source says something, not that every payload value
-came from it. Each value HercFit computes with (nutrients and serving basis, MET,
-muscle groups, activity, equipment...) must be backed by a claim for that field
-path whose quote contains the number, or a term of the enum value. The research
-agent clears unsupported values to null/default before preview; the finalization
-API rejects a payload that still carries one.
+Một trích dẫn nguyên văn chứng minh rằng nguồn có nói điều gì đó, không phải mọi giá trị
+payload đều đến từ nó. Mỗi giá trị HercFit dùng để tính toán (dinh dưỡng và khẩu phần chuẩn, MET,
+nhóm cơ, hoạt động, dụng cụ...) phải có một khẳng định cho đường dẫn trường đó
+với trích dẫn chứa con số, hoặc một từ của giá trị enum. Agent tra cứu
+xoá giá trị không có căn cứ về null/mặc định trước khi xem trước; API finalize
+từ chối payload vẫn còn mang giá trị như vậy.
 """
 import copy
 import json
@@ -84,13 +84,13 @@ def _number_ok(value, quotes):
 
 
 def _numbers_ok(value, quotes):
-    # Every numeral of a free-form value must be quoted; a value without numerals needs a claim.
+    # Mọi chữ số của một giá trị tự do phải được trích dẫn; giá trị không có chữ số cần một khẳng định.
     available = quoted_numbers(quotes)
     return bool(quotes) and all(number_values(n) & available for n in NUMBER.findall(json.dumps(value, ensure_ascii=False)))
 
 
 def _term_ok(value, table, quotes):
-    """An enum value is supported by one of its terms; free text by appearing in a quote."""
+    """Giá trị enum được hỗ trợ bởi một trong các từ của nó; văn bản tự do bằng cách xuất hiện trong trích dẫn."""
     patterns = table.get(str(value).upper())
     if patterns is None:
         patterns = next((terms for terms in table.values() if _has_term([str(value)], terms)), None)
@@ -107,7 +107,7 @@ def _keep(values, path, table, quotes, cleared):
 
 
 def _set(data, key, value, path, cleared, derived=False):
-    """Replace an unsupported value; derived values are recomputed, not reported as cleared."""
+    """Thay giá trị không có căn cứ; giá trị suy ra được tính lại, không báo là đã xoá."""
     if data.get(key) != value:
         if not derived:
             cleared.append(path)
@@ -142,7 +142,7 @@ def _met(config, claims, url_of, cleared):
     if config.get('default_met') is not None and not _number_ok(config['default_met'], met):
         _set(config, 'default_met', None, 'configuration.default_met', cleared)
     if 'met_source' in config or config.get('kind') in {'SPORT', 'ENDURANCE'}:
-        # The citation of a MET value is the registry source that supports it, never model text.
+        # Trích dẫn cho giá trị MET là nguồn trong sổ đăng ký hỗ trợ nó, không bao giờ là văn bản của model.
         source = None
         if config.get('default_met') is not None:
             source = next((url_of(c.source_id) or c.source_id for c in claims if c.field == 'configuration.default_met'
@@ -171,7 +171,7 @@ def _exercises(data, claims, url_of, missing, cleared):
             _set(config, 'unilateral', False, 'configuration.unilateral', cleared)
         if config.get('movement_pattern') and not _quotes(claims, ('configuration.movement_pattern',)):
             _set(config, 'movement_pattern', None, 'configuration.movement_pattern', cleared)
-        # Derived from category, and the load modes are HercFit's logging options, not research facts.
+        # Suy ra từ danh mục, và các chế độ tải là tuỳ chọn ghi nhật ký của HercFit, không phải dữ kiện tra cứu.
         _set(config, 'e1rm_eligible', config.get('category', 'COMPOUND') == 'COMPOUND', 'configuration.e1rm_eligible', cleared, derived=True)
         _set(config, 'supported_load_modes', list(DEFAULT_LOAD_MODES), 'configuration.supported_load_modes', cleared, derived=True)
     elif kind == 'SPORT':
@@ -191,9 +191,9 @@ def _exercises(data, claims, url_of, missing, cleared):
 
 
 def audit(domain, payload, claims, url_of=lambda source_id: ''):
-    """(payload, missing, cleared). Unsupported values are cleared to null/default and their
-    paths listed in cleared; required values without evidence are listed in missing.
-    An audited payload is a fixed point: auditing it again changes nothing."""
+    """(payload, missing, cleared). Giá trị không có căn cứ bị xoá về null/mặc định và đường dẫn
+    của chúng liệt kê trong cleared; giá trị bắt buộc không có bằng chứng liệt kê trong missing.
+    Payload đã kiểm toán là điểm bất động: kiểm toán lại không thay đổi gì."""
     data = copy.deepcopy(payload)
     missing, cleared = [], []
     fields = {claim.field for claim in claims}

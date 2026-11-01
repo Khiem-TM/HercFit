@@ -1,4 +1,4 @@
-"""Google Health connection: OAuth consent, status, assistant consent, sync and disconnect."""
+"""Kết nối Google Health: đồng ý OAuth, trạng thái, consent của trợ lý, đồng bộ và ngắt kết nối."""
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Cookie, Query, Response, status
@@ -22,7 +22,7 @@ from integrations.google_health.sync import sync_connection
 router = APIRouter(prefix="/integrations/google-health", tags=["integrations"])
 HealthConnectionServiceDep = Annotated[HealthConnectionService, service_dependency(HealthConnectionService)]
 COOKIE_PATH = "/api/integrations/google-health"
-# Per user: starting consent and manual syncs call Google, so bursts are refused.
+# Theo người dùng: bắt đầu đồng ý và sync thủ công đều gọi Google, nên các đợt dồn dập bị từ chối.
 _limiter = SlidingWindowLimiter(6)
 
 
@@ -58,7 +58,7 @@ async def callback(
     result, connection_id = await complete_connect(session, code=code, state=state, error=error,
                                                    nonce_cookie=nonce, verifier=verifier)
     if connection_id is not None and settings.GH_WORKER_EXTERNAL:
-        # The worker owns every Google call: the callback only records the work, in this transaction.
+        # Worker sở hữu mọi lời gọi Google: callback chỉ ghi lại công việc, trong transaction này.
         await _enqueue_initial(session, connection_id)
     await session.commit()
     if connection_id is not None and not settings.GH_WORKER_EXTERNAL:

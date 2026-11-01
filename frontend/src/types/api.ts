@@ -5,7 +5,7 @@ export interface UserProfile {
   nick_name: string | null
   avatar_url: string | null
   age: number | null
-  /** Optional biological sex, used only by the energy (BMR) equation. */
+  /** Giới tính sinh học tuỳ chọn, chỉ dùng cho phương trình năng lượng (BMR). */
   sex?: 'MALE' | 'FEMALE' | null
   personal_info: Record<string, unknown>
   email_verified: boolean
@@ -25,7 +25,7 @@ export interface UserUpdatePayload {
 export interface BodyMetricRead {
   id: string
   user_id: string
-  /** Device samples (source GOOGLE_HEALTH) may carry only height or body fat. */
+  /** Mẫu từ thiết bị (source GOOGLE_HEALTH) có thể chỉ mang chiều cao hoặc mỡ cơ thể. */
   weight_kg: number | null
   height_cm: number | null
   body_fat_pct: number | null
@@ -49,7 +49,7 @@ export interface HealthSyncRun {
   error_code: string | null
 }
 
-/** Decimal columns are serialized as JSON strings to keep their precision. */
+/** Cột thập phân được tuần tự hoá thành chuỗi JSON để giữ độ chính xác. */
 export type Numeric = number | string | null
 
 export type ValueSource = 'DECLARED' | 'MEASURED' | 'PROVIDER' | 'DERIVED'
@@ -61,7 +61,7 @@ export interface ProfileValue {
   label: string | null
 }
 
-/** GET /api/health/profile: declared, measured and derived values with their source. */
+/** GET /api/health/profile: giá trị khai báo, đo được và suy ra kèm nguồn. */
 export interface HealthProfile {
   as_of: string
   timezone: string
@@ -162,7 +162,7 @@ export interface HealthSample {
   details: Record<string, string>
 }
 
-/** GET /api/health/overview: deterministic analysis over the chosen days. */
+/** GET /api/health/overview: phân tích tất định trên các ngày đã chọn. */
 export interface HealthOverview {
   start_date: string
   end_date: string
@@ -191,7 +191,7 @@ export interface HealthOverview {
   notes: string[]
 }
 
-/** The part of GET /api/progress the health view reads (logged intake vs device expenditure). */
+/** Phần của GET /api/progress mà phần sức khoẻ đọc (lượng ăn đã ghi so với mức tiêu hao của thiết bị). */
 export interface ProgressDay {
   date: string
   meal_count: number
@@ -199,7 +199,7 @@ export interface ProgressDay {
   calories_out_actual: Numeric
 }
 
-/** GET /api/integrations/google-health: never contains provider tokens. */
+/** GET /api/integrations/google-health: không bao giờ chứa token của nhà cung cấp. */
 export interface HealthConnection {
   provider: string
   configured: boolean
@@ -253,12 +253,12 @@ export interface PendingAction {
   user_id?: string
   tool: string
   payload: Record<string, unknown>
-  /** Server-rendered text preview (tool name + JSON). */
+  /** Bản xem trước văn bản do server dựng (tên tool + JSON). */
   preview: string
   revision: number
   expires_at: string
   research_id?: string | null
-  /** Server dry-run (MealRead / TrainingRead / TrainingPlanRead) or a catalog candidate. */
+  /** Kết quả chạy thử của server (MealRead / TrainingRead / TrainingPlanRead) hoặc một ứng viên catalog. */
   display?: Record<string, unknown> | null
 }
 
@@ -266,20 +266,20 @@ export interface ClarifyOption {
   id: string
   label: string
   description?: string | null
-  /** Only from catalog records returned in this turn. */
+  /** Chỉ từ bản ghi catalog trả về trong lượt này. */
   image_url?: string | null
   ref?: { kind: string; id: string } | null
-  /** Sent as the next user message when chosen. */
+  /** Gửi như tin nhắn tiếp theo của người dùng khi được chọn. */
   value: string
 }
 
-/** Units a number frame can ask in (the agent's NUMBER_UNITS). */
+/** Các đơn vị khung nhập số có thể hỏi (NUMBER_UNITS của agent). */
 export type NumberUnit =
   | 'kg' | 'g' | 'ml' | 'kcal' | 'phút' | 'giờ' | 'km' | 'cm' | '%' | 'bpm' | 'tuổi' | 'RPE' | 'bước' | 'buổi'
   | 'ngày' | 'tuần' | 'hiệp' | 'reps' | 'lần' | 'suất' | 'phần' | 'quả' | 'ly' | 'cốc' | 'chai' | 'lon' | 'hộp'
   | 'bát' | 'tô' | 'đĩa' | 'lát' | 'miếng' | 'cái'
 
-/** One value picked with a stepper or a preset within [min, max]. */
+/** Một giá trị chọn bằng bộ tăng giảm hoặc giá trị có sẵn trong [min, max]. */
 export interface NumberFrame {
   unit: NumberUnit
   min: number
@@ -289,37 +289,37 @@ export interface NumberFrame {
   presets?: number[]
 }
 
-/** Card frames; every one is answered on the card, never with typed free text. */
+/** Khung trên thẻ; mọi khung đều trả lời trên thẻ, không bao giờ bằng văn bản tự do gõ tay. */
 export type ClarifyMode = 'single' | 'multiple' | 'quick_reply' | 'number' | 'sets'
 
 export interface ClarifyQuestion {
   id: string
-  /** Short topic, prefixes the answer in the composed reply. */
+  /** Chủ đề ngắn, đứng đầu câu trả lời trong tin nhắn được soạn. */
   label: string
   question: string
   /**
-   * 'number' picks a value of `number`. 'sets' edits sets × reps × kg per exercise: the exercises picked in
-   * `for_questions`, or its own options.
+   * 'number' chọn một giá trị theo `number`. 'sets' sửa sets × reps × kg theo từng bài tập: các bài đã chọn trong
+   * `for_questions`, hoặc các lựa chọn riêng của nó.
    */
   mode: ClarifyMode
   options: ClarifyOption[]
-  /** Optional questions can be skipped. */
+  /** Câu hỏi tuỳ chọn có thể bỏ qua. */
   required: boolean
   min_select: number
   max_select: number
   for_questions?: string[]
-  /** Asked only when the earlier question was answered with one of these options. */
+  /** Chỉ hỏi khi câu hỏi trước đó được trả lời bằng một trong các lựa chọn này. */
   show_if?: { question: string; option_ids: string[] } | null
   number?: NumberFrame | null
 }
 
-/** Human-in-the-loop form, asked one question at a time and answered as one message. */
+/** Form để con người quyết định, hỏi từng câu một và trả lời gộp thành một tin nhắn. */
 export interface Clarification {
   intro?: string | null
   questions: ClarifyQuestion[]
 }
 
-/** Research picture from the web: display only until imported to Cloudinary. */
+/** Ảnh tra cứu từ web: chỉ hiển thị cho đến khi được nhập lên Cloudinary. */
 export interface Illustration {
   url: string
   description?: string | null
@@ -354,8 +354,8 @@ export interface ChatMessage {
   clarification?: Clarification | null
   illustrations?: Illustration[]
   /**
-   * Client-only states: 'streaming' while tokens arrive, 'stopped' after the user cancels, and 'confirmed' /
-   * 'rejected' for a confirmation request the user has answered.
+   * Trạng thái chỉ ở client: 'streaming' khi token đang tới, 'stopped' sau khi người dùng huỷ, và 'confirmed' /
+   * 'rejected' cho yêu cầu xác nhận mà người dùng đã trả lời.
    */
   status?: ChatStatus | 'streaming' | 'stopped' | 'confirmed' | 'rejected'
   timestamp: string
@@ -384,7 +384,7 @@ export interface OnboardingPayload extends UserUpdatePayload {
   goal?: GoalCreatePayload
 }
 
-/** GET /api/nutrition/targets — deterministic targets computed by the backend. */
+/** GET /api/nutrition/targets — mục tiêu tất định do backend tính. */
 export interface NutritionTargets {
   status: 'ok' | 'incomplete_profile'
   missing: string[]
@@ -422,7 +422,7 @@ export interface NutritionTargets {
   method: Record<string, string>
 }
 
-// ---- Health platform (/api/v2) ------------------------------------------------------------
+// ---- Nền tảng sức khoẻ (/api/v2) ----------------------------------------------------------
 export interface ScopeBundle {
   key: string
   label: string
@@ -431,7 +431,7 @@ export interface ScopeBundle {
   scopes: string[]
 }
 
-/** GET/PUT /api/v2/integrations/google-health/export: the single switch for syncing HercFit to Google. */
+/** GET/PUT /api/v2/integrations/google-health/export: công tắc duy nhất để đồng bộ HercFit lên Google. */
 export interface ExportSwitch {
   available: boolean
   enabled: boolean

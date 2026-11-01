@@ -1,4 +1,4 @@
-"""Aggregate active actual snapshots, including activities outside schedules."""
+"""Tổng hợp các ảnh chụp thực tế đang hoạt động, kể cả hoạt động ngoài lịch."""
 
 from datetime import timedelta
 from decimal import Decimal
@@ -32,11 +32,11 @@ async def _daily_totals(session, model, user_id, options, fields):
 
 
 async def daily_meal_totals(session, user_id, options: DateRangeQuery):
-    """Per local day: meal count, known nutrient sums and how many meals had each value.
+    """Theo từng ngày địa phương: số bữa, tổng dinh dưỡng đã biết và số bữa có từng giá trị.
 
-    Reader v2 `nutrition`: meals logged in another app and imported from Google Health
-    (nutrition logs not linked to a HercFit meal) count as meals too; a value they lack
-    stays unknown for that day. HercFit's own exports are never imported back.
+    Bộ đọc v2 `nutrition`: bữa ghi ở ứng dụng khác và nhập về từ Google Health
+    (nhật ký dinh dưỡng không gắn với bữa HercFit) cũng được tính là bữa ăn; giá trị chúng thiếu
+    vẫn là chưa biết cho ngày đó. Dữ liệu HercFit tự xuất không bao giờ được nhập ngược lại.
     """
     totals = await _daily_totals(session, Meal, user_id, options, NUTRIENT_FIELDS)
     from core.flags import reader_v2
@@ -86,7 +86,7 @@ def _metric(row, field, target):
 
 
 async def summarize_plan(session, *, user_id, plan_id, start_date=None, end_date=None) -> PlanProgressRead:
-    """Compare logs to one explicit historical/current plan in its own timezone."""
+    """So sánh nhật ký với một kế hoạch tường minh trong quá khứ/hiện tại theo múi giờ riêng của nó."""
     plan = await Plan.get_for_user(session, plan_id, user_id=user_id)
     if plan is None:
         raise HTTPException(404, "Plan not found")
@@ -102,7 +102,7 @@ async def summarize_plan(session, *, user_id, plan_id, start_date=None, end_date
 
 
 async def summarize_user(session, *, user_id, options: DateRangeQuery) -> ProgressRead:
-    """Actual daily totals without inferring any plan targets."""
+    """Tổng thực tế theo ngày mà không suy ra chỉ tiêu kế hoạch nào."""
     return ProgressRead(
         timezone=options.timezone, start_date=options.start_date, end_date=options.end_date,
         days=await _summarize_days(session, user_id, options),

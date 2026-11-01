@@ -1,4 +1,4 @@
-"""Transactional PostgreSQL migrations using Alembic with AsyncEngine."""
+"""Migration PostgreSQL có transaction dùng Alembic với AsyncEngine."""
 import asyncio
 import os
 from logging.config import fileConfig
@@ -19,7 +19,7 @@ target_metadata = Base.metadata
 
 
 def migration_url() -> str:
-    """Return migration database URL from alembic config, environment, or application settings."""
+    """Trả về URL database cho migration từ cấu hình alembic, biến môi trường hoặc settings của ứng dụng."""
     return (
         config.get_main_option("sqlalchemy.url")
         or os.getenv("MIGRATION_DATABASE_URL")
@@ -34,7 +34,7 @@ def include_name(name, type_, parent_names):
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode without a live connection."""
+    """Chạy migration ở chế độ 'offline', không có kết nối thật."""
     url = migration_url()
     context.configure(
         url=url,
@@ -52,8 +52,8 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    """Configure migration context and execute migrations inside a transaction."""
-    # Auto-align existing database if stamped with obsolete multi-revision IDs
+    """Cấu hình context migration và chạy migration bên trong một transaction."""
+    # Tự căn chỉnh database có sẵn nếu đã được đánh dấu bằng các ID đa revision lỗi thời
     if connection.dialect.has_table(connection, "alembic_version"):
         connection.execute(
             text(
@@ -76,11 +76,11 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    """Create an AsyncEngine and run migrations in online mode."""
+    """Tạo AsyncEngine và chạy migration ở chế độ online."""
     connectable = create_async_engine(migration_url(), poolclass=pool.NullPool)
     try:
-        # Reflection/version alignment above starts a transaction before Alembic
-        # configures its context. Own that outer transaction so upgrades commit.
+        # Bước reflection/căn chỉnh phiên bản ở trên mở một transaction trước khi Alembic
+        # cấu hình context. Tự quản transaction bên ngoài đó để các lần nâng cấp được commit.
         async with connectable.begin() as connection:
             await connection.run_sync(do_run_migrations)
     finally:
@@ -88,7 +88,7 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode with a live connection."""
+    """Chạy migration ở chế độ 'online' với kết nối thật."""
     existing = config.attributes.get("connection")
     if existing is not None:
         do_run_migrations(existing)

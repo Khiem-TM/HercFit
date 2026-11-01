@@ -1,8 +1,8 @@
-"""External providers. Only this package talks to third-party health APIs.
+"""Nhà cung cấp bên ngoài. Chỉ package này giao tiếp với API sức khoẻ bên thứ ba.
 
-Integration models (health_connections, ...) belong to the ORM registry; load it
-first so importing one of them directly cannot start a circular import. Each
-provider then registers its implementation of the domain ports.
+Model của tích hợp (health_connections, ...) thuộc registry ORM; nạp registry
+trước để import trực tiếp một trong số chúng không gây import vòng. Sau đó mỗi
+nhà cung cấp đăng ký bản cài đặt các port của miền.
 """
 import domains.registry  # noqa: F401
 import integrations.google_health.directory  # noqa: E402,F401

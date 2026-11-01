@@ -1,4 +1,4 @@
-"""/api/v2/assistant/context: sourced, budgeted context for the assistant (and the user's own view)."""
+"""/api/v2/assistant/context: ngữ cảnh có nguồn, có ngân sách cho trợ lý (và cho chính người dùng xem)."""
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query

@@ -1,4 +1,4 @@
-"""Shared PostgreSQL configuration, SQLAlchemy 2.0 Async ORM, and connection lifecycle."""
+"""Cấu hình PostgreSQL dùng chung, ORM bất đồng bộ SQLAlchemy 2.0 và vòng đời kết nối."""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -25,11 +25,11 @@ _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
 class Base(DeclarativeBase):
-    """Declarative base class for all SQLAlchemy 2.0 ORM models."""
+    """Lớp cơ sở khai báo cho mọi model ORM SQLAlchemy 2.0."""
 
 
 def get_postgres_connection_string() -> str:
-    """Let libpq escape credentials, including passwords containing URI characters."""
+    """Để libpq escape thông tin xác thực, kể cả mật khẩu chứa ký tự URI."""
     return make_conninfo(
         user=settings.POSTGRES_USER,
         password=settings.POSTGRES_PASSWORD.get_secret_value() if settings.POSTGRES_PASSWORD else None,
@@ -41,7 +41,7 @@ def get_postgres_connection_string() -> str:
 
 
 def get_sqlalchemy_url() -> URL:
-    """Build SQLAlchemy URL using psycopg v3 dialect."""
+    """Dựng URL SQLAlchemy dùng dialect psycopg v3."""
     return URL.create(
         drivername="postgresql+psycopg",
         username=settings.POSTGRES_USER,
@@ -53,7 +53,7 @@ def get_sqlalchemy_url() -> URL:
 
 
 def get_async_engine() -> AsyncEngine:
-    """Lazily initialize and return the shared SQLAlchemy AsyncEngine."""
+    """Khởi tạo lười và trả về AsyncEngine SQLAlchemy dùng chung."""
     global _async_engine
     if _async_engine is None:
         _async_engine = create_async_engine(
@@ -71,7 +71,7 @@ def get_async_engine() -> AsyncEngine:
 
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
-    """Return the shared async_sessionmaker bound to the AsyncEngine."""
+    """Trả về async_sessionmaker dùng chung gắn với AsyncEngine."""
     global _session_factory
     if _session_factory is None:
         _session_factory = async_sessionmaker(
@@ -84,7 +84,7 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 async def init_crud_db_pool() -> None:
-    """Wait for PostgreSQL readiness before serving requests."""
+    """Chờ PostgreSQL sẵn sàng trước khi phục vụ request."""
     global _crud_pool
     if _crud_pool is not None:
         return
@@ -110,7 +110,7 @@ async def init_crud_db_pool() -> None:
 
 
 async def close_crud_db_pool() -> None:
-    """Close and reset the pool and SQLAlchemy engine on shutdown."""
+    """Đóng và đặt lại pool cùng engine SQLAlchemy khi tắt."""
     global _crud_pool, _async_engine, _session_factory
     if _crud_pool is not None:
         await _crud_pool.close()
@@ -123,7 +123,7 @@ async def close_crud_db_pool() -> None:
 
 @asynccontextmanager
 async def get_db_connection() -> AsyncIterator[AsyncConnection]:
-    """Commit on success, roll back on error; never silently fall back to mock data."""
+    """Commit khi thành công, rollback khi lỗi; không bao giờ âm thầm quay về dữ liệu giả."""
     if _crud_pool is None:
         raise RuntimeError("Database pool is not initialized; call init_crud_db_pool() at startup")
     async with _crud_pool.connection() as conn:
@@ -132,7 +132,7 @@ async def get_db_connection() -> AsyncIterator[AsyncConnection]:
 
 @asynccontextmanager
 async def get_db_session() -> AsyncIterator[AsyncSession]:
-    """Context manager yielding a transactional SQLAlchemy AsyncSession (for services/tools)."""
+    """Context manager trả về một AsyncSession SQLAlchemy có transaction (cho service/tool)."""
     session_factory = get_session_factory()
     async with session_factory() as session:
         try:
@@ -144,19 +144,19 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
-    """FastAPI dependency yielding a SQLAlchemy AsyncSession."""
+    """Phụ thuộc FastAPI trả về một AsyncSession SQLAlchemy."""
     async with get_db_session() as session:
         yield session
 
 
-# The trace GUC is read only by outbox/job inserts, so it is set once per
-# transaction on write paths (ORM flushes and DML statements), never on reads.
+# GUC trace chỉ được các lệnh insert outbox/job đọc, nên nó được đặt một lần mỗi
+# transaction trên đường ghi (ORM flush và câu lệnh DML), không bao giờ trên đường đọc.
 from sqlalchemy import event, text as sql_text
 from sqlalchemy.orm import Session
 
 
 def attach_trace_context(session):
-    connection = session.connection()  # begins the transaction when a statement opens it
+    connection = session.connection()  # bắt đầu transaction khi một câu lệnh mở nó
     transaction = session.get_transaction()
     if session.info.get('trace_transaction') is transaction or connection.dialect.name != 'postgresql':
         return

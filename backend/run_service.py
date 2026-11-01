@@ -1,4 +1,4 @@
-"""Start HercFit CRUD Backend service."""
+"""Khởi động service backend CRUD của HercFit."""
 
 import uvicorn
 

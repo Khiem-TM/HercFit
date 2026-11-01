@@ -1,4 +1,4 @@
-"""Authentication service implementing Google OAuth 2.0 (PKCE) and session management."""
+"""Service xác thực cài đặt Google OAuth 2.0 (PKCE) và quản lý phiên."""
 
 import hmac
 import logging
@@ -41,7 +41,7 @@ def _unauthorized(detail: str) -> HTTPException:
 
 
 class AuthService:
-    """Handles Google OAuth callbacks, refresh token rotation, and session logout."""
+    """Xử lý callback Google OAuth, xoay refresh token và đăng xuất phiên."""
 
     REDIRECT_URI_COOKIE_NAME = "oauth_redirect_uri"
 
@@ -52,7 +52,7 @@ class AuthService:
     # ------------------------------------------------------------------ OAuth
     def build_google_auth_url(self, state: str, redirect_uri: str | None = None,
                               code_challenge: str | None = None) -> str:
-        """Identity-only consent URL: no offline access, Google tokens are never stored."""
+        """URL đồng ý chỉ lấy danh tính: không có truy cập offline, token Google không bao giờ được lưu."""
         params = {
             "client_id": settings.GOOGLE_OAUTH_CLIENT_ID or "",
             "redirect_uri": redirect_uri or settings.resolve_oauth_redirect_uri(),
@@ -79,7 +79,7 @@ class AuthService:
         async with httpx.AsyncClient() as client:
             resp = await client.post(GOOGLE_TOKEN_URL, data=payload, timeout=15.0)
         if resp.status_code != 200:
-            # Provider bodies can echo request details; keep them out of client responses.
+            # Body phản hồi của nhà cung cấp có thể lặp lại chi tiết request; không đưa chúng vào phản hồi cho client.
             logger.warning("google_token_exchange_failed status=%s", resp.status_code)
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Google không chấp nhận mã đăng nhập. Vui lòng đăng nhập lại.")
         return resp.json()
@@ -100,7 +100,7 @@ class AuthService:
         self._set_cookie(response, REFRESH_TOKEN_COOKIE_NAME, raw_token, settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400)
 
     def start_google_login(self, redirect_uri: str | None = None) -> Response:
-        """Redirect to Google with CSRF state and a PKCE challenge kept in short-lived cookies."""
+        """Chuyển hướng tới Google với state chống CSRF và challenge PKCE giữ trong cookie ngắn hạn."""
         state = generate_secure_token(32)
         verifier, challenge = pkce_pair()
         response = RedirectResponse(
@@ -123,7 +123,7 @@ class AuthService:
         redirect_to_frontend: bool = False,
         code_verifier: str | None = None,
     ) -> Response:
-        """Verify CSRF state, exchange code (with PKCE), upsert user and issue HercFit tokens."""
+        """Kiểm tra state CSRF, đổi code (kèm PKCE), upsert người dùng và cấp token HercFit."""
         if not state or not oauth_state or not hmac.compare_digest(state, oauth_state):
             raise HTTPException(status.HTTP_400_BAD_REQUEST,
                                 "Invalid or missing OAuth state parameter (CSRF verification failed)")
@@ -135,7 +135,7 @@ class AuthService:
         user = await User.upsert_from_google(self.session, userinfo)
         if not user.is_active:
             raise _unauthorized("User account is inactive")
-        # Only the provider identity is linked; Google access/refresh tokens are discarded.
+        # Chỉ liên kết danh tính nhà cung cấp; access/refresh token của Google bị bỏ.
         await OAuthAccount.upsert_google_account(self.session, user_id=user.id, provider_user_id=provider_user_id)
 
         raw_refresh_token = await self._create_refresh_session(user.id)
@@ -150,7 +150,7 @@ class AuthService:
             response.delete_cookie(key=cookie, path="/")
         return response
 
-    # ---------------------------------------------------------------- Sessions
+    # ---------------------------------------------------------------- Phiên
     async def _create_refresh_session(self, user_id) -> str:
         raw = generate_secure_token(64)
         await AuthSession.create_session(self.session, AuthSessionCreate(
@@ -174,10 +174,10 @@ class AuthService:
 
     @staticmethod
     def _within_reuse_grace(previous: AuthSession, replacement: AuthSession | None) -> bool:
-        """A concurrent refresh may present the token rotated a moment ago.
+        """Một lần refresh đồng thời có thể trình token vừa được xoay một lát trước.
 
-        Only the immediately preceding token qualifies, only for a short window,
-        and only while its replacement is still the live head of the family.
+        Chỉ token ngay trước đó mới đủ điều kiện, chỉ trong một cửa sổ ngắn,
+        và chỉ khi token thay thế của nó vẫn là đầu sống của họ token.
         """
         grace = settings.REFRESH_REUSE_GRACE_SECONDS
         return bool(
@@ -188,7 +188,7 @@ class AuthService:
         )
 
     async def refresh(self, refresh_token: str | None) -> Response:
-        """Rotate a valid refresh token; tolerate one concurrent reuse inside the grace window."""
+        """Xoay một refresh token hợp lệ; chấp nhận một lần dùng lại đồng thời trong cửa sổ ân hạn."""
         if not refresh_token:
             raise _unauthorized("Missing refresh token")
         auth_session = await AuthSession.get_by_refresh_token_hash(self.session, hash_token(refresh_token))
@@ -201,12 +201,12 @@ class AuthService:
                 user = await User.get_by_id(self.session, auth_session.user_id)
                 if user is None or not user.is_active:
                     raise _unauthorized("User account is inactive or not found")
-                # The browser already holds the replacement cookie from the winning
-                # request; answering without Set-Cookie keeps that cookie intact.
+                # Trình duyệt đã giữ cookie thay thế từ request thắng cuộc;
+                # trả lời không kèm Set-Cookie để giữ nguyên cookie đó.
                 return self._token_response(user, self._access_token(user))
-            # Reuse outside the window: treat as theft and revoke the whole family.
+            # Dùng lại ngoài cửa sổ: coi là bị đánh cắp và thu hồi cả họ token.
             await AuthSession.revoke_replacement_chain(self.session, auth_session.replaced_by_session_id)
-            await self.session.commit()  # The revocation must survive the 401 response.
+            await self.session.commit()  # Việc thu hồi phải tồn tại sau phản hồi 401.
             raise _unauthorized("Refresh token has been revoked or reused")
 
         if auth_session.revoked_at is not None:
@@ -229,13 +229,13 @@ class AuthService:
         return response
 
     async def refresh_with_cookie(self, refresh_token: str | None, *, redirect_uri: str | None = None) -> Response:
-        """Legacy GET contract: start OAuth when no cookie exists, otherwise rotate."""
+        """Hợp đồng GET cũ: bắt đầu OAuth khi chưa có cookie, ngược lại thì xoay token."""
         if not refresh_token:
             return self.start_google_login(redirect_uri)
         return await self.refresh(refresh_token)
 
     async def logout(self, refresh_token: str | None) -> LogoutResponse:
-        """Revoke current refresh session and clear refresh token cookie."""
+        """Thu hồi phiên refresh hiện tại và xoá cookie refresh token."""
         if refresh_token:
             auth_session = await AuthSession.get_by_refresh_token_hash(self.session, hash_token(refresh_token))
             if auth_session is not None and auth_session.revoked_at is None:
@@ -250,7 +250,7 @@ def get_auth_service(
     session: Annotated[AsyncSession, Depends(get_db)],
     response: Response,
 ) -> AuthService:
-    """FastAPI dependency yielding configured AuthService."""
+    """Phụ thuộc FastAPI trả về AuthService đã cấu hình."""
     return AuthService(session=session, response=response)
 
 

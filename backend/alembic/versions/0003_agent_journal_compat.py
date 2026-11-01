@@ -1,7 +1,7 @@
-"""Add current journal columns missing from the consolidated initial migration.
+"""Thêm các cột nhật ký hiện hành còn thiếu trong migration ban đầu đã hợp nhất.
 
-Preserve legacy columns and totals. Existing current-schema installations are
-unchanged. Plan/schedule schema reconciliation is outside this migration.
+Giữ các cột và tổng cũ. Các bản cài đặt đã theo schema hiện hành không
+thay đổi. Việc đối soát schema kế hoạch/lịch tập nằm ngoài migration này.
 """
 from alembic import op
 from sqlalchemy import inspect
@@ -74,6 +74,6 @@ def upgrade():
 
 
 def downgrade():
-    # Columns may predate this revision on existing installations; dropping them
-    # would destroy user data. Rolling back code can leave additive columns intact.
+    # Các cột có thể đã tồn tại trước revision này trên các bản cài đặt có sẵn; xoá chúng
+    # sẽ huỷ dữ liệu người dùng. Quay lui code có thể giữ nguyên các cột cộng thêm.
     pass

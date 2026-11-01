@@ -1,9 +1,9 @@
-"""Version 3: training logs go straight to the structured preview; quick gym logs by intensity."""
+"""Phiên bản 3: nhật ký tập đi thẳng tới bản xem trước có cấu trúc; ghi nhanh buổi gym theo cường độ."""
 
 from agentic.prompts.v2.domains import COACH_GUIDANCE as _COACH_V2
 
-# v2 let the tool model write a text "bản xem trước" and ask "xác nhận lưu?" when it had proposed a value
-# itself (a start time the user skipped), which became a form of typed questions instead of the confirm card.
+# v2 để model tool tự viết văn bản "bản xem trước" và hỏi "xác nhận lưu?" khi nó tự đề xuất một giá trị
+# (một giờ bắt đầu mà người dùng bỏ qua), điều này biến thành form câu hỏi gõ tay thay vì thẻ xác nhận.
 COACH_GUIDANCE = _COACH_V2.replace(
     '- Lịch tập dùng prescription',
     '''- Ghi nhanh buổi gym (người dùng chọn ghi theo cường độ): MỘT item của bài catalog gym_general "Tập gym (tổng
@@ -17,8 +17,8 @@ COACH_GUIDANCE = _COACH_V2.replace(
 - Lịch tập dùng prescription''', 1)
 
 
-# v2 told the model that days with few steps "usually mean the device was not worn" and started from
-# raw overviews. v3 starts from the sourced context API and treats missing coverage as unknown.
+# v2 bảo model rằng ngày ít bước "thường nghĩa là không đeo thiết bị" và bắt đầu từ
+# bản tổng quan thô. v3 bắt đầu từ context API có nguồn và coi thiếu độ phủ là chưa biết.
 from agentic.prompts.v2.domains import HEALTH_GUIDANCE as _HEALTH_V2  # noqa: E402
 
 HEALTH_GUIDANCE = '''Dữ liệu sức khoẻ từ thiết bị (Google Health):

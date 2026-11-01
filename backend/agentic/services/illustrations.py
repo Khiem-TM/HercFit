@@ -1,14 +1,14 @@
-"""Illustrative pictures for researched foods/exercises (display only, never nutrition evidence)."""
+"""Ảnh minh hoạ cho thực phẩm/bài tập đã tra cứu (chỉ để hiển thị, không bao giờ là bằng chứng dinh dưỡng)."""
 import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
-# A plain dish name works best; exercise names are often English gym terms.
+# Tên món ăn đơn giản cho kết quả tốt nhất; tên bài tập thường là thuật ngữ gym tiếng Anh.
 SUFFIX = {'exercises': 'exercise'}
 
 
 async def find_illustrations(tavily, queries, domain: str | None, limit: int = 4, *, reserve=None) -> list[dict]:
-    """Spend at most two seconds total; failed pictures never discard text evidence."""
+    """Tiêu tối đa hai giây tổng cộng; ảnh lỗi không bao giờ làm bỏ bằng chứng văn bản."""
     try:
         async with asyncio.timeout(2):
             return await _find_illustrations(tavily, queries, domain, limit, reserve)

@@ -1,4 +1,4 @@
-"""Version-guarded projections. Every event is one atomic Neo4j transaction."""
+"""Phép chiếu có bảo vệ theo phiên bản. Mỗi sự kiện là một transaction Neo4j nguyên tử."""
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -25,9 +25,9 @@ FIELDS = {
     'Execution': {'run_id', 'session_id', 'session_generation', 'tool', 'status', 'duration_ms',
                   'error_code', 'template_id', 'template_version'},
     'Session': {'session_id', 'generation'},
-    # A conversation turn: structured routing facts only, never message or reply text.
+    # Một lượt hội thoại: chỉ dữ kiện định tuyến có cấu trúc, không bao giờ có văn bản tin nhắn hay câu trả lời.
     'Run': {'run_id', 'session_id', 'session_generation', 'intent', 'domain', 'action', 'status', 'tools', 'occurred_at'},
-    # Wearable data the user allowed the assistant to use: day rollups and sessions only.
+    # Dữ liệu thiết bị đeo mà người dùng cho phép trợ lý dùng: chỉ tổng hợp ngày và các phiên.
     'DailyHealth': {'id', 'version_id', 'local_date', 'source', 'steps', 'distance_m', 'floors', 'active_minutes',
                     'active_zone_minutes', 'total_kcal', 'active_kcal', 'resting_hr_bpm', 'hr_avg_bpm', 'hrv_ms',
                     'spo2_avg_pct', 'respiratory_rate', 'vo2_max', 'hydration_ml', 'sleep_minutes'},
@@ -47,7 +47,7 @@ TRAINING_ITEM_FIELDS = {'id', 'position', 'exercise_id', 'kind', 'duration_secon
 EXERCISE_FIELDS = {'id', 'code', 'name_vi', 'name_en', 'kind', 'source_type'}
 RELATIONS = {'Goal': 'HAS_GOAL', 'BodyMetric': 'HAS_MEASUREMENT', 'Meal': 'LOGGED', 'Training': 'TRAINED',
              'DailyHealth': 'HAS_DAILY_HEALTH', 'SleepSession': 'SLEPT', 'DeviceWorkout': 'WORKED_OUT'}
-# Record kinds a conversation turn may be ABOUT (and an execution may TARGET).
+# Các loại bản ghi mà một lượt hội thoại có thể nói VỀ (và một lần thực thi có thể NHẮM TỚI).
 RECORD_KINDS = {'Goal', 'BodyMetric', 'Meal', 'Food', 'Training', *HEALTH_KINDS}
 
 
@@ -103,7 +103,7 @@ def event_properties(event):
                  projected_at=datetime.now(timezone.utc).isoformat(), deleted=event.operation == 'delete',
                  fact_json=json.dumps(fact, ensure_ascii=False, separators=(',', ':')),
                  search_text=search_text(data))
-    # Sleep belongs to the morning it ended; a day rollup to its local date.
+    # Giấc ngủ thuộc về buổi sáng nó kết thúc; tổng hợp ngày thuộc về ngày địa phương của nó.
     props['business_at'] = utc_string(data.get('consumed_at') or data.get('recorded_at') or data.get('started_at')
                                       or data.get('end_at') or data.get('local_date') or data.get('occurred_at')
                                       or event.occurred_at)
@@ -118,7 +118,7 @@ def event_properties(event):
 
 
 def search_text(data):
-    # Meals and trainings are found by what was eaten or performed, not only by "Bữa tối".
+    # Bữa ăn và buổi tập được tìm theo những gì đã ăn hoặc đã tập, không chỉ theo "Bữa tối".
     names = [data.get(key) for key in ('name', 'name_vi', 'name_en', 'title', 'display_name', 'exercise_type')]
     for item in data.get('items', []):
         snapshot = item.get('food_snapshot') or item.get('exercise') or {}
@@ -127,7 +127,7 @@ def search_text(data):
 
 
 def tool_domain(name):
-    # The registry is the single source of tool domains, shared with routing and turns.
+    # Registry là nguồn duy nhất về miền của tool, dùng chung với định tuyến và các lượt.
     from agentic.tools.registry import REGISTRY
     spec = REGISTRY.get(name)
     return spec.domain if spec else 'other'
@@ -153,7 +153,7 @@ class Projector:
         await self.seed_capabilities()
 
     async def seed_capabilities(self):
-        # Registry is declarative and does not instantiate models or check keys.
+        # Registry mang tính khai báo, không khởi tạo model hay kiểm tra khoá.
         from agentic.tools.registry import REGISTRY
         rows = [dict(name=spec.name, domain=spec.domain, write=spec.write) for spec in REGISTRY.values()]
         await self.query("""
@@ -186,8 +186,8 @@ class Projector:
             return await session.execute_write(self._apply, event)
 
     async def _apply(self, tx, event):
-        # Every event for an owner first takes the same write lock. This makes
-        # deleting an account race-safe even across separate outbox databases.
+        # Mọi sự kiện của một chủ sở hữu đều lấy cùng một khoá ghi trước. Nhờ vậy
+        # xoá tài khoản an toàn trước tranh chấp, kể cả giữa các database outbox khác nhau.
         if event.owner_id:
             result = await tx.run("""
                 MERGE (o:KGOwner {key:$owner}) ON CREATE SET o.deleted=false, o.lock=0
@@ -205,7 +205,7 @@ class Projector:
         if previous['version'] >= event.aggregate_version:
             return 'stale'
         props, data = event_properties(event)
-        label = event.aggregate_type  # validated Literal, never request input
+        label = event.aggregate_type  # Literal đã kiểm tra, không bao giờ là dữ liệu từ request
         if label == 'Session' and previous['generation'] is not None:
             props['session_generation'] = previous['generation']
         if event.aggregate_type in {'Execution', 'Run'}:
@@ -232,8 +232,8 @@ class Projector:
                          key=event.key, props=self.tombstone(props))
             await self._delete(tx, event)
             return 'deleted'
-        # A deactivated account is terminal for this projection. Re-enabling one
-        # requires rebuilding from source; an old event cannot restore its data.
+        # Tài khoản đã vô hiệu hoá là trạng thái cuối của phép chiếu này. Bật lại
+        # cần dựng lại từ nguồn; sự kiện cũ không thể khôi phục dữ liệu của nó.
         if event.aggregate_type == 'User' and owner['deleted']:
             return 'blocked_owner'
         await tx.run(f'MATCH (n:KGEntity {{key:$key}}) SET n:{label}, n = $props', key=event.key, props=props)
@@ -260,7 +260,7 @@ class Projector:
                 MERGE (e)-[:TARGETS]->(n)
             """, key=event.key)
         if label in RECORD_KINDS - {'Food'}:
-            # A turn may be journaled before the record it created is projected.
+            # Một lượt có thể được ghi nhật ký trước khi bản ghi nó tạo ra được chiếu.
             await tx.run("""
                 MATCH (n:KGEntity {key:$key}), (r:KGEntity {owner_id:$owner, kind:'Run'})
                 WHERE $key IN coalesce(r.about_keys, [])
@@ -300,7 +300,7 @@ class Projector:
             await tx.run('MATCH (t:Training {key:$key})-[r:PERFORMED]->() DELETE r', key=event.key)
 
     async def _training(self, tx, event, data):
-        """Training -[:PERFORMED]-> Exercise reference nodes carrying catalog identity only."""
+        """Training -[:PERFORMED]-> các node tham chiếu Exercise chỉ mang định danh catalog."""
         await tx.run('MATCH (t:Training {key:$key})-[r:PERFORMED]->() DELETE r', key=event.key)
         rows = []
         for item in data.get('items', []):
@@ -401,7 +401,7 @@ class Projector:
                      refs=['backend:' + r['kind'] + ':' + r['source_id'] for r in data.get('resource_refs', [])])
 
     async def refresh_model(self, owner, now=None):
-        """Recompute one owner's derived knowledge; idempotent and safe to repeat."""
+        """Tính lại tri thức suy ra của một chủ sở hữu; idempotent và chạy lại an toàn."""
         now = now or datetime.now(timezone.utc)
         cutoff = (now - timedelta(days=value(self.settings, 'KG_BUSINESS_RETENTION_DAYS', 90))).isoformat()
         rows = await self.query("""
@@ -412,9 +412,9 @@ class Projector:
               AND n.fact_json IS NOT NULL AND (n.kind IN ['User','Goal'] OR coalesce(n.business_at, n.source_at) >= $cutoff)
             RETURN u.key AS user, collect(n.fact_json) AS facts
         """, owner=owner, user_key='backend:User:' + owner, cutoff=cutoff, kinds=sorted(MODEL_SOURCES))
-        if not rows:  # deleted or unknown owner; grouping by user keeps this empty
+        if not rows:  # chủ sở hữu đã xoá hoặc không rõ; gom nhóm theo người dùng giữ danh sách này rỗng
             return False
-        # An owner whose history aged out still gets an (empty) model, so it is not re-selected every cycle.
+        # Chủ sở hữu có lịch sử đã quá hạn vẫn nhận một model (rỗng), để không bị chọn lại ở mỗi chu kỳ.
         model = build_user_model([json.loads(fact) for fact in rows[0]['facts']], now)
         foods, exercises = model_links(model)
         await self.query("""
@@ -444,7 +444,7 @@ class Projector:
         return True
 
     async def stale_model_owners(self, limit=25, now=None):
-        """Owners whose model is missing, outdated, or computed on an earlier local day."""
+        """Các chủ sở hữu có model bị thiếu, đã cũ, hoặc được tính vào một ngày địa phương trước đó."""
         now = now or datetime.now(timezone.utc)
         rows = await self.query("""
             MATCH (u:KGEntity:User) WHERE coalesce(u.deleted, false) = false AND u.owner_id IS NOT NULL

@@ -4,8 +4,8 @@ from time import monotonic
 import math
 import httpx
 
-# Exact-text cache of query vectors (not a semantic cache): repeated or retried questions skip
-# the provider round trip. Passages are embedded once by the ingestion worker and never cached.
+# Cache vector truy vấn theo văn bản chính xác (không phải cache ngữ nghĩa): câu hỏi lặp lại hoặc thử lại bỏ qua
+# lượt gọi nhà cung cấp. Các đoạn văn được worker tiếp nhận embed một lần và không bao giờ được cache.
 QUERY_CACHE_SIZE=512
 QUERY_CACHE_SECONDS=3600
 
@@ -44,7 +44,7 @@ class EmbeddingClient:
 
     @observed('embedding.request', 'embedding', capture=('texts',), output=False)
     async def request(self, texts, input_type):
-        # E5 retrieval requires asymmetric prefixes, including non-English input.
+        # Truy hồi E5 cần tiền tố bất đối xứng, kể cả với đầu vào không phải tiếng Anh.
         if self.settings.EMBEDDING_MODEL.rsplit("/", 1)[-1] == "multilingual-e5-large":
             prefix = input_type + ": "
             texts = [prefix + text.removeprefix(prefix) for text in texts]

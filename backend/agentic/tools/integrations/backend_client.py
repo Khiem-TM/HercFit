@@ -24,13 +24,13 @@ DELEGATION_SKEW_SECONDS = 60
 class BackendClient:
     def __init__(self, base_url, timeout=15, transport=None, service_secret=None):
         self.http = httpx.AsyncClient(base_url=base_url, timeout=timeout, transport=transport)
-        # With a service secret, the agent reads with backend-issued delegated tokens, so
-        # consent is enforced from the token itself rather than a self-declared header.
+        # Khi có service secret, agent đọc bằng token uỷ quyền do backend cấp, nên
+        # consent được thực thi từ chính token thay vì một header tự khai báo.
         self.service_secret = service_secret
         self._delegations = {}
 
     async def delegated_token(self, token):
-        """A cached delegated token for this user token, or None (fallback: user token + header)."""
+        """Token uỷ quyền đã cache cho token người dùng này, hoặc None (dự phòng: token người dùng + header)."""
         if not self.service_secret:
             return None
         key = hashlib.sha256(token.encode()).hexdigest()
@@ -66,8 +66,8 @@ class BackendClient:
 
     @observed('backend.request', capture=('method', 'path', 'params', 'body'), output=False)
     async def request(self, method, path, token, *, params=None, body=None, key=None):
-        # The backend applies the user's consent to the assistant's reads: preferably from a
-        # delegated token; the self-declared header remains for the transition only.
+        # Backend áp consent của người dùng lên các lần đọc của trợ lý: ưu tiên từ token
+        # uỷ quyền; header tự khai báo chỉ còn cho giai đoạn chuyển tiếp.
         delegated = await self.delegated_token(token)
         headers = {'Authorization': 'Bearer ' + (delegated or token), 'X-HercFit-Client': 'agent'}
         if key:
@@ -85,7 +85,7 @@ class BackendClient:
                     await asyncio.sleep(.1 * 2**attempt)
                     continue
                 if response.is_error:
-                    # Preserve structured field errors, never request headers/tokens.
+                    # Giữ lỗi theo trường có cấu trúc, không bao giờ giữ header/token của request.
                     try:
                         detail = response.json().get('detail', 'Backend request failed')
                     except ValueError:

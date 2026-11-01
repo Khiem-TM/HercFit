@@ -1,1 +1,1 @@
-"""Wellbeing and reproductive health logs (symptoms, mood, menstrual periods, ovulation tests)."""
+"""Nhật ký sức khoẻ tinh thần và sinh sản (triệu chứng, tâm trạng, kỳ kinh, que thử rụng trứng)."""

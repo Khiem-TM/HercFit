@@ -8,7 +8,7 @@ const items = computed(() => (props.training.items || []) as Record<string, any>
 const volume = computed(() => items.value.reduce((sum, item) => sum + (num(item.volume_kg) ?? 0), 0))
 const distance = computed(() => items.value.reduce((sum, item) => sum + (num(item.distance_meters) ?? 0), 0))
 
-// Session duration when given, otherwise the sum of item durations (moving time for runs).
+// Thời lượng buổi tập khi có, nếu không thì tổng thời lượng các mục (thời gian di chuyển với buổi chạy).
 const duration = computed(() => num(props.training.duration_seconds)
   ?? (items.value.reduce((sum, item) => sum + (num(item.duration_seconds) ?? 0), 0) || null))
 
@@ -21,7 +21,7 @@ const metrics = computed(() => [
   { label: 'Năng lượng', value: num(props.training.energy_kcal) === null ? 'chưa rõ' : `~${fmt(props.training.energy_kcal)} kcal` },
 ])
 
-// Lap bar: 300 s/km (5:00) fills the track, 450 s/km (7:30) is nearly empty.
+// Thanh vòng chạy: 300 s/km (5:00) lấp đầy, 450 s/km (7:30) gần như trống.
 function lapWidth(lap: Record<string, any>): string {
   const seconds = (num(lap.duration_seconds) ?? 0) * 1000 / (num(lap.distance_meters) || 1)
   return `${Math.round(Math.min(1, Math.max(0.08, (450 - seconds) / 150)) * 100)}%`
@@ -50,7 +50,7 @@ const iconFor = (item: Record<string, any>) => item.kind === 'ENDURANCE' ? 'run'
         </div>
       </div>
 
-      <!-- Strength: set table and server-computed metrics -->
+      <!-- Sức mạnh: bảng set và chỉ số do server tính -->
       <template v-if="item.kind === 'STRENGTH'">
         <table class="mt-3 w-full text-xs">
           <caption class="sr-only">Các set của {{ item.exercise_snapshot?.name_vi }}</caption>
@@ -78,7 +78,7 @@ const iconFor = (item: Record<string, any>) => item.kind === 'ENDURANCE' ? 'run'
         </p>
       </template>
 
-      <!-- Endurance: headline stats and laps -->
+      <!-- Sức bền: chỉ số chính và các vòng -->
       <template v-else-if="item.kind === 'ENDURANCE'">
         <dl class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div class="rounded-lg bg-ink/[0.04] px-3 py-2"><dt class="text-[11px] text-on-surface-variant">Quãng đường</dt><dd class="font-headline-md text-lg text-primary">{{ fmt(num(item.performance?.distance_meters)! / 1000, 2) }}<span class="text-xs text-on-surface-variant"> km</span></dd></div>
@@ -98,7 +98,7 @@ const iconFor = (item: Record<string, any>) => item.kind === 'ENDURANCE' ? 'run'
         </ol>
       </template>
 
-      <!-- General sport -->
+      <!-- Môn thể thao chung -->
       <p v-else class="mt-3 text-xs text-on-surface-variant">
         {{ minutes(item.performance?.duration_seconds) }} · cường độ {{ INTENSITY[item.performance?.intensity] || item.performance?.intensity }}
         <template v-if="item.performance?.rpe"> · RPE {{ item.performance.rpe }}</template>

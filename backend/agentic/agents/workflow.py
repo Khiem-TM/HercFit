@@ -35,7 +35,7 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         current={**state,**update}
         routed=fast_route(current) if fast_reads_enabled(settings) and assess(latest_request(current)) is None else None
         if routed:
-            # Standalone read matched a strict template: no routing or tool-selection model call.
+            # Lệnh đọc độc lập khớp một mẫu chặt chẽ: không gọi model định tuyến hay chọn tool.
             decision,plan=routed
             annotate(fast_route=plan.template_id)
             return {**update,'decision':decision,'status':'running','fast_read_plan':plan.model_dump(mode='json'),
@@ -44,14 +44,14 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         if (assess(latest_request(current)) is None and food_suggestion.is_food_suggestion(latest_request(current))
                 and not current.get('tool_outputs') and not current.get('pending_action')
                 and (state.get('turn') or {}).get('run_id') != state.get('run_id')):
-            # Standalone meal suggestion: one read-only catalog lookup, no routing model call.
+            # Gợi ý bữa ăn độc lập: một lần tra catalog chỉ đọc, không gọi model định tuyến.
             decision=food_suggestion.lookup_decision()
             annotate(route='food_suggestion')
             return {**update,'decision':decision,'status':'running','fast_read_plan':None,'fast_read_complete':False,
                     'turn':{'run_id':state.get('run_id'),'intent':decision['intent'],'domain':decision['domain'],
                             'action':decision['action']}}
         if current.get('user_context_run_id')!=current.get('run_id'):
-            # Once per run: what HercFit already knows about the user, so the router reads instead of asking.
+            # Một lần mỗi lượt chạy: những gì HercFit đã biết về người dùng, để router đọc thay vì hỏi.
             ctx=request_context.get(None)
             card=await personal_context.load_card(ctx.backend,ctx.token) if ctx else None
             update={**update,'user_context':card,'user_context_run_id':current.get('run_id')}
@@ -59,15 +59,15 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         result=await orchestrator.decide(current)
         current.update(result)
         decision=result.get('decision') or {}
-        # The wording may name no graph domain ("pace 5K của tôi"): read the router's domain and
-        # personal topic now, so answer, context and research see the card, not only tool calls.
-        # Domains this step already tried are left to later steps (a timeout is not retried here).
+        # Cách diễn đạt có thể không gọi tên miền graph nào ("pace 5K của tôi"): đọc ngay miền của router và
+        # chủ đề cá nhân, để câu trả lời, ngữ cảnh và tra cứu thấy được thẻ, không chỉ các lời gọi tool.
+        # Các miền bước này đã thử được để lại cho các bước sau (timeout không được thử lại ở đây).
         missed=[d for d in decision_domains(decision) if d not in hinted]
         if missed:
             update={**update,**await retrieve_graph_context(current,missed,settings=settings,graph_context=graph_context)}
             current.update(update)
         if (state.get('turn') or {}).get('run_id')!=state.get('run_id') and decision:
-            # The first routing decision names the turn; later ones only continue it.
+            # Quyết định định tuyến đầu tiên đặt tên cho lượt; các quyết định sau chỉ tiếp nối nó.
             result['turn']={'run_id':state.get('run_id'),'intent':decision.get('intent'),
                             'domain':decision.get('domain'),'action':decision.get('action')}
         plan=None
@@ -83,8 +83,8 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
 
     async def answer(state):
         if state.get('model_auth_failed'):
-            # The answer model shares these credentials. Another request cannot
-            # recover a 401 and would hide the original failure with a second one.
+            # Model trả lời dùng chung thông tin xác thực này. Một request khác không thể
+            # khắc phục lỗi 401 và sẽ che lỗi gốc bằng lỗi thứ hai.
             from langchain_core.messages import AIMessage
             reply = state['error']
             return {'reply':reply,'status':'failed',
@@ -121,7 +121,7 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
             result['decision']={**state['decision'],'action':'answer','next_agent':'orchestrator',
                                 'instruction':fast_answer_instruction(plan)}
         elif food_suggestion.lookup_completed(current, result):
-            # The catalog lookup is the whole read: answer from it (reuses the fast-read edge).
+            # Lần tra catalog là toàn bộ việc đọc: trả lời từ đó (dùng lại cạnh đọc nhanh).
             result.update(status='running', fast_read_complete=True,
                           decision={**state['decision'],'action':'answer','next_agent':'orchestrator',
                                     'instruction':food_suggestion.ANSWER_INSTRUCTION})
@@ -133,7 +133,7 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         reads=personal_context.deep_reads(topic)
         inventory=(state.get('user_context') or {}).get('inventory') or {}
         if not inventory.get('health_shared_with_assistant'):
-            # Device data only with the user's consent (the backend enforces it too).
+            # Dữ liệu thiết bị chỉ khi người dùng đồng ý (backend cũng kiểm tra điều này).
             reads=[(name,args) for name,args in reads if not name.startswith(('get_health','list_'))]
         result=await tool.read_context(state,reads) if reads else {}
         outputs={o['tool']:o for o in result.get('tool_outputs',[])}
@@ -156,22 +156,22 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
     def after_orchestrator(s):
         decision=s['decision']
         if decision.get('personalize') and not s.get('personal_reads_done') and decision['action'] in {'research','answer'}:
-            return 'context'  # the user's data before research or the answer
+            return 'context'  # dữ liệu của người dùng trước bước tra cứu hoặc trả lời
         return decision['action'] if decision['action'] in {'tool','research'} else 'answer'
     graph.add_conditional_edges('orchestrator',after_orchestrator,
                                 {'tool':'tool','research':'research','answer':'answer','context':'context'})
     graph.add_conditional_edges('context',lambda s:'research' if s['decision']['action']=='research' else 'answer',
                                 {'research':'research','answer':'answer'})
-    # A code-owned reply (what a confirmed write saved) ends the turn without another routing call.
+    # Câu trả lời do code viết (những gì lệnh ghi đã xác nhận đã lưu) kết thúc lượt mà không gọi định tuyến thêm.
     graph.add_conditional_edges('tool',lambda s:'confirmation' if s.get('pending_action') else
         ('tool' if continue_catalog_lookup(s) else
          ('answer' if s.get('status')=='running' and (s.get('prepared_reply') or (
              s.get('fast_read_complete') and s.get('decision',{}).get('action')=='answer')) else 'orchestrator')))
-    # A personalized answer is written from the user's data and the research evidence, whatever research found.
+    # Câu trả lời cá nhân hoá được viết từ dữ liệu của người dùng và bằng chứng tra cứu, dù tra cứu tìm được gì.
     graph.add_conditional_edges('research',lambda s:'answer' if (s.get('decision') or {}).get('personalize') or s.get('research_answer')
                                 or s.get('prepared_reply') or s.get('status') in {'needs_input','failed'} else 'orchestrator')
     graph.add_conditional_edges('confirmation',lambda s:'execute' if s.get('approved') else END)
-    # A finalize rejected with 409 comes back as a fresh preview that needs its own confirmation.
+    # Lệnh finalize bị từ chối với 409 quay lại dưới dạng bản xem trước mới cần được xác nhận riêng.
     graph.add_conditional_edges('execute',lambda s:'confirmation' if s.get('status')=='pending_confirmation' else 'orchestrator')
     graph.add_edge('answer',END)
     return graph.compile(checkpointer=saver)

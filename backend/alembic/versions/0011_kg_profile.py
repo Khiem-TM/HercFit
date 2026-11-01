@@ -1,4 +1,4 @@
-"""Project users.age and the validated training profile onto the graph User."""
+"""Chiếu users.age và hồ sơ tập luyện đã kiểm tra lên node User của graph."""
 from alembic import op
 
 from core.graph_outbox import installation_statements
@@ -12,7 +12,7 @@ depends_on = None
 def upgrade():
     for statement in installation_statements():
         op.execute(statement)
-    # Publish current profiles once; later edits are captured by the trigger.
+    # Phát hồ sơ hiện tại một lần; các lần sửa sau được trigger ghi nhận.
     op.execute("SELECT kg_publish_backend('User', to_jsonb(u)) FROM users u")
 
 

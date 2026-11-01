@@ -1,4 +1,4 @@
-"""The same atomic snapshot use cases serve meals and trainings."""
+"""Cùng các use case ảnh chụp nguyên tử phục vụ bữa ăn và buổi tập."""
 
 from domains.shared.services.common import UserService, require_found
 

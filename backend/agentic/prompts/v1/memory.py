@@ -1,4 +1,4 @@
-"""Version 1: unchanged application-owned instructions."""
+"""Phiên bản 1: hướng dẫn do ứng dụng sở hữu, không thay đổi."""
 
 SUMMARY_PROMPT = """Bạn cập nhật BỘ NHỚ PHIÊN cho trợ lý HercFit.
 Gộp tóm tắt cũ với các lượt hội thoại mới thành một bản tóm tắt tiếng Việt, gạch đầu dòng, tối đa {limit} ký tự.

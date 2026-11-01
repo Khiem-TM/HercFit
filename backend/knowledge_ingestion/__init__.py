@@ -1,1 +1,1 @@
-"""Local operator tools for curated RAG document ingestion."""
+"""Công cụ vận hành cục bộ để tiếp nhận tài liệu RAG đã tuyển chọn."""

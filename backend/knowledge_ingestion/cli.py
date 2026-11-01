@@ -1,4 +1,4 @@
-"""RAG knowledge-base operator CLI. Run from backend/: python -m knowledge_ingestion.cli --help"""
+"""CLI vận hành cơ sở tri thức RAG. Chạy từ backend/: python -m knowledge_ingestion.cli --help"""
 import argparse
 import asyncio
 import json
@@ -22,7 +22,7 @@ def emit(value):
 
 async def main(args):
     cfg = settings()
-    # Preparation/validation never open a DB connection and never send book text to an API.
+    # Chuẩn bị/kiểm tra không bao giờ mở kết nối DB và không bao giờ gửi nội dung sách tới API.
     if args.command == 'fetch-tokenizer':
         emit({'tokenizer_path': str(fetch_tokenizer(cfg.KNOWLEDGE_TOKENIZER_PATH))})
         return

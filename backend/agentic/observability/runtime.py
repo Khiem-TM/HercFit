@@ -1,7 +1,7 @@
-"""Request correlation without exporting traces or storing request content.
+"""Liên kết request mà không xuất trace hay lưu nội dung request.
 
-Keep this interface available in clean checkouts and deployment images. Business
-token/cost accounting belongs to agentic.observability.telemetry independently.
+Giữ interface này có sẵn trong bản checkout sạch và image triển khai. Việc tính
+token/chi phí nghiệp vụ thuộc về agentic.observability.telemetry một cách độc lập.
 """
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -53,8 +53,8 @@ class Observer:
         state = state or Observation(self)
         mark = current.set(state)
         try:
-            # Also suppress SDK auto-tracing when inherited environment flags
-            # are enabled. Production never activates the local exporter.
+            # Cũng tắt tự động tracing của SDK khi cờ môi trường kế thừa
+            # đang bật. Production không bao giờ kích hoạt exporter cục bộ.
             with tracing_context(enabled=False):
                 yield state
         finally:

@@ -1,16 +1,16 @@
-"""Consent for the assistant to use health data: one decision for every read path.
+"""Consent cho trợ lý dùng dữ liệu sức khoẻ: một quyết định cho mọi đường đọc.
 
-* `load(session, user_id)` returns the current decision and its version.
-* `grant` / `revoke` write user_consents + consent_events in the caller's
-  transaction. The database trigger republishes device data to the knowledge
-  graph (upsert or tombstone) in the same transaction, and a `consent.changed`
-  domain event lets other stores (context snapshots, the agent's memory) purge.
-* `device_access(session, user_id)` answers "may the current principal read
-  device-measured data?": the user always may; the assistant only with consent.
+* `load(session, user_id)` trả về quyết định hiện tại và phiên bản của nó.
+* `grant` / `revoke` ghi user_consents + consent_events trong transaction của
+  bên gọi. Trigger database phát lại dữ liệu thiết bị lên knowledge
+  graph (upsert hoặc tombstone) trong cùng transaction, và sự kiện miền
+  `consent.changed` để các kho khác (ảnh chụp ngữ cảnh, bộ nhớ của agent) dọn dữ liệu.
+* `device_access(session, user_id)` trả lời "principal hiện tại có được đọc
+  dữ liệu đo bởi thiết bị không?": người dùng luôn được; trợ lý chỉ khi có consent.
 
-Data groups: `device` (wearable/provider measurements and anything derived from
-them) and `sensitive` (ECG/IRN, glucose, symptoms, mood, reproductive logs),
-which needs its own, separate consent.
+Nhóm dữ liệu: `device` (số đo từ thiết bị đeo/nhà cung cấp và mọi thứ suy ra từ
+chúng) và `sensitive` (ECG/IRN, đường huyết, triệu chứng, tâm trạng, nhật ký sinh sản),
+nhóm này cần consent riêng, tách biệt.
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ async def load(session: AsyncSession, user_id: UUID) -> ConsentState:
 
 
 async def _set(session: AsyncSession, user_id: UUID, data_group: str, granted: bool, actor: str) -> ConsentState:
-    # Serialize consent changes per user so versions stay strictly increasing.
+    # Tuần tự hoá thay đổi consent theo từng người dùng để phiên bản luôn tăng nghiêm ngặt.
     await session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
                           {"key": f"consent:{user_id}"})
     state = await load(session, user_id)
@@ -67,7 +67,7 @@ async def _set(session: AsyncSession, user_id: UUID, data_group: str, granted: b
     session.add(ConsentEvent(user_id=user_id, purpose=PURPOSE, data_group=data_group, granted=granted,
                              version=version, policy_version=POLICY_VERSION, actor=actor))
     await session.flush()
-    # Contexts built under the previous decision must never be served again.
+    # Ngữ cảnh dựng theo quyết định trước đó không bao giờ được phục vụ lại.
     await session.execute(text("DELETE FROM context_snapshots WHERE user_id = :u"), {"u": user_id})
     from domains.shared.events import publish
     await publish(session, "consent.changed", user_id,
@@ -88,7 +88,7 @@ async def set_device(session: AsyncSession, user_id: UUID, allowed: bool, *, act
 
 
 async def device_access(session: AsyncSession, user_id: UUID, data_group: str = "device") -> bool:
-    """May the current principal read device-measured data of this user?"""
+    """Principal hiện tại có được đọc dữ liệu đo bởi thiết bị của người dùng này không?"""
     if not principals.is_agent():
         return True
     return (await load(session, user_id)).allows(data_group)

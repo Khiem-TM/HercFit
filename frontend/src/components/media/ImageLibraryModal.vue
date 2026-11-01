@@ -41,7 +41,7 @@ watch(kind, async (value, _, onCleanup) => {
   selectedId.value = ''
   cover.value = null
   try {
-    // Fetch all pages so older records remain selectable.
+    // Tải mọi trang để các bản ghi cũ hơn vẫn chọn được.
     const all: RecordItem[] = []
     for (let offset = 0; ; offset += 200) {
       const scope = value === 'foods' || value === 'exercises' ? '&source_type=CUSTOM' : ''

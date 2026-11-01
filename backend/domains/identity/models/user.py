@@ -66,15 +66,15 @@ class User(BaseModel):
         nullable=False,
     )
 
-    # Stable personal information. Measurements and goals have their own history.
+    # Thông tin cá nhân ổn định. Số đo và mục tiêu có lịch sử riêng.
     age: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Optional biological sex, an input of BMR equations only.
+    # Giới tính sinh học tuỳ chọn, chỉ là đầu vào của các phương trình BMR.
     sex: Mapped[str | None] = mapped_column(String(10), nullable=True)
     personal_info: Mapped[dict[str, Any]] = mapped_column(
         JSONB(none_as_null=True), default=dict, server_default=text("'{}'::jsonb"), nullable=False,
     )
 
-    # Relationships
+    # Quan hệ
     body_metrics: Mapped[list[BodyMetric]] = relationship(
         "BodyMetric",
         back_populates="user",
@@ -165,7 +165,7 @@ class User(BaseModel):
     async def update_personal_info(
         cls, session: AsyncSession, user_id: uuid.UUID, values: Mapping[str, Any],
     ) -> User | None:
-        """Merge top-level groups, replacing each supplied group's entire value."""
+        """Gộp các nhóm cấp cao nhất, thay toàn bộ giá trị của từng nhóm được truyền."""
         values = JsonObjectInput.model_validate(values).root
         user = await try_lock_user(session, user_id)
         if user is None:
@@ -192,7 +192,7 @@ class User(BaseModel):
 
     @classmethod
     async def deactivate_profile(cls, session: AsyncSession, user_id: uuid.UUID) -> User | None:
-        """Soft-delete the account and revoke refresh sessions in the same transaction."""
+        """Xoá mềm tài khoản và thu hồi các phiên refresh trong cùng transaction."""
         from domains.identity.models.auth_session import AuthSession
 
         user = await try_lock_user(session, user_id)
@@ -213,11 +213,11 @@ class User(BaseModel):
         user_id: uuid.UUID,
         values: OnboardingInput | Mapping[str, Any],
     ) -> User | None:
-        """Save profile, optional initial measurement and goal in one savepoint.
+        """Lưu hồ sơ, số đo ban đầu (tuỳ chọn) và mục tiêu trong một savepoint.
 
-        body_metric and goal accept their corresponding scoped creation payloads.
-        goal requires title/start_date and can include free-form context and targets.
-        The caller still owns the outer transaction and must commit on success.
+        body_metric và goal nhận payload tạo có phạm vi tương ứng.
+        goal cần title/start_date và có thể kèm ngữ cảnh và chỉ tiêu tự do.
+        Bên gọi vẫn sở hữu transaction bên ngoài và phải commit khi thành công.
         """
         from domains.body.models.body_metrics import BodyMetric
         from domains.goals_plans.models.goal import Goal

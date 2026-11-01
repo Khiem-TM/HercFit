@@ -25,10 +25,10 @@ from domains.catalog.schemas.foods import FoodCreate, FoodQuery, FoodUpdate, Sys
 if TYPE_CHECKING:
     from domains.identity.models.user import User
 
-# Ranking by protein density skips seasonings and fats: fish sauce is protein-dense but not a meal.
+# Xếp hạng theo mật độ protein bỏ qua gia vị và chất béo: nước mắm giàu protein nhưng không phải bữa ăn.
 NON_MEAL_CATEGORIES = ("Gia vị, nước chấm", "Dầu, mỡ, bơ")
 MIN_DENSITY_ENERGY_KCAL = 20
-# catalog_search.score: 25 needs every query word in the name (unaccented) plus the same head word.
+# catalog_search.score: 25 đòi mọi từ của truy vấn có trong tên (không dấu) cùng với cùng từ đầu.
 MIN_DENSITY_RELEVANCE = 25
 _FOOD_ALIASES = table("foods_aliases", column("entity_id"), column("normalized_alias"))
 
@@ -103,8 +103,8 @@ class FoodItem(CatalogMixin, BaseModel):
     )
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_public_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Household measures ([{label, quantity, unit, source}]) and, for PORTION
-    # foods, the gram weight of one serving when the source publishes it.
+    # Đơn vị đo gia dụng ([{label, quantity, unit, source}]) và, với thực phẩm
+    # PORTION, khối lượng gam của một khẩu phần khi nguồn công bố.
     portions: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB(none_as_null=True), default=list, server_default=text("'[]'::jsonb"), nullable=False,
     )
@@ -119,12 +119,12 @@ class FoodItem(CatalogMixin, BaseModel):
 
     @classmethod
     def _protein_density_scope(cls, query: Select) -> Select:
-        """Records that can be ranked by protein per kcal without misleading anyone."""
+        """Các bản ghi có thể xếp hạng theo protein trên kcal mà không gây hiểu lầm."""
         macro_energy = 4 * cls.protein_g + 4 * cls.carbohydrate_g + 9 * cls.fat_g
         return query.where(
             cls.energy_kcal >= MIN_DENSITY_ENERGY_KCAL,
             cls.protein_g > 0,
-            # Protein alone cannot carry more energy than the whole food (data-entry errors).
+            # Riêng protein không thể mang nhiều năng lượng hơn cả thực phẩm (lỗi nhập liệu).
             4 * cls.protein_g <= cls.energy_kcal * 1.2,
             or_(cls.carbohydrate_g.is_(None), cls.fat_g.is_(None),
                 func.abs(macro_energy - cls.energy_kcal) <= cls.energy_kcal * 0.5),
@@ -149,7 +149,7 @@ class FoodItem(CatalogMixin, BaseModel):
             query = query.where(cls.item_type == options.item_type)
         if not options.names:
             return await cls._ranked(session, query, options.search, options.sort, options.offset, options.limit)
-        # Several names in one call (meal suggestions): the best matches of each, in request order.
+        # Nhiều tên trong một lần gọi (gợi ý bữa ăn): kết quả khớp tốt nhất của từng tên, theo thứ tự yêu cầu.
         per_name = max(1, options.limit // len(options.names))
         seen, results = set(), []
         for name in options.names:
@@ -184,7 +184,7 @@ class FoodItem(CatalogMixin, BaseModel):
                          for index, food in enumerate(rows)), key=lambda row: (-row[0], row[1]))
         if sort != "protein_density":
             return [food for _score, _index, food in scored][offset: offset + limit]
-        # Relevant matches first (a whole-word match at least), then the most protein per kcal among them.
+        # Kết quả liên quan đứng trước (ít nhất khớp nguyên từ), rồi trong số đó lấy nhiều protein trên kcal nhất.
         pool = [food for value, _index, food in scored if value >= MIN_DENSITY_RELEVANCE][:max(3 * limit, 10)]
         pool.sort(key=lambda food: float(food.protein_g) / float(food.energy_kcal), reverse=True)
         return pool[offset: offset + limit]

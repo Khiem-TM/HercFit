@@ -1,13 +1,13 @@
-"""What happens after a job fails, by error class.
+"""Điều gì xảy ra sau khi một job thất bại, theo lớp lỗi.
 
-TRANSIENT   network, 5xx, lost lease: retry with full-jitter backoff (5 s .. 30 min)
-RATE_LIMIT  429 or local quota: retry after Retry-After (or backoff)
-PERMISSION  scope missing or revoked: stop, no retry, cursor stays (NOT_GRANTED)
-REAUTH      refresh token dead: connection NEEDS_REAUTH, its jobs pause
-SCHEMA      request or payload rejected: needs a code or contract fix
-UNSUPPORTED type or resource not available for this user or version
-BUG         unexpected exception: retried, then needs attention
-A job that exhausts max_attempts goes to NEEDS_ATTENTION.
+TRANSIENT   mạng, 5xx, mất lease: thử lại với backoff full-jitter (5 s .. 30 phút)
+RATE_LIMIT  429 hoặc quota cục bộ: thử lại sau Retry-After (hoặc backoff)
+PERMISSION  thiếu hoặc bị thu hồi scope: dừng, không thử lại, cursor giữ nguyên (NOT_GRANTED)
+REAUTH      refresh token đã chết: kết nối NEEDS_REAUTH, các job của nó tạm dừng
+SCHEMA      request hoặc payload bị từ chối: cần sửa code hoặc hợp đồng
+UNSUPPORTED loại hoặc tài nguyên không có cho người dùng hay phiên bản này
+BUG         exception bất ngờ: thử lại, rồi chuyển sang cần xử lý
+Job dùng hết max_attempts chuyển sang NEEDS_ATTENTION.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def backoff(attempt: int, *, jitter=random.uniform) -> timedelta:
 
 def decide(error_class: str, attempt: int, max_attempts: int, retry_after: float | None = None, *,
            jitter=random.uniform) -> tuple[str, timedelta | None]:
-    """("RETRY", delay) or ("NEEDS_ATTENTION", None) or ("STOP", None)."""
+    """("RETRY", delay) hoặc ("NEEDS_ATTENTION", None) hoặc ("STOP", None)."""
     if error_class in ("PERMISSION", "UNSUPPORTED"):
         return "STOP", None
     if error_class in ("REAUTH", "SCHEMA"):

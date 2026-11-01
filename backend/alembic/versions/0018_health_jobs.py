@@ -1,15 +1,15 @@
-"""Health platform M3a: durable jobs, operations, webhook inbox, per-type cursors and quotas.
+"""Nền tảng sức khoẻ M3a: job bền vững, operation, hộp thư webhook, cursor theo loại và quota.
 
-* jobs: PostgreSQL work queue. Claims use FOR UPDATE SKIP LOCKED and bump a
-  per-job lease_epoch (fencing token); one RUNNING ingest job per (connection,
-  data type); dedupe keys collapse duplicate requests while a job is pending.
-* operations: what a user-visible command (Sync, export, history export)
-  started; GET /api/v2/operations/{id} reports its jobs' outcome.
-* webhook_inbox: every verified notification message, stored before the
-  endpoint answers 204; duplicates collapse on the message hash.
-* sync_cursors: per connection, data type and source family; advances only
-  after a window was read completely and stored.
-* rate_buckets: token buckets for Google quotas (per user and per project).
+* jobs: hàng đợi công việc PostgreSQL. Lấy job dùng FOR UPDATE SKIP LOCKED và tăng
+  lease_epoch của từng job (fencing token); mỗi (kết nối, loại dữ liệu) chỉ một job
+  nhập RUNNING; dedupe key gộp các yêu cầu trùng khi job còn đang chờ.
+* operations: những gì một lệnh hiển thị với người dùng (Sync, xuất, xuất lịch sử)
+  đã khởi chạy; GET /api/v2/operations/{id} báo kết quả các job của nó.
+* webhook_inbox: mọi thông báo đã kiểm chứng, lưu trước khi
+  endpoint trả 204; bản trùng gộp theo băm của thông báo.
+* sync_cursors: theo kết nối, loại dữ liệu và họ nguồn; chỉ tiến lên
+  sau khi một cửa sổ đã được đọc trọn vẹn và lưu.
+* rate_buckets: token bucket cho quota của Google (theo người dùng và theo project).
 """
 from alembic import op
 

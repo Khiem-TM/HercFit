@@ -71,16 +71,16 @@ export interface KnowledgeProfile {
 
 export type HubCounts = Partial<Record<KnowledgeHub, number>>
 
-/** Inclusive local days the map was drawn for, clamped by the server to the retained history. */
+/** Các ngày địa phương (tính cả hai đầu) mà bản đồ được vẽ, đã được server kẹp vào lịch sử còn lưu. */
 export interface KnowledgeWindow {
   start: string
   end: string
   min: string
   max: string
-  /** At most this many records of each kind are drawn; `totals` counts all of them in the window. */
+  /** Mỗi loại bản ghi chỉ vẽ tối đa chừng này; `totals` đếm tất cả trong cửa sổ. */
   limit: number
   totals: Partial<Record<'BodyMetric' | 'Meal' | 'Training', number>>
-  /** Activity per local day over the whole retained history; quiet days are absent. */
+  /** Hoạt động theo ngày địa phương trên toàn bộ lịch sử còn lưu; ngày yên ắng không có mặt. */
   density: Record<string, HubCounts>
 }
 
@@ -102,7 +102,7 @@ export const emptyKnowledgeGraph = (status = 'loading'): KnowledgeGraph => ({
   status, lag_ms: null, profile: null, insights: [], intents: [], nodes: [], edges: [], timeline: [],
 })
 
-/** `color` is drawn on dark surfaces (and on the star map, which stays a night sky); `light` reads on paper. */
+/** `color` vẽ trên nền tối (và trên bản đồ sao, vốn luôn là bầu trời đêm); `light` đọc được trên nền giấy. */
 export const hubTheme: Record<KnowledgeHub, { label: string; color: string; light: string }> = {
   goal: { label: 'Mục tiêu', color: '#d4b77d', light: '#87671a' },
   body: { label: 'Cơ thể', color: '#8fc3d4', light: '#367689' },
@@ -120,13 +120,13 @@ export const kindLabels: Record<string, string> = {
   Exercise: 'Bài tập', Intent: 'Ý định hội thoại', Run: 'Lượt hội thoại',
 }
 
-/** Theme-aware CSS colour (light-dark()) for styles; no hub means the user's own root. */
+/** Màu CSS theo theme (light-dark()) cho style; không có hub nghĩa là gốc của chính người dùng. */
 export function hubColor(hub: string | null | undefined): string {
   const theme = hub && hub in hubTheme ? hubTheme[hub as KnowledgeHub] : { color: ROOT_COLOR, light: ROOT_LIGHT }
   return `light-dark(${theme.light}, ${theme.color})`
 }
 
-/** Plain colour for the star map (canvas cannot resolve light-dark()); the map is a night sky in both themes. */
+/** Màu thường cho bản đồ sao (canvas không giải được light-dark()); bản đồ là bầu trời đêm ở cả hai theme. */
 export function skyColor(hub: string | null | undefined): string {
   return hub && hub in hubTheme ? hubTheme[hub as KnowledgeHub].color : ROOT_COLOR
 }

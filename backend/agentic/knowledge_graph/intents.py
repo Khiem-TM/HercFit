@@ -1,11 +1,11 @@
-"""Conversation intent taxonomy shared by the agent journal and the graph.
+"""Hệ phân loại ý định hội thoại dùng chung cho nhật ký agent và graph.
 
-Intents are derived from structured routing facts (domain, write, research),
-never from message, reply or free-form model text, so they are safe to keep
-as long-lived personal knowledge.
+Ý định được suy ra từ dữ kiện định tuyến có cấu trúc (miền, lệnh ghi, tra cứu),
+không bao giờ từ tin nhắn, câu trả lời hay văn bản tự do của model, nên giữ
+lâu dài như tri thức cá nhân là an toàn.
 """
 
-# name: (Vietnamese label, hub)
+# tên: (nhãn tiếng Việt, hub)
 INTENTS = {
     'LOG_MEAL': ('Ghi bữa ăn', 'nutrition'),
     'REVIEW_NUTRITION': ('Xem dinh dưỡng', 'nutrition'),
@@ -26,12 +26,12 @@ INTENTS = {
     'PROGRESS': ('Xem tiến độ', 'goal'),
     'REVIEW_PROFILE': ('Xem hồ sơ', 'profile'),
     'UPDATE_PROFILE': ('Cập nhật hồ sơ', 'profile'),
-    # Turns journaled before profile reads and writes were told apart.
+    # Các lượt được ghi nhật ký trước khi phân biệt lệnh đọc và ghi hồ sơ.
     'PROFILE': ('Hồ sơ cá nhân', 'profile'),
     'KNOWLEDGE': ('Hỏi kiến thức', 'knowledge'),
     'CHAT': ('Trò chuyện', 'chat'),
 }
-# domain: (intent when the turn wrote or requested a write, intent otherwise)
+# miền: (ý định khi lượt có ghi hoặc yêu cầu ghi, ý định trong trường hợp còn lại)
 DOMAIN_INTENTS = {
     'meals': ('LOG_MEAL', 'REVIEW_NUTRITION'), 'foods': ('FOOD_KNOWLEDGE', 'FOOD_KNOWLEDGE'),
     'trainings': ('LOG_TRAINING', 'REVIEW_TRAINING'), 'exercises': ('EXERCISE_KNOWLEDGE', 'EXERCISE_KNOWLEDGE'),
@@ -40,19 +40,19 @@ DOMAIN_INTENTS = {
     'progress': ('PROGRESS', 'PROGRESS'), 'profile': ('UPDATE_PROFILE', 'REVIEW_PROFILE'),
     'health': ('REVIEW_ACTIVITY', 'REVIEW_ACTIVITY'),
 }
-# Router labels requested by the research v2 prompt.
+# Nhãn router do prompt tra cứu v2 yêu cầu.
 MODEL_INTENTS = {
     'LOG_FOOD': 'LOG_MEAL', 'LOG_EXERCISE': 'LOG_TRAINING', 'FOOD_KNOWLEDGE_QA': 'FOOD_KNOWLEDGE',
     'SPORTS_KNOWLEDGE_QA': 'EXERCISE_KNOWLEDGE', 'EXERCISE_TECHNIQUE_QA': 'EXERCISE_KNOWLEDGE',
     'TRAINING_PLAN': 'TRAINING_PLAN', 'DEEP_RESEARCH': 'KNOWLEDGE', 'GENERAL_CHAT': 'CHAT',
-    # Body and profile labels requested by the routing prompt (v2).
+    # Nhãn cơ thể và hồ sơ do prompt định tuyến (v2) yêu cầu.
     'BODY_REVIEW': 'REVIEW_BODY', 'ACTIVITY_REVIEW': 'REVIEW_ACTIVITY', 'SLEEP_REVIEW': 'REVIEW_SLEEP',
     'RECOVERY_REVIEW': 'REVIEW_RECOVERY', 'ENERGY_BALANCE': 'ENERGY_BALANCE',
     'PROFILE_REVIEW': 'REVIEW_PROFILE', 'PROFILE_UPDATE': 'UPDATE_PROFILE',
 }
 TRAINING_DOMAINS = {'trainings', 'exercises', 'coaching'}
-# A finer router label wins over the domain default when both describe the body or
-# the profile, e.g. a health turn about sleep is REVIEW_SLEEP, not REVIEW_ACTIVITY.
+# Nhãn router chi tiết hơn được ưu tiên hơn mặc định của miền khi cả hai đều mô tả cơ thể hoặc
+# hồ sơ, ví dụ một lượt sức khoẻ về giấc ngủ là REVIEW_SLEEP, không phải REVIEW_ACTIVITY.
 REFINED_DOMAINS = {'health', 'metrics', 'profile', 'progress'}
 REFINABLE = {'body', 'profile'}
 
@@ -60,7 +60,7 @@ REFINABLE = {'body', 'profile'}
 def classify(domain=None, model_intent=None, *, wrote=False, researched=False):
     mapped = MODEL_INTENTS.get(str(model_intent or '').strip().upper())
     if researched and not wrote:
-        # A public-knowledge answer about a personal domain is still a question.
+        # Câu trả lời tri thức công khai về một miền cá nhân vẫn là một câu hỏi.
         if domain in {'meals', 'foods'}:
             return 'FOOD_KNOWLEDGE'
         if domain in TRAINING_DOMAINS:

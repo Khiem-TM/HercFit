@@ -21,7 +21,7 @@ const KINDS: { key: HealthLogKind; label: string }[] = [
   { key: 'hydration', label: 'Nước uống' }, { key: 'mood', label: 'Tâm trạng' }, { key: 'symptoms', label: 'Triệu chứng' },
   { key: 'menstrual-period', label: 'Kỳ kinh' }, { key: 'ovulation-test', label: 'Que thử rụng trứng' },
 ]
-// Values from the Google Health `moods` enum (backend validates the full list).
+// Giá trị từ enum `moods` của Google Health (backend kiểm tra toàn bộ danh sách).
 const MOODS: Record<string, string> = { HAPPY: 'Vui', CALM: 'Bình tĩnh', STRESSED: 'Căng thẳng', ANXIOUS: 'Lo âu',
   SAD: 'Buồn', ENERGIZED: 'Tràn năng lượng', FATIGUED: 'Mệt mỏi' }
 const MOOD_OPTIONS = Object.entries(MOODS)
@@ -34,7 +34,7 @@ function zoned(date: string): string {
   return new Date(`${date}T08:00:00`).toISOString()
 }
 
-/** Payload sent for the selected kind (exported in tests). */
+/** Payload gửi cho loại đang chọn (được export cho test). */
 function payload(): Record<string, unknown> {
   switch (kind.value) {
     case 'hydration': return { amount_ml: amount.value }

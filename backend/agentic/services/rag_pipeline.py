@@ -1,7 +1,7 @@
-"""Bounded graph retrieval stage; ResearchV2 composes the document RAG stages.
+"""Giai đoạn truy hồi graph có giới hạn; ResearchV2 kết hợp các giai đoạn RAG trên tài liệu.
 
-Knowledge graph outages degrade to the existing backend/model path. No retrieval
-result can authorize tools or change the authenticated request identity.
+Sự cố knowledge graph hạ xuống đường backend/model hiện có. Không kết quả truy hồi
+nào có thể cấp quyền dùng tool hay đổi danh tính đã xác thực của request.
 """
 import asyncio
 from time import perf_counter
@@ -11,13 +11,13 @@ from agentic.core.context import request_context
 from agentic.services.routing import latest_request
 from agentic.observability.telemetry import active_metrics, merge_retrieval
 
-# Personal-context topics (services.personal_context.TOPICS) and the graph domain holding their data.
+# Các chủ đề ngữ cảnh cá nhân (services.personal_context.TOPICS) và miền graph chứa dữ liệu của chúng.
 TOPIC_DOMAINS={'running':'trainings','strength':'trainings','training':'trainings','nutrition':'meals',
                'body':'metrics','recovery':'recovery'}
 
 
 def decision_domains(decision):
-    """Graph domains named by a routing decision: its domain and its personal topic."""
+    """Các miền graph do một quyết định định tuyến gọi tên: miền của nó và chủ đề cá nhân của nó."""
     decision=decision or {}
     return [d for d in dict.fromkeys([decision.get('domain'),TOPIC_DOMAINS.get(decision.get('topic'))]) if d in PILOT_DOMAINS]
 
@@ -26,11 +26,11 @@ async def retrieve_graph_context(state, domains, *, settings, graph_context=None
     fresh=state.get('graph_context_run_id')==state.get('run_id')
     covered=list(state.get('graph_context_domains') or []) if fresh else []
     wanted=[d for d in dict.fromkeys([*covered,*domains]) if d in PILOT_DOMAINS]
-    # Retrieve again only when routing reaches a domain the first hint missed. Without a
-    # composed graph service (offline evaluation baselines) there is nothing to read.
+    # Chỉ truy hồi lại khi định tuyến chạm tới một miền mà gợi ý đầu tiên bỏ sót. Khi không có
+    # service graph được dựng (baseline đánh giá offline) thì không có gì để đọc.
     if graph_context is None or not set(wanted)-set(covered):
         return {}
-    # Domains count as covered only after a successful read, so a timeout is retried later in the run.
+    # Một miền chỉ được tính là đã phủ sau một lần đọc thành công, để timeout được thử lại sau trong lượt chạy.
     update={'graph_retrieval_attempted':True,'graph_context_run_id':state.get('run_id'),'graph_context_domains':covered,
             'graph_context':state.get('graph_context') if fresh else None}
     started=perf_counter()
@@ -52,12 +52,12 @@ async def retrieve_graph_context(state, domains, *, settings, graph_context=None
     except (asyncio.TimeoutError,TimeoutError):
         status='timeout'
     except Exception:
-        # KG outages never turn a usable backend/LLM workflow into a failure.
+        # Sự cố KG không bao giờ biến một workflow backend/LLM dùng được thành thất bại.
         status='unavailable'
     duration=round((perf_counter()-started)*1000,3)
     metrics=active_metrics.get()
     if metrics is not None:
-        # A node may read twice (request hint, then the router's domain): keep both attempts.
+        # Một node có thể đọc hai lần (gợi ý từ request, rồi miền của router): giữ cả hai lần thử.
         metrics['retrieval']=merge_retrieval(metrics.get('retrieval'),{'status':status,'duration_ms':duration,'domains':wanted})
     annotate(status=status, duration_ms=duration)
     return update

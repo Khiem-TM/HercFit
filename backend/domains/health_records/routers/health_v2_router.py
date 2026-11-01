@@ -1,7 +1,7 @@
-"""/api/v2/health: sessions with detail, dense series, source records, insights and personal logs.
+"""/api/v2/health: phiên có chi tiết, chuỗi dày, bản ghi nguồn, insight và nhật ký cá nhân.
 
-Cursor pagination everywhere; the assistant needs device consent for device data
-and the separate sensitive consent for sensitive logs (identity.consent).
+Phân trang bằng cursor ở mọi nơi; trợ lý cần consent thiết bị cho dữ liệu thiết bị
+và consent nhạy cảm riêng cho nhật ký nhạy cảm (identity.consent).
 """
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Any, Literal
@@ -65,7 +65,7 @@ async def sessions(service: UserContextDep, kind: Literal["sleep", "workout"], s
 @router.get("/sessions/{workout_id}/route", summary="Lộ trình GPS (TCX) của một buổi tập thiết bị",
             response_class=Response, responses={200: {"content": {"application/vnd.garmin.tcx+xml": {}}}})
 async def workout_route(service: UserContextDep, workout_id: UUID):
-    """The user's own route file. Routes are never given to the assistant (no consent unlocks them)."""
+    """File lộ trình của chính người dùng. Lộ trình không bao giờ được đưa cho trợ lý (không consent nào mở được)."""
     import zlib
 
     from core import principal as principals
@@ -73,7 +73,7 @@ async def workout_route(service: UserContextDep, workout_id: UUID):
 
     if principals.is_agent():
         raise HTTPException(403, "Routes are available to the user only")
-    data = (await service.session.execute(select(WorkoutRoute.data_zlib).where(  # deferred column: select it
+    data = (await service.session.execute(select(WorkoutRoute.data_zlib).where(  # cột tải trễ: chọn nó tường minh
         WorkoutRoute.workout_id == workout_id, WorkoutRoute.user_id == service.user_id))).scalar_one_or_none()
     if data is None:
         raise HTTPException(404, "No route stored for this workout")
@@ -112,7 +112,7 @@ async def records(service: UserContextDep, data_type: str, start_date: date, end
               "utc_offset_s": row.utc_offset_s, "source_key": row.source_key, "data_source": row.data_source,
               "quality": row.quality, "unknown_paths": row.unknown_paths, "deletion_state": row.deletion_state,
               "schema_revision": row.schema_revision, "api_version": row.api_version,
-              # Raw provider payloads (may hold waveforms or routes) are for the user only.
+              # Payload thô của nhà cung cấp (có thể chứa dạng sóng hoặc lộ trình) chỉ dành cho người dùng.
               **({} if agent else {"payload": row.payload})} for row in rows[:limit]]
     return Page(items=items, next_cursor=_next(rows, limit, "fetched_at"))
 
@@ -137,7 +137,7 @@ async def insights(service: UserContextDep, days: Annotated[int, Query(ge=7, le=
     }
 
 
-# ------------------------------------------------------------------------------------------- logs
+# ------------------------------------------------------------------------------------------- nhật ký
 LogKind = Literal["hydration", "nutrition", "symptoms", "mood", "menstrual-period", "ovulation-test"]
 
 
@@ -186,6 +186,6 @@ async def replace_log(kind: LogKind, log_id: UUID, payload: LogReplace, service:
 @router.delete("/logs/{kind}/{log_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Xoá nhật ký")
 async def delete_log(kind: LogKind, log_id: UUID, service: UserContextDep,
                      expected_version_id: Annotated[int, Query(ge=1)], remote: bool = False):
-    # remote=true also deletes the copy HercFit exported to Google (explicit user choice).
+    # remote=true xoá cả bản HercFit đã xuất lên Google (lựa chọn tường minh của người dùng).
     await log_service.delete(service.session, service.user_id, kind, log_id, expected_version_id, remote=remote)
     await service.session.commit()

@@ -1,1 +1,1 @@
-"""Runtime hybrid RAG retrieval and embedding client; independent of the personal Neo4j graph."""
+"""Truy hồi RAG lai lúc chạy và client embedding; độc lập với graph Neo4j cá nhân."""

@@ -54,12 +54,12 @@ class FoodCreate(PartialSchema):
 
     @field_serializer("portions")
     def _portions_as_json(self, portions: list[HouseholdPortion]) -> list[dict]:
-        # Stored in a JSONB column: keep quantities JSON-native in every dump mode.
+        # Lưu trong cột JSONB: giữ số lượng ở dạng JSON gốc trong mọi chế độ dump.
         return [portion.model_dump(mode="json", exclude_none=True) for portion in portions]
 
     @model_validator(mode="after")
     def portion_basis(self):
-        # Validate only what this (possibly partial) payload supplies.
+        # Chỉ kiểm tra những gì payload (có thể không đầy đủ) này cung cấp.
         if "serving_unit" in self.model_fields_set and self.serving_unit == FoodServingUnit.PORTION:
             if self.serving_size is not None and self.serving_size != 1:
                 raise ValueError("PORTION foods describe exactly one serving; serving_size must be 1 or omitted")

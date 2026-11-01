@@ -8,9 +8,10 @@ export interface MotionOptions {
   onFrame?: (node: NodeSingular) => void
 }
 
-/** A short-lived spring simulation, active only during a drag and its settling.
- * Cytoscape owns the grabbed node. Only its connected neighbours are simulated.
- * Coordinates are presentation state; graph records are never changed.
+/**
+ * Mô phỏng lò xo ngắn hạn, chỉ hoạt động trong lúc kéo và lúc ổn định lại.
+ * Cytoscape sở hữu node đang được nắm. Chỉ các node kề với nó được mô phỏng.
+ * Toạ độ là trạng thái trình bày; bản ghi của graph không bao giờ bị thay đổi.
  */
 export function createConstellationMotion(cy: Core, options: MotionOptions) {
   let bodies: Body[] = []
@@ -56,7 +57,7 @@ export function createConstellationMotion(cy: Core, options: MotionOptions) {
       b.force.x -= dx / distance * force
       b.force.y -= dy / distance * force
     }
-    // Keep adjacent stars legible when a constellation folds over itself.
+    // Giữ các ngôi sao kề nhau dễ đọc khi một chòm sao gập lên chính nó.
     for (let i = 0; i < bodies.length; i++) {
       for (let j = i + 1; j < bodies.length; j++) {
         const a = bodies[i], b = bodies[j]

@@ -5,9 +5,11 @@
 @tailwind utilities;
 
 @layer base {
-  /* Theme colours (tailwind.config.js tokens) as "r g b" so Tailwind's /<alpha> works. Dark is the
-     default; `html.light` (useTheme) switches tokens and color-scheme, which also resolves every
-     light-dark() colour in component styles. */
+  /*
+   * Màu theme (token trong tailwind.config.js) dạng "r g b" để /<alpha> của Tailwind hoạt động. Tối là
+   * mặc định; `html.light` (useTheme) đổi token và color-scheme, nhờ vậy mọi màu
+   * light-dark() trong style của component cũng được giải theo.
+   */
   :root {
     --c-background: 19 19 19;
     --c-on-secondary-fixed: 26 27 34;
@@ -155,7 +157,7 @@
     min-width: 320px;
   }
   :root {
-    /* Arbitrary shadow-[...] utilities: black on dark, a lighter warm shadow on paper. */
+    /* Tiện ích shadow-[...] tuỳ ý: màu đen trên nền tối, bóng ấm nhạt hơn trên nền giấy. */
     --c-shadow: 0 0 0;
     --shadow-k: 1;
   }
@@ -234,7 +236,7 @@
 .registry-title {
   overflow-wrap: anywhere;
 }
-/* While a pane edge is dragged (useResizable), the cursor stays and text is not selected. */
+/* Khi đang kéo mép một khung (useResizable), con trỏ được giữ nguyên và văn bản không bị chọn. */
 html.is-resizing-x,
 html.is-resizing-x * {
   cursor: col-resize !important;

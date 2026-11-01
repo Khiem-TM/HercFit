@@ -1,8 +1,8 @@
-"""Static workout and program library; generates schedule previews, never writes.
+"""Thư viện bài tập và chương trình tĩnh; sinh bản xem trước lịch tập, không bao giờ ghi.
 
-Programs reference catalog exercises by system code. The preview is a complete
-TrainingPlanCreate payload that the client (or agent) submits through the
-normal confirmed create endpoint.
+Chương trình tham chiếu bài tập trong catalog theo mã hệ thống. Bản xem trước là một payload
+TrainingPlanCreate đầy đủ mà client (hoặc agent) gửi qua
+endpoint tạo có xác nhận thông thường.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from domains.catalog.schemas.exercises import ExerciseKind
 DAY = {"MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6}
 
 
-# ----------------------------------------------------------------- builders
+# ----------------------------------------------------------------- hàm dựng
 
 def sets(count: int, reps_min: int, reps_max: int | None = None, *, rpe: float | None = None,
          pct: float | None = None, rest: int | None = None, hold: int | None = None) -> dict[str, Any]:
@@ -73,7 +73,7 @@ def cool(minutes: float = 10) -> dict[str, Any]:
     return step("COOLDOWN", minutes=minutes, zone="E")
 
 
-# ----------------------------------------------------------------- running workouts
+# ----------------------------------------------------------------- bài chạy
 
 RUN_WORKOUTS: dict[str, dict[str, Any]] = {
     "easy_run": {"name_vi": "Chạy nhẹ (Easy)", "level": "BEGINNER", "description_vi": "Chạy thoải mái vùng E, nói chuyện được; nền tảng sức bền hiếu khí.",
@@ -105,7 +105,7 @@ RUN_WORKOUTS: dict[str, dict[str, Any]] = {
 }
 
 
-# ----------------------------------------------------------------- gym sessions
+# ----------------------------------------------------------------- buổi gym
 
 FULL_A = [lift("bb_back_squat", sets(3, 5, 8, rpe=7.5, rest=180)), lift("bb_bench_press", sets(3, 6, 10, rpe=7.5, rest=150)),
           lift("bb_bent_over_row", sets(3, 8, 12, rpe=7.5, rest=120)), lift("romanian_deadlift", sets(2, 8, 10, rpe=7, rest=120)),
@@ -136,7 +136,7 @@ LEGS = [lift("bb_back_squat", sets(4, 5, 8, rpe=8, rest=180)), lift("romanian_de
         lift("standing_calf_raise", sets(4, 10, 15, rpe=8, rest=60))]
 
 
-# ----------------------------------------------------------------- programs
+# ----------------------------------------------------------------- chương trình
 
 @dataclass(frozen=True)
 class Program:
@@ -146,13 +146,13 @@ class Program:
     discipline: str
     level: str
     weeks: int
-    # week index (0-based) -> list of (weekday, label, items)
+    # chỉ số tuần (từ 0) -> danh sách (thứ, nhãn, mục)
     week: Callable[[int, int], list[tuple[str, str, list[tuple[str, dict]]]]]
     sessions_per_week: int = field(default=0)
 
 
 def _cutback(week: int) -> bool:
-    """Every 4th week is a recovery week (reduced volume)."""
+    """Cứ tuần thứ 4 là tuần phục hồi (giảm khối lượng)."""
     return week % 4 == 3
 
 
@@ -162,7 +162,7 @@ def _long_km(week: int, start: float, cap: float) -> float:
 
 
 def _beginner_5k(week: int, total: int):
-    # Run/walk ratio progresses towards 30 min continuous running.
+    # Tỉ lệ chạy/đi bộ tăng dần tới 30 phút chạy liên tục.
     ladder = [(1, 2, 8), (2, 2, 6), (3, 2, 5), (5, 2, 4), (8, 2, 3), (10, 1, 3), (15, 1, 2), (30, 0, 1)]
     run_min, walk_min, reps = ladder[min(week, len(ladder) - 1)]
     workout = RUN_WORKOUTS["easy_run"]["build"](30) if walk_min == 0 else RUN_WORKOUTS["walk_run"]["build"](run_min, walk_min, reps)
@@ -218,7 +218,7 @@ def list_templates() -> list[dict[str, Any]]:
 
 
 async def build_schedule(session, *, user_id, code: str, start_date: date, weeks: int | None, name: str | None) -> dict[str, Any]:
-    """Return a TrainingPlanCreate payload; exercise codes resolve to visible SYSTEM ids."""
+    """Trả về payload TrainingPlanCreate; mã bài tập được giải thành id SYSTEM hiển thị được."""
     from domains.catalog.models.exercises import Exercise
 
     program = PROGRAMS.get(code)

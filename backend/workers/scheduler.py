@@ -1,10 +1,10 @@
-"""Periodic planning, one scheduler at a time (transaction-level advisory lock per tick).
+"""Lập kế hoạch định kỳ, mỗi lúc một scheduler (advisory lock cấp transaction cho mỗi tick).
 
-Every tick: return expired leases to the queue, route webhook notifications, and
-per active connection enqueue onboarding, a 6-hourly reconcile, a daily reverify
-slice and an identity refresh. Dedupe keys carry the time bucket, and periodic work
-is planned once per bucket (`_plan_once`): neither a tick that runs twice nor the
-ticks after the job finished can repeat it.
+Mỗi tick: trả các lease hết hạn về hàng đợi, định tuyến thông báo webhook, và
+với mỗi kết nối đang hoạt động thì xếp hàng onboarding, reconcile mỗi 6 giờ, một lát reverify
+hằng ngày và làm mới định danh. Dedupe key mang theo khung thời gian, và việc định kỳ
+được lập một lần mỗi khung (`_plan_once`): cả tick chạy hai lần lẫn
+các tick sau khi job đã xong đều không lặp lại nó.
 """
 from __future__ import annotations
 
@@ -31,10 +31,10 @@ def _bucket(hours: int, now: datetime) -> str:
 
 
 async def _plan_once(session, kind: str, *, dedupe_key: str, **values) -> bool:
-    """Plan periodic work once per time bucket (named by the key), whatever became of it.
+    """Lập việc định kỳ một lần cho mỗi khung thời gian (được khoá đặt tên), bất kể kết quả của nó.
 
-    The queue's own dedupe covers pending jobs only, so without this check a daily job
-    that finished in a minute was planned again on every tick (ix_jobs_kind_dedupe).
+    Dedupe của chính hàng đợi chỉ bao quát job đang chờ, nên khi chưa có kiểm tra này, một job theo ngày
+    xong trong một phút đã bị lập lại ở mọi tick (ix_jobs_kind_dedupe).
     """
     seen = (await session.execute(text("SELECT 1 FROM jobs WHERE kind = :kind AND dedupe_key = :key LIMIT 1"),
                                   {"kind": kind, "key": dedupe_key})).first()
@@ -94,8 +94,8 @@ async def tick(now: datetime | None = None) -> dict[str, int]:
                     session, "GH_ROUTE_FETCH", queue="maint", dedupe_key=f"routes:{connection.id}:{now:%Y%m%d}",
                     priority=15, **base)
             if not connection.health_user_id:
-                # One cheap call, and webhooks cannot be routed without it: ahead of onboarding fetches
-                # (same priority as after the OAuth callback).
+                # Một lời gọi rẻ, và webhook không định tuyến được nếu thiếu nó: xếp trước các lần fetch onboarding
+                # (cùng độ ưu tiên như sau OAuth callback).
                 planned["jobs"] += await _plan_once(
                     session, "GH_IDENTITY_REFRESH", dedupe_key=f"identity:{connection.id}:{now:%Y%m%d}",
                     priority=95, **base)
@@ -106,7 +106,7 @@ async def loop(stop: asyncio.Event) -> None:
     while not stop.is_set():
         try:
             await tick()
-        except Exception as exc:  # noqa: BLE001 - the next tick retries
+        except Exception as exc:  # noqa: BLE001 - tick sau sẽ thử lại
             logger.warning("scheduler_tick_failed error=%s", type(exc).__name__)
         with suppress(asyncio.TimeoutError):
             await asyncio.wait_for(stop.wait(), TICK_SECONDS)

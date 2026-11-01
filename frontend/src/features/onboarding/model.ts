@@ -16,7 +16,7 @@ export const sexChoices = [
   { value: 'FEMALE', label: 'Nữ' },
   { value: 'MALE', label: 'Nam' },
 ] as const
-// Plausible human ranges; the backend rejects values outside them as well.
+// Khoảng hợp lý của con người; backend cũng từ chối giá trị nằm ngoài.
 export const MEASUREMENT_LIMITS = {
   weight: { min: 20, max: 400 },
   height: { min: 50, max: 260 },

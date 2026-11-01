@@ -5,8 +5,10 @@ import type { DailyHealth } from '@/types/api'
 import { dayLabel, duration, fmt, num } from './healthFormat'
 import type { HealthData } from './useHealthData'
 
-/** Device vitals at a glance: the latest day with data, its trend over the window and the gap to the
- * window's average (other days only). Neutral arrows: a higher or lower value is not judged here. */
+/**
+ * Chỉ số sinh tồn từ thiết bị trong nháy mắt: ngày gần nhất có dữ liệu, xu hướng trong cửa sổ và độ chênh so với
+ * trung bình cửa sổ (chỉ các ngày khác). Mũi tên trung tính: không đánh giá giá trị cao hơn hay thấp hơn là tốt/xấu.
+ */
 const props = defineProps<{ data: HealthData }>()
 
 type Vital = { key: string; label: string; unit: string; icon: typeof Footprints; digits?: number;
@@ -54,7 +56,7 @@ const tiles = computed(() => VITALS.flatMap(vital => {
   }]
 }))
 
-/** Sparkline in a 100×32 box; gaps stay gaps, the last point is marked. */
+/** Biểu đồ nhỏ trong khung 100×32; khoảng trống giữ là khoảng trống, điểm cuối được đánh dấu. */
 function spark(series: (number | null)[]) {
   const values = series.filter((value): value is number => value != null)
   const min = Math.min(...values), max = Math.max(...values)

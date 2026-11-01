@@ -1,4 +1,4 @@
-"""Job kind -> handler. Each handler finishes its job in its last fenced transaction."""
+"""Loại job -> handler. Mỗi handler kết thúc job của nó trong transaction đã fence cuối cùng."""
 from domains.analytics.services.jobs import HANDLERS as ANALYTICS
 from integrations.google_health.export.dispatch import HANDLERS as EXPORT
 from integrations.google_health.export.history import HANDLERS as HISTORY

@@ -1,4 +1,4 @@
-"""Visible catalog reads and versioned custom catalog writes."""
+"""Đọc catalog hiển thị và ghi catalog tuỳ chỉnh có phiên bản."""
 
 from domains.catalog.models.foods import FoodItem
 from domains.shared.services.common import UserService, require_found

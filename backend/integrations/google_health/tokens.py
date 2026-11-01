@@ -1,9 +1,9 @@
-"""Access tokens for a connection: refreshed once, under a per-connection advisory lock.
+"""Access token cho một kết nối: chỉ làm mới một lần, dưới advisory lock theo từng kết nối.
 
-Whoever waits on the lock re-reads the row and reuses the token the first caller
-stored. `check(session)` runs inside the same transaction before anything is
-written, so a run or job that lost its lease or generation never stores tokens.
-invalid_grant raises ReauthRequired; a missing write scope never touches reads.
+Ai chờ khoá sẽ đọc lại dòng và dùng lại token mà bên gọi đầu tiên
+đã lưu. `check(session)` chạy trong cùng transaction trước khi ghi
+bất cứ thứ gì, nên lượt chạy hay job đã mất lease hoặc thế hệ không bao giờ lưu token.
+invalid_grant ném ReauthRequired; thiếu scope ghi không bao giờ ảnh hưởng lệnh đọc.
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def _fresh(connection: HealthConnection) -> bool:
 
 async def access_token(connection_id: UUID, http: httpx.AsyncClient, *,
                        check: Callable[[object], Awaitable[None]] | None = None) -> tuple[str, list[str]]:
-    """(access token, granted scopes) for the connection."""
+    """(access token, các scope đã cấp) cho kết nối."""
     async with get_db_session() as session:
         connection = await session.get(HealthConnection, connection_id)
         if connection is not None and _fresh(connection):

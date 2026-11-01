@@ -1,6 +1,6 @@
-"""Immutable actual activity aggregates with atomic correction and scoped reads.
+"""Aggregate hoạt động thực tế bất biến với sửa nguyên tử và lệnh đọc có phạm vi.
 
-Split from models.journals in the domain reorganization."""
+Tách ra từ models.journals trong đợt tổ chức lại theo miền."""
 from typing import Any, ClassVar
 from uuid import UUID as PyUUID
 from fastapi import HTTPException
@@ -23,7 +23,7 @@ class Journal(BaseModel):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     timezone: Mapped[str] = mapped_column(String(100), nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Images are mutable presentation metadata, separate from activity facts.
+    # Ảnh là metadata trình bày có thể thay đổi, tách khỏi dữ kiện hoạt động.
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_public_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(20), default="USER", server_default="USER", nullable=False)
@@ -63,11 +63,11 @@ class Journal(BaseModel):
             require_version(original, expected_version_id)
             if not original.is_active:
                 raise HTTPException(409, "Snapshot has been replaced or deleted")
-            # Omitted timestamps preserve when the activity happened.
+            # Thời điểm bị bỏ trống giữ nguyên lúc hoạt động diễn ra.
             values.setdefault(cls.TIME_FIELD, getattr(original, cls.TIME_FIELD))
             data = cls.CREATE_SCHEMA.model_validate(values)
             replacement = await cls._insert_snapshot(session, user_id=user_id, data=data, replaces_id=original.id)
-            # The image follows the active snapshot, where media updates and cleanup can reach it.
+            # Ảnh đi theo ảnh chụp đang hoạt động, nơi cập nhật media và dọn dẹp có thể chạm tới.
             replacement.image_url, replacement.image_public_id = original.image_url, original.image_public_id
             original.image_url = original.image_public_id = None
             original.is_active = False
@@ -81,7 +81,7 @@ class Journal(BaseModel):
         from domains.goals_plans.models.plans import MealPlan, MealPlanEntry, TrainingPlan, TrainingPlanEntry
 
         header, entry = (MealPlan, MealPlanEntry) if cls.TIME_FIELD == "consumed_at" else (TrainingPlan, TrainingPlanEntry)
-        # A historical schedule may still be used as the source for a late log.
+        # Một lịch trong quá khứ vẫn có thể là nguồn cho một mục nhật ký ghi muộn.
         found = await session.scalar(select(entry.id).join(header).where(entry.id == entry_id, header.user_id == user_id))
         if found is None:
             raise HTTPException(404, "Scheduled activity not found")

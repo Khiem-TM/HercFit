@@ -1,4 +1,4 @@
-"""Behaviour shared by the system/custom catalogues (foods and exercises)."""
+"""Hành vi dùng chung cho danh mục hệ thống/tuỳ chỉnh (thực phẩm và bài tập)."""
 
 import unicodedata
 from typing import Any, ClassVar
@@ -12,7 +12,7 @@ from domains.shared.models.domain import require_version
 from domains.shared.schemas.common import UserScope
 from domains.shared.schemas.enums import FoodSourceType
 
-# Candidate window for ranked search; ranking happens in Python (accent-aware).
+# Cửa sổ ứng viên cho tìm kiếm có xếp hạng; việc xếp hạng làm trong Python (phân biệt dấu).
 SEARCH_CANDIDATES = 300
 
 
@@ -24,16 +24,16 @@ def normalize_food_text(value: str) -> str:
 
 
 def apply_search_text(entity: Any, *parts: str | None) -> None:
-    """Maintain the derived search columns on ORM writes, including inherited BaseModel CRUD."""
+    """Duy trì các cột tìm kiếm suy ra khi ORM ghi, kể cả CRUD kế thừa từ BaseModel."""
     entity.normalized_name_vi = normalize_food_text(entity.name_vi or "")
     entity.normalized_name_en = normalize_food_text(entity.name_en) if entity.name_en else None
     entity.normalized_search_text = normalize_food_text(" ".join(part for part in parts if part))
 
 
 class CatalogMixin:
-    """SYSTEM rows are visible to everyone; CUSTOM rows only to their owner.
+    """Dòng SYSTEM hiển thị với mọi người; dòng CUSTOM chỉ với chủ sở hữu.
 
-    Combine with BaseModel; the model supplies source_type, owner_user_id and ALIAS_TABLE.
+    Kết hợp với BaseModel; model cung cấp source_type, owner_user_id và ALIAS_TABLE.
     """
 
     ALIAS_TABLE: ClassVar[Any]
@@ -53,7 +53,7 @@ class CatalogMixin:
 
     @classmethod
     def _text_match(cls, normalized: str) -> Any:
-        """Whole phrase, every token, or an alias, against the accent-free search text."""
+        """Nguyên cụm từ, mọi token, hoặc một bí danh, so với văn bản tìm kiếm không dấu."""
         return or_(
             cls.normalized_search_text.contains(normalized, autoescape=True),
             and_(*[cls.normalized_search_text.contains(token, autoescape=True) for token in normalized.split()]),

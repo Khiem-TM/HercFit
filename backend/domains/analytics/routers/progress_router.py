@@ -1,4 +1,4 @@
-"""Daily actual totals and comparisons to explicit plan targets."""
+"""Tổng thực tế theo ngày và so sánh với chỉ tiêu tường minh của kế hoạch."""
 from uuid import UUID
 
 from fastapi import APIRouter

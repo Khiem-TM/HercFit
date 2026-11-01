@@ -1,4 +1,4 @@
-"""Catalog snapshot builders shared by planned (prescription) and actual (performance) items."""
+"""Hàm dựng ảnh chụp catalog dùng chung cho mục kế hoạch (chỉ định) và mục thực tế (thành tích)."""
 
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
@@ -127,19 +127,19 @@ async def build_food_item(session: AsyncSession, user_id: PyUUID, payload) -> di
     return {
         **item.model_dump(), **totals,
         "food_snapshot": FoodRead.model_validate(food).model_dump(mode="json"),
-        # This is the catalog's per-serving information, not an untyped scaled total.
+        # Đây là thông tin theo khẩu phần của catalog, không phải tổng đã nhân tỉ lệ không có kiểu.
         "nutrition_information": {"basis": "catalog_serving", "values": food.nutrition_information},
         "nutrition_incomplete": any(value is None for value in totals.values()),
     }
 
 
 def portion_factor(food, unit: str, quantity: Decimal) -> Decimal | None:
-    """Multiplier from the stored nutrient basis to the logged amount.
+    """Hệ số từ căn cứ dinh dưỡng đã lưu sang lượng đã ghi.
 
-    G/ML foods store values per serving_size grams/millilitres. PORTION foods
-    store values per serving (suất); grams are accepted only when the serving's
-    gram weight is known, because scaling a per-serving value as if it were
-    per 100 g silently multiplies energy several times over.
+    Thực phẩm G/ML lưu giá trị theo serving_size gam/mililít. Thực phẩm PORTION
+    lưu giá trị theo khẩu phần (suất); chỉ nhận gam khi đã biết khối lượng gam
+    của khẩu phần, vì nhân tỉ lệ giá trị theo suất như thể
+    tính theo 100 g sẽ âm thầm nhân năng lượng lên nhiều lần.
     """
     from domains.shared.schemas.enums import FoodServingUnit
 
@@ -174,7 +174,7 @@ async def build_exercise_item(session: AsyncSession, user_id: PyUUID, payload, *
     exercise = await _visible_exercise(session, user_id, item.exercise_id, item.performance.kind)
     calorie = item.calorie_estimate.model_dump(mode="json")
     if item.calorie_estimate.kcal is None:
-        # A user/device value always wins; otherwise attach a reproducible estimate.
+        # Giá trị từ người dùng/thiết bị luôn được ưu tiên; nếu không thì gắn một ước tính tái tạo được.
         calorie = estimate_kcal(item.performance, exercise.configuration, bodyweight_kg) or calorie
     metrics = item_metrics(item.performance, exercise.configuration, bodyweight_kg=bodyweight_kg)
     return {
@@ -202,7 +202,7 @@ async def build_prescription_item(session: AsyncSession, user_id: PyUUID, payloa
 
 
 def sum_known(items, fields=NUTRIENT_FIELDS) -> dict[str, Decimal | None]:
-    """Unknown components make the corresponding total unknown, never zero."""
+    """Thành phần chưa biết làm tổng tương ứng thành chưa biết, không bao giờ là số 0."""
     return {
         field: sum((item[field] for item in items), Decimal(0))
         if all(item[field] is not None for item in items) else None

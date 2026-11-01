@@ -9,14 +9,14 @@ export interface SignedColors { negative: string; positive: string; negativeLabe
 const props = withDefaults(defineProps<{
   label: string
   days: string[]
-  /** Stacked bottom to top; one entry is a plain column chart. */
+  /** Chồng từ dưới lên trên; một mục là biểu đồ cột thường. */
   series: ColumnSeries[]
   format: (value: number) => string
-  /** A single signed series: bars below zero take the negative colour (diverging). */
+  /** Một chuỗi có dấu: cột dưới 0 dùng màu âm (phân kỳ). */
   signed?: SignedColors | null
   reference?: { value: number; label: string } | null
   band?: { low: number; high: number; label: string } | null
-  /** A fixed axis step, e.g. 2 for hours. */
+  /** Bước trục cố định, ví dụ 2 cho giờ. */
   tickStep?: number
   height?: number
 }>(), { signed: null, reference: null, band: null, tickStep: undefined, height: 190 })
@@ -43,11 +43,11 @@ const slot = computed(() => plotW.value / Math.max(1, props.days.length))
 const barW = computed(() => Math.max(2, Math.min(24, slot.value - GAP, slot.value * .64)))
 const cx = (i: number) => PAD.left + slot.value * (i + .5)
 
-/** A bar with a 4px rounded data end and a square end at the baseline. */
+/** Một cột với đầu dữ liệu bo tròn 4px và đầu vuông ở đường gốc. */
 function barPath(x: number, from: number, to: number, w: number): string {
   const h = Math.abs(to - from)
   const r = Math.min(4, w / 2, h)
-  if (to <= from) { // grows upward: data end at the top
+  if (to <= from) { // mọc lên trên: đầu dữ liệu nằm ở đỉnh
     return `M${x},${from}V${to + r}Q${x},${to} ${x + r},${to}H${x + w - r}Q${x + w},${to} ${x + w},${to + r}V${from}Z`
   }
   return `M${x},${from}V${to - r}Q${x},${to} ${x + r},${to}H${x + w - r}Q${x + w},${to} ${x + w},${to - r}V${from}Z`
@@ -64,7 +64,7 @@ const bars = computed(() => props.days.map((day, i) => {
   const segments = props.series.map(s => ({ key: s.key, color: s.color, value: s.values[i] ?? 0 })).filter(s => s.value > 0)
   let base = 0
   const parts = segments.map((segment, index) => {
-    // A 2px surface gap separates stacked segments; the top one carries the rounded end.
+    // Khe 2px màu nền tách các đoạn chồng; đoạn trên cùng mang đầu bo tròn.
     const bottom = y(base) - (index ? GAP : 0)
     base += segment.value
     const top = y(base)
@@ -78,7 +78,7 @@ const labelEvery = computed(() => Math.max(1, Math.ceil(props.days.length / Math
 const showLabel = (i: number) => (props.days.length - 1 - i) % labelEvery.value === 0
 
 const active = shallowRef<number | null>(null)
-// Reference and band labels live in the key row, never on top of the bars.
+// Nhãn tham chiếu và nhãn dải nằm ở hàng chú giải, không bao giờ đè lên cột.
 const legend = computed(() => [
   ...(props.signed
     ? [{ key: 'neg', label: props.signed.negativeLabel, color: props.signed.negative, kind: 'swatch' },
@@ -97,7 +97,7 @@ const tooltip = computed(() => {
     rows[0] = { ...rows[0], label: negative ? props.signed.negativeLabel : props.signed.positiveLabel,
                 color: negative ? props.signed.negative : props.signed.positive }
   }
-  // Beside the hovered column, so the column itself stays visible.
+  // Bên cạnh cột đang trỏ chuột, để bản thân cột vẫn nhìn thấy được.
   const right = cx(i) < width.value / 2
   return { day: props.days[i], rows, total: rows.length > 1 ? totals.value[i] : null,
            style: { left: `${cx(i) + (right ? 1 : -1) * (barW.value / 2 + 10)}px`, transform: right ? 'none' : 'translateX(-100%)' } }
@@ -136,7 +136,7 @@ function keydown(event: KeyboardEvent) {
         <text v-for="(day, i) in days" v-show="showLabel(i)" :key="day" :x="cx(i)" :y="height - 7" text-anchor="middle"
               :class="{ current: active === i }">{{ dayLabel(day) }}</text>
       </g>
-      <!-- The hit target is the whole day slot, not the painted bar. -->
+      <!-- Vùng nhận thao tác là cả ô của ngày, không chỉ phần cột được tô. -->
       <rect v-for="(day, i) in days" :key="'hit-' + day" class="hit" :x="PAD.left + slot * i" :y="PAD.top" :width="slot" :height="plotH"
             @pointerenter="active = i" />
     </svg>

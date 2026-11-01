@@ -1,4 +1,4 @@
-"""Confirm, inspect and manage the authenticated user's goals."""
+"""Xác nhận, xem và quản lý mục tiêu của người dùng đã xác thực."""
 
 from uuid import UUID
 
@@ -15,7 +15,7 @@ router = APIRouter(route_class=IdempotentRoute, prefix="/goals", tags=["goals"])
 @router.post("/confirm", response_model=GoalRead, status_code=status.HTTP_201_CREATED)
 @transaction
 async def confirm_goal(payload: GoalCreate, service: UserDataServiceDep):
-    """Persist an accepted goal as IN_PROGRESS; a second current goal returns 409."""
+    """Lưu mục tiêu đã chấp nhận ở trạng thái IN_PROGRESS; mục tiêu hiện tại thứ hai trả 409."""
     return await service.confirm_goal(payload)
 
 

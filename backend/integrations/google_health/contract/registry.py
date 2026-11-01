@@ -1,19 +1,19 @@
-"""Versioned capability registry: one `DataTypeSpec` per Google Health data type.
+"""Registry khả năng có phiên bản: mỗi loại dữ liệu Google Health một `DataTypeSpec`.
 
-Sources, checked by tests/test_google_health_contract.py:
-* Discovery snapshot (contract/discovery/*.json, revision in `DISCOVERY_REVISION`):
-  value schema, time shape and which response unions (reconcile, rollUp,
-  dailyRollUp) carry the type. These are authoritative.
-* Developer guide (developers.google.com/health/data-types and /scopes, read
-  2026-11-01): list/write support, scope group and webhook support, which the
-  discovery document cannot express.
+Nguồn, được tests/test_google_health_contract.py kiểm tra:
+* Ảnh chụp discovery (contract/discovery/*.json, revision trong `DISCOVERY_REVISION`):
+  schema giá trị, dạng thời gian và các union phản hồi nào (reconcile, rollUp,
+  dailyRollUp) mang loại này. Đây là nguồn có thẩm quyền.
+* Hướng dẫn cho nhà phát triển (developers.google.com/health/data-types và /scopes, đọc
+  ngày 2026-11-01): hỗ trợ list/ghi, nhóm scope và hỗ trợ webhook, những điều
+  tài liệu discovery không diễn đạt được.
 
-`verification` says how far a capability may be trusted at runtime:
-* DOCUMENTED: guide and discovery agree; reads may run, writes stay off until VERIFIED.
-* VERIFIED: exercised against a real Google test account (set through
-  settings.GOOGLE_HEALTH_VERIFIED_CAPABILITIES, never by editing this file casually).
-* CONFLICT / UNDOCUMENTED: sources disagree or the guide is silent; treated as
-  unsupported until verified. `notes` records the reason.
+`verification` cho biết một khả năng được tin tới mức nào lúc chạy:
+* DOCUMENTED: hướng dẫn và discovery khớp nhau; lệnh đọc được chạy, lệnh ghi tắt cho đến khi VERIFIED.
+* VERIFIED: đã chạy thử với tài khoản Google thử nghiệm thật (đặt qua
+  settings.GOOGLE_HEALTH_VERIFIED_CAPABILITIES, không bao giờ tuỳ tiện sửa file này).
+* CONFLICT / UNDOCUMENTED: các nguồn mâu thuẫn hoặc hướng dẫn không nhắc tới; coi là
+  không hỗ trợ cho đến khi được kiểm chứng. `notes` ghi lại lý do.
 """
 from __future__ import annotations
 
@@ -26,12 +26,12 @@ GUIDE_CHECKED_ON = "2026-11-01"
 
 
 class Kind(str, Enum):
-    SAMPLE = "sample"        # one instant: sampleTime{physicalTime, utcOffset, civilTime}
-    INTERVAL = "interval"    # observed interval: interval{startTime, endTime, offsets, civil times}
-    SESSION = "session"      # bundled session (sleep, exercise, ECG, logs)
-    DAILY = "daily"          # one point per civil date: {date: {...}}
-    ROLLUP_ONLY = "rollup"   # exists only as a rollUp / dailyRollUp value
-    CATALOG = "catalog"      # reference data (food, food units); no time shape
+    SAMPLE = "sample"        # một thời điểm: sampleTime{physicalTime, utcOffset, civilTime}
+    INTERVAL = "interval"    # khoảng quan sát: interval{startTime, endTime, độ lệch, giờ địa phương}
+    SESSION = "session"      # phiên gộp (giấc ngủ, buổi tập, ECG, nhật ký)
+    DAILY = "daily"          # mỗi ngày địa phương một điểm: {date: {...}}
+    ROLLUP_ONLY = "rollup"   # chỉ tồn tại dưới dạng giá trị rollUp / dailyRollUp
+    CATALOG = "catalog"      # dữ liệu tham chiếu (thực phẩm, đơn vị thực phẩm); không có dạng thời gian
 
 
 class Op(str, Enum):
@@ -47,16 +47,16 @@ class Op(str, Enum):
 
 
 class Retention(str, Enum):
-    DETAIL_90D = "detail_90d"            # dense series and session detail
-    AGGREGATE_2Y = "aggregate_2y"        # daily values and rollups
-    RECORD_2Y = "record_2y"              # sparse records the user cares about (weight, glucose, logs)
-    SESSION_META_2Y = "session_meta_2y"  # session headers; their detail follows DETAIL_90D
+    DETAIL_90D = "detail_90d"            # chuỗi dày và chi tiết phiên
+    AGGREGATE_2Y = "aggregate_2y"        # giá trị theo ngày và rollup
+    RECORD_2Y = "record_2y"              # bản ghi thưa mà người dùng quan tâm (cân nặng, đường huyết, nhật ký)
+    SESSION_META_2Y = "session_meta_2y"  # phần đầu của phiên; chi tiết của chúng theo DETAIL_90D
 
 
 class Sensitivity(str, Enum):
     NORMAL = "normal"
-    # Never projected into the knowledge graph; the assistant only receives
-    # derived results, and only with the matching consent.
+    # Không bao giờ được chiếu vào knowledge graph; trợ lý chỉ nhận
+    # kết quả suy ra, và chỉ khi có consent tương ứng.
     SENSITIVE = "sensitive"
 
 
@@ -69,12 +69,12 @@ class Verification(str, Enum):
 
 READ_OPS = frozenset({Op.LIST, Op.GET, Op.RECONCILE, Op.ROLLUP, Op.DAILY_ROLLUP, Op.EXPORT_TCX})
 WRITE_OPS = frozenset({Op.CREATE, Op.PATCH, Op.BATCH_DELETE})
-# Page and range limits from the discovery method descriptions.
+# Giới hạn trang và khoảng lấy từ mô tả phương thức trong discovery.
 LIST_PAGE_MAX = 10_000
-SESSION_PAGE_MAX = 25            # exercise and sleep
+SESSION_PAGE_MAX = 25            # buổi tập và giấc ngủ
 DAILY_ROLLUP_PAGE_MAX = 90
 SHORT_RANGE_TYPES = frozenset({"calories-in-heart-rate-zone", "heart-rate", "active-minutes", "total-calories"})
-SHORT_RANGE_DAYS = 14            # rollUp / dailyRollUp range and daily page size for SHORT_RANGE_TYPES
+SHORT_RANGE_DAYS = 14            # khoảng rollUp / dailyRollUp và cỡ trang theo ngày cho SHORT_RANGE_TYPES
 LONG_RANGE_DAYS = 90
 
 
@@ -83,7 +83,7 @@ class DataTypeSpec:
     id: str
     kind: Kind
     scope_group: str
-    family: str                                  # business landing zone (see FAMILIES)
+    family: str                                  # nơi dữ liệu đổ vào bảng nghiệp vụ (xem FAMILIES)
     read_ops: frozenset[Op] = frozenset()
     write_ops: frozenset[Op] = frozenset()
     webhook: bool = False
@@ -102,7 +102,7 @@ class DataTypeSpec:
 
     @property
     def filter_path(self) -> str:
-        """Filters use snake_case field paths (AIP-160); URLs use kebab-case ids."""
+        """Filter dùng đường dẫn trường snake_case (AIP-160); URL dùng id dạng kebab-case."""
         return self.id.replace("-", "_")
 
     @property
@@ -154,7 +154,7 @@ SENS = Sensitivity.SENSITIVE
 
 def _specs() -> Iterable[DataTypeSpec]:
     I, S, SE, DA = Kind.INTERVAL, Kind.SAMPLE, Kind.SESSION, Kind.DAILY
-    # --- activity and fitness -------------------------------------------------
+    # --- vận động và thể chất -------------------------------------------------
     yield DataTypeSpec("steps", I, ACT, "series", _R({L, G, REC, RU, DRU}), webhook=True, retention=D90,
                        units={"count": "steps"})
     yield DataTypeSpec("distance", I, ACT, "series", _R({L, G, REC, RU, DRU}), webhook=True, retention=D90,
@@ -186,7 +186,7 @@ def _specs() -> Iterable[DataTypeSpec]:
     yield DataTypeSpec("exercise", SE, ACT, "device_workout", _R({L, G, REC, Op.EXPORT_TCX}), WRITE, webhook=True,
                        retention=S2Y, export_group="workout",
                        notes="Route (TCX) additionally needs googlehealth.location.readonly.")
-    # --- health metrics and measurements -------------------------------------
+    # --- chỉ số sức khoẻ và số đo ------------------------------------------------
     yield DataTypeSpec("heart-rate", S, MET, "series", _R({L, G, REC, RU, DRU}), webhook=True, retention=D90,
                        units={"beatsPerMinute": "bpm"})
     yield DataTypeSpec("heart-rate-variability", S, MET, "series", _R({L, G, REC}), webhook=True, retention=D90,
@@ -211,15 +211,15 @@ def _specs() -> Iterable[DataTypeSpec]:
     yield DataTypeSpec("skin-temperature-sensors", S, MET, "series", _R({L, G, REC}), api_versions=("v4beta",),
                        retention=D90, notes="v4beta only; enable per type through GH_V4BETA_TYPES. Discovery "
                                             "lists reconcile, the guide's table does not.")
-    # --- sleep, ECG, IRN -------------------------------------------------------
+    # --- giấc ngủ, ECG, IRN -----------------------------------------------------
     yield DataTypeSpec("sleep", SE, "sleep", "sleep_session", _R({L, G, REC}), WRITE, webhook=True, retention=S2Y,
                        export_group="sleep", notes="Stages and short awakenings overlap; never sum them blindly.")
     yield DataTypeSpec("electrocardiogram", SE, "ecg", "ecg", _R({L, G}), retention=S2Y, sensitivity=SENS,
                        notes="Keep the provider classification; the waveform never enters prompts or the graph.")
     yield DataTypeSpec("irregular-rhythm-notification", SE, "irn", "irn", _R({L, G}), retention=S2Y,
                        sensitivity=SENS)
-    # --- nutrition -------------------------------------------------------------
-    # The scope's existence is proven at runtime: reads run only when Google grants it.
+    # --- dinh dưỡng -------------------------------------------------------------
+    # Sự tồn tại của scope được chứng minh lúc chạy: lệnh đọc chỉ chạy khi Google cấp nó.
     nutrition_note = ("Guide documents googlehealth.nutrition.readonly; the discovery snapshot lists only "
                       "nutrition.writeonly for these methods.")
     yield DataTypeSpec("hydration-log", SE, "nutrition", "hydration_log", _R({L, G, REC, RU, DRU}), WRITE,
@@ -228,7 +228,7 @@ def _specs() -> Iterable[DataTypeSpec]:
                        webhook=True, retention=R2Y, export_group="nutrition", notes=nutrition_note)
     yield DataTypeSpec("food", Kind.CATALOG, "nutrition", "catalog", _R({L, G}), retention=R2Y, notes=nutrition_note)
     yield DataTypeSpec("food-measurement-unit", Kind.CATALOG, "nutrition", "catalog", _R({L, G}), retention=R2Y, notes=nutrition_note)
-    # --- write-only logs (no history can be imported) ---------------------------
+    # --- nhật ký chỉ ghi (không nhập được lịch sử) -------------------------------
     write_only = "Write-only at Google: HercFit owns the log; no history import is possible."
     yield DataTypeSpec("symptoms", S, "logged_symptoms", "wellbeing_log", write_ops=WRITE, retention=R2Y,
                        sensitivity=SENS, export_group="symptoms", notes=write_only)
@@ -246,7 +246,7 @@ for _spec in DATA_TYPES.values():
     if _spec.export_group:
         EXPORT_GROUPS.setdefault(_spec.export_group, ())
         EXPORT_GROUPS[_spec.export_group] += (_spec.id,)
-# Order in which export groups may be enabled (M6): low-risk first.
+# Thứ tự được phép bật các nhóm xuất (M6): rủi ro thấp trước.
 EXPORT_ROLLOUT = ("body", "hydration", "nutrition", "workout", "sleep", "symptoms", "mood", "reproductive")
 
 
@@ -259,9 +259,9 @@ def spec(data_type: str) -> DataTypeSpec:
 
 def runtime_enabled(data_type: str, op: Op, *, verified: frozenset[str] = frozenset(),
                     api_version: str = "v4") -> bool:
-    """May HercFit run `op` on this type now? Writes need explicit verification.
+    """HercFit có được chạy `op` trên loại này lúc này không? Lệnh ghi cần kiểm chứng tường minh.
 
-    `verified` holds capability keys "data-type:op" confirmed with a real account
+    `verified` chứa các khoá khả năng "data-type:op" đã xác nhận bằng tài khoản thật
     (settings.GOOGLE_HEALTH_VERIFIED_CAPABILITIES).
     """
     item = spec(data_type)

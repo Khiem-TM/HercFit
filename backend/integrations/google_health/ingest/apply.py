@@ -1,11 +1,11 @@
-"""From the source layer to business tables (primary mode) or to a comparison (shadow mode).
+"""Từ lớp nguồn tới bảng nghiệp vụ (chế độ primary) hoặc tới một phép so sánh (chế độ shadow).
 
-`build(...)` re-parses the PRESENT source records of one data type and civil
-window with the adapter of the API version that produced them, and projects them
-exactly as the in-process sync does. `apply(...)` writes them (reusing
-sync.store for the families it already covers, so the deletion rules are the same
-tested ones) and links each business row to its source record. `compare(...)`
-reports what primary mode would change, without writing business tables.
+`build(...)` phân tích lại các bản ghi nguồn PRESENT của một loại dữ liệu và một cửa sổ
+ngày địa phương bằng adapter của phiên bản API đã tạo ra chúng, và chiếu chúng
+đúng như sync trong tiến trình làm. `apply(...)` ghi chúng (dùng lại
+sync.store cho các họ nó đã hỗ trợ, nên luật xoá vẫn là bộ luật
+đã được test) và liên kết mỗi dòng nghiệp vụ với bản ghi nguồn của nó. `compare(...)`
+báo những gì chế độ primary sẽ thay đổi, không ghi vào bảng nghiệp vụ.
 """
 from __future__ import annotations
 
@@ -61,13 +61,13 @@ def family(data_type: str, mode: str) -> str:
 
 async def build(session, *, connection_id: UUID, data_type: str, mode: str, start: date, end: date,
                 zone: str) -> dict[str, Any]:
-    """Business rows for one type and window, from PRESENT source records only."""
+    """Dòng nghiệp vụ cho một loại và một cửa sổ, chỉ từ các bản ghi nguồn PRESENT."""
     from integrations.google_health.export import selfsource
 
     owned = await selfsource.owned_names(session, connection_id, data_type)
     records = [record for record in await stage.present(session, connection_id=connection_id, data_type=data_type,
                                                         start=start, end=end)
-               # Points HercFit exported are already local records: never import them back.
+               # Các data point HercFit đã xuất vốn là bản ghi cục bộ: không bao giờ nhập ngược lại.
                if record.resource_name not in owned and not selfsource.written_by_us(record.data_source)]
     read = TypeRead(data_type, COMPLETE, points=len(records))
     fetched: dict[str, Any] = {"days": {}, "types": {data_type: read}, "body": [], "samples": [], "sleep": [],
@@ -160,7 +160,7 @@ async def _link(session, *, connection_id: UUID, user_id: UUID, data_type: str) 
 
 async def apply(session, *, connection_id: UUID, user_id: UUID, data_type: str, mode: str, start: date, end: date,
                 zone: str) -> dict[str, Any]:
-    """Write business rows for a completed window. The caller has fenced the job in this transaction."""
+    """Ghi dòng nghiệp vụ cho một cửa sổ đã hoàn tất. Bên gọi đã fence job trong transaction này."""
     from integrations.google_health.export.capture import mark_import
 
     await mark_import(session)
@@ -173,7 +173,7 @@ async def apply(session, *, connection_id: UUID, user_id: UUID, data_type: str, 
     if kind in ("daily_rollup", "daily", "body", "session") or (kind == "sample" and data_type in SAMPLE_TYPES):
         outcome = await store(session, user_id, window, fetched)
         if kind == "body" and clean:
-            # Per-type removal: only rows of this body type (resource names carry the type).
+            # Xoá theo loại: chỉ các dòng của loại số đo cơ thể này (tên tài nguyên có mang loại).
             removed = await session.execute(text("""
                 UPDATE body_metrics SET is_active = false, updated_at = now(), version_id = version_id + 1
                 WHERE user_id = :uid AND source = :source AND is_active AND recorded_at >= :low AND recorded_at < :high
@@ -220,7 +220,7 @@ def _same(left: Any, right: Any) -> bool:
 
 async def compare(session, *, connection_id: UUID, user_id: UUID, data_type: str, mode: str, start: date, end: date,
                   zone: str) -> list[dict[str, Any]]:
-    """Differences between what the source layer implies and what the business tables hold."""
+    """Khác biệt giữa những gì lớp nguồn hàm ý và những gì bảng nghiệp vụ đang giữ."""
     fetched = await build(session, connection_id=connection_id, data_type=data_type, mode=mode, start=start, end=end,
                           zone=zone)
     kind = family(data_type, mode)

@@ -1,4 +1,4 @@
-"""Conservative JEV read routing; all writes keep the existing orchestration path."""
+"""Định tuyến đọc JEV thận trọng; mọi lệnh ghi giữ nguyên luồng điều phối hiện có."""
 import math
 import re
 from domains.catalog.models.foods import normalize_food_text
@@ -9,7 +9,7 @@ from agentic.prompts.registry import get_questions
 JEV_ROUTING_QUESTIONS = get_questions("routing.jev", "v2")
 
 def jev_routing_projection(state):
-    """Keep the candidate gate cheap; history and personal snapshots never leave it."""
+    """Giữ cổng lọc ứng viên rẻ; lịch sử và ảnh chụp dữ liệu cá nhân không bao giờ ra khỏi nó."""
     decision = state.get('decision') or {}
     if (state.get('tool_outputs') or state.get('tool_count') or state.get('pending_action')
             or state.get('candidate') or state.get('catalog_handoff') or state.get('research_handoff')
@@ -19,8 +19,8 @@ def jev_routing_projection(state):
         return None
     text = latest_request(state).strip()
     normalized = normalize_food_text(text)
-    # Clear writes, compound requests, pronoun follow-ups, and explicit research
-    # take the baseline path without paying for another classification call.
+    # Lệnh ghi rõ ràng, yêu cầu ghép, câu hỏi nối tiếp dùng đại từ và yêu cầu tra cứu tường minh
+    # đi theo đường cơ sở, không tốn thêm một lần gọi phân loại.
     if not text or re.search(
             r'\b(?:ghi|them|tao|luu|xoa|sua|cap nhat|dang ky|dat lich|len lich|len ke hoach|thiet ke|'
             r'add|create|save|delete|remove|update|record|change|replace|cancel|complete|'
@@ -28,8 +28,8 @@ def jev_routing_projection(state):
             r'mon do|bai do|cai do|nhu tren|nhu cu|vua roi|tiep tuc|no|again|it|that|those|same|continue|'
             r'web|internet|nghien cuu|nguon ben ngoai|research|online)\b', normalized):
         return None
-    # Defense in depth before the service's identity-aware redaction. Do not
-    # include user/session/run IDs, profile fields, backend credentials, or history.
+    # Phòng thủ nhiều lớp trước bước che thông tin theo danh tính của service. Không đưa
+    # ID người dùng/phiên/lượt chạy, trường hồ sơ, thông tin xác thực backend hay lịch sử vào đây.
     text = re.sub(r'(?i)\bBearer\s+\S+', '[credential]', text)
     text = re.sub(r'[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}', '[email]', text)
     text = re.sub(r'(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b', '[identifier]', text)

@@ -1,15 +1,14 @@
-"""Complete initial database schema for HercFit.
+"""Toàn bộ schema database ban đầu của HercFit.
 
 Revision ID: 0001_initial_schema
 Revises: None
 Create Date: 2026-10-20 09:50:00
-
 """
 from typing import Sequence, Union
 
 from alembic import op
 
-# revision identifiers, used by Alembic.
+# định danh revision, Alembic sử dụng.
 revision: str = "0001_initial_schema"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
@@ -582,11 +581,11 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_training_plans_user_created ON training_plans (user_id, created_at, id);",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_training_plans_current ON training_plans (plan_id) WHERE is_active = true AND status = 'ACTIVE';",
 
-    # meal_plan_entries & training_plan_entries
+    # meal_plan_entries và training_plan_entries
     "CREATE INDEX IF NOT EXISTS ix_meal_plan_entries_date ON meal_plan_entries (meal_plan_id, scheduled_date);",
     "CREATE INDEX IF NOT EXISTS ix_training_plan_entries_date ON training_plan_entries (training_plan_id, scheduled_date);",
 
-    # meals & trainings
+    # meals và trainings
     "CREATE INDEX IF NOT EXISTS ix_meals_user_consumed ON meals (user_id, consumed_at, id);",
     "CREATE INDEX IF NOT EXISTS ix_trainings_user_started ON trainings (user_id, started_at, id);"
 ]
@@ -622,23 +621,23 @@ DOWN_ENUMS = [
 
 
 def upgrade() -> None:
-    # 1. Enums
+    # 1. Kiểu enum
     op.execute(ENUM_DDL)
 
-    # 2. Tables
+    # 2. Bảng
     for table_sql in TABLES:
         op.execute(table_sql)
 
-    # 3. Indexes
+    # 3. Chỉ mục
     for index_sql in INDEXES:
         op.execute(index_sql)
 
 
 def downgrade() -> None:
-    # 1. Drop tables in reverse dependency order
+    # 1. Xoá bảng theo thứ tự phụ thuộc ngược
     for table in DOWN_TABLE_ORDER:
         op.execute(f"DROP TABLE IF EXISTS {table} CASCADE;")
 
-    # 2. Drop enums
+    # 2. Xoá kiểu enum
     for enum_name in DOWN_ENUMS:
         op.execute(f"DROP TYPE IF EXISTS {enum_name} CASCADE;")

@@ -34,13 +34,13 @@ class BodyMetricCreate(BodyMetricBase):
     muscle_mass_kg: MuscleMassKg | None = None
 
 
-# Corrections are complete new snapshots, not updates to stored measurements.
+# Lần sửa là ảnh chụp mới đầy đủ, không phải cập nhật số đo đã lưu.
 BodyMetricReplace = BodyMetricCreate
 
 
 class BodyMetricRead(BodyMetricBase, EntityRead):
     user_id: UUID
-    # Device samples (source GOOGLE_HEALTH) may hold only height or body fat.
+    # Mẫu từ thiết bị (source GOOGLE_HEALTH) có thể chỉ chứa chiều cao hoặc mỡ cơ thể.
     weight_kg: PositiveMeasurement | None = None
     source: str = "MANUAL"
 

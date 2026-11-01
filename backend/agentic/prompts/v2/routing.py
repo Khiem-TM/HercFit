@@ -1,8 +1,8 @@
-"""Version 2: device health data (Google Health) and finer body/profile intents.
+"""Phiên bản 2: dữ liệu sức khoẻ từ thiết bị (Google Health) và ý định cơ thể/hồ sơ chi tiết hơn.
 
-Changes from v1: the health routing domain, its boundaries with metrics/progress/
-profile, router intent labels for body and profile questions, and a health read
-route for the adaptive router. Version 1 stays frozen for existing evaluations.
+Thay đổi so với v1: miền định tuyến health, ranh giới của nó với metrics/progress/
+profile, nhãn ý định router cho câu hỏi về cơ thể và hồ sơ, và một tuyến đọc
+health cho router thích ứng. Phiên bản 1 được giữ cố định cho các đánh giá hiện có.
 """
 
 from agentic.prompts.v1.routing import GRAPH_CONTEXT_GUIDANCE, JEV_ROUTING_QUESTIONS as _V1_QUESTIONS

@@ -31,10 +31,10 @@ const values = computed(() => metric.value
 const reference = computed(() => {
   if (!metric.value) return null
   if (metric.value.target) return metric.value.target
-  // Steps use the backend average (worn days only) so the line matches the headline number.
+  // Bước chân dùng trung bình của backend (chỉ các ngày có đeo) để đường khớp với con số chính.
   const overview = props.data.overview?.activity.steps_avg
   if (metric.value.key === 'steps' && overview != null) return { value: overview, label: `TB ${fmt(overview)} bước (ngày có đeo)` }
-  // Today is still being recorded, so it is left out of the average.
+  // Hôm nay vẫn đang được ghi, nên không tính vào trung bình.
   const known = values.value.filter((value, i): value is number => value != null && props.data.days[i] !== props.data.end)
   if (known.length < 2) return null
   const average = known.reduce((sum, value) => sum + value, 0) / known.length

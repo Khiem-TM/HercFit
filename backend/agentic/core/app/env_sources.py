@@ -1,4 +1,4 @@
-"""Resolve the gateway URL alias without changing settings-source precedence."""
+"""Giải quyết bí danh URL gateway mà không đổi thứ tự ưu tiên của các nguồn settings."""
 from pydantic_settings import DotEnvSettingsSource
 
 
@@ -14,8 +14,8 @@ def canonical_jev_url(values, *, case_sensitive=True):
 
 class JevDotEnvSettingsSource(DotEnvSettingsSource):
     def _read_env_file(self, file_path):
-        # Normalize each file before merging: agent .env must override shared
-        # .env even when they use different names for the same setting.
+        # Chuẩn hoá từng file trước khi gộp: .env của agent phải ghi đè .env dùng chung
+        # kể cả khi hai bên đặt tên khác nhau cho cùng một thiết lập.
         return canonical_jev_url(super()._read_env_file(file_path), case_sensitive=self.case_sensitive)
 
 

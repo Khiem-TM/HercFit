@@ -1,11 +1,11 @@
-"""What the user allows HercFit to do with their health data, as its own record.
+"""Những gì người dùng cho phép HercFit làm với dữ liệu sức khoẻ của họ, thành một bản ghi riêng.
 
-user_consents holds the current decision per (purpose, data group); consent_events
-is the append-only history. The knowledge-graph gate (kg_device_consent) reads
-user_consents too, so SQL reads, tools and the graph follow one decision.
+user_consents giữ quyết định hiện tại theo (mục đích, nhóm dữ liệu); consent_events
+là lịch sử chỉ-ghi-thêm. Cổng của knowledge graph (kg_device_consent) cũng đọc
+user_consents, nên lệnh đọc SQL, tool và graph đều theo một quyết định.
 
-`version` increases on every change for a user (across purposes and groups), so
-a job or a cached context built under an older version can be recognized as stale.
+`version` tăng ở mọi thay đổi của một người dùng (trên mọi mục đích và nhóm), để
+job hay ngữ cảnh cache dựng theo phiên bản cũ hơn bị nhận ra là đã cũ.
 """
 from __future__ import annotations
 

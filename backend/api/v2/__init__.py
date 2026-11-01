@@ -1,6 +1,6 @@
-"""/api/v2: the health platform API (cursor pagination, 202 + operation id for async commands).
+"""/api/v2: API của nền tảng sức khoẻ (phân trang bằng cursor, 202 + operation id cho lệnh bất đồng bộ).
 
-/api (v1) stays unchanged through adapters while consumers move (docs/google_health/).
+/api (v1) giữ nguyên qua các adapter trong khi các bên dùng chuyển dần (docs/google_health/).
 """
 from fastapi import APIRouter
 
@@ -17,7 +17,7 @@ api_v2_router.include_router(operations_router)
 api_v2_router.include_router(health_router)
 api_v2_router.include_router(context_router)
 api_v2_router.include_router(google_health_router)
-# Public: Google authenticates with the subscriber secret and a signature, not a user token.
+# Công khai: Google xác thực bằng secret của subscriber và chữ ký, không phải token người dùng.
 api_v2_router.include_router(google_health_webhook_router)
 
 __all__ = ["api_v2_router"]

@@ -1,1 +1,1 @@
-"""Ingestion: how each data type is read (reads.py) and how a read lands in HercFit."""
+"""Nhập dữ liệu: cách đọc từng loại dữ liệu (reads.py) và cách một lần đọc đổ vào HercFit."""

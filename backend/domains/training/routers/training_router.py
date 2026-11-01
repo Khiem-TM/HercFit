@@ -1,4 +1,4 @@
-"""Actual trainings: complete immutable snapshots."""
+"""Buổi tập thực tế: ảnh chụp bất biến đầy đủ."""
 from uuid import UUID
 
 from fastapi import APIRouter, Response

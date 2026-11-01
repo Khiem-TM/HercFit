@@ -1,8 +1,8 @@
-"""Lookup of a job by (kind, dedupe_key) in any state.
+"""Tra cứu job theo (kind, dedupe_key) ở mọi trạng thái.
 
-The scheduler plans periodic work once per time bucket (workers/scheduler.py
-_plan_once) by checking whether a job with that key ever existed; uq_jobs_dedupe
-only covers pending jobs. Additive only.
+Scheduler lập việc định kỳ một lần cho mỗi khung thời gian (workers/scheduler.py
+_plan_once) bằng cách kiểm tra đã từng có job với khoá đó chưa; uq_jobs_dedupe
+chỉ bao quát job đang chờ. Chỉ cộng thêm.
 """
 from alembic import op
 

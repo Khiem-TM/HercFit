@@ -1,4 +1,4 @@
-"""GH_HISTORY_EXPORT: the user explicitly asked to send records made before enabling a group."""
+"""GH_HISTORY_EXPORT: người dùng yêu cầu tường minh gửi các bản ghi tạo trước khi bật nhóm."""
 from __future__ import annotations
 
 from sqlalchemy import select

@@ -1,4 +1,4 @@
-"""Consistent node errors, latency, model usage and JEV billing across the graph."""
+"""Lỗi node, độ trễ, số liệu sử dụng model và tính phí JEV nhất quán trên toàn graph."""
 import logging
 from time import perf_counter
 from openai import AuthenticationError
@@ -17,8 +17,8 @@ async def run_node(fn, state, node, settings):
         with span(getattr(settings,'LANGSMITH_ENABLED',False),node,state.get('run_id')):
             result=await fn(state)
     except Exception as exc:
-        # Exceptions may contain upstream request bodies. Expose only class;
-        # Never write raw exception text to operational logs.
+        # Exception có thể chứa body request phía trên. Chỉ lộ ra tên lớp;
+        # không bao giờ ghi nội dung exception thô vào log vận hành.
         logger.warning('agent_node_failed node=%s error_type=%s',node,type(exc).__name__)
         annotate(status='failed', error_code=type(exc).__name__)
         result={'status':'failed','error':'Không hoàn tất bước xử lý ('+type(exc).__name__+').'}
@@ -31,8 +31,8 @@ async def run_node(fn, state, node, settings):
     previous=state.get('telemetry') or {}
     telemetry=dict(previous) if previous.get('run_id')==state.get('run_id') else {'run_id':state.get('run_id')}
     if telemetry.get('llm_calls') and not telemetry.get('billing_version'):
-        # Resumed checkpoints from before billing instrumentation have no
-        # verified historical price/usage completeness; never call them free.
+        # Checkpoint được tiếp tục từ trước khi có đo đạc tính phí không có
+        # độ đầy đủ giá/số liệu sử dụng lịch sử đã kiểm chứng; không bao giờ coi chúng là miễn phí.
         telemetry['llm_cost_unknown_calls'] = telemetry.get('llm_cost_unknown_calls', 0) + telemetry['llm_calls']
         telemetry['llm_usage_unknown_calls'] = telemetry.get('llm_usage_unknown_calls', 0) + telemetry['llm_calls']
     telemetry['billing_version'] = 1

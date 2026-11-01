@@ -22,7 +22,7 @@ onMounted(() => {
 })
 onUnmounted(() => observer?.disconnect())
 
-// The right margin holds the direct label of the latest value.
+// Lề phải chứa nhãn trực tiếp của giá trị mới nhất.
 const PAD = { top: 14, right: 58, bottom: 24, left: 36 }
 const plotW = computed(() => width.value - PAD.left - PAD.right)
 const plotH = computed(() => props.height - PAD.top - PAD.bottom)
@@ -31,7 +31,7 @@ const step = computed(() => plotW.value / Math.max(1, props.days.length - 1))
 const x = (i: number) => PAD.left + (props.days.length === 1 ? plotW.value / 2 : step.value * i)
 const y = (value: number) => PAD.top + (scale.value.hi - value) / (scale.value.hi - scale.value.lo) * plotH.value
 
-/** Missing days break the line instead of being drawn as zero. */
+/** Ngày thiếu dữ liệu làm đứt đường thay vì vẽ thành số 0. */
 const path = computed(() => {
   let d = ''
   let open = false
@@ -63,7 +63,7 @@ function keydown(event: KeyboardEvent) {
   event.preventDefault()
   active.value = Math.min(end, Math.max(0, next))
 }
-// Beside the crosshair, so the point under it stays visible.
+// Bên cạnh đường chữ thập, để điểm bên dưới vẫn nhìn thấy được.
 const tooltip = computed(() => {
   if (active.value == null) return null
   const right = x(active.value) < width.value / 2

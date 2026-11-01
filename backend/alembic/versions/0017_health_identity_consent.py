@@ -1,19 +1,19 @@
-"""Health platform M2: connection identity and fencing, and consent as its own record.
+"""Nền tảng sức khoẻ M2: danh tính và fencing của kết nối, và consent thành bản ghi riêng.
 
-* health_connections gains the provider's health user id (webhooks route by it),
-  a connection generation (bumped on reconnect/disconnect so stale jobs are
-  fenced out), a lease epoch (fencing token for every write a sync makes) and
-  the API version the connection reads from.
-* user_consents is the single source of truth for what the assistant may read;
-  consent_events keeps the append-only history. Assistant consent is backfilled
-  from health_connections.share_with_assistant, which stays for rollback only.
-* domain_events is a transactional outbox of business facts (e.g. consent.changed);
-  each consumer records what it handled in domain_event_deliveries, so events
-  committed out of id order are never skipped.
-* The knowledge-graph consent gate (kg_device_consent) now reads user_consents,
-  and a consent change republishes device data in the same transaction.
+* health_connections có thêm health user id của nhà cung cấp (webhook định tuyến theo nó),
+  thế hệ kết nối (tăng khi kết nối lại/ngắt kết nối để fence các job
+  đã cũ), lease epoch (fencing token cho mọi lệnh ghi mà một lần sync thực hiện) và
+  phiên bản API mà kết nối đọc.
+* user_consents là nguồn sự thật duy nhất về những gì trợ lý được đọc;
+  consent_events giữ lịch sử chỉ-ghi-thêm. Consent của trợ lý được điền
+  từ health_connections.share_with_assistant, cột này chỉ còn để quay lui.
+* domain_events là outbox giao dịch cho các dữ kiện nghiệp vụ (ví dụ consent.changed);
+  mỗi consumer ghi những gì nó đã xử lý vào domain_event_deliveries, nên các sự kiện
+  commit không theo thứ tự id không bao giờ bị bỏ qua.
+* Cổng consent của knowledge graph (kg_device_consent) giờ đọc user_consents,
+  và thay đổi consent phát lại dữ liệu thiết bị trong cùng transaction.
 
-Additive only; downgrade drops just what this revision created.
+Chỉ cộng thêm; downgrade chỉ xoá những gì revision này đã tạo.
 """
 from alembic import op
 
@@ -86,7 +86,7 @@ def upgrade():
             delivered_at timestamptz DEFAULT now() NOT NULL,
             PRIMARY KEY (consumer, event_id)
         )""")
-    # Backfill before the trigger exists, so nothing is republished needlessly.
+    # Điền dữ liệu trước khi trigger tồn tại, để không gì bị phát lại không cần thiết.
     op.execute(f"""
         INSERT INTO user_consents (user_id, purpose, data_group, granted, version, policy_version, changed_at)
         SELECT user_id, 'assistant', 'device', share_with_assistant, 1, '{POLICY_VERSION}',
@@ -109,4 +109,4 @@ def downgrade():
     op.execute("ALTER TABLE health_connections DROP CONSTRAINT IF EXISTS ck_health_connections_api_version")
     for column in ("api_version", "lease_epoch", "generation", "health_user_id"):
         op.execute(f"ALTER TABLE health_connections DROP COLUMN IF EXISTS {column}")
-    # kg_device_consent falls back to share_with_assistant once user_consents is gone.
+    # kg_device_consent quay về dùng share_with_assistant khi user_consents không còn.

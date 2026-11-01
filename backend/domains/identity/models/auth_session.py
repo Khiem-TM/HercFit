@@ -91,7 +91,7 @@ class AuthSession(BaseModel):
         session: AsyncSession,
         refresh_token_hash: str,
     ) -> AuthSession | None:
-        # Serialize rotation/revocation of the same refresh token.
+        # Tuần tự hoá việc xoay/thu hồi cùng một refresh token.
         return (await session.execute(
             select(cls).where(cls.refresh_token_hash == refresh_token_hash, cls.is_active.is_(True))
             .with_for_update().execution_options(populate_existing=True)

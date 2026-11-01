@@ -1,4 +1,4 @@
-"""Driver creation is lazy: importing the graph modules opens no connection."""
+"""Tạo driver theo kiểu lười: import các module graph không mở kết nối nào."""
 
 
 def value(settings, name, default=None):

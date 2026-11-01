@@ -3,12 +3,12 @@ import { computed } from 'vue'
 import { Info } from 'lucide-vue-next'
 import { ACTION_NOTES, fieldRows } from '@/features/chat/confirmation'
 
-/** Standard card for a write without a dry-run (body metrics, goals, profile, edits, deletions): labelled fields, never raw JSON. */
+/** Thẻ chuẩn cho lệnh ghi không có chạy thử (số đo cơ thể, mục tiêu, hồ sơ, sửa, xoá): các trường có nhãn, không bao giờ là JSON thô. */
 const props = defineProps<{ tool: string; payload: Record<string, unknown> }>()
 
 const rows = computed(() => fieldRows(props.payload))
 const note = computed(() => ACTION_NOTES[props.tool] ?? '')
-// Deletions and status changes carry only the record's id: a short reference tells two records apart.
+// Xoá và đổi trạng thái chỉ mang id của bản ghi: một mã tham chiếu ngắn để phân biệt hai bản ghi.
 const reference = computed(() => {
   const id = props.payload?.resource_id
   return typeof id === 'string' && id ? `#${id.slice(-6)}` : ''

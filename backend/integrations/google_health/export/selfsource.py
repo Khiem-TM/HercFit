@@ -1,10 +1,10 @@
-"""Recognize data HercFit itself wrote to Google, so an import never duplicates it.
+"""Nhận ra dữ liệu chính HercFit đã ghi lên Google, để lần nhập không bao giờ tạo bản trùng.
 
-A point is ours when its resource name is in google_resource_mappings (owned by
-HercFit) or its data source names our OAuth client (`application.googleWebClientId`).
-Rollups cannot be filtered this way: they aggregate all sources, so daily totals may
-include exported logs; context and insights therefore report logs and provider
-totals per source instead of adding them.
+Một data point là của chúng ta khi tên tài nguyên của nó có trong google_resource_mappings (do
+HercFit sở hữu) hoặc nguồn dữ liệu của nó gọi tên OAuth client của chúng ta (`application.googleWebClientId`).
+Rollup không lọc được theo cách này: chúng gộp mọi nguồn, nên tổng theo ngày có thể
+bao gồm nhật ký đã xuất; vì vậy ngữ cảnh và insight báo nhật ký và tổng
+của nhà cung cấp theo từng nguồn thay vì cộng chúng lại.
 """
 from __future__ import annotations
 

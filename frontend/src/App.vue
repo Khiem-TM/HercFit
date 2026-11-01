@@ -55,11 +55,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!-- Authenticated Chat Workspace -->
+  <!-- Không gian chat đã xác thực -->
   <OnboardingPage v-if="isAuthenticated && !isLoading && !user?.is_onboarding" />
   <ChatPage v-else-if="isAuthenticated && !isLoading" />
 
-  <!-- Loading Auth Session / Exchanging Google OAuth Code -->
+  <!-- Đang tải phiên xác thực / đổi mã Google OAuth -->
   <div
     v-else-if="(isProtectedRoute || isAuthenticated) && isLoading"
     class="flex h-screen w-screen flex-col items-center justify-center bg-background text-primary"
@@ -70,7 +70,7 @@ onBeforeUnmount(() => {
     </p>
   </div>
 
-  <!-- Unauthenticated Gate on /chat or Failed Callback -->
+  <!-- Cổng chưa xác thực trên /chat hoặc callback thất bại -->
   <div
     v-else-if="isProtectedRoute && !isAuthenticated"
     class="relative flex h-screen w-screen flex-col items-center justify-center bg-background px-4 text-primary"
@@ -111,7 +111,7 @@ onBeforeUnmount(() => {
     </div>
   </div>
 
-  <!-- Default Landing Page -->
+  <!-- Trang giới thiệu mặc định -->
   <template v-else>
     <a class="skip-link" href="#main-content">Bỏ qua điều hướng</a>
     <SiteHeader />

@@ -1,7 +1,7 @@
-"""Explicit, versioned prompt lookup with no network, environment or runtime state.
+"""Tra cứu prompt tường minh, có phiên bản, không có mạng, biến môi trường hay trạng thái runtime.
 
-Keep version 1 stable. A changed instruction gets a new version and evaluation;
-callers opt in rather than silently changing running agent behavior.
+Giữ phiên bản 1 ổn định. Hướng dẫn thay đổi thì có phiên bản và đánh giá mới;
+bên gọi chủ động chọn dùng thay vì âm thầm đổi hành vi của agent đang chạy.
 """
 from copy import deepcopy
 from types import MappingProxyType
@@ -33,20 +33,20 @@ TEMPLATES = MappingProxyType({
     ('memory.summary', 'v1'): SUMMARY_PROMPT,
     ('nutrition.capabilities', 'v1'): CAPABILITY_GUIDANCE,
     ('training.coach', 'v1'): COACH_GUIDANCE,
-    # v2: Google Health device data and finer body/profile intents.
+    # v2: dữ liệu thiết bị Google Health và ý định cơ thể/hồ sơ chi tiết hơn.
     ('orchestration.route', 'v2'): v2_routing.ROUTING_PROMPT,
     ('health.guidance', 'v2'): HEALTH_GUIDANCE,
     ('training.coach', 'v2'): COACH_GUIDANCE_V2,
-    # v2: personalized advice from the user's stored data plus verified knowledge.
+    # v2: tư vấn cá nhân hoá từ dữ liệu đã lưu của người dùng cộng tri thức đã kiểm chứng.
     ('orchestration.personal', 'v2'): PERSONAL_ROUTING,
     ('orchestration.personal_answer', 'v2'): PERSONALIZED_ANSWER,
-    # v2: catalog picks can be multiple choice and never reach the user without their options.
+    # v2: lựa chọn catalog có thể chọn nhiều và không bao giờ đến người dùng mà thiếu các phương án.
     ('clarification.form', 'v2'): CLARIFICATION_PROMPT_V2,
-    # v3: training logs go straight to the structured preview; quick gym logs by intensity.
+    # v3: nhật ký tập đi thẳng tới bản xem trước có cấu trúc; ghi nhanh buổi gym theo cường độ.
     ('training.coach', 'v3'): COACH_GUIDANCE_V3,
-    # v3: sourced context API first; missing coverage is unknown, never "not worn".
+    # v3: ưu tiên context API có nguồn; thiếu độ phủ là chưa biết, không bao giờ là "không đeo".
     ('health.guidance', 'v3'): HEALTH_GUIDANCE_V3,
-    # v3: card frames only (choices, numbers with a unit, catalog picks); no free-text answers.
+    # v3: chỉ dùng khung trên thẻ (lựa chọn, số kèm đơn vị, chọn catalog); không có câu trả lời văn bản tự do.
     ('clarification.form', 'v3'): CLARIFICATION_PROMPT_V3,
 })
 
@@ -58,10 +58,10 @@ _QUESTIONS = {
 
 
 def get_prompt(name: str, version: str = 'v1') -> str:
-    """Return the exact template; format dynamic fields only at the call site."""
+    """Trả về đúng mẫu; chỉ điền các trường động tại nơi gọi."""
     return TEMPLATES[(name, version)]
 
 
 def get_questions(name: str, version: str = 'v1') -> dict:
-    """Return an isolated copy so an evaluator cannot mutate another run's policy."""
+    """Trả về một bản sao tách biệt để bộ đánh giá không sửa được chính sách của lượt chạy khác."""
     return deepcopy(_QUESTIONS[(name, version)])

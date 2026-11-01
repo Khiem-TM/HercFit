@@ -1,4 +1,4 @@
-"""Personal foods catalog endpoints."""
+"""Các endpoint danh mục thực phẩm cá nhân."""
 from uuid import UUID
 
 from fastapi import APIRouter, Response
@@ -33,7 +33,7 @@ async def resolve_food(service: CatalogServiceDep, query: str):
 
 from agentic.research.contracts import FoodFinalization, FoodFinalizationResult
 
-# The idempotent route stores the validated response, so the result needs a response model.
+# Route idempotent lưu phản hồi đã kiểm tra, nên kết quả cần một response model.
 @router.post("/research-finalizations", response_model=FoodFinalizationResult)
 @transaction
 async def finalize_food(payload: FoodFinalization, service: CatalogServiceDep):

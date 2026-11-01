@@ -9,7 +9,7 @@ const props = withDefaults(defineProps<{
   rounded?: string
 }>(), { src: null, icon: 'none', rounded: 'rounded-xl' })
 
-// A broken or missing picture falls back to an icon instead of an empty frame.
+// Ảnh hỏng hoặc thiếu sẽ chuyển sang biểu tượng thay vì một khung trống.
 const failed = shallowRef(false)
 watch(() => props.src, () => { failed.value = false })
 const icons = { food: UtensilsCrossed, exercise: Dumbbell, run: Footprints, none: ImageOff }

@@ -11,9 +11,9 @@ import TrainingCardBody from './TrainingCardBody.vue'
 import { cardKind, catalogTitle, DISCIPLINE, fmt, TOOL_TITLES, when } from '@/features/chat/confirmation'
 
 export interface ConfirmExtras {
-  /** User photo for a meal/training, uploaded to Cloudinary after the record is saved. */
+  /** Ảnh của người dùng cho một bữa ăn/buổi tập, tải lên Cloudinary sau khi bản ghi được lưu. */
   photo?: File | null
-  /** Research picture for a custom food/exercise, imported to Cloudinary after saving. */
+  /** Ảnh từ tra cứu cho thực phẩm/bài tập tuỳ chỉnh, nhập lên Cloudinary sau khi lưu. */
   imageSource?: string | null
 }
 
@@ -25,7 +25,7 @@ const kind = computed(() => cardKind(props.action.tool, display.value))
 const photo = shallowRef<File | null>(null)
 const imageSource = shallowRef<string | null>(null)
 
-// A new action (or revision) starts with fresh choices; research cards preselect the first picture.
+// Hành động (hoặc bản sửa đổi) mới bắt đầu với lựa chọn mới; thẻ tra cứu chọn sẵn ảnh đầu tiên.
 watch(() => `${props.action.action_id}:${props.action.revision}`, () => {
   photo.value = null
   imageSource.value = kind.value === 'catalog' ? (display.value?.image_candidates?.[0]?.url ?? null) : null
@@ -45,7 +45,7 @@ const subtitle = computed(() => {
   if (kind.value === 'catalog') return value.resolution === 'reuse' ? 'Không tạo bản ghi mới; lưu liên kết nguồn nghiên cứu' : 'Bản ghi CUSTOM chỉ bạn nhìn thấy'
   return ''
 })
-// A fields card is named by what it changes: deletions, measurements, goals, the profile, journals, plans.
+// Thẻ trường dữ liệu được đặt tên theo thứ nó thay đổi: xoá, số đo, mục tiêu, hồ sơ, nhật ký, kế hoạch.
 function fieldsIcon(tool: string) {
   if (tool.startsWith('delete_')) return Trash2
   if (tool.endsWith('_metrics')) return Ruler

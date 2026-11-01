@@ -1,16 +1,16 @@
-"""Filter graph context and compact verified evidence without mutating checkpoints."""
+"""Lọc ngữ cảnh graph và nén bằng chứng đã kiểm chứng mà không sửa checkpoint."""
 import json
 from agentic.knowledge_graph.service import render_lines
 
 def model_graph_context(state):
     if state.get('graph_context_run_id') != state.get('run_id') or not state.get('graph_context'):
         return None
-    # Readable lines only: no IDs, versions, static capabilities or raw snapshots.
+    # Chỉ các dòng dễ đọc: không ID, phiên bản, khả năng tĩnh hay ảnh chụp thô.
     return '\n'.join(render_lines(state['graph_context'])) or None
 
 
 def compact_evidence(state):
-    """Keep authoritative outputs once in prompts; checkpoints retain every byte."""
+    """Chỉ giữ một lần các đầu ra có thẩm quyền trong prompt; checkpoint giữ lại từng byte."""
     present = set()
     for message in state.get('messages', []):
         raw = None
@@ -33,7 +33,7 @@ def compact_evidence(state):
 
 
 def bounded_documents(documents, limit=18000):
-    """The exact passages sent to research are also the passages verified later."""
+    """Đúng các đoạn trích đã gửi sang tra cứu cũng là các đoạn được kiểm chứng sau đó."""
     selected = []
     remaining = limit
     for source in documents.values():

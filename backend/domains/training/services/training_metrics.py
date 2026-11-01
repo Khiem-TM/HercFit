@@ -1,12 +1,12 @@
-"""Deterministic training formulas. Pure functions: no I/O, no ORM.
+"""Công thức tập luyện tất định. Hàm thuần: không I/O, không ORM.
 
-Every estimate returned here carries its method and inputs so a reader can
-reproduce it. References:
-- Epley (1985) one-repetition maximum estimate.
-- ACSM's Guidelines for Exercise Testing and Prescription, metabolic equations.
-- Compendium of Physical Activities (Herrmann et al., 2024) for MET values.
-- Foster et al. (2001) session-RPE training load.
-- Karvonen heart-rate reserve; Daniels' Running Formula pace zones; Riegel (1981).
+Mọi ước tính trả về ở đây mang phương pháp và đầu vào để người đọc
+tái tạo được. Tài liệu tham khảo:
+- Epley (1985) ước tính 1RM.
+- ACSM's Guidelines for Exercise Testing and Prescription, các phương trình chuyển hoá.
+- Compendium of Physical Activities (Herrmann và cộng sự, 2024) cho giá trị MET.
+- Foster và cộng sự (2001) tải tập session-RPE.
+- Nhịp tim dự trữ Karvonen; vùng pace theo Daniels' Running Formula; Riegel (1981).
 """
 
 from __future__ import annotations
@@ -29,15 +29,15 @@ ESTIMATE_SOURCE = "HERCFIT_ESTIMATE"
 WORK_SETS = frozenset({SetType.WORKING, SetType.BACKOFF, SetType.DROP, SetType.FAILURE})
 E1RM_SETS = frozenset({SetType.WORKING, SetType.BACKOFF, SetType.FAILURE})
 E1RM_MAX_REPS = 12
-# Assumptions used only when a strength item has no measured duration.
+# Giả định chỉ dùng khi một mục sức mạnh không có thời lượng đo được.
 SECONDS_PER_REP = 3.0
 DEFAULT_REST = {SetType.WARMUP: 60.0}
 DEFAULT_WORK_REST = 90.0
-STRENGTH_MET = 3.5  # Compendium: resistance training, multiple exercises, 8-15 reps, varied resistance.
+STRENGTH_MET = 3.5  # Compendium: tập kháng lực, nhiều bài, 8-15 lần, mức tạ thay đổi.
 SPORT_MET = {ActivityIntensity.LIGHT: 4.0, ActivityIntensity.MODERATE: 6.0, ActivityIntensity.VIGOROUS: 8.0}
-# A gym session logged by intensity only (catalog sport "resistance_training"), 2024 Adult Compendium:
-# 02054 multiple exercises, 8-15 reps (3.5); 02061 gym/weight training, general (5.0); 02050 power lifting or
-# body building, vigorous (6.0).
+# Buổi gym chỉ ghi theo cường độ (môn thể thao "resistance_training" trong catalog), 2024 Adult Compendium:
+# 02054 nhiều bài, 8-15 lần (3.5); 02061 tập gym/tạ, chung (5.0); 02050 cử tạ hoặc
+# thể hình, mạnh (6.0).
 RESISTANCE_MET = {ActivityIntensity.LIGHT: 3.5, ActivityIntensity.MODERATE: 5.0, ActivityIntensity.VIGOROUS: 6.0}
 INTENSITY_MET = {"resistance_training": RESISTANCE_MET}
 
@@ -46,10 +46,10 @@ def _round(value: float | None, digits: int = 3) -> float | None:
     return None if value is None else round(value, digits)
 
 
-# --------------------------------------------------------------------------- strength
+# --------------------------------------------------------------------------- sức mạnh
 
 def effective_load(work_set: StrengthSet, bodyweight_kg: float | None = None) -> float | None:
-    """External: bar/dumbbell load. Bodyweight: body + added load. Assisted: body - assistance."""
+    """Ngoài: tạ đòn/tạ đơn. Trọng lượng cơ thể: cơ thể + tạ thêm. Có hỗ trợ: cơ thể - phần hỗ trợ."""
     body = work_set.bodyweight_kg or bodyweight_kg
     if work_set.load_mode == LoadMode.EXTERNAL:
         return work_set.weight_kg
@@ -61,7 +61,7 @@ def effective_load(work_set: StrengthSet, bodyweight_kg: float | None = None) ->
 
 
 def estimate_1rm(load_kg: float, reps: int, rir: float | None = None) -> float | None:
-    """Epley with reps-in-reserve folded into effective reps; None beyond 12 reps."""
+    """Epley với số lần dự trữ (RIR) gộp vào số lần hiệu dụng; None khi quá 12 lần."""
     effective_reps = reps + (rir or 0)
     if load_kg <= 0 or effective_reps > E1RM_MAX_REPS:
         return None
@@ -71,7 +71,7 @@ def estimate_1rm(load_kg: float, reps: int, rir: float | None = None) -> float |
 
 
 def is_hard_set(work_set: StrengthSet) -> bool:
-    """A working set close to failure. Without RPE/RIR a working set counts as hard."""
+    """Set làm việc gần tới giới hạn. Khi không có RPE/RIR thì set làm việc được tính là nặng."""
     if work_set.set_type not in WORK_SETS:
         return False
     if work_set.set_type == SetType.FAILURE:
@@ -112,7 +112,7 @@ def strength_metrics(performance: StrengthPerformance, *, e1rm_eligible: bool, b
     }
 
 
-# --------------------------------------------------------------------------- endurance
+# --------------------------------------------------------------------------- sức bền
 
 def pace_seconds_per_km(duration_seconds: float, distance_meters: float) -> float:
     return duration_seconds * 1000 / distance_meters
@@ -142,7 +142,7 @@ def item_metrics(performance, configuration: dict[str, Any], *, bodyweight_kg: f
     return sport_metrics(performance)
 
 
-# --------------------------------------------------------------------------- energy
+# --------------------------------------------------------------------------- năng lượng
 
 def _estimate(kcal: float, method: str, version: str, **inputs) -> dict[str, Any]:
     return {"kcal": round(kcal, 3), "source": ESTIMATE_SOURCE, "method": method,
@@ -150,9 +150,9 @@ def _estimate(kcal: float, method: str, version: str, **inputs) -> dict[str, Any
 
 
 def acsm_kcal(activity: EnduranceActivity, distance_m: float, seconds: float, gain_m: float | None, weight_kg: float) -> dict[str, Any]:
-    """ACSM metabolic equations: VO2 (ml/kg/min) -> kcal = VO2 * kg * min / 200."""
+    """Phương trình chuyển hoá ACSM: VO2 (ml/kg/phút) -> kcal = VO2 * kg * phút / 200."""
     minutes = seconds / 60
-    speed = distance_m / minutes  # m/min
+    speed = distance_m / minutes  # m/phút
     grade = min((gain_m or 0) / distance_m, 0.4)
     if activity == EnduranceActivity.RUN:
         vo2 = 0.2 * speed + 0.9 * speed * grade + 3.5
@@ -170,7 +170,7 @@ def met_kcal(met: float, seconds: float, weight_kg: float, method: str, **inputs
 
 
 def estimate_kcal(performance, configuration: dict[str, Any], weight_kg: float | None) -> dict[str, Any] | None:
-    """Server-side energy estimate with provenance, or None when weight is unknown."""
+    """Ước tính năng lượng phía server kèm nguồn gốc, hoặc None khi chưa biết cân nặng."""
     weight = getattr(performance, "weight_kg", None) or weight_kg
     if weight is None:
         return None
@@ -190,10 +190,10 @@ def estimate_kcal(performance, configuration: dict[str, Any], weight_kg: float |
 
 
 def allocate_session_time(items: list[dict[str, Any]], session_seconds: float | None) -> None:
-    """Spread unmeasured session time over strength items whose duration was estimated from sets.
+    """Rải thời gian buổi tập chưa đo cho các mục sức mạnh có thời lượng ước tính từ số set.
 
-    Set-based estimates ignore warm-up, transitions and longer rests; when the whole
-    session duration is known, MET energy is recomputed on the allocated time.
+    Ước tính theo set bỏ qua khởi động, thời gian chuyển và các lần nghỉ dài; khi biết
+    thời lượng cả buổi, năng lượng MET được tính lại trên thời gian đã phân bổ.
     """
     estimated = [item for item in items if (item.get("calorie_estimate") or {}).get("inputs", {}).get("duration_basis") == "estimated_from_sets"]
     if not session_seconds or not estimated:
@@ -210,17 +210,17 @@ def allocate_session_time(items: list[dict[str, Any]], session_seconds: float | 
         item["duration_seconds"] = round(seconds, 3)
 
 
-# --------------------------------------------------------------------------- load & zones
+# --------------------------------------------------------------------------- tải và vùng
 
 def session_load(session_rpe: float | None, duration_seconds: float | None) -> float | None:
-    """Foster session-RPE: CR-10 rating x minutes (arbitrary units)."""
+    """Session-RPE của Foster: điểm CR-10 x số phút (đơn vị tuỳ ý)."""
     if session_rpe is None or not duration_seconds:
         return None
     return round(float(session_rpe) * float(duration_seconds) / 60, 3)
 
 
 def hr_zones(max_hr: int, resting_hr: int | None = None) -> dict[str, list[int]]:
-    """Five zones; Karvonen (heart-rate reserve) when resting HR is known, else %HRmax."""
+    """Năm vùng; Karvonen (nhịp tim dự trữ) khi biết nhịp tim nghỉ, nếu không thì %HRmax."""
     bounds = [(0.50, 0.60), (0.60, 0.70), (0.70, 0.80), (0.80, 0.90), (0.90, 1.00)]
     if resting_hr:
         reserve = max_hr - resting_hr
@@ -228,12 +228,12 @@ def hr_zones(max_hr: int, resting_hr: int | None = None) -> dict[str, list[int]]
     return {f"Z{i}": [round(lo * max_hr), round(hi * max_hr)] for i, (lo, hi) in enumerate(bounds, 1)}
 
 
-# Pace multipliers relative to threshold pace (seconds/km); slower = larger.
+# Hệ số pace so với pace ngưỡng (giây/km); chậm hơn = lớn hơn.
 PACE_ZONE_FACTORS = {"E": (1.22, 1.32), "M": (1.06, 1.10), "T": (0.98, 1.02), "I": (0.90, 0.94), "R": (0.84, 0.88)}
 
 
 def pace_zones(threshold_pace_s_per_km: float) -> dict[str, list[int]]:
-    """Daniels-style training paces derived from threshold pace: [fast, slow] s/km."""
+    """Pace tập kiểu Daniels suy ra từ pace ngưỡng: [nhanh, chậm] giây/km."""
     return {zone: [round(threshold_pace_s_per_km * lo), round(threshold_pace_s_per_km * hi)]
             for zone, (lo, hi) in PACE_ZONE_FACTORS.items()}
 
@@ -243,7 +243,7 @@ def riegel(time_seconds: float, distance_m: float, target_m: float, exponent: fl
 
 
 def threshold_from_race(distance_m: float, time_seconds: float) -> float:
-    """Approximate threshold pace as the Riegel-predicted ~1-hour race pace."""
-    # Threshold ~= race pace sustainable for ~60 min; solve distance for 3600 s.
+    """Xấp xỉ pace ngưỡng bằng pace thi đấu ~1 giờ dự đoán theo Riegel."""
+    # Ngưỡng ~= pace thi đấu duy trì được ~60 phút; giải quãng đường cho 3600 s.
     hour_distance = distance_m * (3600 / time_seconds) ** (1 / 1.06)
     return 3600 * 1000 / hour_distance

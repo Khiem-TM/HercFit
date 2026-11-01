@@ -83,7 +83,7 @@ class Goal(BaseModel):
         cls, session: AsyncSession, goal_id: PyUUID, *, user_id: PyUUID,
         payload: GoalUpdate | Mapping[str, Any], expected_version_id: int,
     ) -> Goal | None:
-        """Replace supplied fields; reject stale edits without committing caller work."""
+        """Thay các trường được truyền; từ chối lần sửa đã cũ mà không commit công việc của bên gọi."""
         values = GoalUpdate.model_validate(payload).to_payload()
         async with session.begin_nested():
             if await try_lock_user(session, user_id) is None:
@@ -98,7 +98,7 @@ class Goal(BaseModel):
             if goal.status != GoalStatus.IN_PROGRESS:
                 raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="Goal has already ended")
             require_version(goal, expected_version_id)
-            # Validate dates against the stored counterpart when PATCH supplies only one.
+            # Kiểm tra ngày với giá trị đã lưu còn lại khi PATCH chỉ truyền một ngày.
             GoalCreate.model_validate({
                 "title": goal.title, "start_date": goal.start_date,
                 "target_date": goal.target_date, **values,
@@ -131,7 +131,7 @@ class Goal(BaseModel):
             goal = result.scalar_one_or_none()
             if goal is None:
                 return None
-            # Refresh cached state after waiting for another transaction's User lock.
+            # Làm mới trạng thái cache sau khi chờ khoá User của transaction khác.
             await session.refresh(goal)
             if goal.status == target:
                 return goal
@@ -156,7 +156,7 @@ class Goal(BaseModel):
         return await cls._finish_for_user(session, goal_id, user_id=user_id, target=GoalStatus.CANCELLED)
 
     async def _before_deactivate(self, session: AsyncSession) -> None:
-        """Deleting the current goal ends its plans and frees the single IN_PROGRESS slot."""
+        """Xoá mục tiêu hiện tại sẽ kết thúc các kế hoạch của nó và giải phóng slot IN_PROGRESS duy nhất."""
         from domains.goals_plans.models.plans import Plan
 
         await Plan.end_for_goal(session, user_id=self.user_id, goal_id=self.id, reason="GOAL_DELETED")

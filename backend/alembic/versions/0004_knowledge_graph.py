@@ -1,4 +1,4 @@
-"""Capture knowledge graph projections atomically with source writes."""
+"""Ghi nhận phép chiếu knowledge graph một cách nguyên tử cùng với lệnh ghi nguồn."""
 
 from alembic import op
 
@@ -23,5 +23,5 @@ def downgrade():
     op.execute("DROP FUNCTION IF EXISTS kg_publish_backend(text, jsonb, boolean)")
     op.execute("DROP FUNCTION IF EXISTS kg_allowlisted_payload(text, jsonb)")
     op.execute("DROP FUNCTION IF EXISTS kg_training_profile(jsonb)")
-    # Retain envelopes and revision/tombstone state. The outbox may share a DB
-    # with the agent service, and deleting it would lose committed work.
+    # Giữ phong bì sự kiện và trạng thái revision/tombstone. Outbox có thể dùng chung DB
+    # với service agent, và xoá nó sẽ mất các công việc đã commit.

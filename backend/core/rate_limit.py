@@ -1,9 +1,9 @@
-"""Small in-process sliding-window limiter.
+"""Bộ giới hạn cửa sổ trượt nhỏ trong tiến trình.
 
-It protects one process from bursts (credential stuffing, refresh loops). Several
-replicas each keep their own window, so put a gateway limit in front of a
-multi-replica deployment as well. Behind a reverse proxy, run uvicorn with
---proxy-headers and --forwarded-allow-ips so request.client is the real client.
+Nó bảo vệ một tiến trình khỏi các đợt dồn dập (dò mật khẩu hàng loạt, vòng lặp refresh). Nhiều
+bản sao thì mỗi bản giữ cửa sổ riêng, nên với triển khai nhiều bản sao hãy đặt thêm
+giới hạn ở gateway phía trước. Sau reverse proxy, chạy uvicorn với
+--proxy-headers và --forwarded-allow-ips để request.client là client thật.
 """
 from collections import deque
 from time import monotonic
@@ -22,7 +22,7 @@ class SlidingWindowLimiter:
             del self._hits[key]
 
     def check(self, key: str, now: float | None = None) -> float | None:
-        """Record a hit; return seconds to wait when the key is over its limit."""
+        """Ghi nhận một lượt; trả về số giây phải chờ khi khoá vượt giới hạn."""
         if self.limit <= 0:
             return None
         now = monotonic() if now is None else now

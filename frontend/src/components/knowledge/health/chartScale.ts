@@ -1,4 +1,4 @@
-/** Clean axis bounds and ticks; `fromZero` keeps magnitude charts anchored at zero. */
+/** Biên và vạch chia trục gọn gàng; `fromZero` giữ biểu đồ độ lớn neo tại 0. */
 export function niceScale(values: (number | null | undefined)[], fromZero: boolean, count = 4, fixedStep?: number) {
   const known = values.filter((value): value is number => value != null && Number.isFinite(value))
   let lo = known.length ? Math.min(...known) : 0
@@ -16,7 +16,7 @@ export function niceScale(values: (number | null | undefined)[], fromZero: boole
   return { lo, hi, ticks }
 }
 
-/** Axis ticks: compact from ten thousand up (12k), otherwise grouped digits. */
+/** Vạch chia trục: rút gọn từ mười nghìn trở lên (12k), ngược lại nhóm chữ số. */
 export function tickText(value: number): string {
   if (Math.abs(value) >= 10000) return `${Math.round(value / 100) / 10}k`.replace('.', ',')
   return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value)

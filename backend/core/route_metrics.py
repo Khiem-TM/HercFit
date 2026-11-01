@@ -1,13 +1,13 @@
-"""Per-route request counts and latency histograms, aggregated in memory, flushed to PostgreSQL.
+"""Số request và histogram độ trễ theo route, tổng hợp trong bộ nhớ, ghi xuống PostgreSQL.
 
-Why: a superseded /api (v1) route is removed only after it sees no traffic for 30 days,
-and the API SLOs (webhook ack p95 < 2 s, context API p95 < 500 ms) need per-route
-latency. Labels are the route *template* (never the concrete path), method, API
-version and client kind, so no identifier, token or health value is recorded.
+Lý do: một route /api (v1) đã bị thay thế chỉ được gỡ khi không có lưu lượng trong 30 ngày,
+và các SLO của API (ack webhook p95 < 2 s, context API p95 < 500 ms) cần độ trễ theo
+route. Nhãn là *mẫu* route (không bao giờ là đường dẫn cụ thể), method, phiên bản
+API và loại client, nên không ghi lại định danh, token hay giá trị sức khoẻ nào.
 
-Each process keeps its own counters and adds them to `api_route_usage` once a minute
-(and at shutdown); several API processes therefore sum correctly. A failed flush puts
-its counts back for the next attempt. Recording never fails a request.
+Mỗi tiến trình giữ bộ đếm riêng và cộng vào `api_route_usage` mỗi phút một lần
+(và khi tắt); nhờ vậy nhiều tiến trình API vẫn cộng đúng. Lần ghi thất bại đặt
+số đếm trở lại cho lần thử sau. Việc ghi nhận không bao giờ làm hỏng request.
 """
 from __future__ import annotations
 
@@ -22,11 +22,11 @@ from typing import Any, Awaitable, Callable
 from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
-# Upper bounds (ms); one more bucket counts anything slower.
+# Các cận trên (ms); thêm một bucket đếm mọi request chậm hơn.
 BUCKETS_MS = (25, 50, 100, 250, 500, 1000, 2000, 5000)
 FLUSH_SECONDS = 60
 UNMATCHED = "<unmatched>"
-# Routes kept out of the OpenAPI document still need a label.
+# Các route không đưa vào tài liệu OpenAPI vẫn cần nhãn.
 HIDDEN_TEMPLATES = ("/api/v2/integrations/google-health/webhooks/{subscriber}",
                     "/api/integrations/google-health/callback", "/api/login", "/api/logout")
 
@@ -50,7 +50,7 @@ def bucket(elapsed_ms: float) -> int:
 
 
 def percentile(buckets: list[int], q: float) -> float | None:
-    """Upper bound of the bucket holding the q-quantile (None without requests, inf past the last bound)."""
+    """Cận trên của bucket chứa phân vị q (None khi không có request, inf khi vượt cận cuối)."""
     total = sum(buckets)
     if not total:
         return None
@@ -70,7 +70,7 @@ def _pattern(template: str) -> re.Pattern[str]:
 
 
 class RouteTable:
-    """Concrete path -> route template; templates with more literal text win (/{kind}:preview before /{kind})."""
+    """Đường dẫn cụ thể -> mẫu route; mẫu có nhiều phần chữ cố định hơn được ưu tiên (/{kind}:preview trước /{kind})."""
 
     def __init__(self, templates: list[str] | tuple[str, ...]):
         ordered = sorted(set(templates), key=lambda item: (-len(re.sub(r"\{[^}]+\}", "", item)), item))
@@ -137,7 +137,7 @@ def _client(headers: list[tuple[bytes, bytes]]) -> str:
 
 
 class RouteMetricsMiddleware:
-    """Pure ASGI: counts /api requests by template; adds Deprecation/Link headers on superseded v1 routes."""
+    """ASGI thuần: đếm request /api theo mẫu; thêm header Deprecation/Link cho các route v1 đã bị thay thế."""
 
     def __init__(self, app, metrics: RouteMetrics | None = None, superseded: dict[str, str] | None = None,
                  extra_templates: tuple[str, ...] = HIDDEN_TEMPLATES):
@@ -162,7 +162,7 @@ class RouteMetricsMiddleware:
         started = time.perf_counter()
         try:
             route = self.table(scope).resolve(path)
-        except Exception:  # noqa: BLE001 - metrics never fail a request
+        except Exception:  # noqa: BLE001 - đo lường không bao giờ làm hỏng request
             route = UNMATCHED
         successor = self.superseded.get(route)
         status = {"code": 500}
@@ -197,7 +197,7 @@ async def flush_loop(stop: asyncio.Event, session_scope: Callable[[], Any],
             await asyncio.wait_for(stop.wait(), every)
         try:
             await metrics.flush(session_scope)
-        except Exception as exc:  # noqa: BLE001 - kept in memory, retried next minute
+        except Exception as exc:  # noqa: BLE001 - giữ trong bộ nhớ, thử lại phút sau
             logger.warning("route_metrics_flush_failed error=%s", type(exc).__name__)
         if stop.is_set():
             return

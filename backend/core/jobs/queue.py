@@ -1,9 +1,9 @@
-"""Jobs: enqueue, claim, heartbeat and finish, all fenced by the job's lease epoch.
+"""Job: xếp hàng, lấy, heartbeat và kết thúc, tất cả đều được fence bằng lease epoch của job.
 
-Every claim bumps `lease_epoch`. A worker that lost its lease (crash, pause,
-expiry) can still be running; each write it makes goes through `fence(job)`,
-which locks the job row and checks the epoch, so a stale worker cannot complete,
-reschedule or write results for a job someone else now owns.
+Mỗi lần lấy job đều tăng `lease_epoch`. Worker đã mất lease (sập, tạm dừng,
+hết hạn) có thể vẫn đang chạy; mọi lệnh ghi của nó đều qua `fence(job)`,
+hàm này khoá dòng job và kiểm tra epoch, nên worker cũ không thể hoàn tất,
+lên lịch lại hay ghi kết quả cho một job mà người khác đang sở hữu.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ DEFAULT_LEASE = timedelta(seconds=120)
 
 
 class JobFenced(Exception):
-    """The job's lease moved on (or the job finished): this worker must stop writing."""
+    """Lease của job đã chuyển đi (hoặc job đã xong): worker này phải ngừng ghi."""
 
 
 @dataclass
@@ -64,7 +64,7 @@ async def enqueue(session, kind: str, *, queue: str = "ingest", dedupe_key: str 
                   run_after: datetime | None = None, connection_generation: int | None = None,
                   parent_id: UUID | None = None, root_id: UUID | None = None, operation_id: UUID | None = None,
                   max_attempts: int = 8) -> UUID | None:
-    """Insert a job in the caller's transaction; None when an equal job (dedupe key) is already pending."""
+    """Chèn một job trong transaction của bên gọi; None khi đã có job tương đương (dedupe key) đang chờ."""
     job_id = uuid7()
     async with session.begin_nested():
         row = (await session.execute(text("""
@@ -86,7 +86,7 @@ async def enqueue(session, kind: str, *, queue: str = "ingest", dedupe_key: str 
 
 
 async def claim(session, queues: tuple[str, ...], owner: str, *, lease: timedelta = DEFAULT_LEASE) -> Job | None:
-    """Lease the most urgent ready job; one RUNNING ingest job per (connection, data type)."""
+    """Lease job sẵn sàng khẩn cấp nhất; mỗi (kết nối, loại dữ liệu) chỉ một job nhập RUNNING."""
     try:
         async with session.begin_nested():
             row = (await session.execute(text("""
@@ -102,13 +102,13 @@ async def claim(session, queues: tuple[str, ...], owner: str, *, lease: timedelt
                     ORDER BY j.priority DESC, j.run_after, j.id
                     LIMIT 1 FOR UPDATE SKIP LOCKED)
                 RETURNING *"""), {"queues": list(queues), "owner": owner[:80], "lease": lease.total_seconds()})).first()
-    except IntegrityError:  # lost a race on uq_jobs_running_type; try again next tick
+    except IntegrityError:  # thua một cuộc đua trên uq_jobs_running_type; thử lại ở tick sau
         return None
     return Job.from_row(row) if row else None
 
 
 async def fence(session, job: Job) -> None:
-    """Lock the job row and prove this worker still owns it; call first in every write transaction."""
+    """Khoá dòng job và chứng minh worker này vẫn sở hữu nó; gọi đầu tiên trong mọi transaction ghi."""
     row = (await session.execute(text(
         "SELECT 1 FROM jobs WHERE id = :id AND lease_epoch = :epoch AND state = 'RUNNING' FOR UPDATE"),
         {"id": job.id, "epoch": job.lease_epoch})).first()
@@ -166,7 +166,7 @@ async def cancel(session, job: Job, reason: str) -> None:
 
 
 async def reap(session) -> int:
-    """Expired leases go back to RETRY; the next claim bumps the epoch and fences the old worker."""
+    """Lease hết hạn quay về RETRY; lần lấy sau tăng epoch và fence worker cũ."""
     result = await session.execute(text("""
         UPDATE jobs SET state = CASE WHEN attempts >= max_attempts THEN 'NEEDS_ATTENTION' ELSE 'RETRY' END,
                error_class = COALESCE(error_class, 'TRANSIENT'), error_code = 'lease_expired',
@@ -177,7 +177,7 @@ async def reap(session) -> int:
 
 
 async def cancel_for_connection(session, connection_id: UUID, reason: str) -> int:
-    """Disconnect: pending jobs of the connection are cancelled (running ones are fenced by generation)."""
+    """Ngắt kết nối: các job đang chờ của kết nối bị huỷ (job đang chạy bị fence theo thế hệ)."""
     result = await session.execute(text("""
         UPDATE jobs SET state = 'CANCELLED', error_class = 'CANCELLED', error_code = :reason, finished_at = now(),
                updated_at = now()
@@ -186,9 +186,9 @@ async def cancel_for_connection(session, connection_id: UUID, reason: str) -> in
 
 
 async def requeue(session, job: Job, progress: dict[str, Any], *, delay: timedelta = timedelta(0)) -> None:
-    """Yield the slot: the job keeps its progress (e.g. a page token) and continues later.
+    """Nhường slot: job giữ tiến độ (ví dụ page token) và tiếp tục sau.
 
-    The attempt is given back, because running out of a page budget is not a failure.
+    Lần thử được trả lại, vì hết ngân sách trang không phải là thất bại.
     """
     await fence(session, job)
     job.progress = progress

@@ -17,7 +17,7 @@ const points = computed(() => {
 })
 const active = computed(() => points.value.find(point => point.id === activeId.value) ?? points.value.at(-1))
 const delta = computed(() => points.value.length > 1 ? points.value.at(-1)!.weight - points.value[0].weight : null)
-// A zero baseline keeps bar lengths proportional to the actual measurements.
+// Đường gốc bằng 0 giữ độ dài cột tỉ lệ với số đo thực tế.
 const ceiling = computed(() => Math.ceil(Math.max(5, ...points.value.map(point => point.weight)) / 10) * 10)
 const ticks = computed(() => [ceiling.value, ceiling.value / 2, 0])
 const selectedDetails = computed(() => active.value?.node.details.filter(item => ['BMI', 'Mỡ cơ thể', 'Khối cơ'].includes(item.label)) ?? [])
@@ -67,7 +67,7 @@ h3 { margin: 0; font-size: 14px; font-weight: 500; color: light-dark(#2a2924, #e
 .weight-summary small { display: block; font-size: 10px; font-weight: 400; color: light-dark(#5a6168, #959ca4); margin-top: 3px; }
 .delta { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 3px; max-width: 130px; font: 12px 'JetBrains Mono', monospace; color: light-dark(#507c8a, #b8deeb); }
 .delta small { width: 100%; text-align: right; font-family: Geist, sans-serif; }
-/* The chart grows with the widget, so a wide panel gets a taller, easier-to-read plot. */
+/* Biểu đồ lớn theo widget, nên bảng rộng có biểu đồ cao hơn, dễ đọc hơn. */
 .plot { position: relative; height: clamp(170px, 36cqi, 280px); padding-left: 30px; transition: height 200ms; }
 .grid-lines { position: absolute; inset: 0 0 25px 0; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
 .grid-lines span { border-top: 1px dashed light-dark(#18181810, #ffffff10); margin-left: 30px; position: relative; }
@@ -82,7 +82,7 @@ h3 { margin: 0; font-size: 14px; font-weight: 500; color: light-dark(#2a2924, #e
 .column:hover .bar-tooltip, .column:focus-visible .bar-tooltip { opacity: 1; transform: translate(-50%, 0); }
 .column:first-child .bar-tooltip { left: 0; transform: translateY(0); }
 .column:last-child .bar-tooltip { left: auto; right: 0; transform: translateY(0); }
-/* 9px + 16px: the band under the bars that the grid lines leave free. */
+/* 9px + 16px: dải dưới các cột mà đường lưới chừa trống. */
 .date-label { flex: none; height: 16px; margin-top: 9px; font: 9px/16px 'JetBrains Mono', monospace; color: light-dark(#5b646e, #8e98a2); white-space: nowrap; }
 .date-label.sparse { visibility: hidden; }
 .selected .date-label { color: light-dark(#17353d, #c2e5ee); }

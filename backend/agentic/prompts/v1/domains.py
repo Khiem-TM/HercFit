@@ -1,4 +1,4 @@
-"""Version 1: unchanged application-owned instructions."""
+"""Phiên bản 1: hướng dẫn do ứng dụng sở hữu, không thay đổi."""
 
 CAPABILITY_GUIDANCE = '''Hệ thống có catalog foods/exercises và công cụ tra cứu bằng tên.
 Khi ghi meals, bạn được đọc list_foods/get_foods/resolve_foods.

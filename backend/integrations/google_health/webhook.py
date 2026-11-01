@@ -1,19 +1,19 @@
-"""Google Health webhook endpoint: verify, persist, answer 204. Nothing else runs in the request.
+"""Endpoint webhook Google Health: kiểm chứng, lưu, trả 204. Không chạy gì khác trong request.
 
-Contract (developers.google.com/health/webhooks, checked 2026-11-01):
-* Handshake: Google POSTs {"type": "verification"} twice: with the configured
-  Authorization value we answer 200, without it 401.
-* Every notification carries `Authorization` equal to the subscriber's configured
-  `endpointAuthorization.secret` (scheme included, e.g. "Bearer ...") and
-  `GOOGLE-HEALTH-API-SIGNATURE`: base64 of a 5-byte Tink prefix (version byte +
-  4-byte key id) followed by a DER ECDSA P-256 / SHA-256 signature over the raw
-  body. The public Tink keyset lives at settings.GH_WEBHOOK_KEYSET_URL; keys
-  rotate every 30 days, so an unknown key id triggers one keyset refresh.
-* The body is one {"data": {...}} object or an array of up to 99 of them; Google
-  retries for 7 days and may deliver duplicates.
+Hợp đồng (developers.google.com/health/webhooks, kiểm tra ngày 2026-11-01):
+* Bắt tay: Google POST {"type": "verification"} hai lần: kèm giá trị
+  Authorization đã cấu hình thì chúng ta trả 200, không kèm thì trả 401.
+* Mọi thông báo mang `Authorization` bằng giá trị
+  `endpointAuthorization.secret` đã cấu hình của subscriber (kể cả scheme, ví dụ "Bearer ...") và
+  `GOOGLE-HEALTH-API-SIGNATURE`: base64 của tiền tố Tink 5 byte (byte phiên bản +
+  4 byte key id) theo sau là chữ ký DER ECDSA P-256 / SHA-256 trên body
+  thô. Keyset Tink công khai nằm ở settings.GH_WEBHOOK_KEYSET_URL; khoá
+  xoay mỗi 30 ngày, nên key id lạ sẽ kích hoạt một lần tải lại keyset.
+* Body là một đối tượng {"data": {...}} hoặc mảng tối đa 99 đối tượng như vậy; Google
+  thử lại trong 7 ngày và có thể gửi trùng.
 
-Each message is stored in webhook_inbox (deduplicated by its hash) and committed
-before 204 is returned; a storage failure answers 503 so Google retries.
+Mỗi thông báo được lưu vào webhook_inbox (chống trùng theo băm) và commit
+trước khi trả 204; lỗi lưu trữ trả 503 để Google thử lại.
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ KEYSET_TTL_SECONDS = 3600
 TINK_PREFIX = 0x01
 
 
-# ------------------------------------------------------------------------------------------- keys
+# ------------------------------------------------------------------------------------------- khoá
 def _varint(data: bytes, index: int) -> tuple[int, int]:
     shift = result = 0
     while True:
@@ -57,7 +57,7 @@ def _varint(data: bytes, index: int) -> tuple[int, int]:
 
 
 def ecdsa_public_key(serialized: bytes) -> ec.EllipticCurvePublicKey:
-    """Parse a Tink EcdsaPublicKey protobuf (x = field 3, y = field 4, big-endian) into a P-256 key."""
+    """Phân tích protobuf EcdsaPublicKey của Tink (x = trường 3, y = trường 4, big-endian) thành khoá P-256."""
     fields: dict[int, bytes] = {}
     index = 0
     while index < len(serialized):
@@ -76,7 +76,7 @@ def ecdsa_public_key(serialized: bytes) -> ec.EllipticCurvePublicKey:
 
 
 class Keyset:
-    """Tink JSON keyset {"key": [{"keyId", "keyData": {"value"}, "outputPrefixType", "status"}]} with a TTL cache."""
+    """Keyset JSON của Tink {"key": [{"keyId", "keyData": {"value"}, "outputPrefixType", "status"}]} kèm cache có TTL."""
 
     def __init__(self, url: str, fetch=None):
         self.url = url
@@ -122,7 +122,7 @@ def keyset() -> Keyset:
     return _keyset
 
 
-# ------------------------------------------------------------------------------------------- checks
+# ------------------------------------------------------------------------------------------- kiểm tra
 def authorized(header: str | None) -> bool:
     if not header:
         return False
@@ -130,7 +130,7 @@ def authorized(header: str | None) -> bool:
 
 
 async def signature_valid(body: bytes, header: str | None, keys: Keyset | None = None) -> tuple[bool, str | None]:
-    """(valid, key id) for GOOGLE-HEALTH-API-SIGNATURE over the raw body."""
+    """(hợp lệ, key id) cho GOOGLE-HEALTH-API-SIGNATURE trên body thô."""
     if not header:
         return False, None
     try:
@@ -162,7 +162,7 @@ def messages(document: Any) -> list[dict[str, Any]]:
 
 
 async def store(subscriber: str, items: list[dict[str, Any]], key_id: str | None) -> int:
-    """Persist messages (one row each, duplicates ignored) and commit; returns how many were new."""
+    """Lưu các thông báo (mỗi thông báo một dòng, bỏ qua bản trùng) và commit; trả về số thông báo mới."""
     stored = 0
     async with get_db_session() as session:
         for item in items:
@@ -180,7 +180,7 @@ async def store(subscriber: str, items: list[dict[str, Any]], key_id: str | None
                 "sha": hashlib.sha256(canonical.encode()).hexdigest(), "message": canonical, "key_id": key_id})
             stored += result.rowcount or 0
         if stored and settings.GH_INGEST_V2 != "off":
-            # Route right away (same transaction, deduplicated) rather than at the next scheduler tick.
+            # Định tuyến ngay (cùng transaction, có chống trùng) thay vì chờ tick kế tiếp của scheduler.
             from core.jobs import queue
             await queue.enqueue(session, "GH_WEBHOOK_ROUTE", dedupe_key="webhook-route", priority=95)
     return stored
@@ -217,7 +217,7 @@ async def receive(subscriber: str, request: Request) -> Response:
     items = messages(document)
     try:
         stored = await store(subscriber, items, key_id)
-    except Exception as exc:  # noqa: BLE001 - never acknowledge what was not stored
+    except Exception as exc:  # noqa: BLE001 - không bao giờ xác nhận những gì chưa được lưu
         logger.warning("google_health_webhook_store_failed error=%s", type(exc).__name__)
         return Response(status_code=503)
     logger.info("google_health_webhook messages=%s new=%s", len(items), stored)

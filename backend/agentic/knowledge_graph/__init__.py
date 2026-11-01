@@ -1,4 +1,4 @@
-"""Optional, source-backed knowledge graph; PostgreSQL remains authoritative."""
+"""Knowledge graph tuỳ chọn, có nguồn gốc dữ liệu; PostgreSQL vẫn là nguồn có thẩm quyền."""
 from .models import GraphContext, ProjectionEvent
 from .service import GraphContextService
 

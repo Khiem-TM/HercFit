@@ -1,4 +1,4 @@
-"""Centralized SQLAlchemy 2.0 ORM models registry."""
+"""Registry tập trung các model ORM SQLAlchemy 2.0."""
 
 from core.database import Base
 from domains.identity.models.auth_session import AuthSession

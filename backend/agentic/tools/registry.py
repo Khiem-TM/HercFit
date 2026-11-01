@@ -1,4 +1,4 @@
-"""Allowlisted API tools. Input and output types are the backend's actual contracts."""
+"""Các tool API trong danh sách cho phép. Kiểu đầu vào và đầu ra là hợp đồng thật của backend."""
 from uuid import UUID
 from agentic.tools.definitions.base import ToolSpec
 from agentic.tools.schemas.common import Empty, Resource, VersionedResource, PersonalInfo, TimezoneQuery, TemplatePreview
@@ -25,7 +25,7 @@ def with_id(schema):
 
 add('get_profile','profile','GET','/profile',Empty,UserRead,'Read authenticated profile.')
 add('update_profile','profile','PATCH','/profile',UserUpdate,UserRead,'Update only supplied profile fields.',True)
-# Root object merge is unwrapped by the client; identity fields are never accepted.
+# Phần gộp đối tượng gốc được client gỡ bọc; trường danh tính không bao giờ được chấp nhận.
 add('merge_personal_info','profile','PATCH','/profile/personal-info',PersonalInfo,UserRead,'Merge top-level personal_info groups; nested groups replace as a whole.',True)
 add('onboard','profile','POST','/profile/onboarding',OnboardingInput,UserRead,'Save confirmed onboarding profile, optional metric and goal atomically.',True)
 for domain,path,create,read,query,replace in [
@@ -49,7 +49,7 @@ for action in ['complete','cancel']:
     add(action+'_goal','goals','POST','/goals/{resource_id}/'+action,Resource,GoalRead,action+' the active goal after confirmation.')
 add('get_progress','progress','GET','/progress',DateRangeQuery,ProgressRead,'Read daily progress for explicit start_date/end_date and timezone.')
 
-# Research finalizations use the same preview/hash/approval adapter as other writes.
+# Finalize tra cứu dùng cùng adapter xem trước/băm/phê duyệt như các lệnh ghi khác.
 from agentic.research.contracts import ResolveQuery, FoodFinalization, ExerciseFinalization
 for domain, schema in [('foods', FoodFinalization), ('exercises', ExerciseFinalization)]:
     add('resolve_'+domain, domain, 'GET', '/'+domain+'/resolve', ResolveQuery, dict,
@@ -57,7 +57,7 @@ for domain, schema in [('foods', FoodFinalization), ('exercises', ExerciseFinali
     add('finalize_'+domain, domain, 'POST', '/'+domain+'/research-finalizations', schema, dict,
         'Save the immutable verified research command after human confirmation.', True)
 
-# Training plans (prescriptions) and deterministic coaching analytics.
+# Kế hoạch tập (chỉ định) và phân tích huấn luyện tất định.
 from domains.goals_plans.schemas.plans import (
     PlanInput,
     PlanRead,
@@ -114,9 +114,9 @@ add('get_strength_progress','coaching','GET','/training/strength/progress',Stren
 add('get_strength_records','coaching','GET','/training/strength/records',TimezoneQuery,StrengthRecordsRead,'All-time best e1RM and 1/3/5/10 rep maxes per exercise.')
 add('get_running_summary','coaching','GET','/training/running/summary',AnalyticsQuery,RunningSummaryRead,'Weekly running km, longest run, pace by workout type, easy share, best efforts and race predictions.')
 
-# Device data synchronized from Google Health (read-only). Connecting and syncing are
-# the user's actions in Settings, never tools; reads answer 403 consent_required while
-# the user has not allowed the assistant to use the data.
+# Dữ liệu thiết bị đồng bộ từ Google Health (chỉ đọc). Kết nối và đồng bộ là
+# thao tác của người dùng trong Cài đặt, không bao giờ là tool; lệnh đọc trả 403 consent_required khi
+# người dùng chưa cho phép trợ lý dùng dữ liệu.
 from domains.health_records.schemas.health import (
     DailyHealthRead,
     DeviceWorkoutRead,
@@ -145,8 +145,8 @@ add('list_device_workouts','health','GET','/health/workouts',DateRangeQuery,list
 add('list_health_samples','health','GET','/health/samples',HealthSampleQuery,list[HealthSampleRead],
     'Spot vitals (BLOOD_GLUCOSE mg/dL, CORE_BODY_TEMPERATURE °C) for start_date..end_date. Report values; never diagnose.')
 
-# Sourced, budgeted health context (backend /api/v2/assistant/context): every item carries
-# value, unit, source, measured_at, freshness, coverage, method and evidence ids.
+# Ngữ cảnh sức khoẻ có nguồn, có ngân sách (backend /api/v2/assistant/context): mỗi mục mang
+# giá trị, đơn vị, nguồn, measured_at, độ mới, độ phủ, phương pháp và id bằng chứng.
 from typing import Any as _Any, Literal as _Literal
 from pydantic import Field as _Field
 from agentic.tools.schemas.common import InputSchema as _InputSchema

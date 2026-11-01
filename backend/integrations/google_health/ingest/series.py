@@ -1,13 +1,13 @@
-"""Dense series (heart rate, steps intervals, HRV, SpO2, ...) as compressed chunks.
+"""Chuỗi dày (nhịp tim, khoảng bước chân, HRV, SpO2, ...) dưới dạng chunk nén.
 
-Encoding `zjson1`: zlib(JSON{"v": 1, "fields": [...], "rows": [[dt, dur, f1, f2, ...]]}) where
-`dt` is seconds from the chunk start and `dur` the interval length (0 for samples).
-Columns come from the value schema (time fields removed), so nothing is guessed
-and nothing is dropped; `metric` names the column that feeds min/max/sum.
+Mã hoá `zjson1`: zlib(JSON{"v": 1, "fields": [...], "rows": [[dt, dur, f1, f2, ...]]}) trong đó
+`dt` là số giây tính từ đầu chunk và `dur` là độ dài khoảng (0 với mẫu).
+Các cột lấy từ schema giá trị (đã bỏ trường thời gian), nên không đoán gì
+và không bỏ gì; `metric` gọi tên cột nuôi min/max/sum.
 
-Each (user, type, source, period) is one chunk: sources are never merged, so a
-watch and a phone measuring the same minute stay two observations. A completed
-read of a UTC day replaces that day's chunks; a partial read never does.
+Mỗi (người dùng, loại, nguồn, chu kỳ) là một chunk: các nguồn không bao giờ bị gộp, nên một
+đồng hồ và một điện thoại cùng đo một phút vẫn là hai quan sát. Một lần đọc trọn
+một ngày UTC sẽ thay các chunk của ngày đó; lần đọc dở thì không bao giờ.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from integrations.google_health.contract.registry import DISCOVERY_REVISION
 
 ENCODING = "zjson1"
 HOURLY = frozenset({"heart-rate"})
-# Column whose statistics are kept per chunk (None: count only).
+# Cột có thống kê được giữ theo từng chunk (None: chỉ đếm).
 METRIC = {
     "heart-rate": "beatsPerMinute", "heart-rate-variability": "rootMeanSquareOfSuccessiveDifferencesMilliseconds",
     "oxygen-saturation": "percentage", "steps": "count", "distance": "millimeters", "floors": "count",
@@ -59,7 +59,7 @@ class Chunk:
                 "value_sum": float(sum(values)) if values else None, "covered_seconds": int(covered)}
 
 
-from domains.health_records.series import decode  # noqa: E402,F401  (the reader owns decoding)
+from domains.health_records.series import decode  # noqa: E402,F401  (bộ đọc sở hữu việc giải mã)
 
 
 def utc_day(day: date) -> tuple[datetime, datetime]:
@@ -80,7 +80,7 @@ def _flatten(value: dict[str, Any]) -> dict[str, Any]:
     flat: dict[str, Any] = {}
     readings = value.get("sensorData")
     if isinstance(readings, list):
-        # v4beta skin temperature: several sensor readings per sample; the column is their mean.
+        # Nhiệt độ da v4beta: mỗi mẫu có nhiều số đo cảm biến; cột là trung bình của chúng.
         temps = [r.get("temperatureCelsius") for r in readings if isinstance(r, dict)
                  and isinstance(r.get("temperatureCelsius"), (int, float))]
         flat["temperatureCelsius"] = round(sum(temps) / len(temps), 3) if temps else None
@@ -97,7 +97,7 @@ def _flatten(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def build(data_type: str, points: list[tuple[Parsed, str]]) -> list[Chunk]:
-    """Group parsed points (with their source key) into chunks by source and period."""
+    """Gom các điểm đã phân tích (kèm khoá nguồn) thành chunk theo nguồn và chu kỳ."""
     groups: dict[tuple[str, datetime], dict[str, Any]] = {}
     for parsed, source_key in points:
         start = parsed.time.physical_start

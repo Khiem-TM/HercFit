@@ -1,9 +1,9 @@
-"""Derived personal knowledge: what an attentive coach remembers about a user.
+"""Tri thức cá nhân suy ra: những gì một huấn luyện viên chu đáo nhớ về người dùng.
 
-Pure functions over projected facts, so the worker can rebuild a model at any
-time and tests can check every number. Dates are local (Asia/Ho_Chi_Minh).
-Only backend business facts feed the stored model; conversation statistics are
-aggregated at read time behind the SQL session gate.
+Các hàm thuần trên dữ kiện đã chiếu, để worker dựng lại model bất cứ lúc nào
+và test kiểm tra được từng con số. Ngày tháng là giờ địa phương (Asia/Ho_Chi_Minh).
+Chỉ dữ kiện nghiệp vụ của backend nuôi model đã lưu; thống kê hội thoại được
+tổng hợp lúc đọc, sau cổng phiên SQL.
 """
 import re
 from collections import Counter, defaultdict
@@ -28,8 +28,8 @@ from domains.health_records.schemas.health import (
 from .intents import label as intent_label
 
 LOCAL = ZoneInfo('Asia/Ho_Chi_Minh')
-# 2: device data (activity, sleep, recovery, energy), sex and the declared activity level.
-# 3: implausible weigh-ins kept out of trends, one trend/rate source, exercise-aware activity level.
+# 2: dữ liệu thiết bị (vận động, giấc ngủ, phục hồi, năng lượng), giới tính và mức vận động đã khai báo.
+# 3: loại các lần cân bất hợp lý khỏi xu hướng, một nguồn duy nhất cho xu hướng/tốc độ, mức vận động có tính buổi tập.
 MODEL_VERSION = 3
 LEVELS = {'BEGINNER': 'mới bắt đầu', 'INTERMEDIATE': 'trung cấp', 'ADVANCED': 'nâng cao'}
 FOCUS = {'STRENGTH': 'sức mạnh', 'RUNNING': 'chạy bộ', 'HYBRID': 'kết hợp sức mạnh và chạy'}
@@ -39,14 +39,14 @@ SEX = {'MALE': 'nam', 'FEMALE': 'nữ'}
 DAILY_KEYS = ('steps', 'distance_m', 'active_minutes', 'active_zone_minutes', 'total_kcal', 'active_kcal',
               'resting_hr_bpm', 'hrv_ms', 'spo2_avg_pct', 'respiratory_rate', 'vo2_max', 'hydration_ml', 'sleep_minutes')
 MIN_WORN_DAYS = 7
-# Water, food and clothing move the scale by about 2 kg between weigh-ins; body mass itself
-# changes by at most ~0.25 kg/day. A larger change is a data problem, not a trend.
+# Nước, thức ăn và quần áo làm cân lệch khoảng 2 kg giữa các lần cân; khối lượng cơ thể
+# thực sự thay đổi tối đa ~0,25 kg/ngày. Thay đổi lớn hơn là vấn đề dữ liệu, không phải xu hướng.
 WEIGHT_NOISE_KG = 2.0
 WEIGHT_RATE_KG_PER_DAY = 0.25
-# A trend needs both a weekly rate and a total change above day-to-day noise.
+# Một xu hướng cần cả tốc độ theo tuần lẫn tổng thay đổi vượt mức nhiễu ngày qua ngày.
 STABLE_KG_PER_WEEK = 0.1
 STABLE_TOTAL_KG = 0.3
-# Logged exercise below this (per week) neither raises the activity level nor counts as evidence.
+# Lượng tập đã ghi dưới mức này (mỗi tuần) không nâng mức vận động cũng không được tính là bằng chứng.
 MIN_EXERCISE_MINUTES = 60
 
 
@@ -93,7 +93,7 @@ def _metrics(facts):
         data = fact.get('data') or {}
         at = parse_time(data.get('recorded_at')) or parse_time(fact.get('source_at'))
         weight, height, fat = number(data.get('weight_kg')), number(data.get('height_cm')), number(data.get('body_fat_pct'))
-        # Device samples may carry a single measurement (a body-fat reading without weight).
+        # Mẫu từ thiết bị có thể chỉ mang một số đo (chỉ số mỡ cơ thể mà không có cân nặng).
         if at and (weight or height or fat):
             rows.append({'at': at, 'weight_kg': weight, 'height_cm': height, 'body_fat_pct': fat,
                          'device': (data.get('source') or 'MANUAL') != 'MANUAL'})
@@ -101,7 +101,7 @@ def _metrics(facts):
 
 
 def _days(facts):
-    """Device day rollups by local date."""
+    """Tổng hợp ngày từ thiết bị theo ngày địa phương."""
     days = {}
     for fact in facts:
         data = fact.get('data') or {}
@@ -136,14 +136,14 @@ def _workouts(facts):
 
 
 def _worn(days, start, end):
-    """Complete worn days in [start, end): today is still being recorded."""
+    """Các ngày đeo thiết bị trọn vẹn trong [start, end): hôm nay vẫn đang được ghi."""
     return {day: d for day, d in days.items() if start <= day < end and (d['steps'] or 0) >= WORN_DAY_MIN_STEPS}
 
 
 def _exercise_week(sessions, workouts, today):
-    """Exercise minutes per week over the last 28 days, from logged sessions and device workouts.
+    """Số phút tập mỗi tuần trong 28 ngày gần nhất, từ buổi tập đã ghi và buổi vận động của thiết bị.
 
-    A run may be both logged and recorded by a watch: each day counts the larger of the two."""
+    Một buổi chạy có thể vừa được ghi vừa được đồng hồ ghi lại: mỗi ngày lấy giá trị lớn hơn."""
     start = today - timedelta(days=28)
     logged, recorded = defaultdict(float), defaultdict(float)
     for session in sessions:
@@ -157,10 +157,10 @@ def _exercise_week(sessions, workouts, today):
 
 
 def _observed_level(days, exercise_week, today):
-    """What the data shows: steps on worn days, raised by exercise the step count misses.
+    """Dữ liệu cho thấy gì: bước chân trong các ngày có đeo, được nâng lên bởi buổi tập mà số bước bỏ sót.
 
-    Exercise is a lower bound (not every session is logged), so it can raise the level but
-    never lower it; `basis` says which evidence was used."""
+    Buổi tập là cận dưới (không phải buổi nào cũng được ghi), nên nó có thể nâng mức nhưng
+    không bao giờ hạ mức; `basis` cho biết đã dùng bằng chứng nào."""
     worn = _worn(days, today - timedelta(days=28), today)
     steps = _avg(d['steps'] for d in worn.values()) if len(worn) >= MIN_WORN_DAYS else None
     candidates = []
@@ -194,14 +194,14 @@ def _profile(user, metrics, days, today, observed=None):
 
 
 def _conflicts(profile, observed):
-    """Declared versus measured: surfaced to the assistant, never silently resolved."""
+    """Khai báo so với đo lường: đưa ra cho trợ lý, không bao giờ âm thầm tự giải quyết."""
     if not profile or not observed:
         return []
     declared, level = profile.get('declared_level'), observed['level']
     if declared not in ACTIVITY_ORDER or abs(ACTIVITY_ORDER.index(declared) - ACTIVITY_ORDER.index(level)) < 2:
         return []
     if ACTIVITY_ORDER.index(level) < ACTIVITY_ORDER.index(declared) and 'steps' not in observed['basis']:
-        # Logged sessions alone are a lower bound: missing logs do not contradict a declaration.
+        # Chỉ riêng các buổi đã ghi là cận dưới: thiếu nhật ký không mâu thuẫn với điều đã khai báo.
         return []
     evidence = ', '.join(filter(None, [f"TB {int(observed['steps_28d'])} bước/ngày" if observed.get('steps_28d') else None,
                                        f"{observed['exercise_minutes_week']} phút tập/tuần" if 'exercise' in observed['basis'] else None]))
@@ -241,7 +241,7 @@ def _sleep(sessions, today, age):
     low, high = recommended_sleep_hours(age)
     staged = [s for s in recent if s['deep_minutes'] is not None and s['rem_minutes'] is not None]
     staged_total = sum((s['deep_minutes'] or 0) + (s['light_minutes'] or 0) + (s['rem_minutes'] or 0) for s in staged)
-    # Minutes after noon, so 23:30 and 00:30 are an hour apart rather than 23 hours.
+    # Số phút tính từ giữa trưa, để 23:30 và 00:30 cách nhau một giờ chứ không phải 23 giờ.
     bedtimes = [(s['start'].astimezone(LOCAL).hour * 60 + s['start'].astimezone(LOCAL).minute + 720) % 1440 for s in recent]
     last = main[-1]
     return {'nights_7d': len(recent), 'avg_minutes_7d': _avg(s['minutes_asleep'] for s in recent),
@@ -275,9 +275,9 @@ def _recovery(days, today):
 
 
 def _energy(meal_facts, days, weights, today):
-    """Logged intake against device expenditure on complete days of the last 28.
+    """Lượng ăn đã ghi so với mức tiêu hao của thiết bị trong các ngày trọn của 28 ngày gần nhất.
 
-    `weights` is the consistent weigh-in run (_weight_series), so a bad reading cannot fake a change."""
+    `weights` là chuỗi cân nhất quán (_weight_series), nên một số đo sai không thể giả một thay đổi."""
     totals = defaultdict(lambda: {'kcal': 0.0, 'meals': 0, 'unknown': 0})
     for fact in meal_facts:
         data = fact.get('data') or {}
@@ -307,12 +307,12 @@ def _plausible(a, b):
 
 
 def _weight_series(metrics):
-    """Weigh-ins a trend may use.
+    """Các lần cân mà một xu hướng được phép dùng.
 
-    An isolated reading that disagrees with both neighbours (while they agree) is dropped as a
-    spike. An implausible jump that stays (a mistyped entry, a second scale or a device) cannot
-    be resolved from the data, so only the latest run of mutually plausible weigh-ins feeds
-    changes, rates, goal progress and energy balance, and the jump is reported instead."""
+    Một số đo đơn lẻ lệch với cả hai lần cân kề bên (trong khi hai lần đó khớp nhau) bị loại như
+    điểm nhiễu. Một bước nhảy bất hợp lý mà vẫn duy trì (gõ nhầm, cân thứ hai hay thiết bị khác) không
+    giải quyết được từ dữ liệu, nên chỉ chuỗi gần nhất các lần cân hợp lý với nhau mới nuôi
+    thay đổi, tốc độ, tiến độ mục tiêu và cân bằng năng lượng, còn bước nhảy thì được báo lại."""
     weights = [m for m in metrics if m['weight_kg'] is not None]
     kept, spikes = [], 0
     for index, row in enumerate(weights):
@@ -346,10 +346,10 @@ def _body(series, metrics):
     weights, segment = series['all'], series['segment']
     if not weights:
         return None
-    latest = weights[-1]  # never a dropped spike: a spike needs a later reading
+    latest = weights[-1]  # không bao giờ là điểm nhiễu bị loại: điểm nhiễu cần một số đo sau đó
     changes = []
     for window in (7, 30):
-        # The most recent measurement at least ~80% of the window before the latest one.
+        # Số đo gần nhất cách số đo mới nhất ít nhất ~80% độ dài cửa sổ.
         base = next((m for m in reversed(segment[:-1]) if (latest['at'] - m['at']).days >= window * .8), None)
         if base and not any(change['since'] == local_day(base['at']).isoformat() for change in changes):
             changes.append({'window': window, 'delta_kg': _round(latest['weight_kg'] - base['weight_kg']),
@@ -358,9 +358,9 @@ def _body(series, metrics):
     longest = max(changes, key=lambda change: change['days'], default=None)
     rate = round(longest['delta_kg'] / longest['days'] * 7, 2) if longest and longest['days'] else None
     span = longest['days'] if longest else 0
-    # Least-squares slope over the last 30 days: robust to day-to-day water noise and,
-    # unlike a moving average, without lag when weigh-ins are sparse. Trend and rate come
-    # from this one estimate, so the card never states a direction its rate contradicts.
+    # Hệ số góc bình phương tối thiểu trên 30 ngày gần nhất: bền với nhiễu nước ngày qua ngày và,
+    # khác trung bình trượt, không bị trễ khi các lần cân thưa. Xu hướng và tốc độ lấy
+    # từ cùng một ước lượng này, nên thẻ không bao giờ nêu một hướng mà tốc độ của nó mâu thuẫn.
     recent = [m for m in segment if (latest['at'] - m['at']).days <= 30]
     width = (recent[-1]['at'] - recent[0]['at']).total_seconds() / 86400 if len(recent) >= 2 else 0
     if len(recent) >= 3 and width >= 7:
@@ -378,7 +378,7 @@ def _body(series, metrics):
                'change_30d': _round(fats[-1]['body_fat_pct'] - base['body_fat_pct']) if base is not fats[-1] else None}
     return {'latest': {'weight_kg': latest['weight_kg'], 'date': local_day(latest['at']).isoformat()},
             'body_fat': fat, 'changes': changes, 'rate_kg_per_week': rate, 'trend': _trend(rate, span),
-            # The latest implausible jump and dropped spikes: the card asks to re-weigh instead of trending.
+            # Bước nhảy bất hợp lý gần nhất và các điểm nhiễu đã loại: thẻ đề nghị cân lại thay vì tính xu hướng.
             'inconsistent': series['jump'], 'outliers': series['spikes'],
             'series': [{'date': local_day(m['at']).isoformat(), 'weight_kg': m['weight_kg']} for m in weights[-12:]]}
 
@@ -406,8 +406,8 @@ def _goal(facts, series, body, today):
         result['days_left'] = (end - today).days
         if start and end > start:
             result['time_pct'] = max(0, min(100, round(100 * (today - start).days / (end - start).days)))
-    # Progress is measured inside the consistent weigh-in run: a jump the data cannot explain
-    # is neither progress nor a setback, and a single reading after one is no baseline.
+    # Tiến độ được đo bên trong chuỗi cân nhất quán: một bước nhảy mà dữ liệu không giải thích được
+    # không phải tiến bộ cũng không phải thụt lùi, và một số đo đơn lẻ sau đó không làm mốc được.
     weights = series['segment']
     if target is None or not weights:
         return result
@@ -440,7 +440,7 @@ def _nutrition(facts, today):
         data = fact.get('data') or {}
         at = parse_time(data.get('consumed_at'))
         if at:
-            # Unknown stays unknown: a meal without energy data is counted, not added as 0 kcal.
+            # Chưa biết thì giữ là chưa biết: bữa ăn không có dữ liệu năng lượng được đếm, không cộng là 0 kcal.
             meals.append({'day': local_day(at), 'at': at, 'kcal': number(data.get('energy_kcal')),
                           'protein': number(data.get('protein_g')), 'items': data.get('items') or [],
                           'incomplete': bool(data.get('nutrition_incomplete')) or number(data.get('energy_kcal')) is None})
@@ -453,7 +453,7 @@ def _nutrition(facts, today):
         totals['protein_g'] += meal['protein'] or 0.0
         totals['meals'] += 1
         totals['unknown'] += meal['kcal'] is None
-    # Seven complete days before today; today is still being logged.
+    # Bảy ngày trọn trước hôm nay; hôm nay vẫn đang được ghi.
     window = [today - timedelta(days=offset) for offset in range(1, 8)]
     logged = [day for day in window if day in days]
     foods = {}
@@ -476,14 +476,14 @@ def _nutrition(facts, today):
     meals_per_day = round(sum(days[day]['meals'] for day in logged) / len(logged), 1) if logged else None
     return {'window_days': len(window), 'logged_days': len(logged), 'known_days': len(known_days),
             'avg_meals_per_logged_day': meals_per_day,
-            # Fewer than two meals per logged day usually means days were not fully logged,
-            # so the average understates intake; the card says so instead of hiding it.
+            # Ít hơn hai bữa mỗi ngày có ghi thường nghĩa là các ngày chưa được ghi đầy đủ,
+            # nên mức trung bình thấp hơn thực tế; thẻ nói rõ điều đó thay vì giấu đi.
             'likely_incomplete_logging': meals_per_day is not None and meals_per_day < 2,
             'window_start': window[-1].isoformat(), 'window_end': window[0].isoformat(),
             'avg_kcal': round(sum(days[day]['kcal'] for day in known_days) / len(known_days)) if known_days else None,
             'avg_protein_g': _round(sum(days[day]['protein_g'] for day in known_days) / len(known_days)) if known_days else None,
             'today': day_totals(today), 'yesterday': day_totals(today - timedelta(days=1)),
-            # Oldest first, for charts: the seven complete days plus today.
+            # Cũ nhất trước, cho biểu đồ: bảy ngày trọn cộng hôm nay.
             'daily': [{'date': day.isoformat(), 'kcal': _round(days[day]['kcal']) if day in days else None}
                       for day in [*reversed(window), today]],
             'meals_14d': sum(1 for meal in meals if meal['day'] > today - timedelta(days=14)),
@@ -566,7 +566,7 @@ def _training(facts, today, user):
             'sessions_7d': len(last7), 'minutes_7d': round(sum(s['minutes'] for s in last7)),
             'load_7d': round(sum(s['load'] for s in last7)), 'sessions_28d': len(last28),
             'disciplines_28d': dict(Counter(s['discipline'] for s in last28 if s['discipline'])),
-            # Oldest first: sessions and load in each of the last four calendar weeks.
+            # Cũ nhất trước: số buổi và khối lượng tập trong mỗi tuần của bốn tuần lịch gần nhất.
             'weeks': [{'week_start': start.isoformat(),
                        'sessions': sum(1 for s in sessions if start <= s['day'] < start + timedelta(days=7)),
                        'load': round(sum(s['load'] for s in sessions if start <= s['day'] < start + timedelta(days=7)))}
@@ -600,7 +600,7 @@ def build_user_model(facts, now=None):
 
 
 def model_links(model):
-    """Graph-native habits: which catalog foods and exercises define this user."""
+    """Thói quen gốc của graph: những thực phẩm và bài tập trong catalog định hình người dùng này."""
     foods = [{'key': f['key'], 'count': f['count'], 'last_date': f['last_date']}
              for f in ((model.get('nutrition') or {}).get('top_foods') or []) if f.get('key')]
     exercises = [{'key': e['key'], 'sessions': e['sessions'], 'last_date': e['last_date'],
@@ -610,7 +610,7 @@ def model_links(model):
 
 
 # ---------------------------------------------------------------------------
-# Prompt rendering: one compact Vietnamese line per section, explicit dates.
+# Dựng prompt: mỗi mục một dòng tiếng Việt gọn, ngày tháng tường minh.
 # ---------------------------------------------------------------------------
 
 def _n(value):
@@ -876,11 +876,11 @@ SECTION_RENDERERS = {
 
 
 def section_lines(model, sections, intents=(), now=None):
-    """Rendered lines in relevance order; a stale model keeps explicit dates."""
+    """Các dòng đã dựng theo thứ tự liên quan; model đã cũ giữ ngày tháng tường minh."""
     model = model or {}
     today = local_day(now or datetime.now(timezone.utc))
     if model.get('today') and model['today'] != today.isoformat():
-        # "Hôm nay" would be wrong for a model computed on another day: dates only.
+        # "Hôm nay" sẽ sai với model được tính vào ngày khác: chỉ dùng ngày tháng.
         today = None
     lines = []
     for section in dict.fromkeys(sections):

@@ -1,8 +1,8 @@
-"""Payload adapters per API version.
+"""Adapter payload theo phiên bản API.
 
-Stable v4 is the default. A v4beta adapter is used only for data types that are
-both v4beta-capable in the registry and listed in settings.GH_V4BETA_TYPES,
-and only once they have contract fixtures (M7).
+v4 ổn định là mặc định. Adapter v4beta chỉ dùng cho các loại dữ liệu
+vừa hỗ trợ v4beta trong registry vừa được liệt kê trong settings.GH_V4BETA_TYPES,
+và chỉ khi đã có fixture hợp đồng (M7).
 """
 from pathlib import Path
 
@@ -14,7 +14,7 @@ FIXTURES = Path(__file__).resolve().parents[1] / "contract" / "fixtures"
 
 
 def has_beta_contract(data_type: str) -> bool:
-    """v4beta is used for a type only once a contract fixture pins its payload (M7)."""
+    """v4beta chỉ được dùng cho một loại khi đã có fixture hợp đồng ghim payload của nó (M7)."""
     return (FIXTURES / f"v4beta_{data_type}.json").exists()
 
 

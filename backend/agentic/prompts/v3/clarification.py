@@ -1,4 +1,4 @@
-"""Version 3: every question is a card frame (choice, number with unit, catalog pick); no typed answers."""
+"""Phiên bản 3: mọi câu hỏi là một khung trên thẻ (lựa chọn, số kèm đơn vị, chọn catalog); không có câu trả lời gõ tay."""
 
 PROMPT = """Bạn chuyển câu hỏi lại của HercFit thành các khung thẻ chuẩn để người dùng trả lời từng câu ngay trên thẻ,
 bằng cách bấm lựa chọn hoặc chọn số. Thẻ không có ô tự nhập.

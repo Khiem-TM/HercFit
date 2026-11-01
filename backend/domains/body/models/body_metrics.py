@@ -31,7 +31,7 @@ class BodyMetric(BaseModel):
         ],
         CheckConstraint("body_fat_pct >= 0 AND body_fat_pct <= 100", name="ck_body_metrics_body_fat"),
         CheckConstraint("jsonb_typeof(additional_metrics) = 'object'", name="ck_body_metrics_additional_object"),
-        # Device samples carry one measurement each (a scale weight, a body-fat reading).
+        # Mẫu từ thiết bị mỗi mẫu mang một số đo (cân nặng từ cân, một chỉ số mỡ cơ thể).
         CheckConstraint("weight_kg IS NOT NULL OR height_cm IS NOT NULL OR body_fat_pct IS NOT NULL "
                         "OR muscle_mass_kg IS NOT NULL", name="ck_body_metrics_any_measurement"),
         CheckConstraint("source IN ('MANUAL', 'GOOGLE_HEALTH')", name="ck_body_metrics_source"),
@@ -54,8 +54,8 @@ class BodyMetric(BaseModel):
     additional_metrics: Mapped[dict[str, Any]] = mapped_column(
         JSONB(none_as_null=True), default=dict, server_default=text("'{}'::jsonb"), nullable=False,
     )
-    # MANUAL entries come from the user or the assistant; GOOGLE_HEALTH rows are
-    # keyed by the provider's data point name so repeated syncs never duplicate.
+    # Mục MANUAL đến từ người dùng hoặc trợ lý; dòng GOOGLE_HEALTH được
+    # khoá theo tên data point của nhà cung cấp để đồng bộ lặp lại không bao giờ nhân đôi.
     source: Mapped[str] = mapped_column(String(20), default="MANUAL", server_default="MANUAL", nullable=False)
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     data_source: Mapped[dict[str, Any]] = mapped_column(
@@ -76,7 +76,7 @@ class BodyMetric(BaseModel):
 
     @classmethod
     async def _visible(cls, session: AsyncSession, user_id: PyUUID, respect_consent: bool):
-        """Device-measured rows are hidden from the assistant without the user's consent."""
+        """Dòng đo bởi thiết bị bị ẩn với trợ lý khi người dùng chưa đồng ý."""
         query = cls._user_query(user_id)
         if respect_consent:
             from domains.identity.consent import device_access
@@ -113,10 +113,10 @@ class BodyMetric(BaseModel):
     @classmethod
     async def get_latest_for_user(cls, session: AsyncSession, *, user_id: PyUUID,
                                   respect_consent: bool = True) -> BodyMetric | None:
-        """Latest weigh-in: device rows holding only height or body fat are not a weight.
+        """Lần cân gần nhất: dòng thiết bị chỉ có chiều cao hoặc mỡ cơ thể không phải là cân nặng.
 
-        `respect_consent=False` is for computations inside a confirmed write (e.g. the
-        bodyweight behind a training's calorie estimate), never for reads shown to anyone.
+        `respect_consent=False` dành cho tính toán bên trong một lệnh ghi đã xác nhận (ví dụ
+        cân nặng dùng cho ước tính calo của buổi tập), không bao giờ cho lần đọc hiển thị với ai.
         """
         result = await session.execute(
             (await cls._visible(session, user_id, respect_consent)).where(cls.weight_kg.is_not(None))
@@ -129,9 +129,9 @@ class BodyMetric(BaseModel):
         cls, session: AsyncSession, *, user_id: PyUUID, source: str, rows: list[dict[str, Any]],
         window: tuple[datetime, datetime] | None = None,
     ) -> dict[str, int]:
-        """Mirror provider samples. Snapshots stay immutable: a changed sample replaces
-        the old row, and samples the provider no longer returns inside the synced
-        window are deactivated. Returns inserted/replaced/removed counts."""
+        """Phản chiếu mẫu của nhà cung cấp. Ảnh chụp vẫn bất biến: mẫu thay đổi thì thay
+        dòng cũ, và các mẫu nhà cung cấp không còn trả về trong cửa sổ đã đồng bộ
+        bị vô hiệu hoá. Trả về số dòng thêm/thay/xoá."""
         fields = ("recorded_at", "weight_kg", "height_cm", "body_fat_pct", "muscle_mass_kg")
         incoming = {row["external_id"]: row for row in rows}
         query = cls._user_query(user_id).where(cls.source == source, cls.external_id.is_not(None))
@@ -170,7 +170,7 @@ class BodyMetric(BaseModel):
         cls, session: AsyncSession, metric_id: PyUUID, *, user_id: PyUUID,
         payload: BodyMetricCreate | Mapping[str, Any],
     ) -> BodyMetric | None:
-        """Replace an active snapshot with a complete new payload, atomically."""
+        """Thay nguyên tử một ảnh chụp đang hoạt động bằng payload mới đầy đủ."""
         values = BodyMetricCreate.model_validate(payload).to_payload()
         async with session.begin_nested():
             result = await session.execute(
@@ -179,7 +179,7 @@ class BodyMetric(BaseModel):
             original = result.scalar_one_or_none()
             if original is None:
                 return None
-            # A correction keeps the measurement time unless explicitly supplied.
+            # Lần sửa giữ thời điểm đo trừ khi được truyền tường minh.
             replacement = await cls.create_snapshot(
                 session, user_id=user_id,
                 payload={"recorded_at": original.recorded_at, **values},

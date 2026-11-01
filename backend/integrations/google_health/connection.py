@@ -1,4 +1,4 @@
-"""Connect, inspect, consent to and disconnect the user's Google Health account."""
+"""Kết nối, xem, đồng ý và ngắt kết nối tài khoản Google Health của người dùng."""
 import hmac
 import logging
 from datetime import datetime, timedelta, timezone
@@ -72,7 +72,7 @@ class HealthConnectionService(UserService):
 
     def start(self, share_with_assistant: bool | None, scopes: list[str] | None = None,
               then: str | None = None) -> tuple[str, str, str]:
-        """Consent URL plus the nonce and PKCE verifier the router stores in HttpOnly cookies."""
+        """URL đồng ý cùng nonce và PKCE verifier mà router lưu trong cookie HttpOnly."""
         require_configured()
         nonce = generate_secure_token(24)
         verifier, challenge = pkce_pair()
@@ -84,9 +84,9 @@ class HealthConnectionService(UserService):
         connection = await HealthConnection.for_user(self.session, self.user_id, for_update=True)
         if connection is None:
             raise HTTPException(404, "Chưa kết nối Google Health")
-        # user_consents is the decision; its trigger republishes device data to the graph.
+        # user_consents là quyết định; trigger của nó phát lại dữ liệu thiết bị lên graph.
         await consent.set_device(self.session, self.user_id, share_with_assistant)
-        # Mirror kept only for rollback to code that still reads the column.
+        # Bản phản chiếu chỉ giữ để quay lui về code vẫn đọc cột này.
         if connection.share_with_assistant != share_with_assistant:
             connection.share_with_assistant = share_with_assistant
             connection.consented_at = datetime.now(timezone.utc) if share_with_assistant else None
@@ -109,7 +109,7 @@ class HealthConnectionService(UserService):
             connection.access_token_enc = connection.refresh_token_enc = None
             connection.token_expires_at = connection.next_sync_at = None
             connection.lease_token = connection.lease_until = None
-            # A sync or job started before this point is fenced out by the new generation.
+            # Lần sync hay job bắt đầu trước thời điểm này bị thế hệ mới fence lại.
             connection.generation += 1
             await self.session.flush()
             from core.jobs.queue import cancel_for_connection
@@ -122,7 +122,7 @@ class HealthConnectionService(UserService):
 
 
 async def revoke_connection(connection: HealthConnection, http: httpx.AsyncClient | None = None) -> None:
-    """Revoke the grant at Google; failures never block a disconnect or an erasure."""
+    """Thu hồi quyền tại Google; lỗi không bao giờ chặn việc ngắt kết nối hay xoá dữ liệu."""
     token = connection.refresh_token_enc or connection.access_token_enc
     if not token:
         return
@@ -152,7 +152,7 @@ async def purge_device_data(session, user_id: UUID) -> dict[str, int]:
 async def complete_connect(session, *, code: str | None, state: str | None, error: str | None,
                            nonce_cookie: str | None, verifier: str | None,
                            http: httpx.AsyncClient | None = None) -> tuple[str, UUID | None]:
-    """Handle Google's redirect. Returns (result for the frontend, connection id to sync)."""
+    """Xử lý chuyển hướng của Google. Trả về (kết quả cho frontend, id kết nối cần đồng bộ)."""
     if not settings.google_health_configured:
         return "error", None
     if error:
@@ -182,7 +182,7 @@ async def _link(session, user: User, claims: dict[str, Any], code: str, verifier
     login = await OAuthAccount.get_one(session, user_id=user.id, provider="google")
     subject = str(userinfo.get("sub") or "")
     if login is None or not hmac.compare_digest(subject, login.provider_user_id):
-        # Health data must come from the Google account the user signs in with.
+        # Dữ liệu sức khoẻ phải đến từ tài khoản Google mà người dùng đăng nhập.
         await oauth.revoke(http, tokens.get("refresh_token") or tokens.get("access_token"))
         return "wrong_account", None
     granted = oauth.granted_scopes(tokens)
@@ -195,7 +195,7 @@ async def _link(session, user: User, claims: dict[str, Any], code: str, verifier
         session.add(connection)
     if not tokens.get("refresh_token") and not connection.refresh_token_enc:
         return "error", None
-    # None: an incremental authorization that leaves the assistant consent as it is.
+    # None: một lần uỷ quyền tăng dần, giữ nguyên consent của trợ lý.
     share = claims.get("share")
     if share is None:
         share = (await consent.load(session, user.id)).device
@@ -224,7 +224,7 @@ async def _link(session, user: User, claims: dict[str, Any], code: str, verifier
     await publish(session, "health.connection.changed", user.id,
                   {"status": "ACTIVE", "generation": connection.generation})
     if claims.get("then") == "export_all":
-        # The sync switch asked for these scopes: finish turning it on with what was granted.
+        # Công tắc đồng bộ đã xin các scope này: bật nốt với những gì đã được cấp.
         from integrations.google_health.export import switch
         await switch.enable_all(session, connection, user.id)
     return "connected", connection.id

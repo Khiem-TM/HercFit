@@ -1,9 +1,9 @@
-"""Code-owned reply after confirmed writes: what the backend saved, from the records it returned.
+"""Câu trả lời do code viết sau các lệnh ghi đã xác nhận: những gì backend đã lưu, từ chính bản ghi nó trả về.
 
-After an approved write the router used to send the turn back to the tool step, where the model wrote prose
-instead of a call ("Bữa ăn đã được tạo bản ghi (đang chờ xác nhận qua API riêng)", runs 433a847a, 3725845a,
-6cdf6905, 2446b7af). The prose became the turn's question, and a saved record was reported as still pending.
-A turn that saved something therefore ends with this summary, built only from executed tool outputs.
+Sau một lệnh ghi đã duyệt, router từng gửi lượt quay lại bước tool, nơi model viết văn bản
+thay vì lời gọi ("Bữa ăn đã được tạo bản ghi (đang chờ xác nhận qua API riêng)", lượt chạy 433a847a, 3725845a,
+6cdf6905, 2446b7af). Văn bản đó thành câu hỏi của lượt, và một bản ghi đã lưu bị báo là vẫn đang chờ.
+Vì vậy lượt đã lưu thứ gì đó kết thúc bằng bản tóm tắt này, chỉ dựng từ output của các tool đã thực thi.
 """
 import re
 from datetime import datetime
@@ -16,7 +16,7 @@ from domains.catalog.models.foods import normalize_food_text
 TIMEZONE = 'Asia/Ho_Chi_Minh'
 UNITS = {'G': 'g', 'ML': 'ml', 'SERVING': 'suất'}
 INTENSITY = {'LIGHT': 'nhẹ', 'MODERATE': 'vừa', 'VIGOROUS': 'mạnh'}
-# Writes without details worth listing, as the user would name them.
+# Các lệnh ghi không có chi tiết đáng liệt kê, theo cách người dùng sẽ gọi tên chúng.
 DONE = {
     'update_meals': 'Đã cập nhật bữa ăn', 'delete_meals': 'Đã xoá bữa ăn khỏi nhật ký',
     'update_trainings': 'Đã cập nhật buổi tập', 'delete_trainings': 'Đã xoá buổi tập khỏi nhật ký',
@@ -26,19 +26,19 @@ DONE = {
     'update_profile': 'Đã cập nhật hồ sơ', 'merge_personal_info': 'Đã cập nhật thông tin cá nhân',
     'onboard': 'Đã lưu hồ sơ ban đầu', 'update_training_profile': 'Đã cập nhật hồ sơ vận động viên',
 }
-# A reply that still calls the saved write a preview waiting for confirmation (accents stripped).
+# Câu trả lời vẫn gọi lệnh ghi đã lưu là bản xem trước đang chờ xác nhận (đã bỏ dấu).
 PENDING_CLAIM = re.compile(r'cho (?:ban )?xac nhan|xac nhan qua api|api rieng|ban xem truoc|chua (?:duoc )?luu|'
                            r'trang thai cho|chua chinh thuc')
 
 
 def executed_writes(state) -> list[dict]:
-    """Tool outputs of the writes the backend executed in this turn (after the user's confirmation)."""
+    """Output tool của các lệnh ghi mà backend đã thực thi trong lượt này (sau khi người dùng xác nhận)."""
     return [output for output in (state or {}).get('tool_outputs') or []
             if output.get('ok') and output.get('action_id') and getattr(REGISTRY.get(output.get('tool') or ''), 'write', False)]
 
 
 def reads_after_writes(state) -> bool:
-    """The turn read more data after its last write, e.g. today's remaining calories after logging a meal."""
+    """Lượt đã đọc thêm dữ liệu sau lệnh ghi cuối, ví dụ lượng calo còn lại hôm nay sau khi ghi một bữa ăn."""
     outputs = (state or {}).get('tool_outputs') or []
     last = max((i for i, output in enumerate(outputs) if output in executed_writes(state)), default=None)
     return last is not None and any(output.get('ok') and not output.get('action_id') and not getattr(
@@ -58,7 +58,7 @@ def _number(value) -> Decimal | None:
 
 
 def vn(value, digits: int = 1) -> str:
-    """1104.5 -> "1.104,5" (Vietnamese grouping and decimal comma)."""
+    """1104.5 -> "1.104,5" (nhóm chữ số và dấu phẩy thập phân kiểu Việt Nam)."""
     number = _number(value)
     if number is None:
         return '—'
@@ -67,7 +67,7 @@ def vn(value, digits: int = 1) -> str:
 
 
 def when(value, timezone: str | None = None) -> str:
-    """"14:37 01/11/2026" in the record's own time zone."""
+    """"14:37 01/11/2026" theo múi giờ riêng của bản ghi."""
     try:
         moment = datetime.fromisoformat(str(value).replace('Z', '+00:00')).astimezone(ZoneInfo(timezone or TIMEZONE))
     except (ValueError, TypeError, KeyError):
@@ -198,7 +198,7 @@ def lines_for(output: dict) -> list[str]:
 
 
 def write_reply(state) -> str:
-    """What this turn saved, one block per executed write; '' when it saved nothing."""
+    """Những gì lượt này đã lưu, mỗi lệnh ghi đã thực thi một khối; '' khi không lưu gì."""
     writes = executed_writes(state)
     blocks = ['\n'.join(lines_for(output)) for output in writes]
     meals = [_number((output.get('output') or {}).get('energy_kcal')) for output in writes if output['tool'] == 'create_meals']
@@ -208,7 +208,7 @@ def write_reply(state) -> str:
 
 
 def _quantity(value) -> str:
-    """"1" and the backend's "1.000000" are the same quantity."""
+    """"1" và "1.000000" của backend là cùng một lượng."""
     number = _number(value)
     return '' if number is None else format(number.normalize(), 'f')
 
@@ -226,8 +226,8 @@ def _minute(value) -> str:
 
 
 def repeats_write(state, name: str, payload: dict) -> bool:
-    """Whether a new write call repeats one this turn already executed: the same meal items, the same session
-    start and exercises, the same measurement or the same catalog name (a reworded meal name is still the same meal)."""
+    """Lệnh ghi mới có lặp lại một lệnh lượt này đã thực thi không: cùng các món của bữa ăn, cùng thời điểm bắt đầu buổi tập
+    và bài tập, cùng số đo hay cùng tên catalog (tên bữa ăn diễn đạt khác vẫn là cùng bữa ăn)."""
     for output in executed_writes(state):
         record = output.get('output') if isinstance(output.get('output'), dict) else {}
         if output['tool'] != name or not record:

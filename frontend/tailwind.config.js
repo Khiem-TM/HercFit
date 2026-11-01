@@ -1,10 +1,10 @@
-/** Tokens imported from the supplied Stitch design. */
+/** Các token lấy từ thiết kế Stitch được cung cấp. */
 export default {
   darkMode: "class",
   theme: {
     extend: {
       colors: {
-        // Theme colours are CSS variables (src/assets/main.css): dark by default, `html.light` for the light theme.
+        // Màu theme là biến CSS (src/assets/main.css): mặc định tối, `html.light` cho theme sáng.
         "background": "rgb(var(--c-background) / <alpha-value>)",
         "on-secondary-fixed": "rgb(var(--c-on-secondary-fixed) / <alpha-value>)",
         "surface-variant": "rgb(var(--c-surface-variant) / <alpha-value>)",

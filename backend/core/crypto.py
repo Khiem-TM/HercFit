@@ -1,8 +1,8 @@
-"""Symmetric encryption for third-party credentials stored at rest.
+"""Mã hoá đối xứng cho thông tin xác thực bên thứ ba được lưu trữ.
 
-Provider refresh tokens grant long-lived access to a user's health data, so they
-never sit in the database in plaintext. MultiFernet encrypts with the current
-key and still decrypts values written under a retired key during a rotation.
+Refresh token của nhà cung cấp cấp quyền truy cập lâu dài vào dữ liệu sức khoẻ của người dùng, nên chúng
+không bao giờ nằm trong database dưới dạng rõ. MultiFernet mã hoá bằng khoá hiện tại
+và vẫn giải mã được giá trị ghi bằng khoá đã nghỉ trong lúc xoay khoá.
 """
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
@@ -10,7 +10,7 @@ from core.settings import settings
 
 
 class TokenCipherUnavailable(RuntimeError):
-    """TOKEN_ENCRYPTION_KEY is missing or malformed."""
+    """TOKEN_ENCRYPTION_KEY bị thiếu hoặc sai định dạng."""
 
 
 def _cipher() -> MultiFernet:

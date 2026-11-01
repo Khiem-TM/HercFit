@@ -1,8 +1,8 @@
-"""Ports the health-records domain needs from provider integrations.
+"""Các cổng (port) mà miền health-records cần từ tích hợp nhà cung cấp.
 
-Business code must not import a provider package. A provider integration
-registers an implementation at import time (integrations/google_health/directory.py);
-without one, every user simply has no provider link.
+Code nghiệp vụ không được import package của nhà cung cấp. Tích hợp nhà cung cấp
+đăng ký một bản cài đặt lúc import (integrations/google_health/directory.py);
+khi không có, mọi người dùng đơn giản là không có liên kết nhà cung cấp.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class ProviderStatus:
 
 @dataclass(frozen=True)
 class TypeAvailability:
-    """Per data type: granted by the user, enabled by HercFit, and synced through which date."""
+    """Theo từng loại dữ liệu: người dùng đã cấp, HercFit đã bật, và đã đồng bộ đến ngày nào."""
     granted: bool
     enabled: bool
     complete_through: Any = None
@@ -40,7 +40,7 @@ class ProviderDirectory(Protocol):
     async def availability(self, session: AsyncSession, user_id: UUID) -> dict[str, TypeAvailability]: ...
 
     async def before_account_erasure(self, session: AsyncSession, user_id: UUID) -> None:
-        """Revoke provider grants (best effort) before the account row is deleted."""
+        """Thu hồi quyền tại nhà cung cấp (cố gắng hết mức) trước khi xoá dòng tài khoản."""
 
 
 _directories: list[ProviderDirectory] = []

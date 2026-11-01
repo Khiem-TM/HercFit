@@ -1,23 +1,23 @@
-"""Leased, fenced, per-type synchronization of one Google Health connection.
+"""Đồng bộ theo từng loại, có lease và fence, cho một kết nối Google Health.
 
-1. Claim a lease (SKIP LOCKED): the claim bumps `lease_epoch`, the fencing token.
-   A heartbeat extends the lease while the run lasts; losing it stops the run.
-   No transaction is held during HTTP.
-2. Refresh the access token under a per-connection advisory lock, re-reading the
-   token after the lock so concurrent runs refresh once. invalid_grant marks the
-   connection NEEDS_REAUTH (Testing-mode refresh tokens expire after 7 days).
-3. Read each data type the user granted and the registry enables, through the
-   documented filter for its shape (ingest/reads.py) and explicit projections.
-   Each type ends COMPLETE, INCOMPLETE (page budget used up), NOT_GRANTED,
-   ERROR or SKIPPED; one type never hides or loses another.
-4. Store in one fenced transaction, each family in a savepoint. A type that was
-   not read completely and cleanly is not written over (no None columns) and
-   never deletes anything. Records missing from a complete, clean window are
-   deactivated.
-5. Each type keeps its own cursor (`sync_cursor.types`); only COMPLETE advances it.
+1. Lấy lease (SKIP LOCKED): lần lấy tăng `lease_epoch`, chính là fencing token.
+   Heartbeat gia hạn lease suốt lượt chạy; mất lease thì dừng lượt chạy.
+   Không giữ transaction nào trong lúc gọi HTTP.
+2. Làm mới access token dưới advisory lock theo từng kết nối, đọc lại
+   token sau khi lấy khoá để các lượt chạy đồng thời chỉ làm mới một lần. invalid_grant đánh dấu
+   kết nối NEEDS_REAUTH (refresh token ở chế độ Testing hết hạn sau 7 ngày).
+3. Đọc từng loại dữ liệu người dùng đã cấp và registry đã bật, qua
+   filter đã mô tả cho dạng của nó (ingest/reads.py) và các phép chiếu tường minh.
+   Mỗi loại kết thúc COMPLETE, INCOMPLETE (hết ngân sách trang), NOT_GRANTED,
+   ERROR hoặc SKIPPED; một loại không bao giờ che hay làm mất loại khác.
+4. Lưu trong một transaction đã fence, mỗi họ dữ liệu một savepoint. Loại chưa
+   được đọc trọn vẹn và sạch sẽ thì không bị ghi đè (không có cột None) và
+   không bao giờ xoá gì. Bản ghi vắng mặt trong một cửa sổ trọn vẹn, sạch sẽ thì bị
+   vô hiệu hoá.
+5. Mỗi loại giữ cursor riêng (`sync_cursor.types`); chỉ COMPLETE mới đẩy nó lên.
 
-The job pipeline (M3+) reuses the reads and projections; this module remains
-the in-process path until GH_INGEST_V2=primary.
+Pipeline job (M3+) dùng lại các lần đọc và phép chiếu; module này vẫn là
+đường trong tiến trình cho đến khi GH_INGEST_V2=primary.
 """
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ HEARTBEAT_SECONDS = 60
 OVERLAP_DAYS = 3
 TOKEN_SKEW = timedelta(seconds=60)
 
-# What the in-process sync stores, by landing family.
+# Những gì sync trong tiến trình lưu, theo họ dữ liệu đích.
 ROLLUP_TYPES = ("steps", "distance", "floors", "active-minutes", "active-zone-minutes", "total-calories",
                 "active-energy-burned", "heart-rate", "hydration-log")
 DAILY_TYPES = ("daily-resting-heart-rate", "daily-heart-rate-variability", "daily-oxygen-saturation",
@@ -69,7 +69,7 @@ BODY_TYPES = tuple(projections.BODY)
 SAMPLE_TYPES = tuple(projections.SAMPLES)
 SESSION_TYPES = ("sleep", "exercise")
 SYNC_TYPES = (*ROLLUP_TYPES, *DAILY_TYPES, *BODY_TYPES, *SAMPLE_TYPES, *SESSION_TYPES)
-# Daily columns each type owns; a column is only written when its type was read completely.
+# Các cột theo ngày mà mỗi loại sở hữu; một cột chỉ được ghi khi loại của nó đã được đọc trọn vẹn.
 TYPE_COLUMNS: dict[str, tuple[str, ...]] = {
     "steps": ("steps",), "distance": ("distance_m",), "floors": ("floors",),
     "active-minutes": ("active_minutes", "active_minutes_by_level"), "active-zone-minutes": ("active_zone_minutes",),
@@ -84,7 +84,7 @@ COMPLETE, INCOMPLETE, NOT_GRANTED, ERROR, SKIPPED = "COMPLETE", "INCOMPLETE", "N
 
 
 class FencedOut(Exception):
-    """The lease or the connection generation moved on: this run must not write."""
+    """Lease hoặc thế hệ kết nối đã chuyển đi: lượt chạy này không được ghi."""
 
 
 class Window:
@@ -108,8 +108,8 @@ class TypeRead:
     error_class: str | None = None
     points: int = 0
     pages: int = 0
-    rejected: int = 0      # points whose value or time the adapter could not trust
-    unknown: int = 0       # points with fields newer than the discovery snapshot
+    rejected: int = 0      # các điểm mà adapter không tin được giá trị hay thời điểm
+    unknown: int = 0       # các điểm có trường mới hơn ảnh chụp discovery
     seen: set[str] = field(default_factory=set)
 
     @property
@@ -145,7 +145,7 @@ def type_cursor(connection: HealthConnection, data_type: str) -> date | None:
 
 
 def sync_window(connection: HealthConnection, today: date) -> Window:
-    """Backfill on the first run; then re-read from the least advanced type's cursor minus an overlap."""
+    """Điền dữ liệu ở lượt chạy đầu; sau đó đọc lại từ cursor của loại chậm nhất trừ đi một khoảng chồng lấn."""
     zone = connection.timezone or DEFAULT_TIMEZONE
     earliest = today - timedelta(days=settings.GOOGLE_HEALTH_BACKFILL_DAYS - 1)
     known = [value for value in (type_cursor(connection, data_type) for data_type in SYNC_TYPES) if value]
@@ -154,7 +154,7 @@ def sync_window(connection: HealthConnection, today: date) -> Window:
     return Window(max(earliest, min(min(known), today) - timedelta(days=OVERLAP_DAYS)), today, zone)
 
 
-# ------------------------------------------------------------------------------------------- reading
+# ------------------------------------------------------------------------------------------- đọc
 async def _read(item_type: str, coroutine) -> tuple[TypeRead, Fetch | None]:
     result = TypeRead(item_type)
     try:
@@ -171,7 +171,7 @@ async def _read(item_type: str, coroutine) -> tuple[TypeRead, Fetch | None]:
 
 
 def _enabled(data_type: str, op: Op, granted: list[str] | set[str]) -> str | None:
-    """None when the type may be read now, else the reason to skip it."""
+    """None khi loại được phép đọc lúc này, ngược lại là lý do bỏ qua."""
     item = spec(data_type)
     if not runtime_enabled(data_type, op, verified=settings.verified_capabilities,
                            api_version="v4" if "v4" in item.api_versions else "v4beta"):
@@ -182,7 +182,7 @@ def _enabled(data_type: str, op: Op, granted: list[str] | set[str]) -> str | Non
 
 
 async def fetch_all(client: GoogleHealthClient, window: Window, granted: set[str] | list[str]) -> dict[str, Any]:
-    """Read every enabled, granted type; per-type outcomes are recorded, never raised (except re-auth)."""
+    """Đọc mọi loại đã bật và đã cấp; kết quả từng loại được ghi lại, không bao giờ ném lỗi (trừ khi cần uỷ quyền lại)."""
     v4beta = set(settings.GH_V4BETA_TYPES)
     result: dict[str, Any] = {"days": {}, "types": {}, "body": [], "samples": [], "sleep": [], "workouts": [],
                               "profile": None, "settings": None, "identity": None}
@@ -198,7 +198,7 @@ async def fetch_all(client: GoogleHealthClient, window: Window, granted: set[str
 
         for raw in fetch.points:
             if not rollup and written_by_us(raw.get("dataSource")):
-                continue  # HercFit's own export coming back: the local record already exists
+                continue  # dữ liệu HercFit tự xuất quay về: bản ghi cục bộ đã tồn tại
             parsed = parser.parse_rollup(data_type, raw, daily=True) if rollup else parser.parse_point(data_type, raw)
             if any(code == BAD_TYPE for code in parsed.quality.values()):
                 read.rejected += 1
@@ -278,10 +278,10 @@ async def fetch_all(client: GoogleHealthClient, window: Window, granted: set[str
     return result
 
 
-# ------------------------------------------------------------------------------------------- storing
+# ------------------------------------------------------------------------------------------- lưu
 async def _deactivate_missing(session, table: str, user_id: UUID, keep: list[str], column: str,
                               low: Any, high: Any) -> int:
-    """Soft-delete provider records inside the window that the provider no longer returns."""
+    """Xoá mềm các bản ghi nhà cung cấp trong cửa sổ mà nhà cung cấp không còn trả về."""
     outcome = await session.execute(text(f"""
         UPDATE {table} SET is_active = false, updated_at = now(), version_id = version_id + 1
         WHERE user_id = :uid AND source = :source AND is_active AND {column} >= :low AND {column} <= :high
@@ -292,7 +292,7 @@ async def _deactivate_missing(session, table: str, user_id: UUID, keep: list[str
 
 def _complete(fetched: dict[str, Any]) -> set[str]:
     types = fetched.get("types")
-    if types is None:  # callers that pre-date per-type results treat every read type as complete
+    if types is None:  # bên gọi có từ trước khi có kết quả theo loại coi mọi loại đã đọc là trọn vẹn
         return set(fetched.get("read") or ())
     return {name for name, read in types.items() if read.status == COMPLETE}
 
@@ -305,7 +305,7 @@ def _clean(fetched: dict[str, Any]) -> set[str]:
 
 
 async def store(session, user_id: UUID, window: Window, fetched: dict[str, Any]) -> dict[str, Any]:
-    """Persist one fetch; each data family in a savepoint. Returns counts and storage errors."""
+    """Lưu một lần fetch; mỗi họ dữ liệu một savepoint. Trả về số đếm và lỗi lưu trữ."""
     counts: dict[str, Any] = {}
     errors: dict[str, str] = {}
     complete, clean = _complete(fetched), _clean(fetched)
@@ -316,7 +316,7 @@ async def store(session, user_id: UUID, window: Window, fetched: dict[str, Any])
                 counts[name] = await write()
         except FencedOut:
             raise
-        except Exception as exc:  # A constraint on one family must not lose the others.
+        except Exception as exc:  # Ràng buộc trên một họ dữ liệu không được làm mất các họ khác.
             logger.warning("google_health_store_failed family=%s error=%s", name, type(exc).__name__)
             errors[name] = "storage_error"
 
@@ -367,8 +367,8 @@ async def store(session, user_id: UUID, window: Window, fetched: dict[str, Any])
         await guarded("health_samples", samples)
     body_types = complete & set(BODY_TYPES)
     if body_types:
-        # Removals need every body type read completely and cleanly: otherwise a
-        # weight-only read would deactivate height and body-fat samples it did not see.
+        # Việc xoá cần mọi loại số đo cơ thể được đọc trọn vẹn và sạch sẽ: nếu không, một
+        # lần đọc chỉ có cân nặng sẽ vô hiệu hoá các mẫu chiều cao và mỡ cơ thể mà nó không thấy.
         await guarded("body_metrics", lambda: BodyMetric.sync_device_samples(
             session, user_id=user_id, source=HEALTH_PROVIDER, rows=fetched["body"],
             window=(window.utc_start, window.utc_end) if set(BODY_TYPES) <= clean else None))
@@ -377,7 +377,7 @@ async def store(session, user_id: UUID, window: Window, fetched: dict[str, Any])
 
 # ------------------------------------------------------------------------------------------- lease
 async def _claim(session, connection_id: UUID | None, token: UUID) -> Lease | None:
-    """Lease one connection: a specific one (manual sync) or the most overdue one."""
+    """Lease một kết nối: một kết nối cụ thể (sync thủ công) hoặc kết nối quá hạn lâu nhất."""
     selector = "id = :id" if connection_id else "next_sync_at <= now()"
     row = (await session.execute(text(f"""
         UPDATE health_connections SET lease_token = :token, lease_until = now() + make_interval(secs => :lease),
@@ -392,7 +392,7 @@ async def _claim(session, connection_id: UUID | None, token: UUID) -> Lease | No
 
 
 async def fence(session, lease: Lease) -> None:
-    """Call first in every transaction that writes on behalf of a run."""
+    """Gọi đầu tiên trong mọi transaction ghi thay mặt một lượt chạy."""
     row = (await session.execute(text(
         "SELECT 1 FROM health_connections WHERE id = :id AND lease_token = :token AND lease_epoch = :epoch "
         "AND generation = :generation AND status = 'ACTIVE' FOR UPDATE"),
@@ -426,7 +426,7 @@ async def _release(lease: Lease) -> None:
 
 async def sync_connection(connection_id: UUID | None = None, *, trigger: str | None = None,
                           http: httpx.AsyncClient | None = None, today: date | None = None) -> dict[str, Any]:
-    """Synchronize one connection (or the most overdue one); returns the run summary."""
+    """Đồng bộ một kết nối (hoặc kết nối quá hạn lâu nhất); trả về bản tóm tắt lượt chạy."""
     async with get_db_session() as session:
         lease = await _claim(session, connection_id, uuid4())
     if lease is None:

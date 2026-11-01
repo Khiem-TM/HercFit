@@ -1,4 +1,4 @@
-"""FPT API adapter with bounded retries, unit vectors and explicit E5 input role."""
+"""Adapter FPT API với số lần thử lại có giới hạn, vector đơn vị và vai trò đầu vào E5 tường minh."""
 import asyncio
 import math
 
@@ -14,7 +14,7 @@ class FPTEmbeddingClient(EmbeddingClient):
         for attempt in range(self.settings.KNOWLEDGE_EMBEDDING_RETRIES):
             try:
                 vectors = await super().embed(texts, input_type=input_type)
-                # Cosine search is used by retrieval. Store normalized vectors consistently.
+                # Truy hồi dùng tìm kiếm cosine. Lưu vector đã chuẩn hoá một cách nhất quán.
                 return [[x / math.hypot(*vector) for x in vector] for vector in vectors]
             except (httpx.TimeoutException, httpx.NetworkError, httpx.HTTPStatusError) as exc:
                 retryable = not isinstance(exc, httpx.HTTPStatusError) or exc.response.status_code in {408, 429, 500, 502, 503, 504}

@@ -1,16 +1,16 @@
-"""Schema-driven parsing of Google Health payloads.
+"""Phân tích payload Google Health dựa trên schema.
 
-The discovery snapshot declares every field's type: int64 values arrive as JSON
-strings, durations as "3.5s", timestamps as RFC 3339, dates as {year, month,
-day}, civil times without an offset, plus enums. The adapter converts exactly
-those declarations instead of searching keys by guesswork, and reports:
+Ảnh chụp discovery khai báo kiểu của mọi trường: giá trị int64 đến dưới dạng
+chuỗi JSON, thời lượng dạng "3.5s", mốc thời gian RFC 3339, ngày dạng {year, month,
+day}, giờ địa phương không kèm độ lệch, cùng các enum. Adapter chuyển đổi đúng
+các khai báo đó thay vì đoán mò theo khoá, và báo cáo:
 
-* `unknown_paths`: fields present in the payload but absent from the schema
-  (kept in the stored source payload; surfaced as schema warnings),
-* `quality[path]`: BAD_TYPE, UNKNOWN_ENUM or OUT_OF_RANGE for a field that was
-  present but could not be trusted (its typed value is then None).
+* `unknown_paths`: các trường có trong payload nhưng không có trong schema
+  (được giữ trong payload nguồn đã lưu; hiển thị thành cảnh báo schema),
+* `quality[path]`: BAD_TYPE, UNKNOWN_ENUM hoặc OUT_OF_RANGE cho trường có
+  mặt nhưng không tin được (khi đó giá trị có kiểu của nó là None).
 
-A missing field is simply absent: "no data" and "zero" stay distinguishable.
+Trường bị thiếu thì đơn giản là vắng mặt: "không có dữ liệu" và "bằng 0" vẫn phân biệt được.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from integrations.google_health.contract.registry import Kind, spec
 BAD_TYPE, UNKNOWN_ENUM, OUT_OF_RANGE = "BAD_TYPE", "UNKNOWN_ENUM", "OUT_OF_RANGE"
 _NANOS = re.compile(r"(\.\d{6})\d+")
 
-# Plausibility bounds for values that feed business columns (path inside the value object).
+# Ngưỡng hợp lý cho các giá trị nuôi cột nghiệp vụ (đường dẫn bên trong đối tượng giá trị).
 PLAUSIBLE: dict[tuple[str, str], tuple[float, float]] = {
     ("heart-rate", "beatsPerMinute"): (20, 300),
     ("daily-resting-heart-rate", "beatsPerMinute"): (20, 250),
@@ -45,17 +45,17 @@ PLAUSIBLE: dict[tuple[str, str], tuple[float, float]] = {
 
 @dataclass
 class TimeInfo:
-    """Physical time, the UTC offset Google recorded, and civil (wall-clock) time are kept apart."""
+    """Giờ vật lý, độ lệch UTC mà Google ghi và giờ địa phương (giờ đồng hồ) được giữ tách biệt."""
     physical_start: datetime | None = None
     physical_end: datetime | None = None
     start_offset_s: int | None = None
     end_offset_s: int | None = None
-    civil_start: datetime | None = None   # naive wall-clock time
+    civil_start: datetime | None = None   # giờ đồng hồ không kèm múi giờ
     civil_end: datetime | None = None
-    civil_date: date | None = None        # daily types
+    civil_date: date | None = None        # các loại theo ngày
 
     def local_start(self) -> datetime | None:
-        """Wall-clock start: Google's civil time, else physical time shifted by the recorded offset."""
+        """Thời điểm bắt đầu theo giờ đồng hồ: giờ địa phương của Google, nếu không thì giờ vật lý dịch theo độ lệch đã ghi."""
         if self.civil_start is not None:
             return self.civil_start
         if self.physical_start is not None and self.start_offset_s is not None:
@@ -108,7 +108,7 @@ def parse_timestamp(value: Any) -> datetime | None:
 
 
 def parse_duration(value: Any) -> float | None:
-    """Protobuf Duration JSON ("3.5s", "-25200s")."""
+    """JSON Duration của Protobuf ("3.5s", "-25200s")."""
     if isinstance(value, str) and value.endswith("s"):
         try:
             return float(value[:-1])
@@ -141,13 +141,13 @@ def _civil(value: Any) -> datetime | None:
 
 
 class SchemaAdapter:
-    """Parses one API version's payloads against its discovery schemas."""
+    """Phân tích payload của một phiên bản API theo các schema discovery của nó."""
 
     def __init__(self, api_version: str = "v4"):
         self.api_version = api_version
         self._schemas = discovery.schemas(api_version)
 
-    # -- generic typed conversion ---------------------------------------------------------------
+    # -- chuyển đổi có kiểu tổng quát ----------------------------------------------------------
     def convert(self, schema_name: str, payload: Any, path: str = "", *, quality: dict[str, str],
                 unknown: list[str]) -> Any:
         if schema_name == "Date":
@@ -210,7 +210,7 @@ class SchemaAdapter:
             return raw
         if kind in ("number", "integer"):
             if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-                # Google may encode int32/double as strings in rare cases; accept exact numerals.
+                # Trong trường hợp hiếm Google có thể mã hoá int32/double thành chuỗi; chấp nhận chữ số chính xác.
                 try:
                     raw = float(raw) if kind == "number" else int(raw)
                 except (TypeError, ValueError):
@@ -226,10 +226,10 @@ class SchemaAdapter:
                 return None
             return raw
         if kind == "object":
-            return raw  # free-form (Operation.response, metadata)
+            return raw  # dạng tự do (Operation.response, metadata)
         return raw
 
-    # -- data points ------------------------------------------------------------------------------
+    # -- data point ---------------------------------------------------------------------------------
     def value_schema(self, data_type: str) -> str:
         info = discovery.data_point_types(self.api_version).get(data_type)
         if info is not None:
@@ -240,7 +240,7 @@ class SchemaAdapter:
         return rollup
 
     def parse_point(self, data_type: str, point: dict[str, Any]) -> Parsed:
-        """Parse a list/get/reconcile data point (`DataPoint` or `ReconciledDataPoint`)."""
+        """Phân tích một data point từ list/get/reconcile (`DataPoint` hoặc `ReconciledDataPoint`)."""
         quality: dict[str, str] = {}
         unknown: list[str] = []
         field_name = discovery.camel(data_type)
@@ -263,7 +263,7 @@ class SchemaAdapter:
                       data_source=source or {}, quality=quality, unknown_paths=unknown)
 
     def parse_rollup(self, data_type: str, point: dict[str, Any], *, daily: bool) -> Parsed:
-        """Parse a rollUp / dailyRollUp window: window bounds plus this type's rollup value."""
+        """Phân tích một cửa sổ rollUp / dailyRollUp: mốc cửa sổ cộng giá trị rollup của loại này."""
         quality: dict[str, str] = {}
         unknown: list[str] = []
         field_name = discovery.camel(data_type)
@@ -300,7 +300,7 @@ class SchemaAdapter:
         if isinstance(value.get("date"), date):
             time.civil_date = value["date"]
         elif kind is not Kind.CATALOG:
-            # Sleep belongs to the wake-up date; everything else to its start.
+            # Giấc ngủ thuộc ngày thức dậy; mọi thứ khác thuộc ngày bắt đầu.
             local = time.local_end() if data_type == "sleep" else time.local_start()
             time.civil_date = local.date() if local else None
         return time

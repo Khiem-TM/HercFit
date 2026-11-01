@@ -9,7 +9,7 @@ CARRY_TOTAL_CHARS = 16000
 
 
 def nutrition_basis(unit, size):
-    """Spell out what the nutrient values refer to, so replies never guess per-100 g vs per-portion."""
+    """Nói rõ giá trị dinh dưỡng tính theo cái gì, để câu trả lời không bao giờ đoán theo 100 g hay theo khẩu phần."""
     if unit == 'PORTION':
         return 'mỗi suất'
     try:
@@ -33,7 +33,7 @@ def _project(record, fields):
 
 
 def compact_output(tool: str, data):
-    """Structure-preserving projection of catalog results; other outputs pass through."""
+    """Phép chiếu giữ cấu trúc cho kết quả catalog; các output khác đi qua nguyên vẹn."""
     fields = FOOD_FIELDS if tool.endswith('_foods') else EXERCISE_FIELDS if tool.endswith('_exercises') else None
     if fields is None:
         return data
@@ -52,7 +52,7 @@ def clamp_catalog_query(tool: str, args: dict) -> dict:
 
 
 def carry_over(outputs: list[dict]) -> str | None:
-    """Bounded summary of the previous turn's tool results for the next turn."""
+    """Bản tóm tắt có giới hạn của kết quả tool lượt trước cho lượt sau."""
     parts, used = [], 0
     for output in reversed(outputs):
         text = json.dumps({**output, 'output': compact_output(output.get('tool', ''), output.get('output'))}, ensure_ascii=False, default=str)

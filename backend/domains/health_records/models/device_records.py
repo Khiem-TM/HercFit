@@ -1,6 +1,6 @@
-"""Wearable health data synchronized from the Google Health API.
+"""Dữ liệu sức khoẻ từ thiết bị đeo, đồng bộ từ Google Health API.
 
-Split from models.health in the domain reorganization."""
+Tách ra từ models.health trong đợt tổ chức lại theo miền."""
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -41,7 +41,7 @@ def _json_list():
 
 
 def _source_record():
-    """Provenance: the provider record this row was projected from (health_source_records)."""
+    """Nguồn gốc: bản ghi nhà cung cấp mà dòng này được chiếu từ đó (health_source_records)."""
     return mapped_column(UUID(as_uuid=True), ForeignKey("health_source_records.id", ondelete="SET NULL"),
                          nullable=True)
 
@@ -61,7 +61,7 @@ DAILY_RANGES = {
     "sleep_minutes": (0, 1440), "skin_temp_delta_c": (-20, 20),
 }
 
-# Columns a provider rollup may write; the upsert compares exactly these.
+# Các cột mà rollup của nhà cung cấp có thể ghi; upsert so sánh đúng các cột này.
 DAILY_FIELDS = (*DAILY_RANGES, "active_minutes_by_level", "timezone", "data_source")
 
 SLEEP_FIELDS = ("start_at", "end_at", "local_date", "sleep_type", "is_main", "is_nap", "minutes_asleep",
@@ -146,7 +146,7 @@ class SleepSession(BaseModel):
     efficiency_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     data_source: Mapped[dict[str, Any]] = _json()
     utc_offset_s: Mapped[int | None] = mapped_column(Integer)
-    # Segments as Google recorded them. Short awakenings overlap stages: never add them up.
+    # Các đoạn đúng như Google đã ghi. Lần thức giấc ngắn chồng lên giai đoạn: không bao giờ cộng chúng lại.
     stages: Mapped[list[Any]] = _json_list()
     short_awakenings: Mapped[list[Any]] = _json_list()
     source_record_id: Mapped[PyUUID | None] = _source_record()
@@ -186,7 +186,7 @@ class DeviceWorkout(BaseModel):
     data_source: Mapped[dict[str, Any]] = _json()
     utc_offset_s: Mapped[int | None] = mapped_column(Integer)
     elapsed_seconds: Mapped[int | None] = mapped_column(Integer)
-    # Device sessions carry pauses and splits, never sets or reps.
+    # Phiên của thiết bị mang lần tạm dừng và các chặng, không bao giờ có set hay số lần.
     pauses: Mapped[list[Any]] = _json_list()
     splits: Mapped[list[Any]] = _json_list()
     has_route: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
@@ -219,10 +219,10 @@ class HealthSample(BaseModel):
 
 async def upsert_rows(session: AsyncSession, model, rows: list[dict[str, Any]], *, keys: tuple[str, ...],
                       fields: tuple[str, ...]) -> int:
-    """Insert or update provider rows; returns how many rows were written.
+    """Chèn hoặc cập nhật dòng của nhà cung cấp; trả về số dòng đã ghi.
 
-    Unchanged rows are skipped by the WHERE clause, so their version and the graph
-    projection stay put. A previously soft-deleted record is revived when it returns.
+    Dòng không đổi bị mệnh đề WHERE bỏ qua, nên phiên bản và phép chiếu graph
+    của chúng giữ nguyên. Bản ghi đã xoá mềm trước đó được khôi phục khi nó quay lại.
     """
     if not rows:
         return 0
@@ -234,8 +234,8 @@ async def upsert_rows(session: AsyncSession, model, rows: list[dict[str, Any]], 
     excluded = statement.excluded
     changed = [table.c[field].is_distinct_from(excluded[field]) for field in fields]
     changed.append(table.c.is_active.is_(False))
-    # Provider rows always carry external_id. The predicate lets PostgreSQL infer the partial
-    # unique indexes of the log tables (WHERE external_id IS NOT NULL) as well as full ones.
+    # Dòng của nhà cung cấp luôn có external_id. Predicate này giúp PostgreSQL suy ra các chỉ mục
+    # unique một phần của bảng nhật ký (WHERE external_id IS NOT NULL) cũng như chỉ mục đầy đủ.
     index_where = table.c.external_id.isnot(None) if "external_id" in keys else None
     statement = statement.on_conflict_do_update(
         index_elements=[table.c[key] for key in keys],

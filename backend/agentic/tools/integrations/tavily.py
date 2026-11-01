@@ -69,7 +69,7 @@ class TavilyClient:
 
     @observed('tavily.search_images', 'tool', capture=('query',), output=False)
     async def search_images(self,query,*,reserve=None,limit=4):
-        """Illustrative images for a public food/exercise name; display candidates, never evidence."""
+        """Ảnh minh hoạ cho tên thực phẩm/bài tập công khai; là ứng viên hiển thị, không bao giờ là bằng chứng."""
         key=('images',query.casefold().strip())
         cached=self.cache.get(key)
         if cached and cached[0]>time.monotonic():
@@ -77,7 +77,7 @@ class TavilyClient:
             return [dict(r) for r in cached[1]]
         annotate(cache_hit=False)
         body={'query':query,'max_results':1,'search_depth':'basic','include_images':True,'include_image_descriptions':True}
-        # Image search with descriptions is slower than text search.
+        # Tìm ảnh có mô tả chậm hơn tìm văn bản.
         data=await self._post('/search',body,reserve,timeout=25)
         rows=[]
         for image in data.get('images',[]):
@@ -85,7 +85,7 @@ class TavilyClient:
             if isinstance(url,str) and url.startswith('https://') and public_url(url) and len(url)<=2048:
                 rows.append({'url':url,'description':str(description or '')[:300]})
         rows=list({r['url']:r for r in rows}.values())[:limit]
-        # Empty answers are flaky upstream: retry them soon instead of pinning them for an hour.
+        # Câu trả lời rỗng ở phía nguồn hay chập chờn: thử lại sớm thay vì ghim chúng một giờ.
         self.cache[key]=(time.monotonic()+(3600 if rows else 60),rows)
         self.cache.move_to_end(key)
         while len(self.cache)>128: self.cache.popitem(last=False)
@@ -97,6 +97,6 @@ class TavilyClient:
         urls=list(dict.fromkeys(u for u in urls if public_url(u)))[:3]
         if not urls: return []
         data=await self._post('/extract',{'urls':urls,'extract_depth':'advanced','format':'text'},reserve)
-        # failed_results are not evidence, even when the overall HTTP call is 200.
+        # failed_results không phải bằng chứng, kể cả khi toàn bộ lời gọi HTTP trả 200.
         return [{'url':r['url'],'raw_content':str(r.get('raw_content',''))[:18000]}
                 for r in data.get('results',[]) if r.get('url') in urls]

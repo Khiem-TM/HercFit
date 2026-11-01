@@ -1,1 +1,1 @@
-"""components building blocks."""
+"""Các khối thành phần dựng sẵn."""

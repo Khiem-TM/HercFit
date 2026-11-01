@@ -1,6 +1,6 @@
 import type { KnowledgeEdge, KnowledgeGraph, KnowledgeNode } from '@/types/knowledge'
 
-/** Presentation state only: which branches are open never changes graph records. */
+/** Chỉ là trạng thái trình bày: nhánh nào đang mở không bao giờ thay đổi bản ghi của graph. */
 export interface TreeIndex {
   byId: Map<string, KnowledgeNode>
   children: Map<string, string[]>
@@ -20,7 +20,7 @@ export function indexTree(graph: KnowledgeGraph): TreeIndex {
   return { byId, children, links: graph.edges.filter(edge => edge.kind === 'link'), root: graph.nodes.find(node => !node.parent)?.id }
 }
 
-/** Ancestors from the root down to the direct parent. */
+/** Các tổ tiên từ gốc xuống tới node cha trực tiếp. */
 export function ancestors(index: TreeIndex, id: string): string[] {
   const path: string[] = []
   let current = index.byId.get(id)?.parent ?? null
@@ -31,7 +31,7 @@ export function ancestors(index: TreeIndex, id: string): string[] {
   return path
 }
 
-/** The root and its hubs are always shown; deeper nodes appear under open branches only. */
+/** Gốc và các hub luôn hiển thị; node sâu hơn chỉ xuất hiện dưới các nhánh đang mở. */
 export function visibleIds(index: TreeIndex, expanded: ReadonlySet<string>): string[] {
   if (!index.root) return []
   const result = [index.root]
@@ -54,7 +54,7 @@ export function visibleEdges(index: TreeIndex, visible: ReadonlySet<string>): Kn
   return [...tree, ...index.links.filter(edge => visible.has(edge.source) && visible.has(edge.target))]
 }
 
-/** Closing a branch also closes everything below it, so reopening starts compact. */
+/** Đóng một nhánh cũng đóng mọi thứ bên dưới, để mở lại sẽ bắt đầu gọn gàng. */
 export function collapse(index: TreeIndex, expanded: ReadonlySet<string>, id: string): Set<string> {
   const next = new Set(expanded)
   const close = (node: string) => {
@@ -68,8 +68,8 @@ export function collapse(index: TreeIndex, expanded: ReadonlySet<string>, id: st
 const RADII = [0, 165, 300, 425, 540, 650]
 
 /**
- * Weighted radial tree: every visible node owns an angular wedge proportional to
- * the leaves it shows, so an opened branch gets room and its neighbours glide aside.
+ * Cây toả tròn có trọng số: mỗi node hiển thị sở hữu một hình quạt tỉ lệ với
+ * số lá nó hiển thị, nên nhánh vừa mở có chỗ và các nhánh bên cạnh trượt sang bên.
  */
 export function radialLayout(index: TreeIndex, visible: readonly string[]): Map<string, Point> {
   const shown = new Set(visible)
@@ -89,12 +89,12 @@ export function radialLayout(index: TreeIndex, visible: readonly string[]): Map<
     const children = kids(id)
     if (depth === 0) positions.set(id, { x: 0, y: 0 })
     if (!children.length) return
-    // A bias keeps closed hubs readable next to a wide open one.
+    // Một độ lệch giữ hub đang đóng dễ đọc bên cạnh một hub mở rộng.
     const bias = depth === 0 ? 1.6 : .5
     const total = children.reduce((sum, child) => sum + weight(child) + bias, 0)
-    // Deep branches fan out around their parent instead of sweeping the whole wedge.
+    // Nhánh sâu xoè quanh node cha thay vì quét cả hình quạt.
     const span = depth === 0 ? end - start : Math.min(end - start, .2 + weight(id) * .2 * (1.3 - depth * .12))
-    // The first hub (goal) sits at twelve o'clock; deeper fans centre on their parent.
+    // Hub đầu tiên (mục tiêu) nằm ở vị trí mười hai giờ; các hình quạt sâu hơn căn giữa theo node cha.
     let cursor = depth === 0 ? -Math.PI / 2 - span * (weight(children[0]) + bias) / total / 2 : angle - span / 2
     children.forEach((child, order) => {
       const share = span * (weight(child) + bias) / total

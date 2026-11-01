@@ -14,7 +14,7 @@ _limiters = {}
 
 
 def _settings(request: Request):
-    # Lightweight runtimes (tests, tools) may omit settings; callers fall back to defaults.
+    # Runtime nhẹ (test, tool) có thể bỏ qua settings; bên gọi dùng giá trị mặc định.
     return getattr(request.app.state.runtime, 'settings', None)
 
 
@@ -28,7 +28,7 @@ def _limiter(request: Request):
 
 
 async def rate_limited(request: Request, ctx=Depends(authenticated)):
-    """Per-user burst limit for model-backed endpoints (per process)."""
+    """Giới hạn dồn dập theo từng người dùng cho các endpoint có gọi model (theo từng tiến trình)."""
     wait = _limiter(request).check(ctx.user_id)
     if wait is not None:
         raise HTTPException(429, 'Bạn gửi yêu cầu quá nhanh, vui lòng thử lại sau ít giây.',
@@ -37,7 +37,7 @@ async def rate_limited(request: Request, ctx=Depends(authenticated)):
 
 
 async def new_turn(request: Request, ctx=Depends(rate_limited)):
-    """Durable daily budget shared by all workers (OWASP LLM10: unbounded consumption)."""
+    """Ngân sách theo ngày bền vững, dùng chung cho mọi worker (OWASP LLM10: tiêu thụ không giới hạn)."""
     runtime = request.app.state.runtime
     settings = _settings(request)
     consume = getattr(getattr(runtime, 'store', None), 'consume_turn', None)
@@ -81,8 +81,8 @@ async def stream(payload:ChatRequest,request:Request,ctx=Depends(new_turn)):
                     item=await asyncio.wait_for(queue.get(), timeout=heartbeat)
                 except (asyncio.TimeoutError, TimeoutError):
                     if await request.is_disconnected():
-                        break  # The client left; stop the run instead of computing for nobody.
-                    # SSE comment: keeps proxies from closing a quiet connection.
+                        break  # Client đã rời đi; dừng lượt chạy thay vì tính toán cho không ai cả.
+                    # Comment SSE: giữ cho proxy không đóng một kết nối đang im lặng.
                     yield ': ping\n\n'
                     continue
                 if item is None: break
@@ -112,7 +112,7 @@ async def purge_me(request:Request,ctx=Depends(authenticated)):
 
 @router.get('/knowledge-graph')
 async def knowledge_graph(request:Request,start:date|None=None,end:date|None=None,ctx=Depends(authenticated)):
-    """Personal map; `start`/`end` are inclusive local days that limit which records it draws."""
+    """Bản đồ cá nhân; `start`/`end` là các ngày địa phương (tính cả hai đầu) giới hạn những bản ghi được vẽ."""
     if start and end and start>end:
         raise HTTPException(422,'start must not be after end')
     from agentic.knowledge_graph.visualization import personal_graph

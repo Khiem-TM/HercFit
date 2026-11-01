@@ -4,7 +4,7 @@ import { AlertTriangle, IdCard } from 'lucide-vue-next'
 import type { HealthProfile, ProfileValue, ValueSource } from '@/types/api'
 import { ACTIVITY_LABELS, SEX_LABELS, SOURCE_LABELS, dayLabel, fmt } from './healthFormat'
 
-/** `traits` (training habits from the knowledge profile) and `map` join the overview's profile here. */
+/** `traits` (thói quen tập từ hồ sơ tri thức) và `map` đưa phần hồ sơ của tổng quan vào đây. */
 const props = defineProps<{ profile: HealthProfile | null; traits?: string[] }>()
 const emit = defineEmits<{ edit: []; map: [] }>()
 

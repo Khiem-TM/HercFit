@@ -1,4 +1,4 @@
-"""Athlete profile, deterministic training analytics/insights and template previews."""
+"""Hồ sơ vận động viên, phân tích/insight tập luyện tất định và xem trước giáo án mẫu."""
 from datetime import date, timedelta
 from uuid import UUID
 
@@ -93,7 +93,7 @@ async def training_templates():
 
 @router.get("/templates/workouts/{code}")
 async def running_workout(code: str):
-    """One running workout prescription (no exercise id; resolve run_* from the catalog)."""
+    """Một chỉ định bài chạy (không có exercise id; tra run_* trong catalog)."""
     workout = RUN_WORKOUTS.get(code)
     if workout is None:
         from fastapi import HTTPException
@@ -105,7 +105,7 @@ async def running_workout(code: str):
 @router.get("/templates/{code}/schedule", response_model=TrainingPlanCreate)
 async def preview_template_schedule(code: str, service: UserContextDep, start_date: date | None = None,
                                     weeks: int | None = None, name: str | None = None):
-    """Preview only: submit the returned payload to POST /plans/{plan_id}/training-plans."""
+    """Chỉ xem trước: gửi payload trả về tới POST /plans/{plan_id}/training-plans."""
     options = validated_query(TemplateScheduleQuery, start_date=start_date or date.today() + timedelta(days=1), weeks=weeks, name=name)
     payload = await build_schedule(service.session, user_id=service.user_id, code=code, start_date=options.start_date,
                                    weeks=options.weeks, name=options.name)

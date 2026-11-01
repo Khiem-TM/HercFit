@@ -1,12 +1,12 @@
-"""Code-owned source registry: a source's authority comes from its publisher, never from a model label.
+"""Sổ đăng ký nguồn do code quản lý: độ tin cậy của một nguồn đến từ nhà xuất bản, không bao giờ từ nhãn của model.
 
-Tiers: primary (public health agencies, national nutrition databases, the Compendium of
-Physical Activities), professional (professional bodies, hospitals, universities and the
-operator-curated knowledge base), secondary (reputable health media and references).
-Everything else is 'unknown': usable as supporting text, never counted by the quality gate.
+Các hạng: primary (cơ quan y tế công cộng, cơ sở dữ liệu dinh dưỡng quốc gia, Compendium of
+Physical Activities), professional (hiệp hội chuyên môn, bệnh viện, đại học và
+cơ sở tri thức do người vận hành tuyển chọn), secondary (truyền thông sức khoẻ và tài liệu tham khảo uy tín).
+Mọi thứ khác là 'unknown': dùng được làm văn bản bổ trợ, không bao giờ được cổng chất lượng tính.
 
-Scopes restrict which fields a source may support. MET values affect calorie estimates,
-so only sources with the 'met' scope can back configuration.default_met.
+Phạm vi giới hạn những trường mà một nguồn được phép hỗ trợ. Giá trị MET ảnh hưởng ước tính calo,
+nên chỉ nguồn có phạm vi 'met' mới hỗ trợ được configuration.default_met.
 """
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -16,13 +16,13 @@ from domains.catalog.models.foods import normalize_food_text
 TIER_RANK = {'primary': 0, 'professional': 1, 'secondary': 2, 'unknown': 3}
 ALL = frozenset({'nutrition', 'exercise', 'qa'})
 
-# Matched on the hostname or any parent domain ("fdc.nal.usda.gov" matches "usda.gov").
+# So khớp theo hostname hoặc bất kỳ miền cha nào ("fdc.nal.usda.gov" khớp với "usda.gov").
 REGISTRY = {
-    # Energy cost of physical activity
+    # Mức tiêu hao năng lượng của hoạt động thể chất
     'pacompendium.com': ('primary', ALL | {'met'}),
     'compendiumofphysicalactivities.org': ('primary', ALL | {'met'}),
     'acsm.org': ('professional', ALL | {'met'}),
-    # Public health agencies and national databases
+    # Cơ quan y tế công cộng và cơ sở dữ liệu quốc gia
     'who.int': ('primary', ALL | {'met'}),
     'cdc.gov': ('primary', ALL | {'met'}),
     'nih.gov': ('primary', ALL | {'met'}),
@@ -34,7 +34,7 @@ REGISTRY = {
     'moh.gov.vn': ('primary', ALL),
     'viendinhduong.vn': ('primary', ALL),
     'nin.gov.vn': ('primary', ALL),
-    # Professional bodies, hospitals and universities
+    # Hiệp hội chuyên môn, bệnh viện và trường đại học
     'nsca.com': ('professional', ALL),
     'acefitness.org': ('professional', ALL),
     'eatright.org': ('professional', ALL),
@@ -46,7 +46,7 @@ REGISTRY = {
     'vinmec.com': ('professional', ALL),
     'tamanhhospital.vn': ('professional', ALL),
     'medlatec.vn': ('professional', ALL),
-    # Reputable references and health media
+    # Tài liệu tham khảo và truyền thông sức khoẻ uy tín
     'exrx.net': ('secondary', ALL),
     'healthline.com': ('secondary', ALL),
     'verywellfit.com': ('secondary', ALL),
@@ -57,7 +57,7 @@ REGISTRY = {
     'wikipedia.org': ('secondary', ALL),
     'hellobacsi.com': ('secondary', ALL),
     'suckhoedoisong.vn': ('secondary', ALL),
-    # Major Vietnamese newspapers (health sections quote clinicians and nutrition institutes)
+    # Các báo lớn của Việt Nam (chuyên mục sức khoẻ trích dẫn bác sĩ và viện dinh dưỡng)
     'tuoitre.vn': ('secondary', ALL),
     'thanhnien.vn': ('secondary', ALL),
     'vnexpress.net': ('secondary', ALL),
@@ -66,15 +66,15 @@ REGISTRY = {
     'nld.com.vn': ('secondary', ALL),
     'laodong.vn': ('secondary', ALL),
 }
-# Social platforms: posts are opinions and pages usually block extraction; never rated,
-# only shown to the user as unverified estimates.
+# Nền tảng mạng xã hội: bài đăng là ý kiến và trang thường chặn trích xuất; không bao giờ được xếp hạng,
+# chỉ hiển thị cho người dùng như ước tính chưa kiểm chứng.
 SOCIAL = frozenset({'tiktok.com', 'facebook.com', 'threads.com', 'threads.net', 'instagram.com', 'youtube.com',
                     'x.com', 'twitter.com', 'reddit.com'})
-# Government and academic hosts that are not listed individually.
+# Các host chính phủ và học thuật không được liệt kê riêng.
 SUFFIXES = {'.gov': ('professional', ALL), '.gov.vn': ('professional', ALL), '.edu': ('professional', ALL),
             '.edu.vn': ('professional', ALL)}
 KNOWLEDGE_BASE = ('professional', ALL)
-# Platforms that host many brands are never "the manufacturer".
+# Nền tảng chứa nhiều thương hiệu không bao giờ là "nhà sản xuất".
 PLATFORMS = frozenset({'google', 'facebook', 'youtube', 'tiktok', 'instagram', 'shopee', 'lazada', 'tiki', 'grab',
                        'foody', 'baemin', 'wikipedia', 'amazon', 'reddit', 'pinterest'})
 
@@ -101,9 +101,9 @@ class Rating:
 
 
 def rate(source_id, url='', product=None):
-    """Rating of one evidence source. Knowledge-base passages ('kb:' ids) are operator-curated;
-    their original URL, when known, can still grant a narrower registry scope such as MET.
-    `product` (a researched food's name) lets the brand's own site rate as its label."""
+    """Đánh giá một nguồn bằng chứng. Đoạn trích cơ sở tri thức (id 'kb:') do người vận hành tuyển chọn;
+    URL gốc của chúng, khi biết, vẫn có thể cấp một phạm vi hẹp hơn trong sổ đăng ký như MET.
+    `product` (tên một thực phẩm đã tra cứu) cho phép trang của chính thương hiệu được đánh giá như nhãn sản phẩm."""
     host = (urlparse(url or (source_id if '://' in (source_id or '') else '')).hostname or '').lower().removeprefix('www.')
     if host:
         parts = host.split('.')
@@ -132,7 +132,7 @@ def allows(source_id, url, scope):
 
 
 def quality_gate(claims, url_of, product=None):
-    """At least one primary/professional source, or two distinct secondary sources."""
+    """Ít nhất một nguồn primary/professional, hoặc hai nguồn secondary khác nhau."""
     tiers = {claim.source_id: rate(claim.source_id, url_of(claim.source_id), product).tier for claim in claims}
     strong = any(tier in {'primary', 'professional'} for tier in tiers.values())
     return strong or sum(1 for tier in tiers.values() if tier == 'secondary') >= 2

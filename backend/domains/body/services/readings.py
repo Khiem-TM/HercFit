@@ -1,8 +1,8 @@
-"""Body readings for trends.
+"""Số đo cơ thể cho xu hướng.
 
-Reader v2 `body`: a weigh-in recorded twice, typed by the user and synced from a
-scale, counts once. Readings within 10 minutes and 0.2 kg of each other are one
-weigh-in; the manual reading is kept (the user confirmed it), otherwise the earliest.
+Bộ đọc v2 `body`: một lần cân được ghi hai lần, người dùng gõ tay và đồng bộ từ
+cân, chỉ tính một lần. Các số đo cách nhau trong 10 phút và 0,2 kg là một
+lần cân; giữ bản nhập tay (người dùng đã xác nhận nó), nếu không thì giữ bản sớm nhất.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def _same(a: Any, b: Any) -> bool:
 
 
 def distinct_weighins(metrics: Iterable[Any]) -> list[Any]:
-    """Metrics with a weight, one per weigh-in, in the input order (all of them under reader v1)."""
+    """Các số đo có cân nặng, mỗi lần cân một số đo, theo thứ tự đầu vào (với bộ đọc v1 thì lấy tất cả)."""
     weighed = [metric for metric in metrics if metric.weight_kg is not None]
     if not reader_v2("body"):
         return weighed

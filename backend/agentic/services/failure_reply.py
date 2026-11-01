@@ -1,12 +1,12 @@
-"""Code-owned reply for a failed turn: what was saved, what was not, and how to continue.
+"""Câu trả lời do code viết cho lượt thất bại: những gì đã lưu, những gì chưa, và cách tiếp tục.
 
-A model-written reply to a failed turn (run 195ff084) presented a dinner and the day's
-total as logged: only the new food record had been saved, the meal step had timed out
-and nothing was in the meal journal. A failed turn therefore never reaches the model;
-its reply is built from the executed writes alone.
+Một câu trả lời do model viết cho lượt thất bại (lượt chạy 195ff084) trình bày bữa tối và tổng
+của ngày như đã ghi: thực ra chỉ bản ghi thực phẩm mới được lưu, bước ghi bữa ăn đã timeout
+và nhật ký bữa ăn không có gì. Vì vậy lượt thất bại không bao giờ đến model;
+câu trả lời của nó chỉ được dựng từ các lệnh ghi đã thực thi.
 """
 
-# Executed writes, as the user would name them.
+# Các lệnh ghi đã thực thi, theo cách người dùng sẽ gọi tên chúng.
 WRITES = {
     'create_foods': 'Món mới trong danh mục thực phẩm', 'finalize_foods': 'Món trong danh mục thực phẩm',
     'create_exercises': 'Bài tập mới trong danh mục', 'finalize_exercises': 'Bài tập trong danh mục',
@@ -17,7 +17,7 @@ WRITES = {
     'cancel_goal': 'Huỷ mục tiêu', 'create_plan': 'Kế hoạch', 'create_training_plans': 'Lịch tập',
     'update_training_plans': 'Lịch tập đã sửa', 'end_training_plan': 'Kết thúc lịch tập',
 }
-# The journal write a logging request is for; the reply says when it did not happen.
+# Lệnh ghi nhật ký mà một yêu cầu ghi hướng tới; câu trả lời nói rõ khi nó không xảy ra.
 JOURNALS = {'LOG_FOOD': ('create_meals', 'bữa ăn này vào nhật ký, nên tổng calo hôm nay chưa thay đổi'),
             'LOG_EXERCISE': ('create_trainings', 'buổi tập này vào nhật ký, nên calo tiêu hao hôm nay chưa thay đổi')}
 CAUSES = {
@@ -29,7 +29,7 @@ NODE_ERROR = 'Không hoàn tất bước xử lý ('
 
 
 def cause(error: str | None) -> str:
-    """User-facing reason: node exceptions by class, other errors are already written for the user."""
+    """Lý do hiển thị cho người dùng: exception của node theo lớp, các lỗi khác đã được viết sẵn cho người dùng."""
     error = (error or '').strip()
     if not error:
         return 'Có lỗi khi xử lý nên mình chưa hoàn tất yêu cầu.'
@@ -40,7 +40,7 @@ def cause(error: str | None) -> str:
 
 
 def saved_writes(state) -> list[tuple[str, str | None]]:
-    """(tool, record name) of each write the backend executed in this turn."""
+    """(tool, tên bản ghi) của mỗi lệnh ghi mà backend đã thực thi trong lượt này."""
     saved = []
     for output in state.get('tool_outputs') or []:
         if output.get('ok') and output.get('action_id') and output.get('tool') in WRITES:

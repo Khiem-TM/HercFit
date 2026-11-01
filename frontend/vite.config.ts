@@ -9,7 +9,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // The graph renderer is large and only needed when the knowledge panel opens.
+        // Bộ vẽ graph rất lớn và chỉ cần khi bảng tri thức được mở.
         manualChunks: (id) => (id.includes("node_modules/cytoscape") ? "cytoscape" : undefined),
       },
     },

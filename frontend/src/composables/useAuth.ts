@@ -15,8 +15,8 @@ const currentGoal = ref<GoalRead | null>(null)
 const isLoading = ref<boolean>(true)
 const error = ref<string | null>(null)
 let bootstrapPromise: Promise<boolean> | null = null
-// One refresh at a time: parallel 401s share it, and other tabs wait on a Web Lock.
-// The backend rotates refresh tokens and treats reuse of an old one as theft.
+// Mỗi lúc một lần refresh: các lỗi 401 song song dùng chung nó, và tab khác chờ qua Web Lock.
+// Backend xoay refresh token và coi việc dùng lại token cũ là bị đánh cắp.
 let refreshPromise: Promise<boolean> | null = null
 const REFRESH_LOCK = 'hercfit-auth-refresh'
 
@@ -150,7 +150,7 @@ export function useAuth() {
         currentGoal.value = null
       }
     } catch {
-      // Non-fatal auxiliary fetch failure
+      // Lỗi tải dữ liệu phụ, không ảnh hưởng luồng chính
     }
   }
 
@@ -250,12 +250,12 @@ export function useAuth() {
       throw failure
     }
     const profile: UserProfile = await resp.json()
-    // Refresh auxiliary facts before routing away from onboarding.
+    // Làm mới các dữ kiện phụ trước khi chuyển khỏi trang onboarding.
     await fetchProfileDetails()
     user.value = profile
   }
 
-  /** Download every record the backend holds for this account (JSON). */
+  /** Tải về mọi bản ghi backend đang giữ cho tài khoản này (JSON). */
   async function exportData(): Promise<void> {
     const resp = await authFetch('/api/profile/export')
     if (!resp.ok) throw new Error('Không xuất được dữ liệu. Vui lòng thử lại.')
@@ -268,7 +268,7 @@ export function useAuth() {
     URL.revokeObjectURL(url)
   }
 
-  /** Permanently erase conversations (agent) and then the account (backend). */
+  /** Xoá vĩnh viễn cuộc trò chuyện (agent) rồi đến tài khoản (backend). */
   async function eraseAccount(confirmEmail: string): Promise<void> {
     const conversations = await authFetch('/api/v1/chat/me', { method: 'DELETE' })
     if (!conversations.ok) {

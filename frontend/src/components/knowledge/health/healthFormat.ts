@@ -1,6 +1,6 @@
 import type { Numeric, ValueSource } from '@/types/api'
 
-/** Decimal columns arrive as strings; missing stays missing, never zero. */
+/** Cột thập phân đến dưới dạng chuỗi; thiếu thì giữ là thiếu, không bao giờ là số 0. */
 export function num(value: Numeric | undefined): number | null {
   if (value == null || value === '') return null
   const parsed = typeof value === 'number' ? value : Number(value)
@@ -44,7 +44,7 @@ export const SAMPLE_LABELS: Record<string, string> = { BLOOD_GLUCOSE: 'Đường
 export const DETAIL_LABELS: Record<string, string> = {
   mealType: 'Bữa', measurementTiming: 'Thời điểm', specimen: 'Mẫu', measurementSource: 'Nguồn đo', measurementLocation: 'Vị trí đo',
 }
-/** Provider enum values in sample details; unknown values fall back to readable lowercase. */
+/** Giá trị enum của nhà cung cấp trong chi tiết mẫu; giá trị lạ hiển thị chữ thường dễ đọc. */
 export const DETAIL_VALUES: Record<string, string> = {
   BREAKFAST: 'bữa sáng', LUNCH: 'bữa trưa', DINNER: 'bữa tối', SNACK: 'bữa phụ', FASTING: 'lúc đói',
   BEFORE_MEAL: 'trước ăn', AFTER_MEAL: 'sau ăn', GENERAL: 'bất kỳ', CAPILLARY_BLOOD: 'máu mao mạch',

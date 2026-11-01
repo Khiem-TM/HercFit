@@ -1,4 +1,4 @@
-"""Manual plans and schedule versions; transaction boundary stays at the HTTP layer."""
+"""Kế hoạch thủ công và phiên bản lịch; ranh giới transaction nằm ở tầng HTTP."""
 
 from domains.goals_plans.models.plans import Plan
 from domains.goals_plans.schemas.plans import PlanCreate
@@ -21,7 +21,7 @@ class PlanService(UserService):
     async def current(self, model=Plan, *, plan_id=None):
         if plan_id is not None:
             await self.get(Plan, plan_id)
-        # Return None to the router rather than raising: expiry must commit on a 404.
+        # Trả None cho router thay vì ném lỗi: việc hết hạn phải được commit khi trả 404.
         return await model.get_current_for_user(self.session, user_id=self.user_id, plan_id=plan_id)
 
     @staticmethod

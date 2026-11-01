@@ -1,15 +1,15 @@
-"""Google Health OAuth scopes and the feature bundles HercFit asks for incrementally.
+"""Scope OAuth của Google Health và các gói tính năng HercFit xin dần.
 
-Only scopes listed on developers.google.com/health/scopes (checked 2026-11-01)
-are ever requested: an unknown scope fails the whole consent. Discovery also
-lists `.readonly` variants for logged_symptoms, mindfulness and
-reproductive_health that the guide does not document; they stay out of every
-request until verified.
+Chỉ các scope liệt kê trên developers.google.com/health/scopes (kiểm tra ngày 2026-11-01)
+mới được xin: một scope không rõ làm hỏng cả màn hình đồng ý. Discovery còn
+liệt kê các biến thể `.readonly` cho logged_symptoms, mindfulness và
+reproductive_health mà hướng dẫn không mô tả; chúng không có trong request nào
+cho đến khi được kiểm chứng.
 
-Three permissions stay separate:
-* the Google grant (these scopes, held in health_connections.granted_scopes),
-* HercFit export settings (google_export_settings, per export group),
-* consent for the assistant to read the data (user_consents).
+Ba loại quyền được giữ tách biệt:
+* quyền Google cấp (các scope này, lưu trong health_connections.granted_scopes),
+* thiết lập xuất của HercFit (google_export_settings, theo nhóm xuất),
+* consent cho trợ lý đọc dữ liệu (user_consents).
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from dataclasses import dataclass
 PREFIX = "https://www.googleapis.com/auth/googlehealth."
 IDENTITY_SCOPES = ("openid", "email")
 
-# Scope groups with the variants the guide documents.
+# Các nhóm scope với những biến thể mà hướng dẫn có mô tả.
 DOCUMENTED: dict[str, tuple[str, ...]] = {
     "activity_and_fitness": ("readonly", "writeonly"),
     "health_metrics_and_measurements": ("readonly", "writeonly"),
@@ -33,11 +33,11 @@ DOCUMENTED: dict[str, tuple[str, ...]] = {
     "mindfulness": ("writeonly",),
     "reproductive_health": ("writeonly",),
 }
-# In the discovery snapshot but not in the guide: never requested automatically.
+# Có trong ảnh chụp discovery nhưng không có trong hướng dẫn: không bao giờ tự động xin.
 DISCOVERY_ONLY = frozenset({
     PREFIX + "logged_symptoms.readonly", PREFIX + "mindfulness.readonly", PREFIX + "reproductive_health.readonly",
 })
-# In the guide but not in the discovery snapshot (existence proven only by a grant).
+# Có trong hướng dẫn nhưng không có trong ảnh chụp discovery (chỉ chứng minh được tồn tại khi được cấp).
 GUIDE_ONLY = frozenset({PREFIX + "nutrition.readonly"})
 
 
@@ -60,7 +60,7 @@ ALL_DOCUMENTED = frozenset(scope(group, access) for group, accesses in DOCUMENTE
 
 @dataclass(frozen=True)
 class Bundle:
-    """A feature the user can turn on; HercFit asks only for its scopes, when needed."""
+    """Một tính năng người dùng có thể bật; HercFit chỉ xin scope của nó, khi cần."""
     key: str
     label_vi: str
     scopes: tuple[str, ...]
@@ -68,7 +68,7 @@ class Bundle:
 
 
 BUNDLES: dict[str, Bundle] = {bundle.key: bundle for bundle in (
-    # Reading (the default connect flow asks for CORE_READ only).
+    # Đọc (luồng kết nối mặc định chỉ xin CORE_READ).
     Bundle("activity_read", "Vận động, bước chân, buổi tập", (scope("activity_and_fitness", "readonly"),)),
     Bundle("metrics_read", "Nhịp tim, HRV, SpO₂, cân nặng, chỉ số cơ thể",
            (scope("health_metrics_and_measurements", "readonly"),)),
@@ -79,7 +79,7 @@ BUNDLES: dict[str, Bundle] = {bundle.key: bundle for bundle in (
     Bundle("route_read", "Lộ trình GPS của buổi tập", (scope("location", "readonly"),), sensitive=True),
     Bundle("ecg_read", "Điện tâm đồ (ECG) và cảnh báo nhịp bất thường",
            (scope("ecg", "readonly"), scope("irn", "readonly")), sensitive=True),
-    # Writing (asked only when the user enables an export group).
+    # Ghi (chỉ xin khi người dùng bật một nhóm xuất).
     Bundle("body_write", "Ghi cân nặng, chiều cao, mỡ cơ thể", (scope("health_metrics_and_measurements", "writeonly"),)),
     Bundle("hydration_write", "Ghi nước uống", (scope("nutrition", "writeonly"),)),
     Bundle("nutrition_write", "Ghi bữa ăn", (scope("nutrition", "writeonly"),)),

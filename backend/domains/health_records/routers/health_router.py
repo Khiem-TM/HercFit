@@ -1,4 +1,4 @@
-"""Synchronized health data and the derived health profile (read-only)."""
+"""Dữ liệu sức khoẻ đã đồng bộ và hồ sơ sức khoẻ suy ra (chỉ đọc)."""
 from datetime import date
 from typing import Annotated
 
@@ -35,7 +35,7 @@ def get_overview_query(days: int = 28, timezone: TimeZoneName = DEFAULT_TIMEZONE
 
 def get_range_query(pagination: PaginationDep, start_date: date, end_date: date,
                     timezone: TimeZoneName = DEFAULT_TIMEZONE):
-    # Unlike the shared progress range, device series are paginated: 90 days need limit > 50.
+    # Khác với khoảng tiến độ dùng chung, chuỗi thiết bị được phân trang: 90 ngày cần limit > 50.
     return validated_query(DateRangeQuery, **pagination.model_dump(), start_date=start_date, end_date=end_date,
                            timezone=timezone)
 

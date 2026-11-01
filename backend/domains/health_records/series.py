@@ -1,8 +1,8 @@
-"""Reading dense series chunks (encoding `zjson1`, written by the provider integration).
+"""Đọc các chunk chuỗi dày (mã hoá `zjson1`, do tích hợp nhà cung cấp ghi).
 
-`window(...)` returns points per source between two instants, optionally reduced
-to minute or hour buckets (mean of the metric column, count of samples). Sources
-are kept apart: two devices measuring the same minute are two series.
+`window(...)` trả về các điểm theo nguồn giữa hai thời điểm, có thể gộp
+thành bucket phút hoặc giờ (trung bình của cột chỉ số, số mẫu). Các nguồn
+được giữ tách biệt: hai thiết bị đo cùng một phút là hai chuỗi.
 """
 from __future__ import annotations
 

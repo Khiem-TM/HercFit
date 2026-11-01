@@ -1,7 +1,7 @@
-"""Durable PostgreSQL work queue (jobs table, migration 0018).
+"""Hàng đợi công việc PostgreSQL bền vững (bảng jobs, migration 0018).
 
-queue.py   enqueue with dedupe, claim with SKIP LOCKED and a fencing epoch,
-           heartbeat, complete/retry/needs-attention, reaper
-retry.py   error classes -> what happens next, full-jitter backoff
-quota.py   token buckets for provider quotas (per user, per project)
+queue.py   xếp hàng có dedupe, lấy job bằng SKIP LOCKED và fencing epoch,
+           heartbeat, hoàn tất/thử lại/cần xử lý, bộ thu hồi
+retry.py   lớp lỗi -> bước tiếp theo, backoff full-jitter
+quota.py   token bucket cho quota nhà cung cấp (theo người dùng, theo project)
 """

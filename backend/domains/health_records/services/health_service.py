@@ -1,4 +1,4 @@
-"""Read access to synchronized health data and the derived health profile."""
+"""Quyền đọc dữ liệu sức khoẻ đã đồng bộ và hồ sơ sức khoẻ suy ra."""
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -23,7 +23,7 @@ from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, DateRangeQuery
 from domains.shared.services.common import UserService
 from domains.analytics.services.health_profile import MIN_WORN_DAYS_FOR_LEVEL, build_overview, build_profile
 
-from core.principal import AGENT_CLIENT_HEADER  # noqa: E402,F401  (re-exported for older imports)
+from core.principal import AGENT_CLIENT_HEADER  # noqa: E402,F401  (re-export cho các import cũ)
 COMPLETE_DAY_MIN_MEALS = 2
 
 
@@ -34,7 +34,7 @@ def _recent(user_id, start: date, end: date):
 
 
 async def measured_resting_hr(session, user_id, today: date) -> int | None:
-    """Median device resting heart rate of the last 7 days (None without the reader's access)."""
+    """Trung vị nhịp tim nghỉ từ thiết bị trong 7 ngày gần nhất (None khi bên đọc không có quyền)."""
     if not await consent.device_access(session, user_id):
         return None
     values = sorted((await session.execute(select(DailyHealthSummary.resting_hr_bpm).where(
@@ -43,7 +43,7 @@ async def measured_resting_hr(session, user_id, today: date) -> int | None:
 
 
 async def observed_activity_level(session, user_id, today: date) -> str | None:
-    """Step-based activity level over 28 worn days; None with fewer than 7 worn days."""
+    """Mức vận động theo bước chân trên 28 ngày có đeo; None khi có ít hơn 7 ngày đeo."""
     if not await consent.device_access(session, user_id):
         return None
     row = (await session.execute(select(func.count(), func.avg(DailyHealthSummary.steps)).where(
@@ -52,7 +52,7 @@ async def observed_activity_level(session, user_id, today: date) -> str | None:
 
 
 async def device_expenditure(session, user_id, today: date, days: int = 14) -> float | None:
-    """Average device total energy over complete (past) worn days."""
+    """Trung bình tổng năng lượng từ thiết bị trên các ngày có đeo đã trọn (trong quá khứ)."""
     if not await consent.device_access(session, user_id):
         return None
     row = (await session.execute(select(func.count(), func.avg(DailyHealthSummary.total_kcal)).where(
@@ -74,7 +74,7 @@ class HealthService(UserService):
         return await ports.provider_status(self.session, self.user_id)
 
     async def require_assistant_access(self, request: Request | None = None) -> None:
-        """The assistant reads device data only while the user allows it (identity.consent)."""
+        """Trợ lý chỉ đọc dữ liệu thiết bị khi người dùng cho phép (identity.consent)."""
         await consent.require_device_access(self.session, self.user_id)
 
     async def _daily(self, start: date, end: date):

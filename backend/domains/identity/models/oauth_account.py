@@ -76,8 +76,8 @@ class OAuthAccount(BaseModel):
         provider_user_id: str,
         token_data: dict[str, Any] | None = None,
     ) -> "OAuthAccount":
-        """Link the Google identity. HercFit only needs who the user is, so
-        provider tokens are not persisted unless a caller explicitly passes them."""
+        """Liên kết danh tính Google. HercFit chỉ cần biết người dùng là ai, nên
+        token nhà cung cấp không được lưu trừ khi bên gọi truyền tường minh."""
         account_data = OAuthAccountCreate(user_id=user_id, provider_user_id=provider_user_id)
         oauth_account = await cls.get_by_provider_user_id(
             session,
@@ -95,7 +95,7 @@ class OAuthAccount(BaseModel):
         if token_data:
             oauth_account.update_tokens(token_data)
         else:
-            # Drop credentials stored by earlier versions on the next sign-in.
+            # Xoá thông tin xác thực mà các phiên bản trước đã lưu ở lần đăng nhập kế tiếp.
             oauth_account.access_token = None
             oauth_account.refresh_token = None
             oauth_account.token_expires_at = None

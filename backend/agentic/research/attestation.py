@@ -1,9 +1,9 @@
-"""Research attestation: the research service signs what it verified, the API checks the signature.
+"""Chứng thực tra cứu: service tra cứu ký những gì nó đã kiểm chứng, API kiểm tra chữ ký.
 
-The signature covers the owner, domain and the immutable research content (candidate id,
-query, payload, evidence and sources). Catalog resolution fields (resolution, fingerprints,
-existing record, revision) are excluded: the user may change them after a conflict without
-re-running research, and the API re-checks them against the live catalog on every finalize.
+Chữ ký bao gồm chủ sở hữu, miền và nội dung tra cứu bất biến (id ứng viên,
+truy vấn, payload, bằng chứng và nguồn). Các trường giải quyết catalog (resolution, fingerprints,
+bản ghi có sẵn, revision) không được ký: người dùng có thể đổi chúng sau xung đột mà không
+chạy lại tra cứu, và API kiểm tra lại chúng với catalog hiện tại ở mỗi lần finalize.
 """
 import hashlib
 import hmac
@@ -33,14 +33,14 @@ def _message(owner_id, domain, content, issued_at):
 
 
 def sign(secret, owner_id, domain, content, issued_at=None):
-    """content is the JSON-mode dump of a Finalization (unsigned fields are ignored)."""
+    """content là bản dump chế độ JSON của một Finalization (các trường không ký bị bỏ qua)."""
     issued_at = issued_at or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     signature = hmac.new(secret.encode(), _message(owner_id, domain, content, issued_at), hashlib.sha256).hexdigest()
     return {'version': VERSION, 'key_id': key_id(secret), 'issued_at': issued_at, 'signature': signature}
 
 
 def verify(secrets, owner_id, domain, content, attestation, *, max_age, now=None):
-    """The secret that verified the attestation, or None. Rotated secrets stay valid for verification."""
+    """Secret đã kiểm chứng chứng thực, hoặc None. Secret đã xoay vẫn hợp lệ để kiểm chứng."""
     if not attestation or attestation.get('version') != VERSION:
         return None
     try:

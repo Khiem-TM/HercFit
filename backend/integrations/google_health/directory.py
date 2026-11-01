@@ -1,4 +1,4 @@
-"""Google Health's implementation of the health-records provider ports."""
+"""Bản cài đặt của Google Health cho các port nhà cung cấp của miền health-records."""
 from __future__ import annotations
 
 from uuid import UUID

@@ -1,22 +1,22 @@
-"""Merge duplicate SYSTEM catalog foods without losing provenance.
+"""Gộp các thực phẩm SYSTEM trùng nhau trong catalog mà không mất nguồn gốc.
 
-Rows are grouped by accented name (case-insensitive), item type and nutrient basis (serving unit and size).
-Inside a group:
+Các dòng được gom theo tên có dấu (không phân biệt hoa thường), loại món và căn cứ dinh dưỡng (đơn vị và cỡ khẩu phần).
+Trong một nhóm:
 
-* identical nutrients are exact duplicates: one row is kept;
-* different nutrients that stay close (energy within 25 %, protein within 50 %) are measurement
-  samples of one dish (for example the same dish sampled in several provinces): the real sample
-  closest to the median energy is kept and the other samples are listed on it;
-* energies further apart but the same composition (protein per kcal within 50 %, carbohydrate and
-  fat energy shares within 15 points) are one recipe served in different portion sizes: the
-  median sample is kept and the energy range of the samples is recorded on it;
-* anything else is reported as a conflict and left untouched for manual review, unless the caller
-  opts in with ``merge_conflicts``: then the median sample becomes the typical value ("typical")
-  and the energy range is recorded, trading per-recipe accuracy for one entry per dish name.
+* dinh dưỡng giống hệt là bản trùng hoàn toàn: giữ một dòng;
+* dinh dưỡng khác nhưng gần nhau (năng lượng lệch trong 25 %, protein trong 50 %) là các mẫu
+  đo của một món (ví dụ cùng món được lấy mẫu ở nhiều tỉnh): giữ mẫu thật
+  gần trung vị năng lượng nhất và liệt kê các mẫu khác trên nó;
+* năng lượng xa nhau hơn nhưng cùng thành phần (protein trên kcal lệch trong 50 %, tỉ lệ năng lượng
+  carb và chất béo lệch trong 15 điểm) là một công thức phục vụ ở các cỡ khẩu phần khác nhau: giữ
+  mẫu trung vị và ghi khoảng năng lượng của các mẫu lên nó;
+* mọi trường hợp khác được báo là xung đột và để nguyên cho xem xét thủ công, trừ khi bên gọi
+  chọn ``merge_conflicts``: khi đó mẫu trung vị trở thành giá trị điển hình ("typical")
+  và khoảng năng lượng được ghi lại, đánh đổi độ chính xác theo công thức để mỗi tên món chỉ có một mục.
 
-Merged rows are deactivated (hidden from search), never deleted. Each records ``merged_into`` and
-a ``merge_batch`` so ``revert`` can restore them. Meal plan items are repointed to the kept row;
-logged meals are immutable snapshots and keep their original food_id.
+Các dòng đã gộp bị vô hiệu hoá (ẩn khỏi tìm kiếm), không bao giờ bị xoá. Mỗi dòng ghi ``merged_into`` và
+một ``merge_batch`` để ``revert`` có thể khôi phục. Các mục trong kế hoạch bữa ăn được trỏ lại dòng được giữ;
+bữa ăn đã ghi là ảnh chụp bất biến và giữ food_id gốc.
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ class FoodRow:
         return sum(value is not None for value in self.nutrients.values())
 
     def preference(self):
-        # Keep the row with an image, then the most complete one, then the oldest.
+        # Giữ dòng có ảnh, rồi dòng đầy đủ nhất, rồi dòng cũ nhất.
         return (not self.has_image, -self.filled, self.created_at or datetime.max, self.id)
 
 
@@ -109,7 +109,7 @@ def _close(rows: list[FoodRow]) -> bool:
 
 
 def _same_composition(rows: list[FoodRow]) -> bool:
-    """One recipe at different portion sizes: energy differs, the make-up of that energy does not."""
+    """Một công thức ở các cỡ khẩu phần khác nhau: năng lượng khác, cấu thành của năng lượng đó thì không."""
     energies = [row.nutrients["energy_kcal"] for row in rows]
     if any(value is None or value <= 0 for value in energies):
         return False
@@ -133,7 +133,7 @@ def plan_merges(rows: list[FoodRow], merge_conflicts: bool = False) -> MergePlan
     for members in groups.values():
         if len(members) < 2:
             continue
-        # 1. Exact duplicates collapse into one representative per nutrient profile.
+        # 1. Bản trùng hoàn toàn gộp thành một đại diện cho mỗi hồ sơ dinh dưỡng.
         clusters: list[list[FoodRow]] = []
         for row in sorted(members, key=FoodRow.preference):
             for cluster in clusters:
@@ -149,7 +149,7 @@ def plan_merges(rows: list[FoodRow], merge_conflicts: bool = False) -> MergePlan
             representatives.append(cluster[0])
         if len(representatives) < 2:
             continue
-        # 2. Samples of one dish keep the real sample nearest the median energy.
+        # 2. Các mẫu của một món giữ mẫu thật gần trung vị năng lượng nhất.
         reason = ("sample" if _close(representatives) else "portion" if _same_composition(representatives)
                   else "typical" if merge_conflicts and all(r.nutrients["energy_kcal"] for r in representatives) else None)
         if reason:
@@ -158,7 +158,7 @@ def plan_merges(rows: list[FoodRow], merge_conflicts: bool = False) -> MergePlan
             plan.groups.append(MergeGroup(canonical, [row for row in representatives if row is not canonical], reason))
         else:
             plan.conflicts.append(representatives)
-    # Exact clusters whose representative is later merged as a sample point at the final row.
+    # Các cụm trùng hoàn toàn mà đại diện sau đó được gộp như một mẫu thì trỏ tới dòng cuối cùng.
     final = {row.id: group.canonical for group in plan.groups if group.reason != "exact" for row in group.merged}
     for group in plan.groups:
         if group.reason == "exact" and group.canonical.id in final:
@@ -177,7 +177,7 @@ async def load_rows(session, name: str | None = None) -> list[FoodRow]:
         size = round(float(r["serving_size"]), 4) if r["serving_size"] is not None else None
         rows.append(FoodRow(
             id=r["id"], code=r["code"], name=r["name_vi"],
-            # Accents distinguish dishes ("Bánh gio" vs "Bánh giò"): group by the accented name.
+            # Dấu phân biệt các món ("Bánh gio" với "Bánh giò"): gom nhóm theo tên có dấu.
             key=(accented(r["name_vi"] or ""), r["item_type"], r["serving_unit"], size),
             nutrients={n: (float(r[n]) if r[n] is not None else None) for n in NUTRIENTS},
             has_image=r["has_image"], created_at=r["created_at"]))
@@ -233,7 +233,7 @@ async def apply_plan(session, plan: MergePlan) -> dict[str, Any]:
 
 
 async def revert(session, batch: str | None = None) -> dict[str, Any]:
-    """Undo one merge batch (or every batch when ``batch`` is None)."""
+    """Hoàn tác một lô gộp (hoặc mọi lô khi ``batch`` là None)."""
     scope = "data_quality->>'merge_batch' = :batch" if batch else "data_quality ? 'merge_batch'"
     params = {"batch": batch} if batch else {}
     merged = (await session.execute(text(

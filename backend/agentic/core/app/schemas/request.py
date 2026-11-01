@@ -6,7 +6,7 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     message: str = Field(min_length=1, max_length=8000)
     session_id: str = Field(default_factory=lambda: str(uuid4()), min_length=1, max_length=128, pattern=r'^[A-Za-z0-9_-]+$')
-    # Accepted for backwards compatibility, never used as identity.
+    # Chấp nhận để tương thích ngược, không bao giờ dùng làm danh tính.
     user_id: str | None = None
 
 class ConfirmationRequest(BaseModel):

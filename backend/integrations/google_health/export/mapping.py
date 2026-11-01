@@ -1,13 +1,13 @@
-"""Build Google Health DataPoint payloads for HercFit-owned records.
+"""Dựng payload DataPoint của Google Health cho bản ghi do HercFit sở hữu.
 
-* Only what HercFit actually holds is sent: a training exports its session summary
-  (interval, type, active duration, kcal), never invented heart-rate or step series.
-* Each exported record gets a stable client id (HercFit's own key for the mapping row).
-  Google assigns its own data point ids and ignores a client-provided name (real
-  account, 2026-11-01), so an unknown create outcome is verified by content instead
-  (dispatch._find_written) and creates are never retried blindly.
-* Payloads are validated against the discovery schema by tests (the adapter must
-  parse them without unknown fields or bad types).
+* Chỉ gửi những gì HercFit thực sự có: một buổi tập xuất bản tóm tắt phiên
+  (khoảng thời gian, loại, thời lượng hoạt động, kcal), không bao giờ bịa chuỗi nhịp tim hay bước chân.
+* Mỗi bản ghi được xuất có một client id ổn định (khoá riêng của HercFit cho dòng mapping).
+  Google tự cấp id cho data point và bỏ qua tên do client đặt (tài khoản
+  thật, 2026-11-01), nên kết quả tạo chưa rõ được kiểm chứng theo nội dung
+  (dispatch._find_written) và lệnh tạo không bao giờ được thử lại mù quáng.
+* Payload được test kiểm tra theo schema discovery (adapter phải
+  phân tích được chúng mà không có trường lạ hay sai kiểu).
 """
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ MANUAL = {"recordingMethod": "MANUAL"}
 
 
 def body_metric(entity, zone: str | None = None) -> list[tuple[str, dict[str, Any]]]:
-    """One body metric row can hold weight, height and body fat: one data point per measure."""
+    """Một dòng số đo cơ thể có thể chứa cân nặng, chiều cao và mỡ cơ thể: mỗi số đo một data point."""
     points = []
     sample = _sample(entity.recorded_at, zone)
     if entity.weight_kg is not None:
@@ -109,7 +109,7 @@ def nutrition_log(entity) -> list[tuple[str, dict[str, Any]]]:
 
 
 def meal(entity) -> list[tuple[str, dict[str, Any]]]:
-    """A HercFit meal exports its totals; unknown nutrients are omitted, never sent as 0."""
+    """Bữa ăn HercFit xuất các tổng của nó; dưỡng chất chưa biết bị bỏ qua, không bao giờ gửi là 0."""
     return [("nutrition-log", _nutrition(entity.consumed_at, entity.consumed_at + timedelta(minutes=20),
                                          entity.timezone, name=entity.name, meal_type=None, kcal=entity.energy_kcal,
                                          protein=entity.protein_g, carbohydrate=entity.carbohydrate_g,
@@ -120,7 +120,7 @@ def training(entity) -> list[tuple[str, dict[str, Any]]]:
     duration = float(entity.duration_seconds) if entity.duration_seconds else None
     end = entity.ended_at or (entity.started_at + timedelta(seconds=duration) if duration else None)
     if end is None or end <= entity.started_at:
-        return []  # no honest interval: nothing to export
+        return []  # không có khoảng thời gian trung thực: không có gì để xuất
     value: dict[str, Any] = {"interval": _interval(entity.started_at, end, entity.timezone),
                              "exerciseType": DISCIPLINE_TYPES.get(entity.discipline, "WORKOUT"),
                              "displayName": entity.name[:255]}

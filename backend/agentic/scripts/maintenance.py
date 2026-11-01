@@ -1,12 +1,12 @@
-"""Operational maintenance for the agent database.
+"""Bảo trì vận hành cho database của agent.
 
     python -m agentic.scripts.maintenance prune-checkpoints [--days 30] [--dry-run]
     python -m agentic.scripts.maintenance prune-usage [--days 120]
 
-Each chat turn runs on its own LangGraph thread, so checkpoints grow with every
-turn. Superseded threads older than the retention window are deleted; a
-session's current thread (needed for history and pending confirmations) and
-threads still awaiting reconciliation are always kept.
+Mỗi lượt chat chạy trên một thread LangGraph riêng, nên checkpoint tăng theo từng
+lượt. Các thread đã bị thay thế cũ hơn cửa sổ lưu giữ bị xoá; thread hiện tại
+của phiên (cần cho lịch sử và xác nhận đang chờ) và các thread
+còn chờ đối soát luôn được giữ.
 """
 import argparse
 import asyncio

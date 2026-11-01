@@ -1,4 +1,4 @@
-"""Only opaque lineage is persisted; transaction-local GUCs never leak in pools."""
+"""Chỉ lưu dòng dõi mờ; GUC cục bộ theo transaction không bao giờ rò sang pool."""
 import json
 from contextlib import contextmanager
 from agentic.observability.tracing import observer, durable_context, Observation, outcome
@@ -18,7 +18,7 @@ def worker_context(name, context=None, **metadata):
         state.metadata.update({k: v for k, v in (context.get('metadata') or {}).items() if k in {'thread_id', 'business_run_id', 'action_id'}})
         state.metadata['linked_trace_id'] = context.get('trace_id')
     state.metadata.update(metadata)
-    # Independent worker roots keep user latency independent of queue wait.
+    # Root worker độc lập giữ độ trễ người dùng không phụ thuộc thời gian chờ hàng đợi.
     with manager.request(name, 'worker', state=state):
         yield state
         state.metadata.setdefault('status', 'completed')

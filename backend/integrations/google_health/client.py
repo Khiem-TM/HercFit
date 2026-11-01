@@ -1,17 +1,17 @@
-"""Async client for health.googleapis.com (v4 by default, v4beta per data type).
+"""Client bất đồng bộ cho health.googleapis.com (mặc định v4, v4beta theo từng loại dữ liệu).
 
-* Paging never truncates silently: `*_all` helpers return `Fetch(points, complete,
-  next_token)`. A budget that runs out leaves `complete=False` and the token to
-  continue from; callers must not treat a partial read as the full window.
-* Errors carry an `error_class` that decides what happens next:
-  TRANSIENT (retry later), RATE_LIMIT (retry after Retry-After), PERMISSION (scope
-  missing or revoked: stop this type, never tombstone), REAUTH (refresh token
-  dead), SCHEMA (request rejected, e.g. a filter: needs a code fix), UNSUPPORTED
-  (type or resource not available), PROVIDER (other 4xx).
-* Retries cover 429/5xx/network with full-jitter exponential backoff.
+* Phân trang không bao giờ âm thầm cắt bớt: các hàm `*_all` trả về `Fetch(points, complete,
+  next_token)`. Hết ngân sách thì để `complete=False` cùng token để
+  đọc tiếp; bên gọi không được coi một lần đọc dở là trọn cửa sổ.
+* Lỗi mang `error_class` quyết định bước tiếp theo:
+  TRANSIENT (thử lại sau), RATE_LIMIT (thử lại sau Retry-After), PERMISSION (thiếu
+  hoặc bị thu hồi scope: dừng loại này, không bao giờ tombstone), REAUTH (refresh token
+  đã chết), SCHEMA (request bị từ chối, ví dụ một filter: cần sửa code), UNSUPPORTED
+  (loại hoặc tài nguyên không có), PROVIDER (các 4xx khác).
+* Thử lại áp dụng cho 429/5xx/lỗi mạng với backoff mũ full-jitter.
 
-Provider bodies may echo request details, so only status codes and machine
-reasons are logged.
+Body phản hồi của nhà cung cấp có thể lặp lại chi tiết request, nên chỉ ghi log
+mã trạng thái và lý do dạng máy.
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ TRANSIENT, RATE_LIMIT, PERMISSION, REAUTH, SCHEMA, UNSUPPORTED, PROVIDER = (
 
 
 class GoogleHealthError(Exception):
-    """A provider call failed; `code` is a short loggable reason, `error_class` drives retries."""
+    """Một lời gọi nhà cung cấp thất bại; `code` là lý do ngắn ghi log được, `error_class` điều khiển việc thử lại."""
 
     def __init__(self, code: str, status: int | None = None, error_class: str = PROVIDER,
                  retry_after: float | None = None):
@@ -70,7 +70,7 @@ class Fetch:
 
 
 def error_reason(response: httpx.Response) -> str | None:
-    """Google's machine-readable reason (e.g. SERVICE_DISABLED), never the free-text message."""
+    """Lý do dạng máy của Google (ví dụ SERVICE_DISABLED), không bao giờ là thông điệp văn bản tự do."""
     try:
         error = response.json().get("error") or {}
     except (ValueError, AttributeError):
@@ -83,7 +83,7 @@ def error_reason(response: httpx.Response) -> str | None:
 
 
 def classify(status: int, reason: str | None) -> tuple[str, str]:
-    """(code, error_class) for a final non-2xx response."""
+    """(code, error_class) cho phản hồi cuối không phải 2xx."""
     if status == 400:
         return "invalid_request", SCHEMA
     if status == 403:
@@ -106,7 +106,7 @@ def civil_date(day: date) -> dict[str, Any]:
 
 
 def field_path(data_type: str) -> str:
-    """Filters use snake_case field paths; the URL uses kebab-case type ids."""
+    """Filter dùng đường dẫn trường snake_case; URL dùng id loại dạng kebab-case."""
     return data_type.replace("-", "_")
 
 
@@ -128,11 +128,11 @@ class GoogleHealthClient:
         self._headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
         self._http = http
         self._sleep = sleep
-        # GOOGLE_HEALTH_API_ROOT points tests or an emulator elsewhere (https, or http on localhost only).
+        # GOOGLE_HEALTH_API_ROOT trỏ test hoặc emulator tới nơi khác (https, hoặc http chỉ trên localhost).
         self._root = settings.GOOGLE_HEALTH_API_ROOT.rstrip("/")
         self._base = (base_url or f"{self._root}/v4").rstrip("/")
         self._jitter = jitter
-        self._on_request = on_request  # quota hook (token bucket) awaited before each attempt
+        self._on_request = on_request  # hook quota (token bucket) được chờ trước mỗi lần thử
 
     def for_version(self, api_version: str) -> GoogleHealthClient:
         clone = GoogleHealthClient.__new__(GoogleHealthClient)
@@ -145,8 +145,8 @@ class GoogleHealthClient:
 
     async def _request(self, method: str, path: str, *, params: dict | None = None,
                        body: dict | None = None, retry: bool = True, raw: bool = False) -> Any:
-        """`retry=False` for non-idempotent writes: an unknown outcome is surfaced, never re-sent.
-        `raw=True` returns the response bytes (media downloads such as TCX)."""
+        """`retry=False` cho lệnh ghi không idempotent: kết quả chưa rõ được báo lên, không bao giờ gửi lại.
+        `raw=True` trả về byte của phản hồi (tải file media như TCX)."""
         label = path.split("/")[-1].split(":")[-1]
         attempts = MAX_ATTEMPTS if retry else 1
         for attempt in range(1, attempts + 1):
@@ -178,7 +178,7 @@ class GoogleHealthClient:
                                     _retry_after(response))
         raise GoogleHealthError("provider_error", None, TRANSIENT)
 
-    # -- user resources ----------------------------------------------------------------------
+    # -- tài nguyên người dùng ------------------------------------------------------------------
     async def get_identity(self) -> dict[str, Any]:
         return await self._request("GET", "users/me/identity")
 
@@ -192,16 +192,16 @@ class GoogleHealthClient:
         return (await self._request("GET", "users/me/pairedDevices")).get("pairedDevices") or []
 
     async def export_exercise_tcx(self, name: str, *, partial: bool = False) -> bytes:
-        """Route of one exercise as TCX (needs an activity scope AND a location scope).
+        """Lộ trình của một buổi tập dạng TCX (cần một scope vận động VÀ một scope location).
 
-        `name` is the exercise data point's resource name; `alt=media` downloads the raw file.
+        `name` là tên tài nguyên data point của buổi tập; `alt=media` tải file thô.
         """
         if not name.startswith("users/") or "/dataTypes/exercise/dataPoints/" not in name:
             raise ValueError("not an exercise data point name")
         params = {"alt": "media", **({"partialData": "true"} if partial else {})}
         return await self._request("GET", f"{name}:exportExerciseTcx", params=params, raw=True)
 
-    # -- data points ---------------------------------------------------------------------------
+    # -- data point -------------------------------------------------------------------------------
     async def list_page(self, data_type: str, *, filter: str | None = None, page_size: int = 1000,
                         page_token: str | None = None, reconcile: bool = False) -> Page:
         params: dict[str, Any] = {"pageSize": page_size}
@@ -251,12 +251,12 @@ class GoogleHealthClient:
         logger.warning("google_health_page_budget type=%s pages=%s", data_type, result.pages)
         return result
 
-    # -- writes (each returns a google.longrunning Operation) -----------------------------------
+    # -- lệnh ghi (mỗi lệnh trả về một google.longrunning Operation) -----------------------------
     async def get_point(self, name: str) -> dict[str, Any]:
         return await self._request("GET", name)
 
     async def create_point(self, data_type: str, point: dict[str, Any], *, idempotent: bool = False) -> dict[str, Any]:
-        """Retried by the client only when the point carries a client-provided name (same id on retry)."""
+        """Client chỉ thử lại khi bên gọi đánh dấu idempotent (Google tự cấp id, nên lệnh tạo mặc định không được thử lại)."""
         return await self._request("POST", f"users/me/dataTypes/{data_type}/dataPoints", body=point,
                                    retry=idempotent)
 

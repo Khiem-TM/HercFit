@@ -1,4 +1,4 @@
-"""Dated meal-plans, replaced as complete versions."""
+"""Kế hoạch bữa ăn theo ngày, được thay bằng phiên bản đầy đủ."""
 from uuid import UUID
 
 from fastapi import APIRouter, Response

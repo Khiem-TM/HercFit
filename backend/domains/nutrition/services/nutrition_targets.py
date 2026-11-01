@@ -1,4 +1,4 @@
-"""Assemble a user's energy targets from stored profile, measurements, goal and logs."""
+"""Tập hợp mục tiêu năng lượng của người dùng từ hồ sơ, số đo, mục tiêu và nhật ký đã lưu."""
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -57,13 +57,13 @@ class NutritionTargetService(UserService):
             latest_weight = float(latest.weight_kg) if latest is not None and latest.weight_kg is not None else None
 
         trend = energy.trend_series(weights)
-        # Plan from the smoothed weight so one salty dinner does not move the target.
+        # Lập kế hoạch từ cân nặng đã làm trơn để một bữa tối mặn không làm dịch chỉ tiêu.
         planning_weight = trend[-1][2] if trend else latest_weight
         goal_type, target_weight, target_date = _goal_inputs(await Goal.get_current_for_user(self.session, user_id=self.user_id))
         activity = ((user.personal_info or {}).get("activity") or {}).get("level")
         activity_source = "declared" if activity else None
         if not activity:
-            # A missing declaration is filled from 28 days of device steps.
+            # Khai báo còn thiếu được điền từ 28 ngày bước chân của thiết bị.
             activity = await observed_activity_level(self.session, self.user_id, today)
             activity_source = "observed" if activity else None
         inputs = energy.EnergyInputs(

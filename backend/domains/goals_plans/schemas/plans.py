@@ -1,4 +1,4 @@
-"""Typed, complete-replacement contracts for plans and dated schedules."""
+"""Hợp đồng có kiểu, thay thế toàn bộ, cho kế hoạch và lịch theo ngày."""
 
 from datetime import date, time
 from decimal import Decimal

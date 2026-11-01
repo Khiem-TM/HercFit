@@ -1,4 +1,4 @@
-"""Authentication router: Google OAuth (PKCE), refresh-token rotation and logout."""
+"""Router xác thực: Google OAuth (PKCE), xoay refresh token và đăng xuất."""
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request
 
@@ -17,7 +17,7 @@ def limit_auth(request: Request) -> None:
 
 
 def same_origin(request: Request) -> None:
-    """Cookie-authenticated POSTs must come from an allowed browser origin (CSRF)."""
+    """POST xác thực bằng cookie phải đến từ origin trình duyệt được phép (CSRF)."""
     origin = request.headers.get("origin")
     if origin and origin.rstrip("/") not in {o.rstrip("/") for o in [*settings.CORS_ORIGINS, settings.FRONTEND_URL]}:
         raise HTTPException(403, "Origin is not allowed")

@@ -4,12 +4,12 @@ import { Check, Minus, Plus } from 'lucide-vue-next'
 import type { NumberFrame } from '@/types/api'
 import { formatNumber, snap } from '@/features/chat/clarification'
 
-/** Number frame: −/+ within the range, one-tap presets, and a number field checked against the range. */
+/** Khung nhập số: −/+ trong khoảng, giá trị có sẵn một chạm, và ô nhập số được kiểm tra theo khoảng. */
 const props = defineProps<{ frame: NumberFrame; value: number | null; label: string; disabled?: boolean }>()
 const emit = defineEmits<{ change: [value: number | null]; commit: [] }>()
 
 const hintId = useId()
-// What the field shows. A value outside the range stays visible with its message instead of being clamped.
+// Những gì ô hiển thị. Giá trị ngoài khoảng vẫn hiển thị kèm thông báo thay vì bị kẹp lại.
 const draft = ref(props.value === null ? '' : formatNumber(props.value))
 watch(() => props.value, value => { draft.value = value === null ? '' : formatNumber(value) })
 const presets = computed(() => props.frame.presets ?? [])
@@ -20,7 +20,7 @@ const range = computed(() => `${formatNumber(props.frame.min)}–${formatNumber(
 function step(direction: 1 | -1) {
   if (props.disabled) return
   const { min, max, step: size } = props.frame
-  // The first press starts at the suggested value instead of the bottom of a wide range (30 kg).
+  // Lần nhấn đầu bắt đầu từ giá trị gợi ý thay vì từ đáy của một khoảng rộng (30 kg).
   const start = props.value ?? props.frame.default ?? presets.value[0] ?? min
   const next = props.value === null ? start : start + direction * size
   emit('change', snap(props.frame, Math.min(max, Math.max(min, next))))
@@ -30,7 +30,7 @@ function type(raw: string) {
   draft.value = raw
   const text = raw.trim().replace(',', '.')
   const parsed = Number(text)
-  // A typed value keeps its precision (21.5 g with a 5 g stepper); only −/+ move on the step grid.
+  // Giá trị gõ vào giữ độ chính xác (21.5 g với bước 5 g); chỉ −/+ mới di chuyển theo lưới bước.
   emit('change', text === '' || !Number.isFinite(parsed) ? null : Math.round(parsed * 100) / 100)
 }
 

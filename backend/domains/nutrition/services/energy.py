@@ -1,19 +1,19 @@
-"""Deterministic energy and macro targets. Pure functions: no I/O, no ORM.
+"""Mục tiêu năng lượng và macro tất định. Hàm thuần: không I/O, không ORM.
 
-Every result carries the method and the inputs it used so a reader (or the
-agent) can reproduce it instead of letting a language model do arithmetic.
+Mỗi kết quả mang theo phương pháp và đầu vào đã dùng để người đọc (hoặc
+agent) tái tạo được, thay vì để mô hình ngôn ngữ làm tính toán.
 
-References
-- Mifflin MD, St Jeor ST et al. (1990) resting energy equation; Frankenfield et al.
-  (2005, J Am Diet Assoc) found it the most often within 10% of measured RMR.
-- Activity multipliers 1.2–1.9 (commonly used physical activity factors).
-- ~7,700 kcal per kg of body-mass change (a planning approximation, not a law).
-- Jäger et al. (2017) ISSN Position Stand: 1.4–2.0 g protein/kg/day for most
-  exercising individuals.
-- Fat 20–35% of energy (acceptable macronutrient distribution range); 25% used.
-- Fibre 14 g per 1,000 kcal (US Dietary Guidelines adequacy benchmark).
-- Weight trend: exponentially smoothed moving average (10% per day), as in
-  Walker's "The Hacker's Diet", to separate fat-mass change from water noise.
+Tài liệu tham khảo
+- Mifflin MD, St Jeor ST và cộng sự (1990) phương trình năng lượng nghỉ; Frankenfield và cộng sự
+  (2005, J Am Diet Assoc) thấy nó thường nằm trong 10% so với RMR đo được nhất.
+- Hệ số vận động 1.2–1.9 (các hệ số hoạt động thể chất thường dùng).
+- ~7.700 kcal cho mỗi kg thay đổi khối lượng cơ thể (xấp xỉ để lập kế hoạch, không phải định luật).
+- Jäger và cộng sự (2017) ISSN Position Stand: 1.4–2.0 g protein/kg/ngày cho đa số
+  người tập luyện.
+- Chất béo 20–35% năng lượng (khoảng phân bố macro chấp nhận được); dùng 25%.
+- Chất xơ 14 g mỗi 1.000 kcal (mốc đủ của Hướng dẫn Dinh dưỡng Hoa Kỳ).
+- Xu hướng cân nặng: trung bình trượt làm trơn mũ (10% mỗi ngày), như trong
+  "The Hacker's Diet" của Walker, để tách thay đổi khối mỡ khỏi nhiễu nước.
 """
 from __future__ import annotations
 
@@ -29,10 +29,10 @@ ACTIVITY_FACTORS: dict[str, float] = {
     "sedentary": 1.2, "light": 1.375, "moderate": 1.55, "active": 1.725, "very_active": 1.9,
 }
 KCAL_PER_KG = 7700.0
-# Unsupervised intake floors often used in weight-management guidance.
+# Ngưỡng sàn lượng ăn không giám sát thường dùng trong hướng dẫn kiểm soát cân nặng.
 SEX_FLOOR_KCAL = {"FEMALE": 1200.0, "MALE": 1500.0, None: 1350.0}
-MAX_LOSS_FRACTION_PER_WEEK = 0.01      # never plan to lose more than 1% of body weight per week
-DEFAULT_LOSS_FRACTION_PER_WEEK = 0.005  # 0.5% per week when no target date is set
+MAX_LOSS_FRACTION_PER_WEEK = 0.01      # không bao giờ lên kế hoạch giảm quá 1% cân nặng mỗi tuần
+DEFAULT_LOSS_FRACTION_PER_WEEK = 0.005  # 0,5% mỗi tuần khi chưa đặt ngày đạt mục tiêu
 GAIN_SURPLUS_FRACTION, GAIN_SURPLUS_CAP_KCAL = 0.10, 400.0
 PROTEIN_G_PER_KG = {"fat_loss": 1.8, "muscle_gain": 1.8, "fitness": 1.6, "maintenance": 1.4}
 SEDENTARY_PROTEIN_G_PER_KG = 1.0
@@ -56,7 +56,7 @@ def mifflin_st_jeor(weight_kg: float, height_cm: float, age: int, sex: str | Non
         return base + 5
     if sex == "FEMALE":
         return base - 161
-    return base - 78  # midpoint of the two constants when sex is not provided
+    return base - 78  # điểm giữa của hai hằng số khi không có giới tính
 
 
 @dataclass
@@ -109,7 +109,7 @@ def energy_targets(inputs: EnergyInputs) -> EnergyTargets:
     target, weekly = tdee, 0.0
 
     if age < 18:
-        # Growth needs energy; no deficit or surplus is planned for minors.
+        # Tăng trưởng cần năng lượng; không lập kế hoạch thâm hụt hay dư thừa cho người chưa thành niên.
         warnings.append("minor_maintenance_only")
         goal_effective = "maintenance"
     else:
@@ -156,8 +156,8 @@ def energy_targets(inputs: EnergyInputs) -> EnergyTargets:
 
 
 def trend_series(points: list[tuple[date, float]], alpha: float = TREND_ALPHA) -> list[tuple[date, float, float]]:
-    """(day, measured, trend). Same-day readings are averaged; gaps decay by the
-    number of days elapsed so a sparse logger is not over-smoothed."""
+    """(ngày, số đo, xu hướng). Số đo cùng ngày được lấy trung bình; khoảng trống suy giảm theo
+    số ngày đã trôi qua để người ghi thưa không bị làm trơn quá mức."""
     by_day: dict[date, list[float]] = {}
     for day, weight in points:
         by_day.setdefault(day, []).append(float(weight))
@@ -192,9 +192,9 @@ class AdaptiveExpenditure:
 def adaptive_expenditure(intakes: list[tuple[date, float | None, bool]], weights: list[tuple[date, float]],
                          end: date, window_days: int = 28, min_span_days: int = 14,
                          min_complete_days: int = 10, min_weight_points: int = 4) -> AdaptiveExpenditure:
-    """Energy-balance estimate of actual expenditure from logged intake and trend weight.
+    """Ước tính mức tiêu hao thực tế theo cân bằng năng lượng từ lượng ăn đã ghi và cân nặng xu hướng.
 
-    intakes: (day, kcal or None, complete) where complete means the whole day was logged.
+    intakes: (ngày, kcal hoặc None, complete) trong đó complete nghĩa là cả ngày đã được ghi.
     """
     from datetime import timedelta
 

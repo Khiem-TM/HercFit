@@ -1,4 +1,4 @@
-"""Version 2: catalog picks may choose several records and must carry their options."""
+"""Phiên bản 2: lựa chọn catalog có thể chọn nhiều bản ghi và phải mang theo các phương án."""
 
 PROMPT = """Bạn chuyển câu hỏi lại của HercFit thành một form để người dùng trả lời lần lượt từng câu bằng cách bấm lựa chọn.
 Chỉ dùng thông tin trong câu hỏi lại, missing_fields và kết quả công cụ. Tiếng Việt, ngắn gọn.

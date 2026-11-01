@@ -20,7 +20,7 @@ type SettingsTab = 'profile' | 'metrics' | 'integrations' | 'settings'
 
 const props = defineProps<{
   open: boolean
-  /** Tab to show when the modal opens, e.g. after the Google Health consent screen. */
+  /** Tab hiển thị khi hộp thoại mở, ví dụ sau màn hình đồng ý của Google Health. */
   initialTab?: SettingsTab
   integrationResult?: string | null
 }>()
@@ -201,7 +201,7 @@ async function handleErase(): Promise<void> {
       <div
         class="relative flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-ink/15 bg-sunken text-primary shadow-[0_32px_90px_rgb(var(--c-shadow)/calc(0.85*var(--shadow-k)))]"
       >
-        <!-- Modal Header -->
+        <!-- Phần đầu hộp thoại -->
         <div
           class="flex items-center justify-between border-b border-ink/[0.08] px-6 py-4"
         >
@@ -242,7 +242,7 @@ async function handleErase(): Promise<void> {
           </button>
         </div>
 
-        <!-- Tabs Navigation -->
+        <!-- Thanh điều hướng tab -->
         <div class="flex border-b border-ink/[0.08] bg-sunken px-6">
           <button
             type="button"
@@ -301,9 +301,9 @@ async function handleErase(): Promise<void> {
           </button>
         </div>
 
-        <!-- Body Content -->
+        <!-- Nội dung chính -->
         <div class="flex-1 overflow-y-auto p-6">
-          <!-- Status Alerts -->
+          <!-- Thông báo trạng thái -->
           <div
             v-if="feedbackMessage"
             class="mb-4 flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2.5 text-xs text-emerald-200"
@@ -319,7 +319,7 @@ async function handleErase(): Promise<void> {
             {{ errorMessage }}
           </div>
 
-          <!-- TAB 1: Profile -->
+          <!-- TAB 1: Hồ sơ -->
           <form
             v-if="activeTab === 'profile'"
             class="space-y-4"
@@ -394,7 +394,7 @@ async function handleErase(): Promise<void> {
             </div>
           </form>
 
-          <!-- TAB 2: Body Metrics & Goal -->
+          <!-- TAB 2: Số đo cơ thể & mục tiêu -->
           <div v-else-if="activeTab === 'metrics'" class="space-y-6">
             <form class="space-y-4" @submit.prevent="handleSaveMetric">
               <div class="grid grid-cols-2 gap-4">
@@ -472,7 +472,7 @@ async function handleErase(): Promise<void> {
               </div>
             </form>
 
-            <!-- Active Goal Summary -->
+            <!-- Tóm tắt mục tiêu đang hoạt động -->
             <div class="rounded-2xl border border-ink/[0.08] bg-panel p-4">
               <p class="font-label-telemetry text-[10px] uppercase tracking-[0.18em] text-outline">
                 MỤC TIÊU HIỆN TẠI
@@ -497,13 +497,13 @@ async function handleErase(): Promise<void> {
             </div>
           </div>
 
-          <!-- TAB 3: Device integrations (Google Health) -->
+          <!-- TAB 3: Kết nối thiết bị (Google Health) -->
           <HealthIntegrationPanel
             v-else-if="activeTab === 'integrations'"
             :result="integrationResult"
           />
 
-          <!-- TAB 4: Settings & Session -->
+          <!-- TAB 4: Cài đặt & phiên -->
           <div v-else class="space-y-5">
             <div class="rounded-2xl border border-ink/[0.08] bg-panel p-4 space-y-2">
               <div class="flex items-center justify-between text-xs">

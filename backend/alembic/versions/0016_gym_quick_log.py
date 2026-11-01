@@ -1,9 +1,9 @@
-"""Gym quick log: a system catalog record for a gym session logged by intensity only.
+"""Ghi nhanh buổi gym: một bản ghi catalog hệ thống cho buổi gym chỉ ghi theo cường độ.
 
-When the user only wants calories for "tập gym" and not every exercise, sets and
-load, the session is logged as one SPORT item of this record with its duration and
-intensity. Energy comes from services.training_metrics.RESISTANCE_MET (2024 Adult
-Compendium 02054 / 02061 / 02050), chosen by the sport "resistance_training".
+Khi người dùng chỉ cần calo cho "tập gym" chứ không cần từng bài, set và
+mức tạ, buổi tập được ghi thành một mục SPORT của bản ghi này kèm thời lượng và
+cường độ. Năng lượng lấy từ domains.training.services.training_metrics.RESISTANCE_MET (2024 Adult
+Compendium 02054 / 02061 / 02050), chọn theo môn thể thao "resistance_training".
 """
 import json
 import unicodedata
@@ -28,7 +28,7 @@ CONFIGURATION = {
 
 
 def normalize(value):
-    # Frozen copy of models.catalog.normalize_food_text, so later app changes cannot alter this migration.
+    # Bản sao đóng băng của models.catalog.normalize_food_text, để thay đổi sau này của app không làm đổi migration này.
     value = unicodedata.normalize("NFD", (value or "").lower().replace("đ", "d"))
     return " ".join("".join(char for char in value if not unicodedata.combining(char)).split())
 
@@ -55,7 +55,7 @@ def upgrade():
 
 
 def downgrade():
-    # Logged sessions keep their record; it is only removed while nothing references it.
+    # Các buổi tập đã ghi giữ bản ghi của chúng; nó chỉ bị xoá khi không còn gì tham chiếu tới.
     op.execute(text(f"""
         DELETE FROM exercises e WHERE e.id = '{EXERCISE_ID}'
           AND NOT EXISTS (SELECT 1 FROM training_items i WHERE i.exercise_id = e.id)

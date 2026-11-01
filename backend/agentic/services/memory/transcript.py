@@ -1,15 +1,15 @@
-"""Session transcript helpers: pure functions, no Redis or model calls.
+"""Hàm hỗ trợ bản ghi phiên: hàm thuần, không gọi Redis hay model.
 
-A turn mirrors what the chat history shows: the run's user message and the
-orchestration_agent replies after it. Tool calls, tool results and system
-notes stay in checkpoints only.
+Một lượt phản chiếu những gì lịch sử chat hiển thị: tin nhắn người dùng của lượt chạy và các
+câu trả lời của orchestration_agent sau nó. Lời gọi tool, kết quả tool và ghi chú
+hệ thống chỉ nằm trong checkpoint.
 """
 import json
 
 from agentic.tools.registry import REGISTRY
 
 AGENT = 'orchestration_agent'
-# Records worth remembering by name; reports and analytics are recomputed instead.
+# Các bản ghi đáng nhớ theo tên; báo cáo và phân tích thì được tính lại.
 ENTITY_DOMAINS = {'metrics', 'goals', 'meals', 'trainings', 'foods', 'exercises', 'training_plans'}
 NAME_FIELDS = ('name_vi', 'name', 'title', 'name_en')
 TIME_FIELDS = ('consumed_at', 'started_at', 'recorded_at', 'start_date')
@@ -20,7 +20,7 @@ LAST_MESSAGE_CHARS = 90
 
 
 def visible(messages):
-    """What the person sees: their own messages and the agent's final replies."""
+    """Những gì người dùng thấy: tin nhắn của chính họ và câu trả lời cuối của agent."""
     return [m for m in messages or [] if m.type == 'human' or getattr(m, 'name', None) == AGENT]
 
 
@@ -30,7 +30,7 @@ def _message(message):
 
 
 def turn_from_state(values):
-    """This run's turn: the last user message and the replies that follow it."""
+    """Lượt của lượt chạy này: tin nhắn người dùng cuối cùng và các câu trả lời theo sau."""
     messages = visible(values.get('messages'))
     start = next((i for i in range(len(messages) - 1, -1, -1) if messages[i].type == 'human'), None)
     if not values.get('run_id') or start is None:
@@ -40,7 +40,7 @@ def turn_from_state(values):
 
 
 def seed_turns(values):
-    """Split a checkpoint window into turns; only the newest has a known run ID."""
+    """Chia cửa sổ checkpoint thành các lượt; chỉ lượt mới nhất có run ID đã biết."""
     turns = []
     for message in visible(values.get('messages')):
         if message.type == 'human' or not turns:
@@ -61,11 +61,11 @@ def _records(output):
 
 
 def entities_from_state(values):
-    """Records the run read or wrote, newest first. IDs come only from backend outputs."""
+    """Các bản ghi mà lượt chạy đã đọc hoặc ghi, mới nhất trước. ID chỉ lấy từ output của backend."""
     found = []
     for output in reversed(values.get('tool_outputs') or []):
         spec = REGISTRY.get(output.get('tool') or '')
-        # A deleted record is not something to refer back to.
+        # Bản ghi đã xoá không phải thứ để tham chiếu lại.
         if not output.get('ok') or spec is None or spec.domain not in ENTITY_DOMAINS or spec.method == 'DELETE':
             continue
         for record in _records(output):
@@ -87,12 +87,12 @@ def merge_entities(previous, current, seq, limit):
 
 
 def outside_messages(message_count, covered, window):
-    """Messages that are neither summarized nor in the verbatim window."""
+    """Các tin nhắn chưa được tóm tắt và không nằm trong cửa sổ nguyên văn."""
     return max(0, message_count - covered - window)
 
 
 def gap_turns(turns, outside):
-    """Oldest unsummarized turns with at least one message outside the window."""
+    """Các lượt chưa tóm tắt cũ nhất có ít nhất một tin nhắn nằm ngoài cửa sổ."""
     selected = []
     for turn in turns:
         if outside <= 0:
@@ -103,7 +103,7 @@ def gap_turns(turns, outside):
 
 
 def fold_plan(turns, outside, max_chars):
-    """Oldest unsummarized turns lying wholly outside the window, within a prompt budget."""
+    """Các lượt chưa tóm tắt cũ nhất nằm hoàn toàn ngoài cửa sổ, trong một ngân sách prompt."""
     selected, used = [], 0
     for turn in turns:
         size = sum(len(m['content']) for m in turn['messages'])
@@ -121,7 +121,7 @@ def _clip(text, limit):
 
 
 def render_memory(summary, gap, entities, limit):
-    """One bounded block. Truncation drops records first, then recent turns, then the summary."""
+    """Một khối có giới hạn. Khi cắt bớt thì bỏ bản ghi trước, rồi các lượt gần đây, rồi bản tóm tắt."""
     sections = []
     if summary:
         sections.append('Tóm tắt các lượt trước:\n' + summary.strip())

@@ -1,4 +1,4 @@
-"""Optional catalog images for foods and exercises (shown on confirmation cards)."""
+"""Ảnh catalog tuỳ chọn cho thực phẩm và bài tập (hiển thị trên thẻ xác nhận)."""
 
 from alembic import op
 

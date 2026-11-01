@@ -1,4 +1,4 @@
-"""Authentication and user context dependencies for FastAPI routers."""
+"""Phụ thuộc xác thực và ngữ cảnh người dùng cho router FastAPI."""
 
 import base64
 import hashlib
@@ -27,7 +27,7 @@ strict_bearer_scheme = HTTPBearer(description="Provide Bearer JWT token.", auto_
 
 
 def get_refresh_token_cookie(request: Request) -> str | None:
-    """Extract refresh token from request cookies without raising 422 if missing."""
+    """Lấy refresh token từ cookie của request mà không ném 422 khi thiếu."""
     return request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
 
 
@@ -36,12 +36,12 @@ RefreshTokenCookie = Annotated[str | None, Depends(get_refresh_token_cookie)]
 
 
 def hash_token(token: str) -> str:
-    """Return SHA-256 hexadecimal digest of token."""
+    """Trả về chuỗi hex SHA-256 của token."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def generate_secure_token(nbytes: int = 32) -> str:
-    """Generate cryptographically strong URL-safe random string."""
+    """Sinh chuỗi ngẫu nhiên an toàn cho URL, mạnh về mật mã."""
     return secrets.token_urlsafe(nbytes)
 
 
@@ -50,14 +50,14 @@ def _b64encode(data: bytes) -> str:
 
 
 def pkce_pair() -> tuple[str, str]:
-    """RFC 7636 S256 verifier/challenge pair for the OAuth authorization code flow."""
-    verifier = secrets.token_urlsafe(64)  # 86 unreserved characters (43..128 allowed)
+    """Cặp verifier/challenge S256 theo RFC 7636 cho luồng OAuth authorization code."""
+    verifier = secrets.token_urlsafe(64)  # 86 ký tự không dành riêng (cho phép 43..128)
     challenge = _b64encode(hashlib.sha256(verifier.encode("ascii")).digest())
     return verifier, challenge
 
 
 class _ClaimEncoder(json.JSONEncoder):
-    def default(self, o: Any) -> Any:  # UUIDs, datetimes and enums in caller claims
+    def default(self, o: Any) -> Any:  # UUID, datetime và enum trong claim của bên gọi
         return str(o)
 
 
@@ -70,7 +70,7 @@ def _unauthorized(detail: str) -> HTTPException:
 
 
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
-    """Create a signed HS256 access token with issuer, audience and token type."""
+    """Tạo access token HS256 có chữ ký với issuer, audience và loại token."""
     if settings.JWT_ALGORITHM != "HS256":
         raise ValueError("Only HS256 is supported")
     now = datetime.now(timezone.utc)
@@ -89,10 +89,10 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
 
 
 def create_delegated_token(user_id: UUID, *, consent_version: int) -> tuple[str, datetime]:
-    """A short-lived token for the agent service acting for `user_id` (RFC 8693 style `act`).
+    """Token ngắn hạn cho service agent hành động thay `user_id` (`act` theo kiểu RFC 8693).
 
-    Its audience differs from user tokens, so it can never be used as a user
-    session, and the backend recognizes the agent from the token, not a header.
+    Audience của nó khác token người dùng, nên không bao giờ dùng được làm phiên
+    người dùng, và backend nhận ra agent từ token, không phải từ header.
     """
     now = datetime.now(timezone.utc)
     expires = now + timedelta(minutes=settings.AGENT_DELEGATION_MINUTES)
@@ -104,7 +104,7 @@ def create_delegated_token(user_id: UUID, *, consent_version: int) -> tuple[str,
 
 
 def _decode(token: str, audience: str, token_type: str) -> dict[str, Any] | None:
-    """Claims when the token is valid for this audience and type; None for another audience."""
+    """Claim khi token hợp lệ cho audience và loại này; None với audience khác."""
     for secret in settings.jwt_verification_secrets:
         try:
             payload = jwt.decode(
@@ -117,11 +117,11 @@ def _decode(token: str, audience: str, token_type: str) -> dict[str, Any] | None
                 options={"require": ["exp", "iat", "sub", "iss", "aud"]},
             )
         except jwt.InvalidSignatureError:
-            continue  # Signed with another (possibly retired) key.
+            continue  # Được ký bằng khoá khác (có thể đã nghỉ).
         except jwt.InvalidAudienceError:
             return None
         except jwt.ExpiredSignatureError:
-            # Raised only after the signature verified with this secret.
+            # Chỉ ném sau khi chữ ký đã được xác minh bằng secret này.
             raise _unauthorized("Token has expired") from None
         except jwt.PyJWTError:
             raise _unauthorized("Could not validate credentials") from None
@@ -132,7 +132,7 @@ def _decode(token: str, audience: str, token_type: str) -> dict[str, Any] | None
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
-    """Verify signature (current or retired secret), expiry, issuer, audience and type."""
+    """Kiểm tra chữ ký (secret hiện tại hoặc đã nghỉ), hạn dùng, issuer, audience và loại."""
     if settings.JWT_ALGORITHM != "HS256":
         raise _unauthorized("Invalid token algorithm")
     payload = _decode(token, settings.JWT_AUDIENCE, ACCESS_TOKEN_TYPE)
@@ -142,7 +142,7 @@ def decode_access_token(token: str) -> dict[str, Any]:
 
 
 def decode_bearer(token: str) -> tuple[dict[str, Any], bool]:
-    """(claims, delegated): a user access token or a backend-issued delegated token."""
+    """(claims, delegated): access token người dùng hoặc token uỷ quyền do backend cấp."""
     if settings.JWT_ALGORITHM != "HS256":
         raise _unauthorized("Invalid token algorithm")
     payload = _decode(token, settings.JWT_AUDIENCE, ACCESS_TOKEN_TYPE)
@@ -159,7 +159,7 @@ async def get_current_user(
     http_auth: BearerCredentials,
     session: Annotated[AsyncSession, Depends(get_db)],
 ) -> Any:
-    """FastAPI dependency to retrieve the authenticated User model and set the principal."""
+    """Phụ thuộc FastAPI lấy model User đã xác thực và đặt principal."""
     from core import principal as principals
     from domains.identity.models.user import User
 

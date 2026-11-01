@@ -1,4 +1,4 @@
-"""Exercise definitions, typed performance snapshots and schedule prescriptions."""
+"""Định nghĩa bài tập, ảnh chụp thành tích có kiểu và chỉ định trong lịch tập."""
 
 from decimal import Decimal
 from enum import StrEnum
@@ -50,6 +50,7 @@ class ActivityIntensity(StrEnum):
 
 class MuscleGroup(StrEnum):
     """Primary muscle vocabulary; strength analytics group hard sets by it."""
+    # Docstring giữ tiếng Anh: nó là mô tả trong schema tool mà model đọc (registry_fingerprint).
 
     CHEST = "CHEST"
     BACK = "BACK"
@@ -65,7 +66,7 @@ class MuscleGroup(StrEnum):
     FULL_BODY = "FULL_BODY"
 
 
-# Unambiguous anatomical names map onto the coarse vocabulary; anything else is rejected.
+# Tên giải phẫu rõ nghĩa được ánh xạ vào bộ từ vựng thô; mọi thứ khác bị từ chối.
 MUSCLE_ALIASES = {
     "ABS": "CORE", "ABDOMINALS": "CORE", "OBLIQUES": "CORE", "TRANSVERSE_ABDOMINIS": "CORE", "RECTUS_ABDOMINIS": "CORE",
     "LATS": "BACK", "LATISSIMUS_DORSI": "BACK", "TRAPS": "BACK", "TRAPEZIUS": "BACK", "RHOMBOIDS": "BACK",
@@ -128,7 +129,7 @@ class StrengthConfiguration(InputSchema):
     movement_pattern: NonBlank | None = None
     secondary_muscles: list[Muscle] = Field(default_factory=list)
     unilateral: bool = False
-    # e1RM is only meaningful for loadable multi-joint lifts; defaults follow category.
+    # e1RM chỉ có nghĩa với các bài nhiều khớp có thể tăng tạ; mặc định theo danh mục.
     e1rm_eligible: bool | None = None
     default_met: MET | None = None
     supported_load_modes: Annotated[list[LoadMode], Field(min_length=1)] = Field(
@@ -291,7 +292,7 @@ class WorkoutType(StrEnum):
     OTHER = "OTHER"
 
 
-# Hard sessions for the 80/20 intensity-distribution check.
+# Các buổi nặng cho kiểm tra phân bố cường độ 80/20.
 HARD_WORKOUTS = frozenset({
     WorkoutType.TEMPO, WorkoutType.THRESHOLD, WorkoutType.INTERVAL, WorkoutType.FARTLEK,
     WorkoutType.HILL, WorkoutType.PROGRESSION, WorkoutType.RACE,
@@ -351,7 +352,7 @@ class EndurancePerformance(InputSchema):
 
     @property
     def pace_seconds_per_km(self) -> float:
-        """Derived value; deliberately absent from writable and stored payloads."""
+        """Giá trị suy ra; cố ý không có trong payload ghi được và payload lưu trữ."""
         return self.duration_seconds * 1000 / self.distance_meters
 
 
@@ -359,8 +360,8 @@ class EndurancePerformanceRead(EndurancePerformance):
     @model_validator(mode='before')
     @classmethod
     def accept_serialized_pace(cls, value):
-        # Responses include computed fields; derive them again from validated
-        # duration/distance when reading a response or idempotency replay.
+        # Phản hồi có các trường tính toán; suy lại chúng từ thời lượng/quãng đường
+        # đã kiểm tra khi đọc phản hồi hoặc phát lại idempotency.
         if isinstance(value, dict):
             value = {k: v for k, v in value.items() if k not in _DERIVED_ENDURANCE}
         return value
@@ -425,8 +426,8 @@ class ExerciseActivityInput(InputSchema):
 
 
 # ---------------------------------------------------------------------------
-# Prescriptions: what a schedule asks for. They express ranges and targets and
-# are never confused with the performance that was actually achieved.
+# Chỉ định: những gì một lịch tập yêu cầu. Chúng biểu đạt khoảng và mục tiêu,
+# không bao giờ bị nhầm với thành tích thực sự đã đạt.
 # ---------------------------------------------------------------------------
 
 Reps = Annotated[int, Field(strict=True, ge=1, le=1000)]
@@ -576,7 +577,7 @@ class EndurancePrescriptionRead(EndurancePrescription):
     @computed_field
     @property
     def planned_distance_meters(self) -> float:
-        """Sum of distance-defined steps; time-defined steps are not converted."""
+        """Tổng các bước định nghĩa bằng quãng đường; bước định nghĩa bằng thời gian không được quy đổi."""
         return sum(step.distance_meters or 0 for step in self.flat_steps())
 
     @computed_field

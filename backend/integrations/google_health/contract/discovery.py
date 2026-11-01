@@ -1,10 +1,10 @@
-"""Read-only access to the snapshotted Google Health discovery documents.
+"""Truy cập chỉ đọc vào các tài liệu discovery Google Health đã chụp lại.
 
-The snapshot (discovery/v4.json, discovery/v4beta.json) is the machine-readable
-contract: value schemas, field types and formats (int64 strings, durations,
-timestamps), enums and the data types each API version knows. Refresh it with
-`python -m scripts.snapshot_discovery`; tests fail when the registry and the
-snapshot disagree.
+Ảnh chụp (discovery/v4.json, discovery/v4beta.json) là hợp đồng máy đọc được:
+schema giá trị, kiểu và định dạng trường (chuỗi int64, thời lượng,
+mốc thời gian), enum và các loại dữ liệu mà mỗi phiên bản API biết. Làm mới bằng
+`python -m scripts.snapshot_discovery`; test sẽ hỏng khi registry và
+ảnh chụp không khớp.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def kebab(field: str) -> str:
 
 @lru_cache(maxsize=None)
 def data_point_types(version: str = "v4") -> dict[str, dict[str, str]]:
-    """data type id -> {"field", "schema", "kind"} for every DataPoint union member."""
+    """id loại dữ liệu -> {"field", "schema", "kind"} cho mọi thành viên union của DataPoint."""
     result: dict[str, dict[str, str]] = {}
     for field, spec in schemas(version)["DataPoint"]["properties"].items():
         match = KIND_PATTERN.search(spec.get("description", ""))
@@ -57,7 +57,7 @@ def data_point_types(version: str = "v4") -> dict[str, dict[str, str]]:
 
 @lru_cache(maxsize=None)
 def union_fields(schema_name: str, version: str = "v4") -> frozenset[str]:
-    """Union members of a response schema such as ReconciledDataPoint or RollupDataPoint."""
+    """Các thành viên union của một schema phản hồi như ReconciledDataPoint hoặc RollupDataPoint."""
     properties = schemas(version)[schema_name]["properties"]
     return frozenset(name for name in properties if name not in WINDOW_FIELDS | {"dataPointName", "name", "dataSource"})
 

@@ -1,4 +1,4 @@
-"""Small, non-generative System One client. Never log requests or HTTP bodies."""
+"""Client System One nhỏ, không sinh văn bản. Không bao giờ ghi log request hay body HTTP."""
 import json
 import asyncio
 import math
@@ -10,7 +10,7 @@ import httpx
 
 
 class JevError(Exception):
-    """An intentionally safe reason code, never a gateway response or URL."""
+    """Mã lý do được cố ý giữ an toàn, không bao giờ là phản hồi hay URL của gateway."""
     def __init__(self, reason: str):
         self.reason = reason
         super().__init__(reason)
@@ -102,7 +102,7 @@ def validate_response(data, questions):
     usage = None
     raw_usage = data.get('usage')
     if isinstance(raw_usage, dict):
-        # LiteLLM deployments expose either System One or OpenAI token names.
+        # Các deployment LiteLLM dùng tên token kiểu System One hoặc OpenAI.
         inp = raw_usage.get('input_tokens', raw_usage.get('prompt_tokens'))
         out = raw_usage.get('output_tokens', raw_usage.get('completion_tokens'))
         if all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in (inp, out)):
@@ -159,7 +159,7 @@ class JevClient:
             if response.is_error:
                 raise JevError('http_' + str(response.status_code))
             result = validate_response(response.json(), questions)
-            # LiteLLM commonly accounts cost in a response header rather than JSON.
+            # LiteLLM thường tính chi phí trong header phản hồi thay vì JSON.
             if result['cost'] is None:
                 try:
                     value = float(response.headers['x-litellm-response-cost'])

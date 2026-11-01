@@ -49,7 +49,7 @@ watch(step, async () => { await nextTick(); heading.value?.focus({preventScroll:
 </template>
 
 <style>
-/* Scoped to the onboarding page, shared by its step components. */
+/* Chỉ áp dụng trong trang onboarding, dùng chung cho các component bước của nó. */
 .onboarding-page{min-height:100dvh;background:light-dark(#f4f3f1, #131313);color:light-dark(#2e2c2b, #e5e2e1);font-family:Geist,sans-serif;position:relative;isolation:isolate}
 .onboarding-page .onboarding-header{height:76px;display:flex;align-items:center;justify-content:space-between;padding:0 5vw;border-bottom:1px solid light-dark(#1818180e, #ffffff0e);position:relative;z-index:2}
 .onboarding-page .onboarding-brand{font:500 14px 'JetBrains Mono',monospace;letter-spacing:.2em;color:light-dark(#2e2c2b, #e5e2e1);text-decoration:none}.onboarding-page .onboarding-brand span{font-size:9px;color:light-dark(#73736c, #85857e);letter-spacing:.13em;margin-left:16px}.onboarding-page .exit-button{display:flex;gap:8px;align-items:center;font-size:11px;color:light-dark(#67675f, #93938b);padding:10px}.onboarding-page .exit-button:hover{color:light-dark(#2e2c2b, #e5e2e1)}

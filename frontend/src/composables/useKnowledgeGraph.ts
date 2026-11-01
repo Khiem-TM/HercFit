@@ -4,7 +4,7 @@ import { emptyKnowledgeGraph, type KnowledgeGraph } from '@/types/knowledge'
 
 export interface DayRange { start: string; end: string }
 
-/** The personal map; with `range`, only the records of those local days (inclusive). */
+/** Bản đồ cá nhân; với `range`, chỉ các bản ghi của những ngày địa phương đó (tính cả hai đầu). */
 export function useKnowledgeGraph(range?: () => DayRange | undefined) {
   const { authFetch } = useAuth()
   const graph = ref<KnowledgeGraph>(emptyKnowledgeGraph())
@@ -28,7 +28,7 @@ export function useKnowledgeGraph(range?: () => DayRange | undefined) {
         failed.value = false
       }
     } catch {
-      // Keep what is already drawn when a refresh fails; report only a first failure.
+      // Giữ những gì đã vẽ khi làm mới thất bại; chỉ báo lỗi lần đầu.
       if (!disposed && !current.signal.aborted) {
         failed.value = true
         if (!graph.value.nodes.length) graph.value = emptyKnowledgeGraph('unavailable')

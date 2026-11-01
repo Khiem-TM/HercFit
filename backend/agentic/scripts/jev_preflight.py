@@ -1,4 +1,4 @@
-"""Authenticated, synthetic Jev check: python -m agentic.scripts.jev_preflight [--list-only]."""
+"""Kiểm tra Jev tổng hợp có xác thực: python -m agentic.scripts.jev_preflight [--list-only]."""
 import argparse
 import asyncio
 import json
@@ -33,8 +33,8 @@ async def preflight(settings, *, list_only=False, client=None):
             return {'status': 'ok', 'models': await client.models()}
         if not settings.JEV_MODEL:
             raise JevError('missing_model')
-        # Invocation is authoritative: scoped keys may invoke a deployment
-        # without being permitted to enumerate the gateway's model list.
+        # Lời gọi là căn cứ có thẩm quyền: khoá có phạm vi có thể gọi một deployment
+        # mà không được phép liệt kê danh sách model của gateway.
         result = await client.evaluate({'colour': 'blue'}, {
             'colour': {'type': 'choice', 'instructions': 'Select the colour explicitly given in state.',
                        'criteria': {'blue': 'The state says blue.', 'red': 'The state says red.'}},

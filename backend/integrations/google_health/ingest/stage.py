@@ -1,12 +1,12 @@
-"""Staging provider points into health_source_records, and mark-and-sweep deletion.
+"""Lưu tạm điểm của nhà cung cấp vào health_source_records, và xoá kiểu đánh dấu-và-quét.
 
-* Identity: Google's resource name when the type is identifiable; otherwise a
-  stable key from the type, the observation time and the data source, so a
-  re-read updates the same row instead of creating a new one.
-* Every staged row records the root fetch that saw it (`last_seen_root`). When a
-  fetch of a window completes cleanly, rows of that window it did not see are
-  marked DELETED_REMOTE. Missing pages, parse errors or a lost permission never
-  get that far, so they never delete anything.
+* Định danh: tên tài nguyên của Google khi loại có định danh; nếu không thì một
+  khoá ổn định từ loại, thời điểm quan sát và nguồn dữ liệu, để một
+  lần đọc lại cập nhật đúng dòng đó thay vì tạo dòng mới.
+* Mỗi dòng lưu tạm ghi lại lần fetch gốc đã thấy nó (`last_seen_root`). Khi một
+  lần fetch cửa sổ hoàn tất sạch sẽ, các dòng của cửa sổ đó mà nó không thấy bị
+  đánh dấu DELETED_REMOTE. Thiếu trang, lỗi phân tích hay mất quyền không bao giờ
+  tới được bước đó, nên chúng không bao giờ xoá gì.
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ RETENTION_DAYS = {Retention.DETAIL_90D: 90, Retention.AGGREGATE_2Y: 730, Retenti
 
 
 def source_key(parsed: Parsed) -> str:
-    """Opaque, stable id of the recording source (device/app/platform); never merged across sources."""
+    """Id mờ, ổn định của nguồn ghi (thiết bị/ứng dụng/nền tảng); không bao giờ gộp giữa các nguồn."""
     source = parsed.data_source or {}
     device = source.get("device") or {}
     application = source.get("application") or {}
@@ -63,8 +63,8 @@ def _canonical(raw: dict[str, Any]) -> str:
 
 
 def civil_date(parsed: Parsed, zone: str | None) -> date | None:
-    """The point's own civil date; for points that carry no offset nor civil time (old devices),
-    the connection's timezone decides, so they still belong to a window."""
+    """Ngày địa phương của chính điểm đó; với điểm không mang độ lệch lẫn giờ địa phương (thiết bị cũ),
+    múi giờ của kết nối quyết định, để chúng vẫn thuộc một cửa sổ."""
     if parsed.time.civil_date is not None:
         return parsed.time.civil_date
     moment = parsed.time.physical_end if parsed.data_type == "sleep" else parsed.time.physical_start
@@ -76,7 +76,7 @@ def civil_date(parsed: Parsed, zone: str | None) -> date | None:
 
 async def stage(session, *, connection_id: UUID, user_id: UUID, generation: int, root_id: UUID,
                 points: list[tuple[Parsed, dict[str, Any]]], rollup: bool = False, zone: str | None = None) -> int:
-    """Upsert staged points; returns how many rows were inserted or changed."""
+    """Upsert các điểm lưu tạm; trả về số dòng được chèn hoặc thay đổi."""
     if not points:
         return 0
     rows: dict[tuple[str, str], dict[str, Any]] = {}
@@ -115,7 +115,7 @@ async def stage(session, *, connection_id: UUID, user_id: UUID, generation: int,
 
 
 async def sweep(session, *, connection_id: UUID, data_type: str, root_id: UUID, start: date, end: date) -> list[str]:
-    """After a complete, clean fetch of [start, end]: rows it did not see were deleted at the provider."""
+    """Sau một lần fetch trọn vẹn, sạch sẽ trên [start, end]: các dòng nó không thấy đã bị xoá ở nhà cung cấp."""
     result = await session.execute(text("""
         UPDATE health_source_records SET deletion_state = 'DELETED_REMOTE', fetched_at = now()
         WHERE connection_id = :connection AND data_type = :data_type AND deletion_state = 'PRESENT'

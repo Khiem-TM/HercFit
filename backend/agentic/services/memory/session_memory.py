@@ -1,10 +1,10 @@
-"""Redis session memory: a rebuildable hot tier over PostgreSQL checkpoints.
+"""Bộ nhớ phiên Redis: tầng nóng dựng lại được, nằm trên checkpoint PostgreSQL.
 
-Checkpoints stay authoritative for approvals, recovery and the verbatim
-window. Redis keeps each session's full transcript, a rolling summary of the
-turns that left the window and the records the conversation touched.
-Request-path calls run inside the session's advisory lock, are bounded by
-REDIS_TIMEOUT_MS and never raise: an outage only loses the extra memory.
+Checkpoint vẫn có thẩm quyền về phê duyệt, khôi phục và cửa sổ
+nguyên văn. Redis giữ toàn bộ bản ghi của mỗi phiên, một bản tóm tắt cuốn chiếu của
+các lượt đã ra khỏi cửa sổ và các bản ghi mà cuộc trò chuyện đã chạm tới.
+Các lời gọi trên đường xử lý request chạy trong advisory lock của phiên, bị giới hạn bởi
+REDIS_TIMEOUT_MS và không bao giờ ném lỗi: sự cố chỉ làm mất phần bộ nhớ bổ sung.
 """
 from agentic.prompts.registry import get_prompt
 import asyncio
@@ -74,7 +74,7 @@ class Recall:
         return render_memory(self.summary, self.gap, self.entities, MEMORY_CHARS) or None
 
     def state(self):
-        # Durable copy in the checkpoint: losing Redis cannot lose the summary.
+        # Bản sao bền vững trong checkpoint: mất Redis không làm mất bản tóm tắt.
         return {'summary': self.summary, 'upto_seq': self.upto_seq, 'covered': self.covered, 'entities': self.entities}
 
 
@@ -103,11 +103,11 @@ class SessionMemory:
 
     @property
     def reads(self):
-        """Shadow mode writes and measures; only 'on' serves reads and prompts from Redis."""
+        """Chế độ shadow ghi và đo; chỉ 'on' mới phục vụ lệnh đọc và prompt từ Redis."""
         return self.mode == 'on'
 
     def _keys(self, session_id):
-        # The hash tag keeps a session's keys in one Cluster slot for WATCH/MULTI.
+        # Hash tag giữ các khoá của một phiên trong cùng một slot Cluster cho WATCH/MULTI.
         base = f'{self.prefix}:s:{{{session_id}}}'
         return Keys(base + ':meta', base + ':turns', base + ':order', base + ':summary', base + ':entities', base + ':summarizing')
 
@@ -119,7 +119,7 @@ class SessionMemory:
                 return await call()
         except Exception as exc:
             self._down_until = monotonic() + BREAKER_SECONDS
-            # Exception text can echo keys or payloads; record the class only.
+            # Nội dung exception có thể lặp lại khoá hoặc payload; chỉ ghi tên lớp.
             logger.warning('session_memory_failed op=%s error_type=%s', op, type(exc).__name__)
             return None
 
@@ -136,7 +136,7 @@ class SessionMemory:
 
     @observed('memory.record', output=False)
     async def record_run(self, values, at=None):
-        """Upsert the run's turn. The caller holds the session lock."""
+        """Upsert lượt của lượt chạy. Bên gọi đang giữ khoá phiên."""
         values = values or {}
         if not values.get('session_id') or not values.get('user_id') or not turn_from_state(values):
             return False
@@ -160,7 +160,7 @@ class SessionMemory:
             pipe.hgetall(k.summary)
             meta, old, stored, entities, summary = await pipe.execute()
         if not meta or int(meta.get('generation', 0)) != generation or not stored:
-            # New, cleared or partially evicted session: rebuild from the checkpoint window.
+            # Phiên mới, đã xoá hoặc bị đẩy ra một phần: dựng lại từ cửa sổ checkpoint.
             return await self._seed(k, values, at)
         old = json.loads(old) if old else None
         seq = old['seq'] if old else int(meta['next_seq'])
@@ -171,7 +171,7 @@ class SessionMemory:
         if turn_count > self.max_turns:
             ids = await self.redis.zrange(k.order, 0, turn_count - self.max_turns - 1)
             dropped = [json.loads(row) for row in await self.redis.hmget(k.turns, ids) if row] if ids else []
-        # Turns trimmed before they were summarized are skipped so counts stay aligned with the window.
+        # Các lượt bị cắt trước khi được tóm tắt thì bỏ qua để số đếm khớp với cửa sổ.
         lost = [t for t in dropped if t['seq'] > upto]
         if lost:
             upto, covered = max(t['seq'] for t in lost), covered + sum(len(t['messages']) for t in lost)
@@ -217,7 +217,7 @@ class SessionMemory:
             pipe.set(k.entities, json.dumps(merge_entities(restored.get('entities') or [], entities_from_state(values), len(turns),
                                                            self.entity_limit), ensure_ascii=False))
             if restored.get('summary'):
-                # The checkpoint's copy covers what came before this window.
+                # Bản sao trong checkpoint bao phủ những gì có trước cửa sổ này.
                 pipe.hset(k.summary, mapping={'text': restored['summary'], 'upto_seq': 0, 'covered_messages': 0,
                                               'generation': generation, 'updated_at': _now()})
             for key in k.data:
@@ -227,14 +227,14 @@ class SessionMemory:
         return True
 
     async def _current(self, session, values, at):
-        """Meta, summary and entities after recording the latest run if Redis missed it."""
+        """Meta, tóm tắt và thực thể sau khi ghi lượt chạy mới nhất nếu Redis đã bỏ lỡ nó."""
         k = self._keys(session['session_id'])
         meta, summary, entities = await self._read(k)
         if meta and int(meta.get('generation', 0)) != int(session['generation']):
             await self.redis.unlink(*k.data)
             meta, summary, entities = {}, {}, None
         if values.get('run_id') and meta.get('last_run_id') != values['run_id'] and turn_from_state(values):
-            # The run ended without recording (cancelled stream, crash) or predates Redis.
+            # Lượt chạy kết thúc mà không ghi lại (stream bị huỷ, sập) hoặc có từ trước khi dùng Redis.
             await self._record({**values, 'session_id': session['session_id'],
                                 'session_generation': int(session['generation'])}, at)
             meta, summary, entities = await self._read(k)
@@ -242,7 +242,7 @@ class SessionMemory:
 
     @observed('memory.recall', 'retriever', output=False)
     async def recall(self, session, previous, at=None):
-        """Memory beyond the checkpoint window. Falls back to the checkpoint's own copy."""
+        """Bộ nhớ ngoài cửa sổ checkpoint. Quay về dùng bản sao riêng của checkpoint."""
         started = perf_counter()
         previous = previous or {}
         recall = (await self._guard('recall', lambda: self._recall(session, previous, at))
@@ -260,7 +260,7 @@ class SessionMemory:
         outside = outside_messages(int(meta['message_count']), covered, self.window)
         gap = []
         if outside and self.summarize:
-            # Bridge turns the summary has not reached yet, so nothing is forgotten in between.
+            # Nối các lượt mà bản tóm tắt chưa tới, để không gì bị quên ở giữa.
             ids = await self.redis.zrangebyscore(k.order, f'({upto}', '+inf', start=0, num=min(outside, 2 * self.trigger))
             rows = await self.redis.hmget(k.turns, ids) if ids else []
             gap = gap_turns([json.loads(row) for row in rows if row], outside)
@@ -269,7 +269,7 @@ class SessionMemory:
 
     @observed('memory.transcript', output=False)
     async def transcript(self, session, values, at=None):
-        """Stored conversation for /history, oldest first; None means read the checkpoint."""
+        """Cuộc trò chuyện đã lưu cho /history, cũ nhất trước; None nghĩa là đọc checkpoint."""
         return await self._guard('transcript', lambda: self._transcript(session, values or {}, at), max(self.timeout, 0.5))
 
     async def _transcript(self, session, values, at):
@@ -282,14 +282,14 @@ class SessionMemory:
                 for row in rows if row for m in json.loads(row)['messages']]
 
     async def metas(self, rows):
-        """Session list summaries. Read-only: sessions are seeded under their lock elsewhere."""
+        """Tóm tắt danh sách phiên. Chỉ đọc: các phiên được khởi tạo dưới khoá của chúng ở nơi khác."""
         rows = list(rows)
         async def read():
             async with self.redis.pipeline(transaction=False) as pipe:
                 for row in rows:
                     pipe.hgetall(self._keys(row['session_id']).meta)
                 values = await pipe.execute()
-            # A meta that missed the latest run is stale; that session uses its checkpoint.
+            # Meta bỏ lỡ lượt chạy mới nhất là đã cũ; phiên đó dùng checkpoint của nó.
             return {row['session_id']: meta for row, meta in zip(rows, values)
                     if meta and meta.get('generation') == str(row.get('generation'))
                     and meta.get('last_run_id') == row.get('thread_id')}
@@ -300,7 +300,7 @@ class SessionMemory:
         await self._guard('forget', lambda: self.redis.unlink(*k.data, k.lock))
 
     async def purge_deleted(self, store):
-        """Remove memory of cleared sessions whose delete could not reach Redis."""
+        """Xoá bộ nhớ của các phiên đã xoá mà lệnh xoá chưa tới được Redis."""
         started = datetime.now(timezone.utc)
         rows = await store.deleted_sessions(self._purged_since or started - timedelta(seconds=self.ttl))
         failed = False
@@ -312,7 +312,7 @@ class SessionMemory:
                         await pipe.watch(k.meta)
                         generation = await pipe.hget(k.meta, 'generation')
                         if generation is not None and int(generation) > int(row['generation']):
-                            return False  # reused session: its new generation is live
+                            return False  # phiên được dùng lại: thế hệ mới của nó đang sống
                         pipe.multi()
                         pipe.unlink(*k.data, k.lock)
                         await pipe.execute()
@@ -328,7 +328,7 @@ class SessionMemory:
         if (not self.summarize or session_id in self._tasks
                 or outside_messages(message_count, covered, self.window) < 2 * self.trigger):
             return
-        # A fresh context: the summary outlives the request and is traced on its own.
+        # Ngữ cảnh mới: bản tóm tắt sống lâu hơn request và được trace riêng.
         task = asyncio.get_running_loop().create_task(self._summarize(session_id, generation), context=contextvars.Context())
         self._tasks[session_id] = task
         task.add_done_callback(lambda _: self._tasks.pop(session_id, None))
@@ -337,7 +337,7 @@ class SessionMemory:
     async def _summarize(self, session_id, generation):
         k, token = self._keys(session_id), uuid4().hex
         try:
-            # One summarizer per session across processes; the lock expires if a worker dies.
+            # Mỗi phiên một bộ tóm tắt trên mọi tiến trình; khoá tự hết hạn nếu worker chết.
             if not await self.redis.set(k.lock, token, nx=True, px=SUMMARY_LOCK_MS):
                 return
             try:
@@ -380,7 +380,7 @@ class SessionMemory:
                 pipe.expire(k.summary, self.ttl)
                 await pipe.execute()
         except WatchError:
-            return False  # a concurrent trim or clear won; a later turn retries
+            return False  # một lần cắt hoặc xoá đồng thời đã thắng; lượt sau sẽ thử lại
         return True
 
     async def _condense(self, previous, turns):

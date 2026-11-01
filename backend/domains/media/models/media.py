@@ -1,4 +1,4 @@
-"""Durable cleanup tickets survive failed uploads and process restarts."""
+"""Phiếu dọn dẹp bền vững tồn tại qua các lần upload thất bại và tiến trình khởi động lại."""
 from datetime import datetime
 
 from sqlalchemy import DateTime, Text, func

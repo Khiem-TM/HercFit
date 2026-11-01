@@ -1,6 +1,6 @@
-"""Immutable actual activity aggregates with atomic correction and scoped reads.
+"""Aggregate hoạt động thực tế bất biến với sửa nguyên tử và lệnh đọc có phạm vi.
 
-Split from models.journals in the domain reorganization."""
+Tách ra từ models.journals trong đợt tổ chức lại theo miền."""
 from datetime import datetime
 from uuid import UUID as PyUUID
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, UniqueConstraint

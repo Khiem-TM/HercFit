@@ -12,7 +12,7 @@ async function detail(response: Response, fallback: string): Promise<string> {
   return fallback
 }
 
-/** Google Health connection: status, OAuth consent, assistant consent, manual sync and disconnect. */
+/** Kết nối Google Health: trạng thái, đồng ý OAuth, consent của trợ lý, đồng bộ thủ công và ngắt kết nối. */
 export function useHealthIntegration() {
   const { authFetch } = useAuth()
   const connection = shallowRef<HealthConnection | null>(null)
@@ -52,7 +52,7 @@ export function useHealthIntegration() {
     }
   }
 
-  /** Starts Google's consent screen; the backend callback returns to /chat?integration=google-health. */
+  /** Mở màn hình đồng ý của Google; callback của backend quay về /chat?integration=google-health. */
   async function connect(shareWithAssistant: boolean): Promise<void> {
     const response = await run(() => authFetch(`${BASE}/connect`, {
       method: 'POST',

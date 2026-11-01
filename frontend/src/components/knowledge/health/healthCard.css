@@ -1,4 +1,4 @@
-/* Shared chrome for the health cards; data colours live in healthColors.ts. */
+/* Khung dùng chung cho các thẻ sức khoẻ; màu dữ liệu nằm trong healthColors.ts. */
 .card { container: card / inline-size; min-width: 0; padding: clamp(16px, 2.2cqi, 24px); border: 1px solid light-dark(#36768926, #8fc3d426); border-radius: 18px; background: linear-gradient(125deg, light-dark(#36768907, #8fc3d407), transparent 60%), light-dark(#fdfcf9, #14171d); }
 .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .eyeline { display: flex; align-items: center; gap: 6px; margin: 0 0 7px; font: 9px 'JetBrains Mono', monospace; letter-spacing: .12em; color: light-dark(#367689, #8fc3d4); }

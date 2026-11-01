@@ -9,5 +9,5 @@ class RequestContext:
     backend: Any
     private_values: tuple[str, ...] = ()
 
-# Never place credentials in graph state, messages, or configurable/checkpoints.
+# Không bao giờ đặt thông tin xác thực vào graph state, tin nhắn hay configurable/checkpoint.
 request_context: ContextVar[RequestContext] = ContextVar('agent_request_context')

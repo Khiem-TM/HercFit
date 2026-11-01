@@ -24,7 +24,7 @@ from agentic.research.sources import rate
 PROMPT = get_prompt('tool.call')
 
 
-# Writes whose confirmation card needs server-computed totals, snapshots and images.
+# Các lệnh ghi mà thẻ xác nhận cần tổng do server tính, ảnh chụp dữ liệu và hình ảnh.
 PREVIEW_PATHS = {
     'create_meals': '/api/meals/preview',
     'create_trainings': '/api/trainings/preview',
@@ -32,14 +32,14 @@ PREVIEW_PATHS = {
 }
 
 def research_handoff(state, domain):
-    """Database-first: an empty catalog search for this turn's item moves on to research (once)."""
+    """Ưu tiên database: tìm catalog rỗng cho món của lượt này thì chuyển sang tra cứu (một lần)."""
     if domain not in {'foods','exercises'} or state.get('research_count') or state.get('candidate'):
         return None
     empty=[o for o in state.get('tool_outputs',[]) if o.get('tool')=='list_'+domain and o.get('ok') and o.get('output')==[]]
     query=((empty[-1].get('arguments') or {}).get('search') or '').strip() if empty else ''
     return {'domain':domain,'query':query} if query else None
 
-# Reads whose 404 means "none yet" (a state the model can act on), not a backend failure.
+# Các lệnh đọc mà 404 nghĩa là "chưa có" (trạng thái model xử lý được), không phải lỗi backend.
 NOT_FOUND_IS_EMPTY = {'current_goal', 'latest_metrics', 'current_plan', 'current_training_plan'}
 
 CATALOG_WRITES = {'create_foods': 'foods', 'finalize_foods': 'foods', 'create_exercises': 'exercises', 'finalize_exercises': 'exercises'}
@@ -56,7 +56,7 @@ class ToolAgent:
         candidate=state.get('candidate') or {}
         draft=state.get('catalog_draft') or {}
         if not decision.get('read_only') and decision.get('intent')=='catalog_estimate' and draft.get('domain')==decision['domain']:
-            # The user picked a sourced estimate: preview exactly that CUSTOM record, no model call.
+            # Người dùng đã chọn một ước tính có nguồn: xem trước đúng bản ghi CUSTOM đó, không gọi model.
             name='create_'+draft['domain']
             call={'name':name,'args':draft['payload'],'id':str(uuid5(NAMESPACE_URL,state['run_id']+':'+name+':estimate'))}
             return await self.execute_calls(state,[call],[AIMessage(content='',tool_calls=[call])])
@@ -73,8 +73,8 @@ class ToolAgent:
             prompt += '\n'+HEALTH_GUIDANCE
         if decision.get('read_only'):
             prompt += '\nNhiệm vụ chỉ đọc: không ghi dữ liệu, không tạo candidate và không chuyển research. Catalog trống thì báo chưa có kết quả.'
-        # Relative dates ("hôm nay", "sáng nay") resolve against the real local clock; the
-        # clock and per-run data stay in the trailing message so the prompt prefix is cacheable.
+        # Ngày tương đối ("hôm nay", "sáng nay") được giải theo đồng hồ địa phương thật; đồng hồ
+        # và dữ liệu riêng từng lượt chạy nằm trong tin nhắn cuối nên tiền tố prompt cache được.
         tail = ['Thời gian hiện tại: ' + datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')).replace(second=0, microsecond=0).isoformat()]
         context = model_graph_context(state)
         if context:
@@ -95,11 +95,11 @@ class ToolAgent:
             if handoff:
                 return {'status':'running','error':None,'research_handoff':handoff}
             if executed_writes(state):
-                # The write was saved; prose here restated it as still pending and became a question (run 433a847a).
+                # Lệnh ghi đã được lưu; văn bản ở đây từng nói lại nó như vẫn đang chờ và biến thành câu hỏi (lượt chạy 433a847a).
                 return self.saved(state,'prose')
             return {'status':'needs_input','error':strip_tool_markup(str(result.content)) or 'Cần bổ sung dữ liệu để chọn tool.'}
         if any(self.repeats(state,call) for call in calls):
-            # The router sent an executed write back to the tool step; a second preview would save it twice.
+            # Router đã gửi một lệnh ghi đã thực thi quay lại bước tool; xem trước lần hai sẽ lưu nó hai lần.
             return self.saved(state,'repeat')
         return await self.execute_calls(state, calls, [result])
 
@@ -115,7 +115,7 @@ class ToolAgent:
 
     @staticmethod
     def saved(state, reason):
-        """End the turn with the code-owned summary of what it saved (the answer node returns it unchanged)."""
+        """Kết thúc lượt bằng bản tóm tắt do code viết về những gì đã lưu (node trả lời trả nó về nguyên vẹn)."""
         annotate(post_write_reply=reason)
         return {'status':'running','error':None,'prepared_reply':write_reply(state)}
 
@@ -126,7 +126,7 @@ class ToolAgent:
         return {**result,'candidate':candidate}
 
     async def refinalize(self, state, candidate, resolution, existing_id=None):
-        """Rebuild the finalize preview for the user's choice against the live catalog, or ask again."""
+        """Dựng lại bản xem trước finalize cho lựa chọn của người dùng theo catalog hiện tại, hoặc hỏi lại."""
         domain=candidate['domain']
         if candidate.get('candidate_revision',0)>=catalog_choice.MAX_REVISIONS:
             return {'status':'failed','error':'Catalog thay đổi liên tục; chưa thể lưu bản ghi nghiên cứu. Vui lòng thử lại sau.'}
@@ -150,13 +150,13 @@ class ToolAgent:
             return None
         call = {'name': plan.tool, 'args': plan.arguments,
                 'id': str(uuid5(NAMESPACE_URL, plan.run_id + ':' + plan.template_id))}
-        # The same allowlist, normalization, budget, and backend adapter as LLM calls.
+        # Cùng danh sách cho phép, chuẩn hoá, ngân sách và adapter backend như các lần gọi LLM.
         result = await self.execute_calls(state, [call], [AIMessage(content='', tool_calls=[call])], plan)
         output = result['tool_outputs'][-1]
         complete = output.get('ok') and terminal_result(plan, output.get('output'))
         result['fast_read_complete'] = bool(complete)
         if output.get('ok') and not complete:
-            # Never reissue a read through another route after executing it once.
+            # Không bao giờ phát lại một lệnh đọc qua tuyến khác sau khi đã thực thi nó một lần.
             output['ok'] = False
             output.pop('output', None)
             output['error'] = 'Progress result does not match the requested interval.'
@@ -178,7 +178,7 @@ class ToolAgent:
                   'template_version': plan.template_version if plan else None}
         labels = {'goals': 'Goal', 'metrics': 'BodyMetric', 'meals': 'Meal', 'foods': 'Food', 'profile': 'User',
                   'trainings': 'Training'}
-        # Health tools return different record kinds; summaries (overview, profile) have no ids.
+        # Các tool sức khoẻ trả về nhiều loại bản ghi khác nhau; bản tóm tắt (overview, profile) không có id.
         kind = HEALTH_TOOL_KINDS.get(name) or labels.get(REGISTRY[name].domain)
         try:
             data = await ctx.backend.call(name, args, ctx.token, **({'key': key} if key else {}))
@@ -200,9 +200,9 @@ class ToolAgent:
             records.append(record)
 
     async def read_context(self, state, reads):
-        """Code-owned reads for a personalized answer, through the same allowlist check, adapter,
-        journal and budget as model-chosen reads. A failed read reaches the answer as unavailable;
-        it never asks the user or ends the turn."""
+        """Các lần đọc do code quyết định cho câu trả lời cá nhân hoá, qua cùng bước kiểm tra danh sách cho phép, adapter,
+        nhật ký và ngân sách như các lần đọc do model chọn. Lần đọc thất bại đến câu trả lời dưới dạng không có dữ liệu;
+        nó không bao giờ hỏi người dùng hay kết thúc lượt."""
         done={o['tool'] for o in state.get('tool_outputs',[]) if o.get('ok')}
         calls=[{'name':name,'args':args,'id':str(uuid5(NAMESPACE_URL,state['run_id']+':context:'+name))}
                for name,args in reads if name not in done]
@@ -243,7 +243,7 @@ class ToolAgent:
                     if spec.write:
                         candidate=state.get('candidate')
                         research_id=None
-                        # A researched item is saved only through its verified, signed command.
+                        # Một món đã tra cứu chỉ được lưu qua lệnh đã kiểm chứng và đã ký của nó.
                         if candidate and candidate.get('domain')==spec.domain and name in CATALOG_WRITES:
                             if name != 'finalize_'+spec.domain or not candidate.get('finalization'):
                                 raise ValueError('Use the verified finalization command')
@@ -252,7 +252,7 @@ class ToolAgent:
                             research_id=candidate['research_id']
                         elif name.startswith('finalize_'):
                             raise ValueError('A verified research candidate is required')
-                        # A failed dry run (422/404/409) surfaces now, before the user is asked to confirm.
+                        # Lần chạy thử thất bại (422/404/409) được báo ngay, trước khi hỏi người dùng xác nhận.
                         display=await self._preview(state,name,normalized)
                         preview=name+'\n'+json.dumps(normalized,ensure_ascii=False,indent=2)
                         pending=await self.store.new_action(state['session_id'],state['user_id'],name,normalized,preview,
@@ -283,9 +283,9 @@ class ToolAgent:
     @observed('tool.preview', 'tool', capture=('name', 'normalized'))
     async def _preview(self, state, name, normalized):
         if name in CATALOG_WRITES:
-            # Custom catalog card: the record plus research pictures the user may keep (imported to Cloudinary).
+            # Thẻ catalog tuỳ chỉnh: bản ghi cùng ảnh từ tra cứu mà người dùng có thể giữ (nhập lên Cloudinary).
             if not name.startswith('finalize_'):
-                # A record built from an estimate the user picked carries that estimate's source.
+                # Bản ghi dựng từ một ước tính người dùng đã chọn mang theo nguồn của ước tính đó.
                 draft = state.get('catalog_draft') or {}
                 chosen = draft.get('payload') == normalized
                 return {'kind': 'catalog_candidate', 'domain': CATALOG_WRITES[name], 'resolution': 'create',
@@ -295,7 +295,7 @@ class ToolAgent:
                         'image_candidates': [], 'sources': draft.get('sources', []) if chosen else []}
             candidate = state.get('candidate') or {}
             reuse = normalized['resolution'] == 'reuse'
-            # Evidence cites sources by id; URL and title live in the command's source list.
+            # Bằng chứng trích nguồn theo id; URL và tiêu đề nằm trong danh sách nguồn của lệnh.
             cited = {e['source_id'] for e in normalized['evidence']}
             product = normalized['query'] if CATALOG_WRITES[name] == 'foods' else None
             sources = [{'url': s['url'], 'title': s['title'], 'authority': rate(s['source_id'], s['url'], product).tier}
@@ -305,7 +305,7 @@ class ToolAgent:
                     'existing': candidate.get('existing') if reuse else None,
                     'unverified_fields': candidate.get('unverified_fields', []),
                     'research_verified': bool(normalized.get('attestation')),
-                    # A reused record may be a shared SYSTEM entry: research pictures are never attached to it.
+                    # Bản ghi được dùng lại có thể là mục SYSTEM dùng chung: ảnh từ tra cứu không bao giờ được gắn vào nó.
                     'image_candidates': [] if reuse else candidate.get('image_candidates', []),
                     'sources': sources}
         path = PREVIEW_PATHS.get(name)
@@ -325,15 +325,15 @@ class ToolAgent:
         try:
             data=await self._backend_call(state,saved['tool'],saved['payload'],saved['action_id'],records,key=saved['action_id'])
         except BackendError as exc:
-            # Unknown write outcomes remain approved and can only retry with the
-            # same key. A 409/422 is definitive and requires a new preview.
+            # Kết quả ghi chưa rõ vẫn ở trạng thái đã duyệt và chỉ có thể thử lại với
+            # cùng khoá. Lỗi 409/422 là dứt khoát và cần bản xem trước mới.
             if exc.status < 500:
                 await self.store.set_action(saved['action_id'],'failed')
             failure={'tool':saved['tool'],'ok':False,'status_code':exc.status,'error':exc.detail}
             candidate=state.get('candidate') or {}
             if exc.status==409 and saved['tool'].startswith('finalize_') and candidate.get('research_id')==saved.get('research_id'):
-                # The catalog changed after the preview: rebuild it against the live catalog
-                # (a new preview the user confirms again), never retry the stale command.
+                # Catalog đã thay đổi sau khi xem trước: dựng lại theo catalog hiện tại
+                # (một bản xem trước mới mà người dùng xác nhận lại), không bao giờ thử lại lệnh đã cũ.
                 return await self.refinalize({**state,'execution_records':records,'tool_outputs':[*state.get('tool_outputs',[]),failure]},
                                              candidate,saved['payload']['resolution'],saved['payload'].get('existing_id'))
             return {'status':'failed','error':str(exc.detail),'execution_records':records,
@@ -349,7 +349,7 @@ class ToolAgent:
         if saved.get('research_id') and data and data.get('id'):
             await self.store.link_research(saved['research_id'],data['id'])
         out={'tool':saved['tool'],'ok':True,'output':data,'action_id':saved['action_id'],**({'provenance':provenance} if provenance else {})}
-        # A completed write is evidence for the next orchestrator decision.
+        # Một lệnh ghi đã hoàn tất là bằng chứng cho quyết định điều phối tiếp theo.
         return {'pending_action':None,'status':'running','error':None,'execution_records':records,
                 'candidate':None if saved.get('research_id') else state.get('candidate'),
                 'catalog_draft':None if saved['tool'] in {'create_foods','create_exercises'} else state.get('catalog_draft'),

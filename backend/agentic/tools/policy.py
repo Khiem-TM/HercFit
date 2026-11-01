@@ -8,15 +8,15 @@ CAPABILITY_GUIDANCE = get_prompt('nutrition.capabilities')
 HEALTH_GUIDANCE = get_prompt('health.guidance', 'v3')
 
 CATALOG_DEPENDENCIES = {'meals': 'foods', 'trainings': 'exercises', 'training_plans': 'exercises'}
-# Additional read-only domains: coaching interprets logs/progress, logging may check the schedule.
+# Các miền chỉ đọc bổ sung: huấn luyện diễn giải nhật ký/tiến độ, ghi nhật ký có thể kiểm tra lịch tập.
 READ_DEPENDENCIES = {
     'coaching': ('trainings', 'progress', 'metrics', 'exercises', 'health'),
     'trainings': ('training_plans',),
-    # A schedule hangs off the parent plan, which needs the active goal's id.
+    # Lịch tập treo dưới kế hoạch cha, kế hoạch cha cần id của mục tiêu đang hoạt động.
     'training_plans': ('coaching', 'goals'),
     'meals': ('progress',),
     'goals': ('progress', 'metrics', 'health'),
-    # Device recovery and activity inform coaching; body questions compare with device data.
+    # Phục hồi và vận động từ thiết bị bổ sung cho huấn luyện; câu hỏi về cơ thể so sánh với dữ liệu thiết bị.
     'progress': ('health',),
     'metrics': ('health',),
     'profile': ('health', 'metrics'),
@@ -24,9 +24,9 @@ READ_DEPENDENCIES = {
 }
 
 
-# Raw device tools whose backend routes have a v2 successor (backend api/deprecations.py).
-# They stay registered (checkpoints and pending actions refer to tools by name) but are
-# not offered once the agent reader moved to the context API.
+# Các tool thiết bị thô có route backend đã có bản kế nhiệm v2 (backend api/deprecations.py).
+# Chúng vẫn được đăng ký (checkpoint và hành động đang chờ tham chiếu tool theo tên) nhưng
+# không được cung cấp khi bộ đọc của agent đã chuyển sang context API.
 SUPERSEDED_HEALTH_TOOLS = frozenset({'list_sleep_sessions', 'list_device_workouts', 'list_health_samples'})
 
 
@@ -69,5 +69,5 @@ def continue_catalog_lookup(state):
 
 
 TRAINING_DOMAINS = frozenset({'trainings', 'training_plans', 'coaching'})
-# Domains that may read device data receive the health guidance.
+# Các miền được đọc dữ liệu thiết bị nhận hướng dẫn về sức khoẻ.
 HEALTH_DOMAINS = frozenset(domain for domain in ('health', *READ_DEPENDENCIES) if 'health' in (domain, *READ_DEPENDENCIES.get(domain, ())))

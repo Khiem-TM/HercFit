@@ -1,4 +1,4 @@
-"""Owner-scoped resolver and transaction-local catalog finalization."""
+"""Bộ giải quyết theo chủ sở hữu và finalize catalog cục bộ trong transaction."""
 import hashlib
 import json
 from datetime import timedelta
@@ -45,7 +45,7 @@ async def resolve(service, domain, query):
             'fingerprint':digest([[r['id'],r['version_id']] for r in matches])}
 
 def attest(service, domain, data):
-    """Only commands signed by the research service carry the "verified by research" label."""
+    """Chỉ lệnh do service tra cứu ký mới mang nhãn "đã kiểm chứng bởi tra cứu"."""
     if settings.RESEARCH_ATTESTATION_SECRET is None:
         raise HTTPException(503, 'Research attestation is not configured')
     secrets = [settings.RESEARCH_ATTESTATION_SECRET.get_secret_value(),
@@ -67,10 +67,10 @@ async def finalize(service, domain, command):
     if previous:
         if previous['digest'] != request_digest:
             raise HTTPException(409, 'Candidate revision has changed')
-        # An exact replay (the digest covers the signature) returns the receipt even after expiry.
+        # Phát lại chính xác (digest bao gồm chữ ký) trả về biên nhận kể cả sau khi hết hạn.
         return previous['result']
     provenance = attest(service, domain, data)
-    # The user decided on these exact resolver results for the query and the candidate's name.
+    # Người dùng đã quyết định dựa trên đúng các kết quả bộ giải quyết này cho truy vấn và tên ứng viên.
     found = await resolve(service, domain, command.query)
     canonical = await resolve(service, domain, command.payload.name_vi)
     if (found['truncated'] or canonical['truncated'] or found['fingerprint'] != command.expected_match_fingerprint
@@ -86,9 +86,9 @@ async def finalize(service, domain, command):
             raise HTTPException(409, 'A distinct variant needs a name no existing record uses')
         if command.aliases and any(m['exact'] for m in found['matches']):
             raise HTTPException(422, 'The query names an existing record and cannot alias a new variant')
-    # Query must describe the actual candidate; otherwise an empty unrelated
-    # search could be used to evade duplicate checks. A distinct variant may
-    # refine the query ("squat" -> "goblet squat").
+    # Truy vấn phải mô tả đúng ứng viên thật; nếu không, một lần tìm rỗng không liên quan
+    # có thể bị dùng để lách kiểm tra trùng. Một biến thể riêng có thể
+    # làm rõ truy vấn ("squat" -> "goblet squat").
     query = normalize_food_text(command.query)
     names = {normalize_food_text(n) for n in [command.payload.name_vi, command.payload.name_en, *command.aliases] if n}
     if query not in names and not (command.resolution == 'create_distinct' and any(query in name for name in names)):

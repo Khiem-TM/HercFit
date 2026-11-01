@@ -3,7 +3,7 @@ import { Minus, Plus, Trash2 } from 'lucide-vue-next'
 import { defaultGroup, formatGroup, groupError, groupsFor, SET_LIMITS, type Answer, type SetGroup, type SetRow } from '@/features/chat/clarification'
 import CatalogImage from './CatalogImage.vue'
 
-/** Sets × reps × kg for each exercise; rows the user has not touched show (and send) the default 3 × 10. */
+/** Sets × reps × kg cho từng bài tập; các dòng người dùng chưa đụng tới hiển thị (và gửi) mặc định 3 × 10. */
 const props = defineProps<{ rows: SetRow[]; answer: Answer; disabled?: boolean }>()
 const emit = defineEmits<{ change: [sets: Record<string, SetGroup[]>] }>()
 
@@ -29,14 +29,14 @@ function count(row: SetRow, index: number, field: 'sets' | 'reps', raw: string) 
   edit(row, index, { [field]: Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : min })
 }
 
-// Blank means no external load; a load outside 0–500 kg is kept and flagged (groupError) rather than dropped.
+// Để trống nghĩa là không có tạ ngoài; mức tạ ngoài 0–500 kg được giữ và gắn cờ (groupError) thay vì bị bỏ.
 function load(row: SetRow, index: number, raw: string) {
   const value = Number(raw.replace(',', '.'))
   edit(row, index, { kg: raw.trim() === '' || !Number.isFinite(value) ? null : Math.round(value * 100) / 100 })
 }
 
 function add(row: SetRow) {
-  // A new group starts from the last one (same load, e.g. a back-off set), which is the common next step.
+  // Nhóm mới bắt đầu từ nhóm cuối (cùng mức tạ, ví dụ một set giảm tải), đó là bước tiếp theo thường gặp.
   const groups = groupsFor(props.answer, row)
   update(row, [...groups, { ...(groups[groups.length - 1] ?? defaultGroup()), sets: 1 }])
 }

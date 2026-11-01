@@ -1,3 +1,3 @@
-"""ORM models of this domain. The full registry loads first so relationship
-targets and graph-outbox hooks are always complete."""
+"""Model ORM của miền này. Toàn bộ registry được nạp trước để đích của quan hệ
+và hook graph-outbox luôn đầy đủ."""
 import domains.registry  # noqa: F401

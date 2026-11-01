@@ -1,17 +1,17 @@
-"""Coverage and baselines: what is known, what is missing, and why.
+"""Độ phủ và đường nền: biết gì, thiếu gì, và vì sao.
 
-Coverage per (day, data type) is one of
-  OBSERVED      a value exists (or dense samples for some seconds)
-  ZERO          a counted value of exactly 0 (e.g. 0 floors): data, not absence
-  NO_DATA       the type was synced through that day and nothing exists
-  NOT_GRANTED   the user did not grant the scope
-  UNSUPPORTED   HercFit does not read this type (registry or verification)
-  NOT_SYNCED    the day is newer than the type's last complete read
-Few steps never means "not worn": wear is not inferred from activity, only from
-observed data, and is reported as unknown when nothing supports it.
+Độ phủ theo (ngày, loại dữ liệu) là một trong
+  OBSERVED      có giá trị (hoặc có mẫu dày trong vài giây)
+  ZERO          giá trị đếm được đúng bằng 0 (ví dụ 0 tầng): là dữ liệu, không phải vắng mặt
+  NO_DATA       loại này đã đồng bộ qua ngày đó và không có gì
+  NOT_GRANTED   người dùng chưa cấp scope
+  UNSUPPORTED   HercFit không đọc loại này (registry hoặc kiểm chứng)
+  NOT_SYNCED    ngày đó mới hơn lần đọc trọn vẹn cuối cùng của loại này
+Ít bước không bao giờ có nghĩa là "không đeo": việc đeo không suy ra từ mức hoạt động, chỉ từ
+dữ liệu quan sát được, và được báo là chưa biết khi không có gì hỗ trợ.
 
-Baselines are medians over a window with their sample size and an
-`algorithm_version`, so a changed method never silently changes old answers.
+Đường nền là trung vị trên một cửa sổ, kèm cỡ mẫu và
+`algorithm_version`, để đổi phương pháp không bao giờ âm thầm đổi câu trả lời cũ.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from domains.health_records.models.device_records import DailyHealthSummary
 from domains.health_records.schemas.health import HEALTH_PROVIDER
 
 ALGORITHM_VERSION = "baseline-median-v1"
-# Daily columns tracked for coverage, with the data type that feeds them.
+# Các cột theo ngày được theo dõi độ phủ, kèm loại dữ liệu nuôi chúng.
 DAILY_SIGNALS = {
     "steps": "steps", "total_kcal": "total-calories", "active_minutes": "active-minutes",
     "resting_hr_bpm": "daily-resting-heart-rate", "hrv_ms": "daily-heart-rate-variability",
@@ -126,12 +126,12 @@ async def stored_baselines(session, user_id: UUID, as_of: date, window_days: int
 
 async def baselines_for(session, user_id: UUID, end: date, window_days: int,
                         today: date | None = None) -> tuple[dict[str, Baseline], str]:
-    """Baselines for a report ending on `end`, and how they were obtained ("live" or "stored").
+    """Đường nền cho một báo cáo kết thúc ở `end`, và cách có được chúng ("live" hay "stored").
 
-    v1: the window ends with `end` itself, so a report for today includes a partial day.
-    Reader v2 `analytics`: complete days only (before today), read from what
-    ANALYTICS_RECOMPUTE stored for that day when present, otherwise computed live with
-    the same algorithm, so both paths give the same numbers.
+    v1: cửa sổ kết thúc ở chính `end`, nên báo cáo cho hôm nay có một ngày chưa trọn.
+    Bộ đọc v2 `analytics`: chỉ các ngày đã trọn (trước hôm nay), đọc từ những gì
+    ANALYTICS_RECOMPUTE đã lưu cho ngày đó nếu có, ngược lại tính trực tiếp bằng
+    cùng thuật toán, nên hai đường cho cùng con số.
     """
     from core.flags import reader_v2
 

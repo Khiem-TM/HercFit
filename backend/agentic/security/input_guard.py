@@ -1,4 +1,4 @@
-"""Existing public-query privacy and clinical-topic guards."""
+"""Các chốt bảo vệ quyền riêng tư của truy vấn công khai và chủ đề lâm sàng hiện có."""
 import re
 from domains.catalog.models.foods import normalize_food_text
 
@@ -6,15 +6,15 @@ class ClinicalQuestion(ValueError):
     pass
 
 
-# Diagnosis, treatment, rehabilitation, specific pain, medical conditions and an injury the
-# person already has need a professional. Matched on accent-free text, where "đau" and "đâu"
-# collapse to "dau", so only multi-word pain phrases are listed.
+# Chẩn đoán, điều trị, phục hồi chức năng, cơn đau cụ thể, bệnh lý và chấn thương mà
+# người dùng đang có cần đến chuyên gia. So khớp trên văn bản không dấu, nơi "đau" và "đâu"
+# cùng thành "dau", nên chỉ liệt kê các cụm từ nhiều chữ về đau.
 CLINICAL = re.compile(r'dau nguc|dau goi|dau lung|dau khop|phuc hoi chuc nang|phau thuat|benh tim|tieu duong|'
     r'mang thai|ke don|lieu thuoc|chan doan|dieu tri|chua tri|\b(?:dang|da|vua) bi\b|sau (?:khi )?(?:bi )?chan thuong|'
     r'rehab|diagnos|treat|chest pain|knee pain|back pain|surgery|pregnan|diabet|prescri|medication|'
     r"i'?m injured|i am injured|i (?:have|got) (?:an? )?injur|my injur")
 INJURY = re.compile(r'chan thuong|gay xuong|injur|fracture')
-# Preventing injuries (training load, shoes, technique) is general training guidance.
+# Phòng ngừa chấn thương (khối lượng tập, giày, kỹ thuật) là hướng dẫn tập luyện chung.
 PREVENTION = re.compile(r'phong ngua|phong tranh|\btranh\b|giam nguy co|nguy co|prevent|avoid|risk|injury.free')
 
 
@@ -24,7 +24,7 @@ def clinical_topic(query):
 
 
 def injury_prevention(query):
-    """An allowed injury question; its answer carries a see-a-professional note."""
+    """Một câu hỏi về chấn thương được phép; câu trả lời kèm lời khuyên gặp chuyên gia."""
     text = normalize_food_text(query)
     return bool(INJURY.search(text)) and not clinical_topic(query)
 

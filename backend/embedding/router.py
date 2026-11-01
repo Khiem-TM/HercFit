@@ -9,8 +9,8 @@ router=APIRouter(prefix='/knowledge',tags=['knowledge'])
 async def knowledge_search(payload: SearchRequest, session: SessionDep, user: CurrentUserDep, request: Request):
     client=getattr(request.app.state,'embedding_client',None)
     if client is None: raise HTTPException(503,'RAG_UNAVAILABLE')
-    # Authentication used this read-only session. Release its connection before
-    # the external embedding call so ordinary CRUD remains available.
+    # Bước xác thực đã dùng session chỉ đọc này. Nhả kết nối của nó trước
+    # lời gọi embedding bên ngoài để CRUD thông thường vẫn dùng được.
     await session.commit()
     try:
         return await search(session,payload,settings(),client,getattr(request.app.state,'rerank_client',None))

@@ -1,4 +1,4 @@
-"""Tool-only request wrappers around the backend's canonical schemas."""
+"""Lớp bọc request chỉ dành cho tool, quanh các schema chuẩn của backend."""
 from datetime import date
 from typing import Any
 from uuid import UUID

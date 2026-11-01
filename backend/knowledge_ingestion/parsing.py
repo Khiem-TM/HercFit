@@ -1,4 +1,4 @@
-"""Local, bounded parsing; no document-supplied URL is fetched."""
+"""Phân tích cục bộ, có giới hạn; không tải URL nào do tài liệu cung cấp."""
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -17,7 +17,7 @@ class TextHTML(HTMLParser):
         if not self.blocked: self.parts.append(data)
 
 def extract_text(path, max_bytes, max_chars=10_000_000):
-    """Text of a local file; PDF pages are separated by form feeds like the OCR text sources."""
+    """Văn bản của một file cục bộ; các trang PDF được ngăn bằng form feed như nguồn văn bản OCR."""
     path=Path(path)
     if not path.is_file(): raise ValueError('Source file not found')
     if path.stat().st_size>max_bytes: raise ValueError('Document exceeds size limit')

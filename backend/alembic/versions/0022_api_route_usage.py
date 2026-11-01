@@ -1,12 +1,12 @@
-"""Per-route API usage: request counts and latency histograms per day.
+"""Mức sử dụng API theo route: số request và histogram độ trễ theo ngày.
 
-Rows are keyed by (day, api, method, route template, client kind). The route is the
-template (/api/v2/health/logs/{kind}), never the concrete path, so no identifier or
-health value is stored. Used to decide when a superseded /api (v1) route can be
-removed (no traffic for 30 days) and to measure the API SLOs (webhook ack, context API).
+Các dòng có khoá (ngày, api, method, mẫu route, loại client). Route là
+mẫu (/api/v2/health/logs/{kind}), không bao giờ là đường dẫn cụ thể, nên không lưu định danh
+hay giá trị sức khoẻ nào. Dùng để quyết định khi nào một route /api (v1) đã bị thay thế có thể
+gỡ (không có lưu lượng trong 30 ngày) và để đo SLO của API (ack webhook, context API).
 
-latency_buckets counts requests per upper bound in core.route_metrics.BUCKETS_MS,
-with one extra overflow bucket.
+latency_buckets đếm request theo từng cận trên trong core.route_metrics.BUCKETS_MS,
+cộng thêm một bucket tràn.
 """
 from alembic import op
 

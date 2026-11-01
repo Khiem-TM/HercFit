@@ -1,12 +1,12 @@
-"""Gym logging guard: a generic "tập gym" is logged in detail or quickly, and the user chooses first.
+"""Chốt ghi buổi tập gym: một câu chung chung "tập gym" được ghi chi tiết hoặc ghi nhanh, và người dùng chọn trước.
 
-Detailed logging (exercises, sets x reps x load) feeds volume, e1RM and progress
-analytics; a quick log only needs the session's intensity to estimate calories
-(catalog record gym_general, RESISTANCE_MET in the backend). Asking before any
-catalog lookup spares a user who only wants calories a long exercise form.
+Ghi chi tiết (bài tập, sets x reps x mức tạ) nuôi khối lượng tập, e1RM và phân tích
+tiến độ; ghi nhanh chỉ cần cường độ buổi tập để ước tính calo
+(bản ghi catalog gym_general, RESISTANCE_MET trong backend). Hỏi trước mọi lần
+tra catalog giúp người chỉ cần calo khỏi phải điền form bài tập dài.
 
-The form, its labels and its values are code-owned, so the reply to it is routed by
-code on the next turn without a routing model call.
+Form, nhãn và giá trị của nó do code quản lý, nên câu trả lời cho form được code
+định tuyến ở lượt sau mà không gọi model định tuyến.
 """
 import re
 
@@ -14,7 +14,7 @@ from domains.catalog.models.foods import normalize_food_text
 
 # Accents stripped: "tập tạ", "thể hình", "phòng tập"...
 GYM = re.compile(r'\b(?:gym|tap ta|nang ta|cu ta|the hinh|phong tap|weight ?training|strength training|tap suc manh)\b')
-# Performance already given ("4x8", "3 hiệp", "10 reps"): the user is logging in detail. A bare "70kg" may be body weight.
+# Thành tích đã được nêu ("4x8", "3 hiệp", "10 reps"): người dùng đang ghi chi tiết. "70kg" đứng riêng có thể là cân nặng cơ thể.
 DETAILS = re.compile(r'\d+\s*[x×]\s*\d+|\b\d+\s*(?:hiep|set|sets|rep|reps)\b')
 DURATION = re.compile(r'\b\d+(?:[.,]\d+)?\s*(?:tieng|gio|h|phut|p|min|mins|minutes?|hours?)\b|\bnua tieng\b')
 LOG_DOMAINS = {'trainings', 'exercises'}
@@ -22,7 +22,7 @@ LOG_DOMAINS = {'trainings', 'exercises'}
 MODE_LABEL = 'Cách ghi buổi gym'
 INTENSITY_LABEL = 'Cường độ buổi gym'
 DURATION_LABEL = 'Thời lượng buổi gym'
-# Values are sent back as the user's message, so each one names its own choice.
+# Giá trị được gửi lại như tin nhắn của người dùng, nên mỗi giá trị tự gọi tên lựa chọn của nó.
 DETAILED_VALUE = 'Ghi chi tiết buổi gym: từng bài, số hiệp × reps × mức tạ'
 QUICK_VALUE = 'Ghi nhanh buổi gym theo cường độ'
 INTENSITIES = (
@@ -35,14 +35,14 @@ REPLY = ('Bạn muốn ghi buổi gym thế nào? **Nhập chi tiết từng bà
 
 
 def asks_mode(request: str, decision) -> bool:
-    """A new request to log gym training that names no sets, reps or load."""
+    """Một yêu cầu mới ghi buổi tập gym mà không nêu set, số lần hay mức tạ."""
     text = normalize_food_text(request or '')
     return (decision.intent == 'LOG_EXERCISE' and decision.action in {'tool', 'clarify'} and decision.domain in LOG_DOMAINS
             and bool(GYM.search(text)) and not DETAILS.search(text))
 
 
 def mode_form(request: str) -> dict:
-    """The choice form; intensity (and duration, when the request has none) only after "ghi nhanh"."""
+    """Form lựa chọn; cường độ (và thời lượng, khi yêu cầu chưa có) chỉ hỏi sau "ghi nhanh"."""
     quick = {'question': 'q1', 'option_ids': ['gym-quick']}
     questions = [
         {'id': 'q1', 'label': MODE_LABEL, 'question': 'Bạn muốn ghi buổi gym thế nào?', 'mode': 'single',
@@ -55,7 +55,7 @@ def mode_form(request: str) -> dict:
          'show_if': quick, 'options': [{'id': key, 'label': label, 'value': label, 'description': hint} for key, label, _, hint in INTENSITIES]},
     ]
     if not DURATION.search(normalize_food_text(request or '')):
-        # Answered as "60 phút" on the card (stepper or preset), which parse_choice reads back.
+        # Được trả lời là "60 phút" trên thẻ (bộ tăng giảm hoặc giá trị có sẵn), parse_choice đọc ngược lại.
         questions.append({'id': 'q3', 'label': DURATION_LABEL, 'question': 'Buổi gym kéo dài khoảng bao lâu?', 'mode': 'number',
                           'show_if': quick, 'options': [],
                           'number': {'unit': 'phút', 'min': 10, 'max': 300, 'step': 5, 'default': 60, 'presets': [30, 45, 60, 90]}})
@@ -68,7 +68,7 @@ def _line(request: str, label: str) -> str | None:
 
 
 def parse_choice(request: str) -> dict | None:
-    """The answer to mode_form: {'mode': 'detailed'} or {'mode': 'quick', 'intensity', 'duration'}; None otherwise."""
+    """Câu trả lời cho mode_form: {'mode': 'detailed'} hoặc {'mode': 'quick', 'intensity', 'duration'}; ngược lại là None."""
     text = normalize_food_text(request or '')
     if normalize_food_text(DETAILED_VALUE) in text:
         return {'mode': 'detailed'}

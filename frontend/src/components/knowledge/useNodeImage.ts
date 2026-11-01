@@ -2,11 +2,11 @@ import { shallowRef, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import type { MediaTarget } from './knowledgeMedia'
 
-// Moving back and forth between stars should not refetch; uploads elsewhere show up within minutes.
+// Chuyển qua lại giữa các ngôi sao không nên tải lại; ảnh tải lên ở nơi khác sẽ hiện trong vài phút.
 const cache = new Map<string, { at: number; url: string | null }>()
 const FRESH_MS = 120_000
 
-/** The cover image of a map node, read from the owner-scoped media API on demand. */
+/** Ảnh bìa của một node trên bản đồ, đọc từ media API theo chủ sở hữu khi cần. */
 export function useNodeImage(target: () => MediaTarget | null) {
   const { authFetch } = useAuth()
   const url = shallowRef<string | null>(null)
@@ -27,13 +27,13 @@ export function useNodeImage(target: () => MediaTarget | null) {
     loading.value = true
     try {
       const response = await authFetch(`/api/media/${key}/image`, { signal: controller.signal })
-      // A missing or replaced record simply has no picture to show.
+      // Bản ghi bị thiếu hoặc đã bị thay thì đơn giản là không có ảnh để hiển thị.
       const body = response.ok ? await response.json() : null
       const found = typeof body?.image_url === 'string' && body.image_url ? body.image_url : null
       cache.set(key, { at: Date.now(), url: found })
       if (!controller.signal.aborted) url.value = found
     } catch {
-      // Aborted or offline: the inspector shows the facts without a picture.
+      // Bị huỷ hoặc mất mạng: bảng chi tiết hiển thị thông tin mà không có ảnh.
     } finally {
       if (!controller.signal.aborted) loading.value = false
     }

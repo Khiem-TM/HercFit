@@ -1,4 +1,4 @@
-"""System/custom exercise catalogue with scoped writes and optimistic versions."""
+"""Danh mục bài tập hệ thống/tuỳ chỉnh với lệnh ghi có phạm vi và phiên bản lạc quan."""
 
 from __future__ import annotations
 
@@ -223,7 +223,7 @@ def _validate_exercise(_mapper: Mapper, _connection: Connection, exercise: Exerc
         raise ValueError("configuration.kind must match exercise kind")
     exercise.configuration = configuration.model_dump(mode="json")
     if exercise.kind == ExerciseKind.STRENGTH:
-        # Strength analytics group by this vocabulary; reject free-text muscles.
+        # Phân tích sức mạnh gom nhóm theo bộ từ vựng này; từ chối tên cơ tự do.
         exercise.muscle_groups = [MuscleGroup(muscle_name(group)).value for group in exercise.muscle_groups or []]
     apply_search_text(
         exercise, exercise.code, exercise.name_vi, exercise.name_en, exercise.instructions,

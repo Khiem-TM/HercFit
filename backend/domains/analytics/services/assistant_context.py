@@ -1,9 +1,9 @@
-"""Compact, deterministic snapshot of what HercFit knows about a user, for the assistant.
+"""Ảnh chụp gọn, tất định về những gì HercFit biết về người dùng, dành cho trợ lý.
 
-One request gives the assistant the facts it would otherwise ask the user for (age, body,
-goal, athlete profile, recent running and training) plus an inventory of logged data, so it
-can personalise answers and read details with tools instead of asking. Every value is
-computed here from stored records; the assistant never recomputes or invents them.
+Một request cho trợ lý các dữ kiện mà nếu không nó sẽ phải hỏi người dùng (tuổi, cơ thể,
+mục tiêu, hồ sơ vận động viên, chạy bộ và tập luyện gần đây) cộng danh mục dữ liệu đã ghi, để nó
+cá nhân hoá câu trả lời và đọc chi tiết bằng tool thay vì hỏi. Mọi giá trị đều được
+tính tại đây từ bản ghi đã lưu; trợ lý không bao giờ tính lại hay bịa ra chúng.
 """
 from datetime import date, datetime, timedelta, timezone as dt_timezone
 from typing import Any
@@ -29,7 +29,7 @@ def _float(value) -> float | None:
 
 
 async def _height(session, user_id, device_allowed: bool) -> float | None:
-    """Height is measured rarely; the latest row that has one, not the latest row."""
+    """Chiều cao hiếm khi được đo; lấy dòng mới nhất có chiều cao, không phải dòng mới nhất."""
     statement = select(BodyMetric.height_cm).where(
         BodyMetric.user_id == user_id, BodyMetric.is_active.is_(True), BodyMetric.height_cm.is_not(None))
     if not device_allowed:
@@ -66,12 +66,12 @@ def _running(summary: dict[str, Any], last_run) -> dict[str, Any]:
 
 
 async def build(session, user, *, timezone: str, agent: bool | None = None) -> dict[str, Any]:
-    """`agent` is ignored: who reads is the request principal (core.principal), checked by consent."""
+    """`agent` bị bỏ qua: ai đọc là principal của request (core.principal), được kiểm tra theo consent."""
     today = analytics.today_in(timezone)
     now = datetime.now(dt_timezone.utc)
     provider = await ports.provider_status(session, user.id)
     decision = await consent.load(session, user.id)
-    # The assistant uses device data only while the user allows it (same rule on every read path).
+    # Trợ lý chỉ dùng dữ liệu thiết bị khi người dùng cho phép (cùng luật trên mọi đường đọc).
     device_allowed = await consent.device_access(session, user.id)
     measured = await measured_resting_hr(session, user.id, today) if device_allowed else None
     athlete = analytics.profile_read(user.personal_info, measured)
@@ -129,7 +129,7 @@ async def build(session, user, *, timezone: str, agent: bool | None = None) -> d
     return context
 
 
-# Facts a coach needs; listed when absent so the assistant asks only for these.
+# Các dữ kiện huấn luyện viên cần; được liệt kê khi thiếu để trợ lý chỉ hỏi những thứ này.
 def missing(context: dict[str, Any]) -> list[str]:
     checks = {
         "age": context["profile"]["age"], "sex": context["profile"]["sex"],

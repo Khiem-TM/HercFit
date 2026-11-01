@@ -1,11 +1,11 @@
-"""Snapshot the Google Health API discovery documents into the contract package.
+"""Chụp lại tài liệu discovery của Google Health API vào package hợp đồng.
 
-    python -m scripts.snapshot_discovery            # refresh v4 and v4beta
-    python -m scripts.snapshot_discovery --check    # exit 1 if Google's revision differs
+    python -m scripts.snapshot_discovery            # làm mới v4 và v4beta
+    python -m scripts.snapshot_discovery --check    # thoát với mã 1 nếu revision của Google khác
 
-The snapshot is the machine-readable contract the adapters and the data-type
-registry are tested against (tests/test_google_health_contract.py). Refreshing
-it is a deliberate change: review the diff, then update the registry.
+Ảnh chụp là hợp đồng máy đọc được mà adapter và registry loại dữ liệu
+được test đối chiếu (tests/test_google_health_contract.py). Làm mới
+nó là một thay đổi có chủ đích: xem lại diff, rồi cập nhật registry.
 """
 import argparse
 import json

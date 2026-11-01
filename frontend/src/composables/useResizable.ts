@@ -4,12 +4,12 @@ export interface ResizeBounds { min: number; max: number }
 
 export interface ResizeOptions {
   axis: 'x' | 'y'
-  /** -1 when the pane grows as its handle moves toward the left or the top. */
+  /** -1 khi khung lớn lên lúc tay nắm di chuyển sang trái hoặc lên trên. */
   grow: 1 | -1
   bounds: () => ResizeBounds
-  /** The rendered size, used when the pane still has its natural size. */
+  /** Kích thước đã render, dùng khi khung vẫn ở kích thước tự nhiên. */
   measure: () => number
-  /** Remembers the size per browser; storage may be unavailable, so it is never relied upon. */
+  /** Nhớ kích thước theo từng trình duyệt; bộ nhớ có thể không dùng được, nên không bao giờ phụ thuộc vào nó. */
   storageKey?: string
   step?: number
 }
@@ -18,7 +18,7 @@ export function clampSize(value: number, { min, max }: ResizeBounds): number {
   return Math.round(Math.min(Math.max(value, min), Math.max(min, max)))
 }
 
-/** Pixels the handle moves for a key, along its axis; null for keys it ignores. */
+/** Số pixel tay nắm di chuyển với một phím, theo trục của nó; null với phím nó bỏ qua. */
 export function keyOffset(key: string, axis: 'x' | 'y', step: number): number | null {
   const keys = axis === 'x' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown']
   return key === keys[0] ? -step : key === keys[1] ? step : null
@@ -35,8 +35,8 @@ function restore(key?: string): number | null {
 }
 
 /**
- * A pane resized from one edge with a pointer or the keyboard (WAI-ARIA window splitter).
- * `size` stays null until the user resizes, so the pane keeps its natural CSS size.
+ * Một khung được đổi kích thước từ một mép bằng con trỏ hoặc bàn phím (WAI-ARIA window splitter).
+ * `size` giữ null cho đến khi người dùng đổi kích thước, nên khung giữ kích thước CSS tự nhiên.
  */
 export function useResizable(options: ResizeOptions) {
   const size = shallowRef<number | null>(restore(options.storageKey))
@@ -56,7 +56,7 @@ export function useResizable(options: ResizeOptions) {
     if (persist) save()
   }
 
-  /** Re-clamp after the viewport or the surrounding layout changed. */
+  /** Kẹp lại sau khi viewport hoặc bố cục xung quanh thay đổi. */
   function fit() {
     if (size.value != null) set(size.value, false)
   }
@@ -75,12 +75,12 @@ export function useResizable(options: ResizeOptions) {
     document.documentElement.classList.add(`is-resizing-${options.axis}`)
     const move = (pointer: PointerEvent) => {
       next = from + (coordinate(pointer) - origin) * options.grow
-      // One layout per frame, however fast the pointer reports.
+      // Mỗi khung hình một lần bố cục, dù con trỏ báo nhanh đến đâu.
       frame ||= requestAnimationFrame(() => { frame = 0; set(next, false) })
     }
     const end = () => {
       cleanup?.()
-      // A click without movement keeps the natural size.
+      // Một cú nhấp không di chuyển thì giữ kích thước tự nhiên.
       if (next !== from) set(next)
     }
     cleanup = () => {

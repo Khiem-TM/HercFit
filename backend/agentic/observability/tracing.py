@@ -1,4 +1,4 @@
-"""Stable runtime interface; the optional exporter is kept on developer machines."""
+"""Interface runtime ổn định; exporter tuỳ chọn được giữ trên máy nhà phát triển."""
 from importlib.util import find_spec
 
 from agentic.observability.settings import ObservabilitySettings

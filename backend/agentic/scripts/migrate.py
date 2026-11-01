@@ -1,4 +1,4 @@
-"""Run once before deployment: python -m agentic.scripts.migrate (from backend/)."""
+"""Chạy một lần trước khi triển khai: python -m agentic.scripts.migrate (từ backend/)."""
 import asyncio
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool

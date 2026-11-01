@@ -1,4 +1,4 @@
-"""Message layout shared by the router, tool agent and reply model."""
+"""Bố cục tin nhắn dùng chung cho router, tool agent và model trả lời."""
 import json
 
 from langchain_core.messages import SystemMessage

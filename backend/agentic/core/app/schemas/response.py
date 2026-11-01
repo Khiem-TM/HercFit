@@ -9,10 +9,10 @@ class ClarifyOption(BaseModel):
     id: str
     label: str = Field(max_length=120)
     description: str | None = Field(default=None, max_length=200)
-    # Only copied from catalog records returned by tools in this turn, never generated.
+    # Chỉ chép từ các bản ghi catalog mà tool trả về trong lượt này, không bao giờ do model sinh.
     image_url: str | None = None
     ref: dict[str, str] | None = None
-    # Text sent back as the user's next message when the option is chosen.
+    # Văn bản gửi lại như tin nhắn tiếp theo của người dùng khi lựa chọn được chọn.
     value: str = Field(max_length=300)
 
 class ShowIf(BaseModel):
@@ -20,8 +20,8 @@ class ShowIf(BaseModel):
     question: str
     option_ids: list[str] = Field(min_length=1)
 
-# Units a number frame may ask in, with the widest range (lowest, highest) and the default step the card offers.
-# A frame's own range must fit inside it: a typo like 700 kg cannot be picked.
+# Các đơn vị mà khung nhập số có thể hỏi, cùng khoảng rộng nhất (thấp nhất, cao nhất) và bước mặc định thẻ đưa ra.
+# Khoảng riêng của một khung phải nằm trong đó: không thể chọn một số gõ nhầm như 700 kg.
 NUMBER_UNITS: dict[str, tuple[float, float, float]] = {
     'kg': (0, 500, 0.5), 'g': (0, 5000, 5), 'ml': (0, 5000, 50), 'kcal': (0, 10000, 10),
     'phút': (1, 1440, 5), 'giờ': (0.25, 24, 0.25), 'km': (0.1, 500, 0.1), 'cm': (30, 250, 1), '%': (0, 100, 0.5),
@@ -41,9 +41,9 @@ class NumberFrame(BaseModel):
     min: float
     max: float
     step: float = Field(gt=0)
-    # Shown preselected; None asks the user to pick.
+    # Hiển thị sẵn đã chọn; None nghĩa là để người dùng tự chọn.
     default: float | None = None
-    # One-tap common values ("30 phút", "45 phút").
+    # Các giá trị thường dùng chọn bằng một chạm ("30 phút", "45 phút").
     presets: list[float] = Field(default_factory=list, max_length=6)
 
     @model_validator(mode='after')
@@ -66,13 +66,13 @@ class ClarifyQuestion(BaseModel):
     for_questions, or its own options as rows.
     """
     id: str
-    # Short topic ("Mục tiêu chính") used to label the answer in the composed reply.
+    # Chủ đề ngắn ("Mục tiêu chính") dùng làm nhãn cho câu trả lời trong tin nhắn được soạn.
     label: str = Field(max_length=60)
     question: str = Field(max_length=300)
     mode: Literal['single', 'multiple', 'quick_reply', 'number', 'sets'] = 'single'
     # Catalog picks list every record the reply showed ("những bài nào trong danh sách?").
     options: list[ClarifyOption] = Field(default_factory=list, max_length=12)
-    # Optional questions can be skipped in the wizard.
+    # Câu hỏi tuỳ chọn có thể bỏ qua trong trình hướng dẫn.
     required: bool = True
     min_select: int = Field(default=1, ge=0, le=12)
     max_select: int = Field(default=1, ge=1, le=12)
@@ -105,7 +105,7 @@ class Clarification(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def _legacy(cls, data):
-        # Checkpoints and stored confirm responses from before the form held one top-level question.
+        # Checkpoint và phản hồi xác nhận đã lưu từ trước khi form chỉ chứa một câu hỏi cấp cao nhất.
         if isinstance(data, dict) and 'questions' not in data and 'question' in data:
             question = {key: value for key, value in data.items() if key != 'intro'}
             return {'intro': data.get('intro'), 'questions': [{'id': 'q1', 'label': 'Trả lời', **question}]}
@@ -127,8 +127,8 @@ class Clarification(BaseModel):
 
     @classmethod
     def sanitize(cls, data) -> dict | None:
-        """The valid part of a form, or None: frames that fail their validation (including the free-text
-        questions of older checkpoints) are dropped with the questions that depend on them."""
+        """Phần hợp lệ của một form, hoặc None: các khung không qua kiểm tra (kể cả câu hỏi văn bản
+        tự do của checkpoint cũ) bị bỏ cùng các câu hỏi phụ thuộc vào chúng."""
         if not data:
             return None
         if isinstance(data, BaseModel):
@@ -173,7 +173,7 @@ class PendingAction(BaseModel):
     payload: dict[str, Any]
     payload_hash: str
     expires_at: datetime
-    # Server dry-run of the write (names, images, totals, metrics) for the confirmation card.
+    # Kết quả chạy thử lệnh ghi trên server (tên, ảnh, tổng, chỉ số) cho thẻ xác nhận.
     display: dict[str, Any] | None = None
 
 class ChatResponse(BaseModel):
@@ -192,5 +192,5 @@ class ChatResponse(BaseModel):
     @field_validator('clarification', mode='before')
     @classmethod
     def _valid_frames(cls, value):
-        # Stored confirm responses may hold free-text forms from before frames were enforced.
+        # Phản hồi xác nhận đã lưu có thể chứa form văn bản tự do từ trước khi bắt buộc dùng khung.
         return Clarification.sanitize(value)

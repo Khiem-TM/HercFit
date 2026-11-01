@@ -22,16 +22,16 @@ const tabs: { id: Tab; label: string; icon: typeof Orbit }[] = [
   { id: 'timeline', label: 'Dòng thời gian', icon: History },
 ]
 const hubs = Object.keys(hubTheme) as KnowledgeHub[]
-// The overview and the timeline read the recent records; the map draws only the chosen days.
+// Tổng quan và dòng thời gian đọc các bản ghi gần đây; bản đồ chỉ vẽ các ngày đã chọn.
 const { graph, loading, refresh } = useKnowledgeGraph()
 const today = localDay(new Date())
-// Until the server reports the retained history, assume its default of 90 days.
+// Cho đến khi server báo lịch sử còn lưu, giả định mặc định là 90 ngày.
 const fallbackMin = shiftDay(today, -90)
 const NO_DENSITY = {}
 const range = shallowRef<DayRange>(recentRange(fallbackMin, today))
 const { graph: atlas, loading: atlasLoading, failed: atlasFailed, refresh: refreshAtlas } = useKnowledgeGraph(() => range.value)
 const tab = ref<Tab>('overview')
-// Presentation state only; ids are stable graph keys, so open branches survive refreshes.
+// Chỉ là trạng thái trình bày; id là khoá graph ổn định, nên nhánh đang mở vẫn giữ qua các lần làm mới.
 const expanded = shallowRef<Set<string>>(new Set())
 const selectedId = ref<string>()
 const pending = shallowRef<string>()
@@ -67,7 +67,7 @@ const statusText = computed(() => {
   if (status === 'warming') return 'Đang xây dựng bản đồ'
   return 'Chưa kết nối được bản đồ'
 })
-// An empty window is not an empty history: say how to find the rest.
+// Cửa sổ rỗng không có nghĩa là lịch sử rỗng: chỉ cách tìm phần còn lại.
 const quietWindow = computed(() => atlas.value.status === 'empty' && Object.keys(atlas.value.window?.density ?? {}).length > 0)
 const skyText = computed(() => quietWindow.value ? 'Những ngày này chưa có hoạt động nào' : ({
   loading: 'Đang tìm các vì sao…', warming: 'Đang xây dựng bản đồ tri thức', unavailable: 'Chưa kết nối được bản đồ',
@@ -77,7 +77,7 @@ const skyHint = computed(() => quietWindow.value
   ? 'Kéo thanh thời gian phía trên hoặc chọn “30 ngày” để xem thêm.'
   : 'Ghi bữa ăn, số đo, buổi tập hoặc trò chuyện với trợ lý để bắt đầu.')
 
-/* ---------- Map window: one request however many triggers fire in a tick ---------- */
+/* ---------- Cửa sổ bản đồ: một request dù có bao nhiêu tác nhân kích hoạt trong một tick ---------- */
 let atlasOpened = false
 let atlasQueued = false
 let requested: DayRange | undefined
@@ -104,15 +104,15 @@ watch(range, value => {
   if (atlasOpened) requestAtlas()
 })
 watch(() => atlas.value.window, (window, previous) => {
-  // An answer for an older range may land while the newer one is being asked for.
+  // Câu trả lời cho khoảng cũ hơn có thể tới trong khi khoảng mới hơn đang được hỏi.
   if (!window || !sameRange(requested, range.value)) return
-  // A window that ended on the latest day keeps ending there after midnight.
+  // Cửa sổ kết thúc ở ngày mới nhất vẫn kết thúc ở đó sau nửa đêm.
   if (previous && range.value.end === previous.max && window.max > previous.max) {
     range.value = { start: shiftDay(range.value.start, dayDiff(previous.max, window.max)), end: window.max }
     return
   }
   const drawn = { start: window.start, end: window.end }
-  // The server clamps to the retained history; adopt that without asking again.
+  // Server kẹp vào lịch sử còn lưu; chấp nhận điều đó mà không hỏi lại.
   if (!sameRange(drawn, range.value)) {
     adopted = drawn
     range.value = drawn
@@ -125,7 +125,7 @@ function toggle(id: string) {
   expanded.value = expanded.value.has(id) ? collapse(index.value, expanded.value, id) : new Set([...expanded.value, id])
 }
 
-/** First tap opens a branch and selects it; tapping the selected open branch folds it. */
+/** Chạm lần đầu mở một nhánh và chọn nó; chạm vào nhánh đang mở và đang chọn thì thu gọn nó. */
 function activate(id: string) {
   const node = index.value.byId.get(id)
   if (!node) return
@@ -135,12 +135,12 @@ function activate(id: string) {
 }
 
 function focusLater(id: string, attempt = 0) {
-  // The map mounts after the tab transition; wait for it rather than guessing a delay.
+  // Bản đồ được gắn sau hiệu ứng chuyển tab; chờ nó thay vì đoán thời gian trễ.
   if (canvas.value) canvas.value.focus(id)
   else if (attempt < 12) setTimeout(() => focusLater(id, attempt + 1), 80)
 }
 
-/** Open every ancestor of a node on the map, select it and fly to it. */
+/** Mở mọi node tổ tiên của một node trên bản đồ, chọn nó và bay tới nó. */
 function show(id: string) {
   const node = index.value.byId.get(id)
   if (!node) return
@@ -152,7 +152,7 @@ function show(id: string) {
 }
 
 const DATED = new Set(['BodyMetric', 'Meal', 'MealItem', 'Training', 'TrainingItem', 'Run'])
-/** The local day a record happened, for records the map draws by day only. */
+/** Ngày địa phương bản ghi xảy ra, cho các bản ghi mà bản đồ chỉ vẽ theo ngày. */
 function dayOf(id: string): string | undefined {
   const lookup = (key: string) => recentIndex.value.byId.get(key) ?? index.value.byId.get(key)
   let node = lookup(id)
@@ -165,7 +165,7 @@ function dayOf(id: string): string | undefined {
   return node?.at ? localDay(node.at) : undefined
 }
 
-/** The record itself when the map draws it, otherwise its closest drawn ancestor. */
+/** Chính bản ghi khi bản đồ vẽ nó, nếu không thì tổ tiên gần nhất được vẽ. */
 function nearest(id: string): string | undefined {
   let current: string | null | undefined = id
   while (current && !index.value.byId.has(current)) current = recentIndex.value.byId.get(current)?.parent
@@ -179,7 +179,7 @@ function settle() {
   if (target) show(target)
 }
 
-/** Reveal a record chosen in the overview or the timeline, moving the window to its day if needed. */
+/** Hiển thị một bản ghi được chọn từ tổng quan hoặc dòng thời gian, dời cửa sổ tới ngày của nó nếu cần. */
 function reveal(id: string) {
   tab.value = 'map'
   const day = dayOf(id)
@@ -206,7 +206,7 @@ watch(index, current => {
   if (kept.length !== expanded.value.size) expanded.value = new Set(kept)
 })
 
-/* ---------- Resizing: the panel from its left edge, the details from their top edge ---------- */
+/* ---------- Đổi kích thước: bảng từ mép trái, khung chi tiết từ mép trên ---------- */
 const panel = useTemplateRef<HTMLElement>('panel')
 const mapView = useTemplateRef<HTMLElement>('mapView')
 const toolbar = useTemplateRef<HTMLElement>('toolbar')
@@ -218,7 +218,7 @@ const width = reactive(useResizable({
   bounds: () => {
     const screen = window.innerWidth
     if (screen <= 1000) return { min: Math.min(360, screen), max: screen }
-    // Docked beside the chat, which keeps enough room for a readable conversation.
+    // Gắn bên cạnh khung chat, khung chat vẫn giữ đủ chỗ để đọc hội thoại.
     const main = panel.value?.parentElement?.querySelector<HTMLElement>(':scope > main')
     const shared = (main?.offsetWidth ?? 0) + (panel.value?.offsetWidth ?? 0)
     return { min: 380, max: Math.max(380, (shared || screen) - 400) }
@@ -235,7 +235,7 @@ const naturalWidth = computed(() => Math.round(Math.min(860, viewport.value <= 1
 const panelStyle = computed(() => (resizable.value && width.size ? { width: `${width.size}px` } : undefined))
 const dockStyle = computed(() => (dock.size == null ? undefined : { height: `${dock.size}px`, maxHeight: 'none' }))
 const mapHeight = shallowRef(0)
-// Tall details read like a page: every child, larger type and a bigger picture.
+// Khung chi tiết cao đọc như một trang: mọi node con, chữ lớn hơn và ảnh to hơn.
 const roomy = computed(() => (dock.size ?? 0) >= 300)
 const tall = computed(() => dock.size != null && dock.size > mapHeight.value * .5)
 
@@ -251,13 +251,13 @@ watch(mapView, element => {
 })
 
 function settleDock() {
-  // Keep the chosen star in view above the details once the height animation ends.
+  // Giữ ngôi sao đã chọn trong tầm nhìn phía trên khung chi tiết khi hiệu ứng chiều cao kết thúc.
   setTimeout(() => { if (selectedId.value) canvas.value?.focus(selectedId.value) }, 360)
 }
 
 async function expandDock() {
   if (dock.size == null) {
-    // Heights animate between lengths only, so start from the natural height.
+    // Chiều cao chỉ chuyển động giữa các độ dài cụ thể, nên bắt đầu từ chiều cao tự nhiên.
     dock.set(dockElement.value?.offsetHeight ?? 200, false)
     await nextTick()
     await new Promise(requestAnimationFrame)
@@ -282,7 +282,7 @@ function schedule(...delays: number[]) {
   timers.forEach(clearTimeout)
   timers = delays.map(delay => setTimeout(() => { if (!props.busy) refreshAll() }, delay))
 }
-// A finished turn reaches the graph within seconds; the derived profile follows it.
+// Một lượt đã xong tới graph trong vài giây; hồ sơ suy ra đến sau đó.
 watch(() => props.busy, (busy, was) => { if (was && !busy) schedule(1500, 5000) })
 watch(() => props.revision, () => { if (!props.busy) schedule(900) })
 
@@ -293,7 +293,7 @@ onMounted(() => {
   window.addEventListener('keydown', keydown)
   window.addEventListener('resize', onResize)
   width.fit()
-  // The chat shrinks when its own sidebar opens; keep the panel from crowding it out.
+  // Khung chat co lại khi thanh bên của nó mở; giữ cho bảng không chèn ép nó.
   const main = panel.value?.parentElement?.querySelector<HTMLElement>(':scope > main')
   if (main) {
     chatObserver = new ResizeObserver(() => { if (!width.dragging) width.fit() })
@@ -436,7 +436,7 @@ onUnmounted(() => {
 .legend button:hover:not(:disabled), .legend button.open { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); color: light-dark(#302919, #efe6d2); }
 .legend button:disabled { opacity: .35; }
 .map-area { position: relative; flex: 1; min-height: 120px; border-block: 1px solid light-dark(#18181809, #ffffff09); color-scheme: dark; }
-/* The star map is a night sky in both themes: light-dark() colours inside it resolve to their dark values. */
+/* Bản đồ sao là bầu trời đêm ở cả hai theme: các màu light-dark() bên trong lấy giá trị tối. */
 .map-controls { position: absolute; right: 16px; bottom: 16px; display: flex; background: light-dark(#faf9f6e8, #13151be8); border: 1px solid light-dark(#18181815, #ffffff15); border-radius: 24px; overflow: hidden; backdrop-filter: blur(12px); box-shadow: 0 6px 24px light-dark(#0000001a, #0003); }
 .map-controls button { padding: 10px; color: light-dark(#4e493a, #c1bba9); transition: color 220ms, background 220ms; }
 .map-controls button:hover { color: light-dark(#88754c, #f0dfba); background: light-dark(#87671a12, #d4b77d12); }
@@ -462,7 +462,7 @@ footer { display: flex; justify-content: space-between; padding: 12px var(--gutt
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 @keyframes observatory-arrive { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
-/* The panel's own width, not the screen's, decides how its content is arranged. */
+/* Chính độ rộng của bảng, không phải của màn hình, quyết định cách sắp xếp nội dung. */
 @container observatory (max-width: 480px) {
   .subtitle { display: none; }
   .tabs button { gap: 4px; font-size: 10px; padding: 8px 3px; }

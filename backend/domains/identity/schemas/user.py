@@ -10,7 +10,7 @@ Email = Annotated[EmailStr, Field(max_length=255)]
 URL = Annotated[HttpUrl, PlainSerializer(str, return_type=str)]
 Age = Annotated[int, Field(strict=True, ge=1, le=120)]
 Nickname = Annotated[str, Field(max_length=100)]
-# Biological sex is optional and used only by energy equations (Mifflin-St Jeor).
+# Giới tính sinh học là tuỳ chọn và chỉ dùng cho phương trình năng lượng (Mifflin-St Jeor).
 Sex = Literal["MALE", "FEMALE"]
 
 
@@ -41,7 +41,7 @@ class OnboardingInput(UserUpdate):
 
 
 class GoogleProfile(InputSchema):
-    # OAuth providers may add claims that the application does not consume.
+    # Nhà cung cấp OAuth có thể thêm claim mà ứng dụng không dùng.
     model_config = ConfigDict(extra="ignore")
     email: Email
     name: Name | None = None

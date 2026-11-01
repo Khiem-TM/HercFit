@@ -1,8 +1,8 @@
-"""Bounded retrieval with fixed Cypher and no model or driver retries.
+"""Truy hồi có giới hạn với Cypher cố định, không thử lại ở model hay driver.
 
-The agent reads a knowledge card: derived user-model sections chosen for the
-request's domains first, then the most relevant recent records, then recent
-conversation turns, all rendered as compact lines within a byte budget.
+Agent đọc một thẻ tri thức: các mục model người dùng suy ra, chọn theo miền
+của yêu cầu trước, rồi các bản ghi gần đây liên quan nhất, rồi các lượt hội thoại
+gần đây, tất cả dựng thành dòng gọn trong một ngân sách byte.
 """
 from agentic.observability import observed, annotate
 import asyncio
@@ -22,9 +22,9 @@ from .models import GraphContext
 
 log = logging.getLogger(__name__)
 LOCAL = ZoneInfo('Asia/Ho_Chi_Minh')
-# Routing domains with personal knowledge: fact kinds and user-model sections, by relevance.
-# activity, sleep and recovery are retrieval-only domains found in the message; the
-# router domain for device data is health.
+# Các miền định tuyến có tri thức cá nhân: loại dữ kiện và các mục của model người dùng, theo mức liên quan.
+# activity, sleep và recovery là các miền chỉ dùng cho truy hồi, tìm thấy trong tin nhắn; miền
+# router cho dữ liệu thiết bị là health.
 KINDS = {'meals': ['Meal'], 'foods': ['Food', 'Meal'], 'metrics': ['BodyMetric'], 'goals': ['Goal'],
          'progress': ['Goal', 'BodyMetric', 'Meal'], 'trainings': ['Training'], 'coaching': ['Training'],
          'training_plans': ['Training'], 'profile': [], 'conversation': [],
@@ -43,7 +43,7 @@ SECTIONS = {
 }
 DEVICE_KINDS = ('DailyHealth', 'SleepSession', 'DeviceWorkout')
 PILOT_DOMAINS = set(KINDS)
-# Turns are journaled with the router domain of their first decision.
+# Các lượt được ghi nhật ký với miền router của quyết định đầu tiên.
 EPISODE_DOMAINS = {'meals': ['meals', 'foods'], 'foods': ['meals', 'foods'], 'coaching': ['coaching', 'trainings'],
                    'trainings': ['trainings', 'coaching'], 'progress': ['progress', 'meals', 'metrics', 'goals'],
                    'activity': ['health'], 'sleep': ['health'], 'recovery': ['health', 'coaching']}
@@ -57,7 +57,7 @@ DOMAIN_PATTERNS = (
     ('training_plans', r'ke hoach tap|lich tap|giao an|chuong trinh tap|training plan'),
     ('trainings', r'buoi tap|bai tap|tai tap|tap luyen|\btap\b|\bchay\b|\bkm\b|training|workout|\bgym\b|day nguc|squat|deadlift|e1rm|ky luc'
                   r'|\bpace\b|\b(?:3|5|10|15|21|42)\s?k\b|marathon|cu ly|\brun(?:ning)?\b|\bjog|tempo|interval|\b1rm\b|\bvo2'),
-    # "giảm bao nhiêu kg" names no body word: a change verb near "kg" is a weight question.
+    # "giảm bao nhiêu kg" không có từ nào về cơ thể: một động từ chỉ thay đổi gần "kg" là câu hỏi về cân nặng.
     ('metrics', r'can nang|\bcan\b|so do|chieu cao|\bweight\b|(?:giam|tang|xuong|len|mat|them)\b.{0,25}\bkg\b'
                 r'|\bkg\b.{0,25}(?:so voi|truoc)|giam mo|ty le mo|body ?fat|vong eo|beo phi'),
     ('goals', r'muc tieu|\bgoals?\b'),
@@ -68,8 +68,8 @@ DOMAIN_PATTERNS = (
 STOPWORDS = {'toi', 'cua', 'ban', 'nay', 'qua', 'hom', 'kia', 'gan', 'nhat', 'bao', 'nhieu', 'khong', 'duoc',
              'voi', 'cho', 'xem', 'lan', 'nhung', 'the', 'nao', 'con', 'dang', 'sau', 'truoc', 'tuan', 'thang',
              'ngay', 'mot', 'cac', 'hay', 'giup', 'minh', 'trong', 'phu', 'hop'}
-# Timed-out reads keep running to preserve pooled connections; past this many a
-# slow graph is skipped instead of piling more queries onto the driver pool.
+# Lần đọc bị timeout vẫn chạy tiếp để giữ kết nối trong pool; quá số lượng này thì
+# graph chậm bị bỏ qua thay vì dồn thêm truy vấn vào pool của driver.
 MAX_PENDING_READS = 4
 STATUS = {'completed': 'hoàn tất', 'needs_input': 'chờ bổ sung', 'pending_confirmation': 'chờ xác nhận', 'failed': 'lỗi'}
 
@@ -80,7 +80,7 @@ def normalize(text):
 
 
 def domains_for(message):
-    """Every graph domain a message mentions; only a retrieval hint, never routing."""
+    """Mọi miền graph mà tin nhắn nhắc tới; chỉ là gợi ý truy hồi, không bao giờ dùng để định tuyến."""
     text = normalize(message)
     return [domain for domain, pattern in DOMAIN_PATTERNS if re.search(pattern, text)]
 
@@ -91,13 +91,13 @@ def domain_for(message):
 
 
 def sections_for(domains):
-    # Round-robin keeps each domain's most relevant section ahead of budget trimming.
+    # Xoay vòng để mục liên quan nhất của mỗi miền đứng trước khi cắt theo ngân sách.
     ranked = (section for group in zip_longest(*(SECTIONS.get(domain, []) for domain in domains)) for section in group if section)
     return list(dict.fromkeys(ranked))
 
 
-# No generated Cypher, variable-length paths, or unscoped traversals. All facts
-# have an allowlisted JSON projection, including historical meal-item snapshots.
+# Không sinh Cypher, không đường đi độ dài thay đổi, không duyệt ngoài phạm vi. Mọi dữ kiện
+# đều có phép chiếu JSON trong danh sách cho phép, kể cả ảnh chụp món ăn trong lịch sử.
 RETRIEVE = """
 MATCH (state:KGState {key:'main'})
 WHERE state.ready = true
@@ -153,7 +153,7 @@ class GraphContextService:
     def _settle(self, query):
         self._background.discard(query)
         if not query.cancelled():
-            query.exception()  # retrieved: late failures are already degraded to 'timeout'
+            query.exception()  # đã truy hồi: lỗi đến muộn đã được hạ thành 'timeout'
 
     async def close(self):
         for query in list(self._background):
@@ -162,10 +162,10 @@ class GraphContextService:
             await self.driver.close()
 
     async def warm_up(self, attempts=40, delay=3.0):
-        """Plan and run each domain query a few times at startup: cold reads (~0.15-0.9 s) exceed the cap.
+        """Lập kế hoạch và chạy mỗi truy vấn miền vài lần lúc khởi động: lần đọc nguội (~0,15-0,9 s) vượt mức trần.
 
-        Neo4j is not a startup dependency of the agent and may answer later, so an unreachable
-        graph is retried in the background (about two minutes) instead of staying cold."""
+        Neo4j không phải phụ thuộc khởi động của agent và có thể trả lời muộn, nên graph không
+        truy cập được sẽ được thử lại ở nền (khoảng hai phút) thay vì để nguội."""
         for attempt in range(attempts):
             try:
                 for _ in range(3):
@@ -196,11 +196,11 @@ class GraphContextService:
             deadline = min(float(value(self.settings, 'KG_RETRIEVAL_TIMEOUT_MS', 150)), 150) / 1000
             result = await asyncio.wait_for(asyncio.shield(query), deadline)
         except TimeoutError:
-            # Stop waiting but let the read finish: cancelling mid-stream discards the
-            # pooled connection, and reconnecting alone then exceeds the next deadline.
+            # Ngừng chờ nhưng để lần đọc chạy xong: huỷ giữa chừng sẽ bỏ kết nối
+            # trong pool, và riêng việc kết nối lại đã vượt hạn chót tiếp theo.
             result = GraphContext(status='timeout')
         except Exception as exc:
-            # Do not log user IDs, prompts, credentials, or driver exception text.
+            # Không ghi log ID người dùng, prompt, thông tin xác thực hay nội dung exception của driver.
             log.warning('kg_retrieval_failed error_type=%s', type(exc).__name__)
             result = GraphContext(status='unavailable')
         log.info('kg_retrieval status=%s duration_ms=%.2f facts=%d episodes=%d sections=%d',
@@ -209,8 +209,8 @@ class GraphContextService:
         return result
 
     async def _retrieve(self, owner, session_id, message, domains, limits):
-        # Absence of a live source gate disables all episodic memory. A caller
-        # must never rely on Neo4j alone to authorize deleted-session memory.
+        # Không có cổng nguồn đang sống thì tắt toàn bộ bộ nhớ theo sự kiện. Bên gọi
+        # không bao giờ được chỉ dựa vào Neo4j để cấp quyền cho bộ nhớ của phiên đã xoá.
         gate = await self.store.kg_retrieval_gate(owner) if self.store is not None else {}
         if gate.get('blocked'):
             return GraphContext(status='blocked')
@@ -225,7 +225,7 @@ class GraphContextService:
         data['episodes'] = [json.loads(item) for item in data['episodes'] if item]
         result = GraphContext(**data, model=model, domains=domains, sections=sections_for(domains))
         if model and {'profile', 'activity'} & set(result.sections):
-            # Declared versus measured disagreements, e.g. activity level against device steps.
+            # Chênh lệch giữa khai báo và đo lường, ví dụ mức vận động so với số bước của thiết bị.
             result.conflicts.extend((model.get('conflicts') or [])[:2])
         result.status = 'ok' if render_lines(result) else 'empty'
         for fact in result.facts:
@@ -250,7 +250,7 @@ class GraphContextService:
             business_cutoff=(now - timedelta(days=value(self.settings, 'KG_BUSINESS_RETENTION_DAYS', 90))).isoformat(),
             memory_cutoff=(now - timedelta(days=value(self.settings, 'KG_MEMORY_RETENTION_DAYS', 30))).isoformat(),
         )
-        # session.run is an implicit transaction: it does not auto-retry reads.
+        # session.run là transaction ngầm: nó không tự thử lại lệnh đọc.
         async with self.driver.session(database=value(self.settings, 'NEO4J_DATABASE', 'neo4j')) as session:
             return await (await session.run(RETRIEVE, **params)).single()
 
@@ -296,7 +296,7 @@ def _exercise(item):
 
 
 def fact_line(fact):
-    """One readable line per fact: IDs, versions and raw snapshots stay out of prompts."""
+    """Mỗi dữ kiện một dòng dễ đọc: ID, phiên bản và ảnh chụp thô không vào prompt."""
     data, kind = fact.get('data') or {}, fact.get('kind')
     if kind == 'Meal':
         return _join('Bữa ăn', _local(data.get('consumed_at')), data.get('name'),
@@ -342,7 +342,7 @@ def fact_line(fact):
 def render_lines(context):
     data = context.model_dump() if isinstance(context, GraphContext) else context
     sections = section_lines(data.get('model'), data.get('sections') or [], data.get('intents') or [])
-    # The goal section already states the active goal with its progress.
+    # Mục mục tiêu đã nêu mục tiêu đang hoạt động cùng tiến độ của nó.
     covered = {'Goal'} if any(line.startswith('Mục tiêu:') for line in sections) else set()
     facts = [fact_line(fact) for fact in data.get('facts', []) if fact.get('kind') not in covered]
     episodes = [fact_line(fact) for fact in data.get('episodes', [])]
@@ -351,9 +351,9 @@ def render_lines(context):
 
 
 def bounded_context(context, token_budget):
-    # UTF-8 bytes of the rendered prompt lines are a conservative token upper
-    # bound, including Vietnamese. Whole lines only: derived sections are kept
-    # longest, then concrete records, then conversation turns.
+    # Số byte UTF-8 của các dòng prompt đã dựng là cận trên token an toàn,
+    # kể cả tiếng Việt. Chỉ lấy nguyên dòng: các mục suy ra được giữ
+    # lâu nhất, rồi đến bản ghi cụ thể, rồi các lượt hội thoại.
     maximum = max(256, token_budget)
     def size():
         return len('\n'.join(render_lines(context)).encode('utf-8'))

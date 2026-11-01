@@ -1,17 +1,17 @@
-"""Assistant context API: precomputed, sourced numbers within a token budget.
+"""Context API của trợ lý: các con số tính sẵn, có nguồn, trong một ngân sách token.
 
-Each item is {key, label, value, unit, source, measured_at, freshness_s, coverage,
-method, algorithm_version, evidence}. The assistant reads these numbers; it never
-recomputes totals, baselines or metrics from thousands of samples.
+Mỗi mục là {key, label, value, unit, source, measured_at, freshness_s, coverage,
+method, algorithm_version, evidence}. Trợ lý đọc các con số này; nó không bao giờ
+tính lại tổng, đường nền hay chỉ số từ hàng nghìn mẫu.
 
-Rules that hold on every topic:
-* device-measured items require the reader's `device` consent; sensitive items
-  (glucose, ECG/IRN classifications, symptom/mood/reproductive logs) require the
-  separate `sensitive` consent; checked live for every build.
-* ECG waveforms, GPS routes and tokens are never part of a context.
-* missing data stays explicit (coverage state), never a zero or a guess.
-* snapshots are stored per (topic, period) with the consent version they were
-  built under; a consent change deletes them and a different version never serves.
+Các luật áp dụng cho mọi chủ đề:
+* mục đo bởi thiết bị cần consent `device` của bên đọc; mục nhạy cảm
+  (đường huyết, phân loại ECG/IRN, nhật ký triệu chứng/tâm trạng/sinh sản) cần
+  consent `sensitive` riêng; kiểm tra trực tiếp ở mỗi lần dựng.
+* dạng sóng ECG, lộ trình GPS và token không bao giờ thuộc một ngữ cảnh.
+* dữ liệu thiếu được nêu rõ (trạng thái độ phủ), không bao giờ là số 0 hay phỏng đoán.
+* ảnh chụp được lưu theo (chủ đề, khoảng thời gian) cùng phiên bản consent lúc
+  dựng; thay đổi consent sẽ xoá chúng và phiên bản khác không bao giờ được phục vụ.
 """
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ METHOD_VERSION = "context-v1"
 
 
 def tokens(value: Any) -> int:
-    """Rough token count (UTF-8 JSON / 4): cheap, deterministic, slightly pessimistic for Vietnamese."""
+    """Ước lượng thô số token (JSON UTF-8 / 4): rẻ, tất định, hơi bi quan với tiếng Việt."""
     return len(json.dumps(value, ensure_ascii=False, default=str).encode()) // 4 + 1
 
 
@@ -166,7 +166,7 @@ async def build(session, user, *, topic: str, period: str, zone: str, now: datet
                 SELECT source, round(sum(amount_ml)) AS ml, count(*) AS n FROM hydration_logs
                 WHERE user_id = :u AND is_active AND local_date >= :start GROUP BY source"""),
                 {"u": user.id, "start": start})).mappings().all()
-            for row in water:  # per source: never summed across sources
+            for row in water:  # theo từng nguồn: không bao giờ cộng gộp giữa các nguồn
                 items.append(item(f"hydration.{row['source'].lower()}", "Nước uống ghi nhận", float(row["ml"]), "ml",
                                   source=row["source"], measured_at=end, method=f"sum of {row['n']} logs in {days}d",
                                   now=now))
@@ -228,7 +228,7 @@ async def build(session, user, *, topic: str, period: str, zone: str, now: datet
 
 
 def fit(context: dict[str, Any], budget: int) -> dict[str, Any]:
-    """Keep items in priority order until the budget is spent; report what was cut."""
+    """Giữ các mục theo thứ tự ưu tiên cho đến khi hết ngân sách; báo lại phần bị cắt."""
     kept, used = [], tokens({k: v for k, v in context.items() if k != "items"})
     for entry in context["items"]:
         cost = tokens(entry)
@@ -242,7 +242,7 @@ def fit(context: dict[str, Any], budget: int) -> dict[str, Any]:
 
 async def get(session, user, *, topic: str = "overview", period: str = "28d", budget: int = BASE_BUDGET,
               zone: str = "Asia/Ho_Chi_Minh") -> dict[str, Any]:
-    """Serve a fresh snapshot built under the current consent version, else rebuild and store it."""
+    """Phục vụ ảnh chụp mới dựng theo phiên bản consent hiện tại, nếu không thì dựng lại và lưu."""
     decision = await consent.load(session, user.id)
     device = await consent.device_access(session, user.id)
     scope = "device" if device else "own"

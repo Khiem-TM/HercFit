@@ -1,10 +1,10 @@
-"""v1 routes that have a complete v2 successor, keyed by route template.
+"""Các route v1 đã có bản kế nhiệm v2 đầy đủ, khoá theo mẫu route.
 
-Responses on these routes carry `Deprecation: true` and a `Link: <successor>;
-rel="successor-version"` header (core.route_metrics). A route is removed only after
-`python -m workers metrics` reports it with no traffic for 30 days. Routes without a
-complete successor (daily summaries, overview, health profile, the v1 assistant card)
-are not listed and stay supported.
+Phản hồi trên các route này có `Deprecation: true` và header `Link: <successor>;
+rel="successor-version"` (core.route_metrics). Một route chỉ bị gỡ sau khi
+`python -m workers metrics` báo nó không có lưu lượng trong 30 ngày. Route chưa có
+bản kế nhiệm đầy đủ (tổng hợp ngày, overview, hồ sơ sức khoẻ, thẻ trợ lý v1)
+không được liệt kê và vẫn được hỗ trợ.
 """
 
 SUPERSEDED_V1: dict[str, str] = {

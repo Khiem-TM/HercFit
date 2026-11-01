@@ -1,13 +1,13 @@
-"""Read-only, owner-scoped personal knowledge map for the UI.
+"""Bản đồ tri thức cá nhân chỉ đọc, theo chủ sở hữu, dành cho UI.
 
-The payload mirrors how a coach organizes what they know: a profile, a few
-derived insights, and a disclosure tree (Bạn → hubs → records → details) that
-the client reveals one click at a time, plus conversation intents and a
-timeline. Every record comes from the projection; nothing here is model text.
+Payload phản chiếu cách một huấn luyện viên sắp xếp những gì họ biết: một hồ sơ, vài
+insight suy ra, và một cây mở dần (Bạn → hub → bản ghi → chi tiết) mà
+client mở ra từng cú nhấp, cộng các ý định hội thoại và một
+dòng thời gian. Mọi bản ghi đều đến từ phép chiếu; không gì ở đây là văn bản của model.
 
-With a local-day window the map shows only the records of those days, at most
-WINDOW_PER_KIND of each kind, with totals and per-day activity so the client can
-draw a time scrubber and say what was left out.
+Với một cửa sổ ngày địa phương, bản đồ chỉ hiển thị các bản ghi của những ngày đó, tối đa
+WINDOW_PER_KIND mỗi loại, kèm tổng và hoạt động theo ngày để client
+vẽ thanh trượt thời gian và nói rõ phần nào bị lược bỏ.
 """
 import asyncio
 import json
@@ -67,7 +67,7 @@ RETURN s.projection_lag_ms AS lag_ms, records, totals, runs, habits, moments,
 """
 DEFAULT_PER_KIND = 14
 WINDOW_PER_KIND = 40
-# Device data hangs under the body hub, so the client needs no new hub.
+# Dữ liệu thiết bị treo dưới hub cơ thể, nên client không cần hub mới.
 WINDOW_KINDS = {'BodyMetric': 'body', 'Meal': 'nutrition', 'Training': 'training', 'Run': 'conversation',
                 'DailyHealth': 'body', 'SleepSession': 'body', 'DeviceWorkout': 'body'}
 HUBS = {'goal': 'Mục tiêu', 'body': 'Cơ thể', 'nutrition': 'Dinh dưỡng', 'training': 'Tập luyện', 'conversation': 'Hội thoại'}
@@ -233,7 +233,7 @@ def _body(builder, records):
 
 
 def _device(builder, days, sleeps, workouts):
-    """Device data the user shared: day rollups, sleep sessions and recorded workouts."""
+    """Dữ liệu thiết bị người dùng đã chia sẻ: tổng hợp ngày, phiên ngủ và buổi vận động đã ghi."""
     groups = (('grp:days', 'Vận động theo ngày', days), ('grp:sleep', 'Giấc ngủ', sleeps), ('grp:workouts', 'Buổi vận động (thiết bị)', workouts))
     for group, title, records in groups:
         if records:
@@ -384,7 +384,7 @@ def _conversation(builder, runs):
 
 
 def window_bounds(settings, now, start=None, end=None):
-    """Clamp an inclusive local-day window to the retained history and turn it into UTC bounds."""
+    """Kẹp cửa sổ ngày địa phương (tính cả hai đầu) vào lịch sử còn lưu và chuyển thành mốc UTC."""
     retained = now - timedelta(days=value(settings, 'KG_BUSINESS_RETENTION_DAYS', 90))
     remembered = now - timedelta(days=value(settings, 'KG_MEMORY_RETENTION_DAYS', 30))
     floor, today = retained.astimezone(LOCAL).date(), now.astimezone(LOCAL).date()
@@ -397,7 +397,7 @@ def window_bounds(settings, now, start=None, end=None):
 
 
 def density(moments):
-    """Activity per local day and hub; days without activity are left out."""
+    """Hoạt động theo ngày địa phương và hub; ngày không có hoạt động bị bỏ ra."""
     days = {}
     for kind, at in moments:
         moment, hub = parse_time(at), WINDOW_KINDS.get(kind)
@@ -453,7 +453,7 @@ def build_map(model, records, runs, habits):
         node['children'] = sum(1 for edge in builder.edges if edge['kind'] == 'tree' and edge['source'] == node['id'])
     insights = _insights(model, intents)
     by_hub = {}
-    for item in insights:  # the first insight of a hub (weight for body) summarizes it
+    for item in insights:  # insight đầu tiên của một hub (cân nặng với cơ thể) tóm tắt hub đó
         by_hub.setdefault(item['hub'], item)
     for hub, item in by_hub.items():
         summary = {'goal': item.get('detail'), 'body': item.get('value'), 'nutrition': f"TB {item.get('value')}/ngày",

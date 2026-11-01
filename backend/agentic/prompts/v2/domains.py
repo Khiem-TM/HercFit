@@ -1,4 +1,4 @@
-"""Version 2: Google Health device data guidance; coaching adds the missing parent-plan flow."""
+"""Phiên bản 2: hướng dẫn dữ liệu thiết bị Google Health; phần huấn luyện thêm luồng kế hoạch cha còn thiếu."""
 
 from agentic.prompts.v1.domains import COACH_GUIDANCE as _COACH_V1
 
@@ -15,8 +15,8 @@ HEALTH_GUIDANCE = '''Dữ liệu sức khoẻ từ thiết bị (Google Health):
   hướng dẫn vào Cài đặt → Kết nối. Không tự kết nối hay đồng bộ thay người dùng.
 '''
 
-# v1 stopped at a 404 from current_plan and reported it as a system error: users without a
-# parent plan could never save a schedule.
+# v1 dừng ở lỗi 404 từ current_plan và báo nó là lỗi hệ thống: người dùng chưa có
+# kế hoạch cha không bao giờ lưu được lịch tập.
 COACH_GUIDANCE = _COACH_V1.replace(
     '- Không chẩn đoán',
     '''- current_plan trả not_found nghĩa là chưa có kế hoạch cha, không phải lỗi hệ thống: đọc current_goal rồi

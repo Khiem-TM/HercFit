@@ -1,4 +1,4 @@
-"""Run from backend/: python -m uvicorn agentic.core.app.main:app --port 8081."""
+"""Chạy từ backend/: python -m uvicorn agentic.core.app.main:app --port 8081."""
 from contextlib import AsyncExitStack, asynccontextmanager
 import asyncio
 from fastapi import FastAPI
@@ -21,10 +21,10 @@ from agentic.observability.middleware import ObservabilityMiddleware
 
 def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=None, jev_client=None,
                        backend_client=None, persistence_factory=None, graph_context_factory=None):
-    """Compose dependencies once per lifespan, including cleanup on partial startup.
+    """Dựng các phụ thuộc một lần cho mỗi vòng đời ứng dụng, có dọn dẹp khi khởi động dở dang.
 
-    Injected clients follow the existing ownership contract: the app closes them.
-    Factories make local tests possible without starting PostgreSQL or Neo4j.
+    Client được tiêm vào tuân theo hợp đồng sở hữu hiện có: app sẽ đóng chúng.
+    Factory giúp chạy test cục bộ mà không cần khởi động PostgreSQL hay Neo4j.
     """
     @asynccontextmanager
     async def lifespan(app):
@@ -48,14 +48,14 @@ def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=No
             agent_models = models if models is not None else Models(settings)
             memory = None
             if getattr(settings, 'SESSION_MEMORY_MODE', 'off') != 'off':
-                # Optional Redis failure falls back to authoritative checkpoints.
+                # Lỗi Redis (tuỳ chọn) quay về dùng checkpoint có thẩm quyền.
                 from agentic.services.memory.session_memory import SessionMemory
                 memory = SessionMemory.connect(settings, agent_models)
                 resources.push_async_callback(memory.close)
                 await memory.health()
             store, saver = await resources.enter_async_context((persistence_factory or persistence)(settings))
             app.state.backend = backend
-            # The graph is always composed; only an offline evaluation baseline injects a factory returning None.
+            # Graph luôn được dựng; chỉ baseline đánh giá offline mới tiêm một factory trả về None.
             graph_context = (graph_context_factory or GraphContextService)(settings, store)
             if graph_context is not None:
                 resources.push_async_callback(graph_context.close)
@@ -95,7 +95,7 @@ def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=No
             result={'status':'ready','observability':observer().status()}
             memory=getattr(app.state.runtime,'memory',None)
             if memory is not None:
-                # Reported, never required: chat works without Redis.
+                # Chỉ báo cáo, không bắt buộc: chat vẫn hoạt động khi không có Redis.
                 result['session_memory']=await memory.health()
             return result
         except Exception:

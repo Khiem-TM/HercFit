@@ -1,4 +1,4 @@
-"""Response helpers shared by versioned aggregate endpoints."""
+"""Hàm hỗ trợ response dùng chung cho các endpoint aggregate có phiên bản."""
 
 from fastapi import Response
 from fastapi.responses import JSONResponse
@@ -10,5 +10,5 @@ def created(response: Response, resource: str, entity):
 
 
 def current_or_not_found(entity, name: str):
-    # A returned response allows @transaction to commit expiry before sending 404.
+    # Trả về một response cho phép @transaction commit việc hết hạn trước khi gửi 404.
     return entity if entity is not None else JSONResponse(status_code=404, content={"detail": f"{name} not found"})

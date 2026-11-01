@@ -1,4 +1,4 @@
-"""Node-level span shim (enabled, name, run_id); native graph/model callbacks own the real node spans."""
+"""Lớp đệm span cấp node (enabled, name, run_id); callback gốc của graph/model sở hữu span node thật."""
 from contextlib import contextmanager
 from agentic.observability import annotate
 

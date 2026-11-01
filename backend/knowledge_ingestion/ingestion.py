@@ -1,4 +1,4 @@
-"""Operator-owned curation. Research results never call this module."""
+"""Việc tuyển chọn do người vận hành sở hữu. Kết quả tra cứu không bao giờ gọi module này."""
 from agentic.observability import observed, durable_context
 import hashlib
 import json
@@ -14,7 +14,7 @@ class Manifest(BaseModel):
     title: str=Field(min_length=1,max_length=500)
     filename: str
     license: str=Field(min_length=1,max_length=1000)
-    # Every chunk comes from `prepare`, which counts tokens with the real E5 tokenizer.
+    # Mỗi chunk đến từ `prepare`, bước này đếm token bằng tokenizer E5 thật.
     chunks_filename: str
     chunks_sha256: str | None = None
     content_sha256: str | None = None
@@ -59,7 +59,7 @@ async def enqueue(session, settings, manifest):
         VALUES (:id,:doc,:version,:hash,:content,CAST(:metadata AS jsonb))'''),
         {'id':revision,'doc':doc,'version':version,'hash':sha,'content':content,'metadata':json.dumps(metadata)})
     for index,chunk in enumerate(prepared_chunks):
-        # Same normalization as the query side; knowledge_document() weighs the heading and picks the language config.
+        # Cùng cách chuẩn hoá như phía truy vấn; knowledge_document() đặt trọng số cho tiêu đề và chọn cấu hình ngôn ngữ.
         await session.execute(text('''INSERT INTO knowledge_chunks(id,revision_id,position,heading,page,page_end,page_label,content,search_vector)
             VALUES (:id,:revision,:position,:heading,:page,:page_end,:page_label,:content,
             knowledge_document(:language,:normalized_heading,:normalized))'''),
@@ -74,7 +74,7 @@ async def enqueue_index(session, revision, profile):
         ON CONFLICT(revision_id,profile_id) DO NOTHING'''),{'id':uuid4(),'revision':revision,'profile':profile,'trace':json.dumps(durable_context()) if durable_context() else None})
 
 async def publish_ready(session, revision):
-    # Serialize publication and revocation for this document.
+    # Tuần tự hoá việc xuất bản và thu hồi cho tài liệu này.
     row=(await session.execute(text('''SELECT r.document_id,r.review_status,r.version FROM knowledge_revisions r
         JOIN knowledge_documents d ON d.id=r.document_id WHERE r.id=:id FOR UPDATE OF d,r'''),{'id':revision})).mappings().one()
     if row['review_status']!='APPROVED': return
@@ -102,9 +102,9 @@ async def review(session, revision, action, reviewer):
 
 async def activate(session, profile):
     await session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended('knowledge:profile',0))"))
-    # Every published document needs an approved revision, the active one or a newer replacement,
-    # indexed for the target profile; publish_ready below then promotes the replacement. This lets a
-    # re-chunked revision and a new embedding profile go live together.
+    # Mọi tài liệu đã xuất bản cần một bản sửa đổi đã duyệt, bản đang hoạt động hoặc bản thay thế mới hơn,
+    # đã được lập chỉ mục cho hồ sơ đích; publish_ready bên dưới sau đó nâng bản thay thế lên. Nhờ vậy
+    # một bản sửa đổi chia chunk lại và một hồ sơ embedding mới có thể cùng lên production.
     missing=(await session.execute(text('''SELECT count(*) FROM knowledge_documents d
         JOIN knowledge_revisions active ON active.id=d.active_revision
         WHERE NOT EXISTS(SELECT 1 FROM knowledge_revisions r JOIN knowledge_jobs j ON j.revision_id=r.id

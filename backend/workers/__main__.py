@@ -1,7 +1,7 @@
 """python -m workers run [--queues ingest,export,maint] [--concurrency 4] [--no-scheduler]
-python -m workers drain   # run ready jobs once and exit (operations, tests)
-python -m workers tick    # one scheduler tick
-python -m workers metrics # queue, lag, export and webhook metrics as JSON
+python -m workers drain   # chạy các job sẵn sàng một lần rồi thoát (vận hành, test)
+python -m workers tick    # một tick của scheduler
+python -m workers metrics # số liệu hàng đợi, độ trễ, xuất và webhook dạng JSON
 """
 import argparse
 import asyncio
@@ -14,7 +14,7 @@ from core.database import close_crud_db_pool
 
 
 async def main() -> None:
-    import integrations  # noqa: F401  (registers ORM models and provider ports)
+    import integrations  # noqa: F401  (đăng ký model ORM và port nhà cung cấp)
     from workers import runner, scheduler
     from workers.registry import HANDLERS
 

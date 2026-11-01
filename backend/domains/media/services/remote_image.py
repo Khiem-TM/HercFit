@@ -1,4 +1,4 @@
-"""Fetch a research picture for Cloudinary import without letting the server reach private networks."""
+"""Tải ảnh từ tra cứu để nhập lên Cloudinary mà không để server chạm tới mạng riêng."""
 import asyncio
 import ipaddress
 import socket
@@ -27,7 +27,7 @@ async def _public_address(host: str, port: int) -> str:
     except socket.gaierror as exc:
         raise HTTPException(422, "Không truy cập được địa chỉ ảnh") from exc
     addresses = sorted({info[4][0] for info in infos})
-    # Every resolved address must be public: a mixed answer could still reach an internal host.
+    # Mọi địa chỉ phân giải được đều phải là công khai: một câu trả lời lẫn lộn vẫn có thể tới host nội bộ.
     if not addresses or any(not ipaddress.ip_address(address.split("%")[0]).is_global for address in addresses):
         raise HTTPException(422, "Địa chỉ ảnh không hợp lệ")
     return addresses[0]
@@ -41,7 +41,7 @@ async def fetch_remote_image(url: str) -> PreparedImage:
             port = parsed.port or 443
             address = await _public_address(parsed.hostname, port)
             pinned = parsed._replace(netloc=f"[{address}]:{port}" if ":" in address else f"{address}:{port}").geturl()
-            # Connect to the vetted address (no DNS rebinding); SNI and certificate checks use the hostname.
+            # Kết nối tới địa chỉ đã kiểm tra (chống DNS rebinding); SNI và kiểm tra chứng chỉ dùng hostname.
             request = client.build_request("GET", pinned, headers={"Host": parsed.netloc},
                                            extensions={"sni_hostname": parsed.hostname})
             try:
@@ -71,6 +71,6 @@ async def fetch_remote_image(url: str) -> PreparedImage:
                 raise HTTPException(422, "Không tải được ảnh nguồn") from exc
             finally:
                 await response.aclose()
-            # Same decoding/re-encoding as user uploads: format check, EXIF strip, WebP.
+            # Cùng bước giải mã/mã hoá lại như ảnh người dùng tải lên: kiểm tra định dạng, bỏ EXIF, WebP.
             return await run_in_threadpool(prepare_image, bytes(body))
     raise HTTPException(422, "Ảnh nguồn chuyển hướng quá nhiều lần")

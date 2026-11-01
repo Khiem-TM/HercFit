@@ -1,4 +1,4 @@
-"""Bounded, durable Jev decisions; never retain the material being evaluated."""
+"""Quyết định Jev có giới hạn, bền vững; không bao giờ giữ lại tư liệu đang được đánh giá."""
 import asyncio
 import copy
 import hashlib
@@ -41,7 +41,7 @@ class PostgresJevLedger:
         run_id, session_id, user_id = state['run_id'], state['session_id'], state['user_id']
         async with self.store.pool.connection() as conn:
             async with conn.transaction():
-                # Serialize both cache checks and counters before network I/O.
+                # Tuần tự hoá cả kiểm tra cache lẫn bộ đếm trước I/O mạng.
                 await conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', ('jev:' + run_id,))
                 await conn.execute('''INSERT INTO agent_jev_runs(run_id,session_id,user_id,mode)
                     SELECT %s,%s,%s,%s FROM agent_sessions WHERE session_id=%s AND user_id=%s
@@ -79,14 +79,14 @@ class JevService:
         mode = self.settings.JEV_MODE
         if mode != 'enforce':
             return mode
-        # Pin by business run; changing percentage never selects by request/retry.
+        # Ghim theo lượt chạy nghiệp vụ; đổi phần trăm không bao giờ chọn theo request/lần thử lại.
         bucket = int(hashlib.sha256(str(state.get('run_id', '')).encode()).hexdigest(), 16) % 100
         return 'enforce' if bucket < getattr(self.settings, 'JEV_ENFORCE_PERCENT', 100) else 'shadow'
 
     @observed('jev.evaluate', 'tool', capture=('phase',), output=False)
     async def evaluate(self, state, phase, projection, questions):
         result = await self._evaluate(state, phase, projection, questions)
-        # One source for node-level measured usage; diagnostic graph state is not billing.
+        # Một nguồn duy nhất cho số liệu sử dụng đo ở cấp node; state graph chẩn đoán không phải dữ liệu tính phí.
         from agentic.observability.telemetry import record_jev_result
         record_jev_result(result)
         return result
@@ -162,19 +162,19 @@ class JevService:
         except TimeoutError:
             unknown('timeout')
         except asyncio.CancelledError:
-            # The provider may have billed this attempt even though no response
-            # reached us. Keep its reservation pending, and record unknown usage.
+            # Nhà cung cấp có thể đã tính phí lần thử này dù không có phản hồi
+            # nào đến. Giữ khoản đặt trước ở trạng thái chờ, và ghi số liệu sử dụng là chưa biết.
             from agentic.observability.telemetry import record_jev_result
             record_jev_result(unknown('cancelled'))
             raise
         except Exception:
             unknown('client_error')
-        # Cancelled requests leave a durable pending reservation to prevent reissue.
+        # Request bị huỷ để lại một khoản đặt trước chờ bền vững để ngăn phát lại.
         result['duration_ms'] = round((time.monotonic() - started) * 1000, 3)
         try:
             await self.ledger.complete(result['evaluation_id'], result)
         except Exception:
-            # Preserve a known rejection in this response/checkpoint, even if the
-            # cache write failed. The durable pending row still prevents reissue.
+            # Giữ một lần từ chối đã biết trong phản hồi/checkpoint này, kể cả khi
+            # ghi cache thất bại. Dòng chờ bền vững vẫn ngăn phát lại.
             result['reason'] = 'ledger_write_failed'
         return result

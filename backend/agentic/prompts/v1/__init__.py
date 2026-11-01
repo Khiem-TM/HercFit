@@ -1,1 +1,1 @@
-"""prompts v1 building blocks."""
+"""Các khối dựng sẵn của prompt v1."""

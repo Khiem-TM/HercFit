@@ -1,4 +1,4 @@
-"""Recover projection observations directly from committed LangGraph checkpoints."""
+"""Khôi phục quan sát của phép chiếu trực tiếp từ các checkpoint LangGraph đã commit."""
 import logging
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver

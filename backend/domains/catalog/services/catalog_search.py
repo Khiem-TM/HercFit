@@ -1,17 +1,17 @@
-"""Accent-aware ranking for catalog search (foods and exercises).
+"""Xếp hạng có phân biệt dấu cho tìm kiếm catalog (thực phẩm và bài tập).
 
-Vietnamese loses meaning without diacritics: "cá" (fish), "cà" (eggplant) and
-"ca" all normalize to the same string, and a substring match on "ca" also hits
-"canh" or "cacao". SQL narrows candidates with the accent-free normalized text
-and pg_trgm; this module orders them so the reading the user typed comes first:
+Tiếng Việt mất nghĩa khi bỏ dấu: "cá", "cà" và "ca" đều chuẩn hoá thành
+cùng một chuỗi, và khớp chuỗi con "ca" còn trúng cả
+"canh" hay "cacao". SQL thu hẹp ứng viên bằng văn bản đã chuẩn hoá không dấu
+và pg_trgm; module này sắp xếp chúng để cách đọc người dùng gõ đứng đầu:
 
-1. exact name (accented beats accent-free),
-2. name starting with the query as whole words; the head word counts on its
-   own because Vietnamese dish names lead with the head noun ("Cá basa" is fish,
-   "Cháo cá" is porridge),
-3. every query word present as a whole word,
-4. weaker signals: partial last-word prefix, substring, other names/aliases,
-   string similarity, a small boost for the user's own items.
+1. đúng tên (có dấu thắng không dấu),
+2. tên bắt đầu bằng truy vấn dưới dạng nguyên từ; từ đầu được tính riêng
+   vì tên món tiếng Việt bắt đầu bằng danh từ chính ("Cá basa" là cá,
+   "Cháo cá" là cháo),
+3. mọi từ của truy vấn có mặt dưới dạng nguyên từ,
+4. tín hiệu yếu hơn: tiền tố một phần của từ cuối, chuỗi con, tên khác/bí danh,
+   độ tương đồng chuỗi, cộng nhẹ cho món của chính người dùng.
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def _prefix_words(query: list[str], name: list[str]) -> bool:
 
 
 def _partial_prefix(query: list[str], name: list[str]) -> bool:
-    """All but the last query word match in order; the last is a prefix (typing)."""
+    """Mọi từ trừ từ cuối của truy vấn khớp theo thứ tự; từ cuối là tiền tố (đang gõ)."""
     if not query or len(name) < len(query):
         return False
     return name[:len(query) - 1] == query[:-1] and name[len(query) - 1].startswith(query[-1])
@@ -83,7 +83,7 @@ def score(query: str, name: str, others: Iterable[str] = (), *, owned: bool = Fa
             total += 8
             break
     total += 10 * SequenceMatcher(None, qn, nn).ratio()
-    total -= min(len(nn), 60) / 30  # prefer concise names when everything else ties
+    total -= min(len(nn), 60) / 30  # ưu tiên tên ngắn gọn khi mọi thứ khác bằng nhau
     if owned:
         total += 3
     return total
@@ -92,7 +92,7 @@ def score(query: str, name: str, others: Iterable[str] = (), *, owned: bool = Fa
 def rank(query: str, items: Sequence[T], *, name: Callable[[T], str],
          others: Callable[[T], Iterable[str]] = lambda _item: (),
          owned: Callable[[T], bool] = lambda _item: False) -> list[T]:
-    """Stable best-first order; ties keep the database order (similarity, id)."""
+    """Thứ tự tốt-nhất-trước ổn định; bằng điểm thì giữ thứ tự của database (độ tương đồng, id)."""
     scored = [(score(query, name(item) or "", others(item), owned=owned(item)), index, item)
               for index, item in enumerate(items)]
     scored.sort(key=lambda row: (-row[0], row[1]))
@@ -100,5 +100,5 @@ def rank(query: str, items: Sequence[T], *, name: Callable[[T], str],
 
 
 def explain(query: str, items: Sequence[Any], *, name: Callable[[Any], str]) -> list[tuple[str, float]]:
-    """Debug helper: (name, score) pairs in ranked order."""
+    """Hàm hỗ trợ gỡ lỗi: các cặp (tên, điểm) theo thứ tự xếp hạng."""
     return [(name(item), round(score(query, name(item)), 2)) for item in rank(query, items, name=name)]

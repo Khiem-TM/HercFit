@@ -1,8 +1,8 @@
-"""Clinical-grade provider records and device metadata (migration 0020).
+"""Bản ghi cấp lâm sàng của nhà cung cấp và metadata thiết bị (migration 0020).
 
-ECG and IRN keep the provider's classification and device/algorithm metadata;
-HercFit never re-interprets them. The ECG waveform stays compressed in
-PostgreSQL under retention: it never reaches the knowledge graph or a prompt.
+ECG và IRN giữ phân loại của nhà cung cấp cùng metadata thiết bị/thuật toán;
+HercFit không bao giờ diễn giải lại chúng. Dạng sóng ECG được giữ nén trong
+PostgreSQL có thời hạn lưu: nó không bao giờ đến knowledge graph hay prompt.
 """
 from __future__ import annotations
 

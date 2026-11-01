@@ -7,7 +7,7 @@ const props = defineProps<{
   sessions: SessionSummary[]
   activeSessionId: string
   isStreaming?: boolean
-  /** Icon-only rail for the collapsed sidebar: switching stays one click away. */
+  /** Dải chỉ có biểu tượng cho thanh bên đã thu gọn: chuyển cuộc trò chuyện vẫn chỉ một cú nhấp. */
   compact?: boolean
 }>()
 const emit = defineEmits<{

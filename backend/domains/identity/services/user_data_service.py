@@ -1,6 +1,6 @@
-"""Authenticated profile, measurement history and goal use cases.
+"""Các use case hồ sơ, lịch sử số đo và mục tiêu đã xác thực.
 
-Models own persistence rules; the request transaction owns commit/rollback.
+Model sở hữu luật lưu trữ; transaction của request sở hữu commit/rollback.
 """
 
 from uuid import UUID
@@ -80,7 +80,7 @@ class UserDataService(UserService):
         ), "Body metric")
 
     async def confirm_goal(self, payload: GoalCreate) -> Goal:
-        # A confirmed goal enters IN_PROGRESS; drafts remain on the client.
+        # Mục tiêu đã xác nhận chuyển sang IN_PROGRESS; bản nháp vẫn ở phía client.
         return await Goal.create_for_user(self.session, user_id=self.user_id, payload=payload)
 
     async def list_goals(self, options: Pagination) -> list[Goal]:
@@ -103,7 +103,7 @@ class UserDataService(UserService):
                 payload=payload.to_payload(), expected_version_id=payload.expected_version_id,
             )
         except ValidationError as exc:
-            # Includes validation against dates already stored in the database.
+            # Bao gồm kiểm tra với các ngày đã lưu trong database.
             raise request_validation_error(exc, "body") from exc
         return require_found(goal, "Goal")
 

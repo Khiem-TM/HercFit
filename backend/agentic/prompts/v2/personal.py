@@ -1,4 +1,4 @@
-"""Version 2: personalized advice and analysis from the user's stored data plus verified knowledge."""
+"""Phiên bản 2: tư vấn và phân tích cá nhân hoá từ dữ liệu đã lưu của người dùng cộng tri thức đã kiểm chứng."""
 
 PERSONAL_ROUTING = '''Cá nhân hoá:
 - Phần "Hồ sơ người dùng" trong trạng thái thực thi là dữ liệu đã lưu (tuổi, cơ thể, mục tiêu, hồ sơ VĐV,

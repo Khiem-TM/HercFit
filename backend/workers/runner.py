@@ -1,10 +1,10 @@
-"""Worker loop: claim, heartbeat, run, and turn failures into retries by error class.
+"""Vòng lặp worker: lấy job, heartbeat, chạy, và biến lỗi thành lần thử lại theo lớp lỗi.
 
-Each slot claims one job at a time (SKIP LOCKED). A heartbeat extends the lease
-while the handler runs; if the lease is lost, the handler's next fenced write
-raises JobFenced and the slot moves on without touching the job. Handlers finish
-their job in their own last transaction; when one returns without finishing, the
-runner completes it.
+Mỗi slot lấy một job mỗi lần (SKIP LOCKED). Heartbeat gia hạn lease
+khi handler chạy; nếu mất lease, lệnh ghi đã fence kế tiếp của handler
+ném JobFenced và slot chuyển tiếp mà không đụng tới job. Handler kết thúc
+job trong transaction cuối của chính nó; khi một handler trả về mà chưa kết thúc, runner
+sẽ hoàn tất nó.
 """
 from __future__ import annotations
 
@@ -29,8 +29,8 @@ from integrations.google_health import tokens
 logger = logging.getLogger(__name__)
 HEARTBEAT_SECONDS = 40
 IDLE_SECONDS = 2.0
-# Touched whenever a slot reaches the database (claim or job heartbeat): the worker serves
-# no HTTP, so the container healthcheck reads this file's age instead.
+# Được chạm vào mỗi khi một slot truy cập được database (lấy job hoặc heartbeat): worker không phục vụ
+# HTTP, nên healthcheck của container đọc tuổi của file này thay thế.
 ALIVE_FILE = Path(tempfile.gettempdir()) / "hercfit-worker.alive"
 
 
@@ -54,7 +54,7 @@ async def _heartbeat(job: Job, lost: asyncio.Event) -> None:
 
 
 async def _settle(job: Job, exc: BaseException) -> None:
-    """Record the failure on the job (fenced: a stale worker records nothing)."""
+    """Ghi lỗi vào job (đã fence: worker đã cũ không ghi gì)."""
     if isinstance(exc, JobFenced):
         return
     if isinstance(exc, ConnectionChanged):
@@ -96,7 +96,7 @@ async def run_one(job: Job, handlers: dict, http: httpx.AsyncClient) -> None:
     beat = asyncio.create_task(_heartbeat(job, lost))
     try:
         await handler(Context(job=job, http=http))
-    except Exception as exc:  # noqa: BLE001 - every failure is classified and recorded
+    except Exception as exc:  # noqa: BLE001 - mọi lỗi đều được phân loại và ghi lại
         with suppress(JobFenced):
             await _settle(job, exc)
     else:
@@ -112,7 +112,7 @@ async def run_one(job: Job, handlers: dict, http: httpx.AsyncClient) -> None:
 
 async def drain(queues: tuple[str, ...], handlers: dict, http: httpx.AsyncClient, *, owner: str = "test",
                 limit: int = 100) -> int:
-    """Run ready jobs until none is left (tests and one-shot CLI)."""
+    """Chạy các job sẵn sàng cho đến khi hết (test và CLI chạy một lần)."""
     done = 0
     while done < limit:
         async with get_db_session() as session:
@@ -133,7 +133,7 @@ async def run(queues: tuple[str, ...], concurrency: int, handlers: dict, stop: a
                     async with get_db_session() as session:
                         job = await queue.claim(session, queues, owner, lease=timedelta(seconds=120))
                     _alive()
-                except Exception as exc:  # database briefly unavailable
+                except Exception as exc:  # database tạm thời không truy cập được
                     logger.warning("job_claim_failed error=%s", type(exc).__name__)
                     job = None
                 if job is None:

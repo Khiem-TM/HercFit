@@ -1,15 +1,15 @@
-"""Google Health API sync: measured health time series and the provider connection.
+"""Đồng bộ Google Health API: chuỗi thời gian sức khoẻ đo được và kết nối nhà cung cấp.
 
-* body_metrics accepts device samples: weight becomes optional (a smart-scale row
-  may hold only body fat), and rows carry source, external_id and data_source so
-  repeated syncs never duplicate a measurement.
-* health_connections keeps one OAuth grant per user with Fernet-encrypted tokens;
-  oauth_accounts stays identity-only.
-* daily_health_summaries, sleep_sessions, device_workouts and health_samples hold
-  what the provider measured. health_sync_runs records every synchronization.
-* The knowledge-graph capture gains DailyHealth, SleepSession and DeviceWorkout,
-  published only while the user allows the assistant to use device data, and the
-  graph User gains sex and the declared activity level.
+* body_metrics nhận mẫu từ thiết bị: cân nặng trở thành tuỳ chọn (một dòng cân thông minh
+  có thể chỉ có mỡ cơ thể), và các dòng mang source, external_id và data_source để
+  đồng bộ lặp lại không bao giờ nhân đôi một số đo.
+* health_connections giữ mỗi người dùng một quyền OAuth với token mã hoá Fernet;
+  oauth_accounts chỉ còn dùng cho danh tính.
+* daily_health_summaries, sleep_sessions, device_workouts và health_samples chứa
+  những gì nhà cung cấp đo được. health_sync_runs ghi lại mọi lần đồng bộ.
+* Phần ghi nhận knowledge graph có thêm DailyHealth, SleepSession và DeviceWorkout,
+  chỉ phát khi người dùng cho phép trợ lý dùng dữ liệu thiết bị, và
+  node User của graph có thêm giới tính và mức vận động đã khai báo.
 """
 from alembic import op
 from sqlalchemy import text
@@ -206,7 +206,7 @@ def upgrade():
         op.execute(statement)
     for statement in installation_statements():
         op.execute(statement)
-    # users.sex and the declared activity level joined the graph profile; publish profiles once.
+    # users.sex và mức vận động đã khai báo được đưa vào hồ sơ graph; phát hồ sơ một lần.
     op.execute("SELECT kg_publish_backend('User', to_jsonb(u)) FROM users u")
 
 

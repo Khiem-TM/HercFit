@@ -35,7 +35,7 @@ class EvidenceClaim(StrictModel):
     source_id: str = Field(min_length=1, max_length=200)
     quote: str = Field(min_length=1, max_length=800)
     applicable: bool
-    # The model's guess; verified claims carry the source registry's tier instead (agentic/research/sources.py).
+    # Phỏng đoán của model; các khẳng định đã kiểm chứng mang hạng của sổ đăng ký nguồn thay thế (agentic/research/sources.py).
     authority: Literal['primary', 'professional', 'secondary', 'unknown']
     published_at: str | None = None
     conflict: bool = False
@@ -57,7 +57,7 @@ class ResearchPlan(StrictModel):
     budget: ResearchLimits = Field(default_factory=ResearchLimits)
     confirmation_required: bool = False
     output_schema: str
-    # Existing records a requested new variant must be distinguishable from.
+    # Các bản ghi có sẵn mà biến thể mới được yêu cầu phải phân biệt được.
     distinct_from: list[str] = Field(default_factory=list, max_length=5)
 
 class ResearchDraft(StrictModel):
@@ -100,13 +100,13 @@ class Finalization(StrictModel):
     evidence: list[EvidenceClaim] = Field(min_length=1, max_length=30)
     sources: list[SourceReference] = Field(min_length=1, max_length=6)
     resolution: Literal['create', 'reuse', 'create_distinct'] = 'create'
-    # Fingerprints of the resolver results for the query and for payload.name_vi the user decided on.
+    # Dấu vân tay kết quả của bộ giải quyết cho truy vấn và cho payload.name_vi mà người dùng đã chọn.
     expected_match_fingerprint: str = Field(pattern=r'^[0-9a-f]{64}$')
     expected_name_fingerprint: str = Field(pattern=r'^[0-9a-f]{64}$')
     existing_id: UUID | None = None
     expected_existing_version: int | None = Field(default=None, ge=1)
-    # Optional in the contract so the research service can build the command before signing;
-    # the finalization API refuses a command without a valid attestation.
+    # Tuỳ chọn trong hợp đồng để service tra cứu dựng được lệnh trước khi ký;
+    # API finalize từ chối lệnh không có chứng thực hợp lệ.
     attestation: Attestation | None = None
 
     @model_validator(mode='after')
@@ -119,7 +119,7 @@ class Finalization(StrictModel):
             raise ValueError('reuse requires an ID and version')
         if self.resolution != 'reuse' and (self.existing_id or self.expected_existing_version):
             raise ValueError('Only reuse accepts an existing record')
-        # The research query is the only alias the flow proposes; anything else is unreviewed.
+        # Truy vấn tra cứu là bí danh duy nhất mà luồng đề xuất; mọi thứ khác là chưa được xem xét.
         if any(normalize_food_text(a) != normalize_food_text(self.query) for a in self.aliases):
             raise ValueError('Invalid alias')
         return self

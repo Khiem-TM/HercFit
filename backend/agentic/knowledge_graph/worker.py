@@ -1,8 +1,8 @@
-"""Postgres transactional outbox consumer and administrative commands.
+"""Consumer outbox giao dịch của Postgres và các lệnh quản trị.
 
-Run from backend/: python -m agentic.knowledge_graph.worker run
-All commands use the backend PostgreSQL advisory lock, including when the agent
-database is separate. An event is acknowledged only after its graph commit.
+Chạy từ backend/: python -m agentic.knowledge_graph.worker run
+Mọi lệnh đều dùng advisory lock PostgreSQL của backend, kể cả khi database của agent
+tách riêng. Một sự kiện chỉ được xác nhận sau khi graph đã commit.
 """
 from agentic.observability import observer, outcome, annotate
 from agentic.observability.persistence import worker_context
@@ -67,8 +67,8 @@ class Worker:
         touched = set()
         for dsn in self.dsns:
             async with await AsyncConnection.connect(dsn, autocommit=True, row_factory=dict_row) as conn:
-                # Ordering affects fairness only, never correctness; projector
-                # source-version guards tolerate commit and delivery reordering.
+                # Thứ tự chỉ ảnh hưởng tính công bằng, không bao giờ ảnh hưởng tính đúng; các bảo vệ
+                # phiên bản nguồn của projector chịu được việc commit và giao nhận bị đảo thứ tự.
                 events = await (await conn.execute(f'''
                     SELECT {EVENT_COLUMNS} FROM kg_outbox
                     WHERE delivered_at IS NULL AND available_at<=now()
@@ -82,15 +82,15 @@ class Worker:
                         with worker_context('worker.kg_projection', row.get('trace_context'), event_id=str(event_id), retry_count=row.get('attempts',0), queue_wait_ms=max(0,(datetime.now(timezone.utc)-row['occurred_at']).total_seconds()*1000)):
                             await self.projector.apply(event)
                     except Exception as exc:
-                        # Do not persist the exception text: driver errors may
-                        # contain sensitive query parameters or connection URLs.
+                        # Không lưu nội dung exception: lỗi driver có thể
+                        # chứa tham số truy vấn nhạy cảm hoặc URL kết nối.
                         await conn.execute('''UPDATE kg_outbox SET attempts=attempts+1,
                             last_error=%s,available_at=now()+make_interval(secs=>LEAST(300,POWER(2,LEAST(attempts+1,8)))::int)
                             WHERE event_id=%s''', (type(exc).__name__, event_id))
                         log.warning('kg_projection_failed error_type=%s', type(exc).__name__)
                         continue
-                    # A crash here causes redelivery; the graph version guard
-                    # makes the already-committed projection a no-op.
+                    # Sập ở đây sẽ gây giao lại; bảo vệ phiên bản của graph
+                    # khiến phép chiếu đã commit trở thành không làm gì.
                     await conn.execute('''UPDATE kg_outbox SET delivered_at=now(),last_error=NULL
                         WHERE event_id=%s''', (event_id,))
                     count += 1
@@ -111,7 +111,7 @@ class Worker:
         return count
 
     async def refresh_models(self, owners):
-        """Derived knowledge is rebuildable: a failure is logged and retried by maintenance."""
+        """Tri thức suy ra dựng lại được: lỗi được ghi log và việc bảo trì sẽ thử lại."""
         refreshed = 0
         for owner in sorted(owners):
             try:
@@ -159,15 +159,15 @@ class Worker:
             if not acquired:
                 raise RuntimeError('Another projection worker is active; retry the command')
             await self.projector.initialize()
-            # Readiness blocks partial retrieval during both initial snapshots
-            # and rebuild. Tombstones survive in PostgreSQL, not graph memory.
+            # Trạng thái sẵn sàng chặn truy hồi dở dang trong cả lúc chụp ban đầu
+            # lẫn lúc dựng lại. Bia mộ (tombstone) tồn tại trong PostgreSQL, không trong bộ nhớ graph.
             await self.projector.query("MATCH (s:KGState {key:'main'}) SET s.ready=false,s.generation=s.generation+1")
             if rebuild:
                 await self.projector.query('MATCH (n) WHERE n:KGEntity OR n:KGOwner DETACH DELETE n')
             await self.snapshot()
-            # Snapshot sources include authoritative tombstones. Replay these
-            # before ordinary events, preventing late old executions or private
-            # records from restoring deleted users or session generations.
+            # Nguồn chụp bao gồm các tombstone có thẩm quyền. Phát lại chúng
+            # trước các sự kiện thường, để các lần thực thi cũ đến muộn hay bản ghi riêng tư
+            # không khôi phục người dùng hoặc thế hệ phiên đã xoá.
             for dsn in self.dsns:
                 async with await AsyncConnection.connect(dsn,autocommit=True,row_factory=dict_row) as conn:
                     rows = await (await conn.execute(f'''SELECT {EVENT_COLUMNS} FROM kg_outbox
@@ -192,7 +192,7 @@ class Worker:
                 if monotonic() >= next_maintenance:
                     await self.reconcile()
                     await self.projector.prune()
-                    # Day-relative windows (7 days, this week) move even without new events.
+                    # Các cửa sổ tính theo ngày (7 ngày, tuần này) vẫn dịch chuyển dù không có sự kiện mới.
                     await self.refresh_models(await self.projector.stale_model_owners())
                     next_maintenance = monotonic() + 60
                 await self.consume_once()

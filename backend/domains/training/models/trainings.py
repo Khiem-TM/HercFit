@@ -1,6 +1,6 @@
-"""Immutable actual activity aggregates with atomic correction and scoped reads.
+"""Aggregate hoạt động thực tế bất biến với sửa nguyên tử và lệnh đọc có phạm vi.
 
-Split from models.journals in the domain reorganization."""
+Tách ra từ models.journals trong đợt tổ chức lại theo miền."""
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID as PyUUID
@@ -66,7 +66,7 @@ class Training(Journal):
                 item["duration_seconds"] = Decimal(str(item["duration_seconds"]))
         totals = NutritionTotals.model_validate(sum_known(items, ("energy_kcal",)))
         kinds = {item["kind"] for item in items}
-        # sRPE uses the whole session (incl. transitions); fall back to summed item time.
+        # sRPE dùng cả buổi tập (kể cả thời gian chuyển); nếu không có thì dùng tổng thời gian các mục.
         duration = data.duration_seconds or sum((item["duration_seconds"] or Decimal(0) for item in items), Decimal(0)) or None
         entity = cls(
             **data.model_dump(exclude={"items"}), user_id=user_id, replaces_id=replaces_id,

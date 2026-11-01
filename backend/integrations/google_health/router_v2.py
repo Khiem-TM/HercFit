@@ -1,6 +1,6 @@
-"""/api/v2/integrations/google-health: capabilities, scopes, sync jobs (202 + operation).
+"""/api/v2/integrations/google-health: khả năng, scope, job đồng bộ (202 + operation).
 
-Export settings and conflicts join in M6; the webhook endpoint lives in webhook.py.
+Thiết lập xuất và xung đột được thêm ở M6; endpoint webhook nằm trong webhook.py.
 """
 from datetime import datetime
 from typing import Annotated, Any
@@ -150,10 +150,10 @@ class DevicesRead(BaseModel):
 
 @router.get("/devices", response_model=DevicesRead, summary="Thiết bị đã ghép và nguồn ghi dữ liệu")
 async def devices(service: ServiceDep):
-    """Paired devices (Google pairedDevices) and the recording sources seen in received records.
+    """Thiết bị đã ghép (pairedDevices của Google) và các nguồn ghi thấy trong bản ghi đã nhận.
 
-    Sources stay separate (no cross-source merge); `source_key` is the same opaque key the
-    series and records carry. Only labels and counts: no measured values.
+    Các nguồn được giữ tách biệt (không gộp giữa các nguồn); `source_key` là cùng khoá mờ mà
+    chuỗi và bản ghi mang theo. Chỉ nhãn và số đếm: không có giá trị đo.
     """
     from domains.identity import consent
 
@@ -240,7 +240,7 @@ async def list_jobs(service: ServiceDep, cursor: str | None = None,
 __all__ = ["router", "COOKIE_PATH"]
 
 
-# ------------------------------------------------------------------------------------------- export (M6)
+# ------------------------------------------------------------------------------------------- xuất (M6)
 from integrations.google_health.contract.registry import EXPORT_GROUPS, EXPORT_ROLLOUT, Op as _Op, spec as _spec  # noqa: E402
 
 

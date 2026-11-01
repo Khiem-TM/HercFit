@@ -1,4 +1,4 @@
-"""Small persistence helpers shared by user-owned aggregate models."""
+"""Hàm hỗ trợ lưu trữ nhỏ dùng chung cho các model aggregate thuộc người dùng."""
 
 from uuid import UUID
 
@@ -10,7 +10,7 @@ from domains.shared.schemas.common import UserScope, VersionCheck
 
 
 async def try_lock_user(session: AsyncSession, user_id: UUID):
-    """Lock the active User row for this transaction; None when it does not exist."""
+    """Khoá dòng User đang hoạt động cho transaction này; None khi không tồn tại."""
     from domains.identity.models.user import User
 
     user_id = UserScope(user_id=user_id).user_id
@@ -36,7 +36,7 @@ def require_version(entity, expected_version_id: int) -> None:
 
 
 def guard_immutable(cls, allowed=()) -> None:
-    """ORM safeguard; callers correct historical aggregates by replacing them."""
+    """Chốt bảo vệ ORM; bên gọi sửa aggregate lịch sử bằng cách thay thế chúng."""
     allowed = set(allowed) | {"is_active", "updated_at", "version_id"}
 
     def protect(_mapper, _connection, entity):

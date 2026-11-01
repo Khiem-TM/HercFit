@@ -1,4 +1,4 @@
-"""Research alias resolution and atomic finalization receipts."""
+"""Giải quyết bí danh tra cứu và biên nhận finalize nguyên tử."""
 from alembic import op
 revision = '0005_research_catalog'
 down_revision = '0004_knowledge_graph'
@@ -18,8 +18,8 @@ def upgrade():
         digest text NOT NULL, domain text NOT NULL CHECK(domain IN ('foods','exercises')),
         command jsonb NOT NULL, result jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
         PRIMARY KEY(owner_id,candidate_id,candidate_revision))''')
-    # A domain lock also covers direct SQL imports and UI changes. Catalog writes
-    # are infrequent; coarse locking avoids alias/rename lock-order deadlocks.
+    # Khoá theo miền cũng bao quát import SQL trực tiếp và thay đổi từ UI. Lệnh ghi catalog
+    # không thường xuyên; khoá thô tránh deadlock do thứ tự khoá khi đặt bí danh/đổi tên.
     op.execute('''CREATE FUNCTION research_catalog_lock() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN PERFORM pg_advisory_xact_lock(hashtextextended('catalog:' || TG_ARGV[0],0));
         RETURN NULL; END $$''')
@@ -28,5 +28,5 @@ def upgrade():
             op.execute(f"CREATE TRIGGER research_lock BEFORE INSERT OR UPDATE OR DELETE ON {table} FOR EACH STATEMENT EXECUTE FUNCTION research_catalog_lock('{domain}')")
 
 def downgrade():
-    # Deliberately retain user provenance/receipts; destructive removal is manual.
+    # Cố ý giữ nguồn gốc/biên nhận của người dùng; xoá phá huỷ phải làm thủ công.
     raise RuntimeError('Research data is retained. Roll back application flags, not provenance tables.')

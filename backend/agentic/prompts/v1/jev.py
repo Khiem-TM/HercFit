@@ -1,4 +1,4 @@
-"""Version 1 of deterministic JEV evidence gate questions."""
+"""Phiên bản 1 của bộ câu hỏi cổng bằng chứng JEV tất định."""
 
 RESEARCH_QUESTIONS = {'local': {'local_insufficient': {'type': 'noul',
                                   'instructions': 'Considering only the supplied evidence, is it '

@@ -34,7 +34,7 @@ const ImageLibraryModal = defineAsyncComponent(() => import('@/components/media/
 const isImageLibraryOpen = ref(false)
 const isKnowledgeOpen = ref(false)
 const isUserModalOpen = ref(false)
-// Google Health's consent screen returns to /chat?integration=google-health&result=...
+// Màn hình đồng ý của Google Health quay về /chat?integration=google-health&result=...
 const userModalTab = ref<'profile' | 'integrations'>('profile')
 const integrationResult = ref<string | null>(null)
 
@@ -91,16 +91,16 @@ function handleSelectPrompt(prompt: string): void {
   <div
     class="relative flex h-screen w-screen overflow-hidden bg-background font-body-md text-on-surface selection:bg-ink selection:text-paper"
   >
-    <!-- Film grain overlay matching Landing Page -->
+    <!-- Lớp phủ nhiễu hạt giống trang giới thiệu -->
     <div class="grain-overlay pointer-events-none" aria-hidden="true" />
 
-    <!-- Subtle atmospheric radial spotlight -->
+    <!-- Vệt sáng toả tròn nhẹ tạo không khí -->
     <div
       class="pointer-events-none absolute left-1/2 top-1/4 z-0 h-[540px] w-[760px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink/[0.035] blur-[130px]"
       aria-hidden="true"
     />
 
-    <!-- Left Sidebar (History + New Chat + User Avatar ONLY) -->
+    <!-- Thanh bên trái (CHỈ gồm lịch sử + cuộc trò chuyện mới + avatar người dùng) -->
     <ChatSidebar
       v-if="!isSidebarCollapsed"
       ref="sidebar"
@@ -115,9 +115,9 @@ function handleSelectPrompt(prompt: string): void {
       @collapse="hideSidebar"
     />
 
-    <!-- Right Main Workspace -->
+    <!-- Vùng làm việc chính bên phải -->
     <main class="relative z-10 flex min-w-0 flex-1 flex-col">
-      <!-- Minimal Top Bar -->
+      <!-- Thanh trên tối giản -->
       <header
         class="flex h-14 shrink-0 items-center justify-between border-b border-ink/[0.05] px-6"
       >
@@ -158,7 +158,7 @@ function handleSelectPrompt(prompt: string): void {
         </button>
       </header>
 
-      <!-- Error Banner -->
+      <!-- Banner lỗi -->
       <div
         v-if="error"
         class="mx-auto mt-3 w-full max-w-3xl px-4"
@@ -170,7 +170,7 @@ function handleSelectPrompt(prompt: string): void {
         </div>
       </div>
 
-      <!-- STATE A: Empty / New Conversation (Matches Reference Layout) -->
+      <!-- TRẠNG THÁI A: Trống / cuộc trò chuyện mới (theo bố cục tham chiếu) -->
       <div
         v-if="!hasMessages"
         class="flex flex-1 flex-col items-center justify-center overflow-y-auto py-6"
@@ -190,7 +190,7 @@ function handleSelectPrompt(prompt: string): void {
         </ChatEmptyState>
       </div>
 
-      <!-- STATE B: Active Conversation Stream -->
+      <!-- TRẠNG THÁI B: Luồng hội thoại đang diễn ra -->
       <template v-else>
         <ChatMessageList
           :messages="messages"
@@ -202,7 +202,7 @@ function handleSelectPrompt(prompt: string): void {
           @send="sendMessage"
         />
 
-        <!-- Bottom Pinned Composer -->
+        <!-- Khung soạn tin ghim ở dưới cùng -->
         <div class="shrink-0 px-4 pb-5 pt-2 md:px-8">
           <div class="mx-auto w-full max-w-3xl">
             <ChatComposer
@@ -219,7 +219,7 @@ function handleSelectPrompt(prompt: string): void {
     <KnowledgePanel v-if="isKnowledgeOpen" :busy="isStreaming || isConfirming" :activity="activeNodeLabel" :revision="messages.length + Number(isStreaming) + Number(isConfirming) + sessions.length" @close="isKnowledgeOpen = false" @open-settings="openSettings" />
     <ImageLibraryModal v-if="isImageLibraryOpen" @close="isImageLibraryOpen = false" />
 
-    <!-- User Profile, Metrics & Settings Modal -->
+    <!-- Hộp thoại Hồ sơ, Số đo & Cài đặt -->
     <UserSettingsModal
       :open="isUserModalOpen"
       :initial-tab="userModalTab"

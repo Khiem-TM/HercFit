@@ -1,1 +1,1 @@
-"""HercFit -> Google Health export: mapping (DataPoint payloads), capture (outbox), dispatch (worker)."""
+"""Xuất HercFit -> Google Health: mapping (payload DataPoint), capture (outbox), dispatch (worker)."""

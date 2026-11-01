@@ -23,7 +23,7 @@ class SessionBusy(HTTPException):
 class Store:
     def __init__(self, pool, lock_pool=None, lease_seconds=180, wait_seconds=30):
         self.pool = pool
-        self.lock_pool = lock_pool or pool  # kept for callers that still pass it
+        self.lock_pool = lock_pool or pool  # giữ cho các bên gọi vẫn truyền nó
         self.lease_seconds, self.wait_seconds = lease_seconds, wait_seconds
 
     async def ready(self):
@@ -34,7 +34,7 @@ class Store:
                 raise RuntimeError('Run python -m agentic.scripts.migrate before starting')
 
     async def _acquire(self, session_id, user_id, create, token):
-        """One short transaction: ownership checks, optional creation, then the lease."""
+        """Một transaction ngắn: kiểm tra quyền sở hữu, tạo mới (tuỳ chọn), rồi lấy lease."""
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 await set_psycopg_context(conn)
@@ -61,9 +61,9 @@ class Store:
 
     @asynccontextmanager
     async def session(self, session_id, user_id, create=True):
-        # A timed lease serializes each chat/confirm/history/clear operation on a
-        # conversation across workers, without holding a pooled connection while
-        # the model runs. A crashed worker's lease simply expires.
+        # Một lease có thời hạn tuần tự hoá từng thao tác chat/confirm/history/clear trên một
+        # cuộc trò chuyện giữa các worker, mà không giữ kết nối trong pool trong lúc
+        # model chạy. Lease của worker bị sập đơn giản là hết hạn.
         token = uuid4()
         deadline = monotonic() + self.wait_seconds
         while True:
@@ -87,7 +87,7 @@ class Store:
             await conn.execute('UPDATE agent_sessions SET thread_id=%s WHERE session_id=%s', (thread_id, session_id))
 
     async def touch_thread(self, thread_id):
-        """A resumed run (confirmation) may change the checkpoint: reconcile it later if needed."""
+        """Lượt chạy được tiếp tục (xác nhận) có thể đổi checkpoint: đối soát lại sau nếu cần."""
         async with self.pool.connection() as conn:
             await conn.execute('UPDATE agent_threads SET needs_reconcile=true, last_run_at=now() WHERE thread_id=%s', (thread_id,))
 
@@ -102,7 +102,7 @@ class Store:
                 (title, last_message, message_count, status, session_id))
 
     async def consume_turn(self, user_id, *, turn_limit, token_limit, day=None):
-        """Atomically count a new turn; False when today's turn or token budget is spent."""
+        """Đếm nguyên tử một lượt mới; False khi đã hết ngân sách lượt hoặc token của hôm nay."""
         day = day or date.today()
         async with self.pool.connection() as conn:
             async with conn.transaction():
@@ -128,7 +128,7 @@ class Store:
             return [r['session_id'] for r in rows]
 
     async def stale_threads(self, older_than_days, limit=500):
-        """Superseded per-turn threads older than the retention window (never a session's current thread)."""
+        """Các thread theo lượt đã bị thay thế cũ hơn cửa sổ lưu giữ (không bao giờ là thread hiện tại của phiên)."""
         async with self.pool.connection() as conn:
             return await (await conn.execute('''SELECT t.thread_id FROM agent_threads t
                 JOIN agent_sessions s USING(session_id)
@@ -141,11 +141,11 @@ class Store:
             await conn.execute('DELETE FROM agent_threads WHERE thread_id=%s', (thread_id,))
 
     async def forget_episodes(self, user_id, is_health):
-        """Remove the user's conversation episodes that `is_health(data)` selects.
+        """Xoá các episode hội thoại của người dùng mà `is_health(data)` chọn ra.
 
-        Each journal row (turn or tool execution) gets a graph `delete` at the next
-        version, so the projector tombstones the episode, and the row itself is
-        removed so a graph rebuild (enqueue_kg_snapshot) cannot restore it.
+        Mỗi dòng nhật ký (lượt hoặc lần thực thi tool) nhận một lệnh `delete` của graph ở
+        phiên bản kế tiếp, để projector đánh tombstone episode, và chính dòng đó bị
+        xoá để dựng lại graph (enqueue_kg_snapshot) không khôi phục được nó.
         """
         removed = {'Run': 0, 'Execution': 0}
         async with self.pool.connection() as conn:
@@ -206,8 +206,8 @@ class Store:
         fields = ['user_id','session_id','revision','tool','payload_hash']
         if any(saved[k] != action[k] for k in fields) or payload_hash(action['tool'],action['payload']) != saved['payload_hash']:
             raise HTTPException(409, 'Approved payload has changed')
-        # Expiration checked at approval time. An accepted write can be retried
-        # after an outage with its SAME idempotency key even after that deadline.
+        # Hạn được kiểm tra lúc phê duyệt. Lệnh ghi đã được chấp nhận có thể thử lại
+        # sau sự cố với CÙNG khoá idempotency kể cả sau hạn đó.
         return saved
 
     async def research(self, state, candidate):
@@ -243,7 +243,7 @@ class Store:
                 await conn.execute('DELETE FROM agent_sessions WHERE session_id=%s', (session_id,))
 
     async def kg_retrieval_gate(self, user_id):
-        """Current SQL ownership/generations gate stale graph episodes immediately."""
+        """Quyền sở hữu/thế hệ SQL hiện tại chặn ngay các episode graph đã cũ."""
         async with self.pool.connection() as conn:
             rows = await (await conn.execute('SELECT session_id,generation,deleted FROM agent_session_generations WHERE user_id=%s', (user_id,))).fetchall()
         return {'blocked':False,
@@ -251,10 +251,10 @@ class Store:
                 'deleted_session_ids':[r['session_id'] for r in rows if r['deleted']]}
 
     async def record_execution_state(self, state, checkpoint_id=None):
-        """Journal committed workflow observations and enqueue them atomically.
+        """Ghi nhật ký các quan sát workflow đã commit và xếp hàng chúng một cách nguyên tử.
 
-        Replaying a checkpoint is a no-op. An approved action that first failed
-        and later succeeds produces a higher version of the same execution.
+        Phát lại một checkpoint không làm gì. Một hành động đã duyệt lần đầu thất bại
+        và sau đó thành công tạo ra phiên bản cao hơn của cùng lần thực thi.
         """
         session_id, user_id = state.get('session_id'), state.get('user_id')
         if not session_id or not user_id:
@@ -270,13 +270,13 @@ class Store:
                     WHERE thread_id=%s AND session_id=%s FOR UPDATE''', (state['run_id'],session_id))).fetchone()
                 if not thread:
                     return
-                # LangGraph checkpoint IDs are monotonically ordered UUIDs.
-                # A reconciler that read an older checkpoint must not replace a
-                # later successful action observation with a previous failure.
+                # ID checkpoint của LangGraph là UUID có thứ tự tăng dần.
+                # Bộ đối soát đã đọc checkpoint cũ hơn không được thay
+                # một quan sát hành động thành công sau đó bằng một lỗi trước đó.
                 if checkpoint_id and thread['kg_checkpoint_id'] and checkpoint_id <= thread['kg_checkpoint_id']:
                     await conn.execute('UPDATE agent_threads SET kg_checked_at=now() WHERE thread_id=%s', (state['run_id'],))
                     return
-                # Coalesce attempts of the same logical action within this state.
+                # Gộp các lần thử của cùng một hành động logic trong state này.
                 records = {r['execution_id']:r for r in state.get('execution_records',[]) if r.get('execution_id')}
                 for execution_id, record in records.items():
                     UUID(execution_id)
@@ -318,10 +318,10 @@ class Store:
                                    (checkpoint_id,state['run_id'],session_id))
 
     async def reconciliation_threads(self, limit=50, grace_seconds=180):
-        """Threads whose last run may have ended without journaling (worker crash).
+        """Các thread mà lượt chạy cuối có thể đã kết thúc mà không ghi nhật ký (worker sập).
 
-        Runs journal themselves on completion; only flagged threads older than the
-        grace period are read, so an idle system performs no checkpoint reads.
+        Lượt chạy tự ghi nhật ký khi hoàn tất; chỉ các thread được đánh dấu và cũ hơn
+        thời gian ân hạn mới được đọc, nên hệ thống nhàn rỗi không đọc checkpoint nào.
         """
         async with self.pool.connection() as conn:
             return await (await conn.execute('''SELECT thread_id,session_id,kg_checkpoint_id FROM agent_threads
@@ -333,7 +333,7 @@ class Store:
             await conn.execute('UPDATE agent_threads SET kg_checked_at=now(), needs_reconcile=false WHERE thread_id=%s', (thread_id,))
 
     async def enqueue_kg_snapshot(self):
-        """Requeue source records for a rebuild without changing their revisions."""
+        """Xếp hàng lại các bản ghi nguồn để dựng lại mà không đổi revision của chúng."""
         count = 0
         async with self.pool.connection() as conn:
             async with conn.transaction():
@@ -393,7 +393,7 @@ class Store:
             return rows
 
     async def deleted_sessions(self, since):
-        """Sessions cleared since a moment; their Redis memory must not outlive them."""
+        """Các phiên đã xoá kể từ một thời điểm; bộ nhớ Redis của chúng không được sống lâu hơn chúng."""
         async with self.pool.connection() as conn:
             return await (await conn.execute('SELECT session_id,generation FROM agent_session_generations WHERE deleted AND updated_at>=%s',
                                               (since,))).fetchall()

@@ -17,7 +17,7 @@ const STAGES = [
 
 const main = computed(() => props.data.sleep.filter(session => !session.is_nap))
 const naps = computed(() => props.data.sleep.filter(session => session.is_nap))
-/** Main sleep per wake-up date, in hours; nights without stages are one neutral segment. */
+/** Giấc ngủ chính theo ngày thức dậy, tính bằng giờ; đêm không có giai đoạn là một đoạn trung tính. */
 const series = computed<ColumnSeries[]>(() => {
   const nights = new Map<string, SleepSession[]>()
   for (const session of main.value) nights.set(session.local_date, [...(nights.get(session.local_date) ?? []), session])

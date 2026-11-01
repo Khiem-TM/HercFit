@@ -1,9 +1,9 @@
-"""Business write hooks: integrations react to domain writes inside the same transaction.
+"""Hook ghi nghiệp vụ: tích hợp phản ứng với lệnh ghi của miền bên trong cùng transaction.
 
-Domains call `emit(...)` after a create/update/delete; a provider integration (for
-example the Google Health exporter) registers a hook and writes its outbox rows in
-the caller's transaction, so the business change and the work to propagate it
-commit together or not at all. Domains never import an integration.
+Các miền gọi `emit(...)` sau khi tạo/cập nhật/xoá; tích hợp nhà cung cấp (ví
+dụ bộ xuất Google Health) đăng ký hook và ghi dòng outbox trong
+transaction của bên gọi, nên thay đổi nghiệp vụ và công việc lan truyền nó
+cùng commit hoặc cùng không. Các miền không bao giờ import một tích hợp.
 """
 from __future__ import annotations
 
@@ -24,8 +24,8 @@ async def emit(session, user_id: UUID, aggregate_type: str, entity: Any, op: str
         await hook(session, user_id, aggregate_type, entity, op, **extra)
 
 
-# Previewers describe what a write would cause outside HercFit (e.g. the Google data point),
-# so a confirmation card can show it and the confirmed write can be bound to it.
+# Previewer mô tả những gì một lệnh ghi sẽ gây ra bên ngoài HercFit (ví dụ data point trên Google),
+# để thẻ xác nhận hiển thị được và lệnh ghi đã xác nhận được gắn với nó.
 _previewers: list[Hook] = []
 
 

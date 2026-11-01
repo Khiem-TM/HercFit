@@ -1,21 +1,21 @@
-"""Forget health data the assistant already holds when the user revokes consent.
+"""Quên dữ liệu sức khoẻ mà trợ lý đang giữ khi người dùng thu hồi consent.
 
-The backend publishes `consent.changed` in the same transaction as the decision
-(domain_events). This consumer, running inside the agent service, handles each
-revocation once (domain_event_deliveries):
+Backend phát `consent.changed` trong cùng transaction với quyết định
+(domain_events). Consumer này, chạy bên trong service agent, xử lý mỗi
+lần thu hồi một lần (domain_event_deliveries):
 
-* each conversation's current checkpoint drops health tool outputs and the
-  context card, so nothing is carried into the next turn;
-* superseded per-turn checkpoints (raw tool outputs of older turns) are deleted;
-* the Redis session memory (summaries, recalled turns) is forgotten; it is
-  rebuilt from the remaining checkpoints;
-* conversation episodes about health (graph `Run`/`Execution` nodes: health
-  domain, a health tool, or a reference to a device record) are tombstoned in
-  the graph and their journal rows deleted, so a graph rebuild cannot restore
-  them. Episodes never hold measured values, but they do reveal what was asked.
+* checkpoint hiện tại của mỗi cuộc trò chuyện bỏ output của tool sức khoẻ và
+  thẻ ngữ cảnh, để không gì được mang sang lượt sau;
+* các checkpoint theo lượt đã bị thay thế (output tool thô của các lượt cũ) bị xoá;
+* bộ nhớ phiên Redis (tóm tắt, các lượt được nhớ lại) bị quên; nó được
+  dựng lại từ các checkpoint còn lại;
+* các episode hội thoại về sức khoẻ (node `Run`/`Execution` trong graph: miền
+  health, một tool sức khoẻ, hoặc tham chiếu tới bản ghi thiết bị) bị đánh tombstone trong
+  graph và dòng nhật ký của chúng bị xoá, để dựng lại graph không khôi phục được
+  chúng. Episode không bao giờ chứa giá trị đo, nhưng có tiết lộ điều đã được hỏi.
 
-Device facts in the graph are already tombstoned by the backend trigger. The
-visible chat transcript stays: it is the user's conversation, which they can clear.
+Dữ kiện thiết bị trong graph đã được trigger của backend đánh tombstone. Bản
+ghi chat hiển thị vẫn được giữ: đó là cuộc trò chuyện của người dùng, họ có thể tự xoá.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ HEALTH_RECORD_KINDS = frozenset({'DailyHealth', 'SleepSession', 'DeviceWorkout'}
 
 
 def is_health_episode(data: dict) -> bool:
-    """A journaled turn (`tools`) or execution (`tool`) that touched health data."""
+    """Một lượt đã ghi nhật ký (`tools`) hoặc lần thực thi (`tool`) có chạm tới dữ liệu sức khoẻ."""
     tools = [data['tool']] if data.get('tool') else list(data.get('tools') or [])
     refs = data.get('resource_refs') or []
     return (data.get('domain') in HEALTH_DOMAINS or any(tool in HEALTH_TOOLS for tool in tools)
@@ -57,7 +57,7 @@ async def purge_user_health(runtime, user_id: str) -> dict:
                 values = (snapshot.values if snapshot else None) or {}
                 outputs = values.get('tool_outputs') or []
                 kept = [output for output in outputs if output.get('tool') not in HEALTH_TOOLS]
-                # A pending confirmation keeps its thread untouched; its outputs are not health reads.
+                # Xác nhận đang chờ giữ nguyên thread của nó; output của nó không phải lần đọc sức khoẻ.
                 if (len(kept) != len(outputs) or values.get('user_context')) and not values.get('pending_action'):
                     await runtime.graph.aupdate_state(runtime.config(current),
                                                       {'tool_outputs': kept, 'user_context': None},
@@ -71,7 +71,7 @@ async def purge_user_health(runtime, user_id: str) -> dict:
 
 
 async def purge_once(runtime, *, limit: int = 50) -> int:
-    """Handle undelivered consent events; revocations purge, grants are only acknowledged."""
+    """Xử lý các sự kiện consent chưa giao; thu hồi thì dọn dữ liệu, cấp quyền thì chỉ xác nhận."""
     handled = 0
     async with runtime.store.pool.connection() as conn:
         async with conn.transaction():

@@ -1,14 +1,14 @@
-/** Card frames of the clarification form: validation, answer state and reply composition. Nothing is typed as free text. */
+/** Khung trên thẻ của form làm rõ: kiểm tra, trạng thái câu trả lời và soạn câu trả lời. Không gõ văn bản tự do. */
 import type { Clarification, ClarifyMode, ClarifyQuestion, NumberFrame, NumberUnit } from '@/types/api'
 
-/** One line of the sets editor: `sets` sets of `reps` reps at `kg` (no external load when null). */
+/** Một dòng của trình sửa set: `sets` set, mỗi set `reps` lần với `kg` (không có tạ ngoài khi null). */
 export interface SetGroup {
   sets: number
   reps: number
   kg: number | null
 }
 
-/** One exercise in the sets editor. */
+/** Một bài tập trong trình sửa set. */
 export interface SetRow {
   id: string
   label: string
@@ -17,15 +17,15 @@ export interface SetRow {
 
 export interface Answer {
   optionIds: string[]
-  /** Number frames: the value picked, null until one is. */
+  /** Khung nhập số: giá trị đã chọn, null cho đến khi có. */
   value: number | null
   skipped: boolean
-  /** Sets editor groups by row id; a row without an entry uses the default group. */
+  /** Các nhóm của trình sửa set theo id dòng; dòng chưa có mục dùng nhóm mặc định. */
   sets: Record<string, SetGroup[]>
 }
 
 export const emptyAnswer = (): Answer => ({ optionIds: [], value: null, skipped: false, sets: {} })
-/** A number frame starts at its default (shown preselected); every other frame starts empty. */
+/** Khung nhập số bắt đầu ở giá trị mặc định (hiển thị sẵn đã chọn); mọi khung khác bắt đầu trống. */
 export const initialAnswer = (question: ClarifyQuestion): Answer =>
   ({ ...emptyAnswer(), value: question.mode === 'number' ? question.number?.default ?? null : null })
 
@@ -34,7 +34,7 @@ export const defaultGroup = (): SetGroup => ({ sets: 3, reps: 10, kg: null })
 export const groupsFor = (answer: Answer, row: SetRow): SetGroup[] => answer.sets[row.id] ?? [defaultGroup()]
 
 const MODES: ClarifyMode[] = ['single', 'multiple', 'quick_reply', 'number', 'sets']
-/** The widest range each unit allows (the agent's NUMBER_UNITS): a frame outside it is never shown. */
+/** Khoảng rộng nhất mỗi đơn vị cho phép (NUMBER_UNITS của agent): khung nằm ngoài nó không bao giờ được hiển thị. */
 export const UNIT_BOUNDS: Record<NumberUnit, [number, number]> = {
   kg: [0, 500], g: [0, 5000], ml: [0, 5000], kcal: [0, 10000], phút: [1, 1440], giờ: [0.25, 24], km: [0.1, 500],
   cm: [30, 250], '%': [0, 100], bpm: [30, 230], tuổi: [10, 100], RPE: [1, 10], bước: [0, 100000], buổi: [1, 14],
@@ -45,7 +45,7 @@ export const UNIT_BOUNDS: Record<NumberUnit, [number, number]> = {
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
 
-/** Why a number frame cannot be drawn, or null. */
+/** Lý do một khung nhập số không vẽ được, hoặc null. */
 export function numberFrameError(frame: NumberFrame | null | undefined): string | null {
   if (!frame || typeof frame !== 'object') return 'thiếu khoảng giá trị'
   const bounds = UNIT_BOUNDS[frame.unit]
@@ -58,7 +58,7 @@ export function numberFrameError(frame: NumberFrame | null | undefined): string 
   return null
 }
 
-/** Why a question is not a valid card frame (given the questions kept before it), or null. */
+/** Lý do một câu hỏi không phải khung thẻ hợp lệ (dựa trên các câu hỏi được giữ trước nó), hoặc null. */
 export function frameError(question: ClarifyQuestion, earlier: ClarifyQuestion[] = []): string | null {
   if (!question.id || !question.question) return 'thiếu nội dung'
   if (!MODES.includes(question.mode)) return 'không phải khung thẻ'
@@ -96,8 +96,8 @@ function showIfError(question: ClarifyQuestion, earlier: ClarifyQuestion[]): str
 }
 
 /**
- * The valid card frames of a payload, legacy one-question payloads included; null when none is left.
- * Free-text questions of older messages, malformed frames and the questions depending on them are dropped.
+ * Các khung thẻ hợp lệ của một payload, kể cả payload một câu hỏi kiểu cũ; null khi không còn khung nào.
+ * Câu hỏi văn bản tự do của tin nhắn cũ, khung sai định dạng và các câu hỏi phụ thuộc vào chúng bị bỏ.
  */
 export function normalizeClarification(raw: unknown): Clarification | null {
   if (!raw || typeof raw !== 'object') return null
@@ -120,7 +120,7 @@ export function normalizeClarification(raw: unknown): Clarification | null {
       required: item.required !== false,
       min_select: Number(item.min_select ?? 1),
       max_select: Number(item.max_select ?? 1),
-      // A sets editor keeps only the picks that are still asked.
+      // Trình sửa set chỉ giữ những lựa chọn vẫn còn được hỏi.
       for_questions: (Array.isArray(item.for_questions) ? item.for_questions : []).filter((id: string) => kept.some(q => q.id === id)),
       show_if: item.show_if ?? null,
       number: item.number ?? null,
@@ -131,10 +131,10 @@ export function normalizeClarification(raw: unknown): Clarification | null {
   return kept.length ? { intro: typeof data.intro === 'string' ? data.intro : null, questions: kept.slice(0, 8) } : null
 }
 
-/** Options are answered right away; multiple, number and sets questions need an explicit "Tiếp". */
+/** Lựa chọn được trả lời ngay; câu hỏi chọn nhiều, số và set cần nút "Tiếp" tường minh. */
 export const choosesOnce = (question: ClarifyQuestion) => question.mode === 'single' || question.mode === 'quick_reply'
 
-/** Indexes of the questions to ask, given the answers so far (a show_if question follows its trigger). */
+/** Chỉ số các câu hỏi cần hỏi, dựa trên câu trả lời đến lúc này (câu hỏi show_if đi sau câu kích hoạt nó). */
 export function visibleIndexes(form: Clarification, answers: Answer[]): number[] {
   const visible: number[] = []
   form.questions.forEach((question, index) => {
@@ -150,7 +150,7 @@ export function visibleIndexes(form: Clarification, answers: Answer[]): number[]
   return visible
 }
 
-/** Rows of a sets question: the exercises picked in its source questions, else its own options. */
+/** Các dòng của câu hỏi set: bài tập đã chọn ở các câu hỏi nguồn, nếu không thì các lựa chọn riêng của nó. */
 export function setRows(form: Clarification, answers: Answer[], index: number): SetRow[] {
   const question = form.questions[index]
   const sources = (question.for_questions ?? []).map(id => form.questions.findIndex(item => item.id === id)).filter(i => i >= 0)
@@ -162,13 +162,13 @@ export function setRows(form: Clarification, answers: Answer[], index: number): 
   })
 }
 
-/** "72.5": a decimal point, as in the sets editor (", " separates answers in the sent reply). */
+/** "72.5": dấu chấm thập phân, như trong trình sửa set (", " ngăn cách các câu trả lời trong tin nhắn gửi đi). */
 export const formatNumber = (value: number) => String(Math.round(value * 1000) / 1000)
 export const formatValue = (value: number, unit: string) => `${formatNumber(value)} ${unit}`
 
 const decimalsOf = (value: number) => (String(value).split('.')[1] ?? '').length
 
-/** The nearest multiple of the step inside the range, so 72.43 kg with a 0.1 step is 72.4 (and 0.1 + 0.2 stays 0.3). */
+/** Bội số gần nhất của bước nằm trong khoảng, nên 72.43 kg với bước 0.1 là 72.4 (và 0.1 + 0.2 vẫn là 0.3). */
 export function snap(frame: NumberFrame, value: number): number {
   const decimals = decimalsOf(frame.step)
   const first = Math.ceil(Number((frame.min / frame.step).toFixed(9))) * frame.step
@@ -177,7 +177,7 @@ export function snap(frame: NumberFrame, value: number): number {
   return Number(snapped.toFixed(decimals))
 }
 
-/** Why a sets group cannot be sent, or null. */
+/** Lý do một nhóm set không gửi được, hoặc null. */
 export function groupError(group: SetGroup): string | null {
   const [setsMin, setsMax] = SET_LIMITS.sets
   const [repsMin, repsMax] = SET_LIMITS.reps
@@ -188,7 +188,7 @@ export function groupError(group: SetGroup): string | null {
   return null
 }
 
-/** The validation message of a frame's answer, or null when it can be sent. */
+/** Thông báo kiểm tra cho câu trả lời của một khung, hoặc null khi gửi được. */
 export function answerError(question: ClarifyQuestion, answer: Answer, rows: SetRow[] = []): string | null {
   switch (question.mode) {
     case 'number': {
@@ -216,11 +216,11 @@ export function answerError(question: ClarifyQuestion, answer: Answer, rows: Set
 
 export const isAnswered = (question: ClarifyQuestion, answer: Answer, rows: SetRow[] = []) => answerError(question, answer, rows) === null
 
-// Decimal point, never a comma: groups are already separated by ", " in the sent reply. A blank load is said
-// explicitly: a bare "3×12" was logged as 0 kg (an unloaded movement) and zeroed the volume.
+// Dấu chấm thập phân, không bao giờ là dấu phẩy: các nhóm đã được ngăn bằng ", " trong tin nhắn gửi đi. Mức tạ để trống
+// được nói rõ: một chuỗi "3×12" trần từng bị ghi thành 0 kg (động tác không tạ) và làm khối lượng tập về 0.
 export const formatGroup = (group: SetGroup) => `${group.sets}×${group.reps}${group.kg === null ? ' (chưa ghi tạ)' : ` @ ${group.kg}kg`}`
 
-/** The text an answer sends: picked option values, "60 phút", or each exercise's sets. */
+/** Văn bản một câu trả lời gửi đi: giá trị các lựa chọn đã chọn, "60 phút", hoặc các set của từng bài tập. */
 export function answerText(question: ClarifyQuestion, answer: Answer, rows: SetRow[] = []): string {
   if (question.mode === 'number') return answer.value === null ? '' : formatValue(answer.value, question.number!.unit)
   if (question.mode === 'sets') return rows.map(row => `${row.label}: ${groupsFor(answer, row).map(formatGroup).join(', ')}`).join('; ')

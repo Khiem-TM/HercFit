@@ -1,9 +1,9 @@
-"""Resolving a local/remote divergence the user was shown.
+"""Giải quyết một lần lệch cục bộ/từ xa mà người dùng đã được xem.
 
-KEEP_LOCAL     the remote state becomes the new base and HercFit's version is sent
-               again (a fresh outbox row), overwriting the remote edit knowingly.
-ACCEPT_REMOTE  the remote version is accepted: the mapping takes the remote state as
-               confirmed, and editable log fields are copied into the local record.
+KEEP_LOCAL     trạng thái từ xa trở thành mốc mới và phiên bản của HercFit được gửi
+               lại (một dòng outbox mới), chủ động ghi đè lần sửa từ xa.
+ACCEPT_REMOTE  chấp nhận phiên bản từ xa: mapping lấy trạng thái từ xa làm
+               đã xác nhận, và các trường nhật ký sửa được chép vào bản ghi cục bộ.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from domains.shared.models.basemodel import uuid7
 from integrations.google_health.export import mapping
 from integrations.google_health.export.dispatch import _typed
 
-REMOTE_FIELDS = {  # aggregate type -> (table, data type field, {local column: remote path})
+REMOTE_FIELDS = {  # loại aggregate -> (bảng, trường loại dữ liệu, {cột cục bộ: đường dẫn từ xa})
     "HydrationLog": ("hydration_logs", "hydrationLog", {"amount_ml": ("amountConsumed", "milliliters")}),
     "OvulationTestLog": ("ovulation_test_logs", "ovulationTest", {"result": ("result",)}),
 }

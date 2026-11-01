@@ -3,7 +3,7 @@ import { useAuth } from '@/composables/useAuth'
 import type { NutritionTargets } from '@/types/api'
 import { dashboardTimezone } from './dashboardData'
 
-/** Typed targets from the backend; refreshed whenever the knowledge map revision changes. */
+/** Mục tiêu có kiểu từ backend; làm mới mỗi khi revision của bản đồ tri thức thay đổi. */
 export function useNutritionTargets(revision: () => string | null | undefined) {
   const { authFetch } = useAuth()
   const targets = shallowRef<NutritionTargets | null>(null)

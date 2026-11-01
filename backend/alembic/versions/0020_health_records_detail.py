@@ -1,20 +1,20 @@
-"""Health platform M3c: richer health records and the new logs (additive only).
+"""Nền tảng sức khoẻ M3c: bản ghi sức khoẻ chi tiết hơn và các nhật ký mới (chỉ cộng thêm).
 
-Existing tables keep their ids and graph capture; they gain provenance (source
-record, recorded UTC offset) and detail that was dropped before:
-* device_workouts: elapsed time, pauses, splits, whether a GPS route exists.
-* sleep_sessions: stage segments and short awakenings (which overlap stages and
-  are never summed into stage totals).
-* health_samples: more sparse vitals (VO2 max, run VO2 max, sleep respiratory rate).
+Các bảng có sẵn giữ id và phần ghi nhận graph; chúng có thêm nguồn gốc (bản ghi
+nguồn, độ lệch UTC lúc ghi) và các chi tiết trước đây bị bỏ:
+* device_workouts: thời gian trôi qua, lần tạm dừng, các chặng, có lộ trình GPS hay không.
+* sleep_sessions: các đoạn giai đoạn ngủ và lần thức giấc ngắn (chồng lên giai đoạn và
+  không bao giờ được cộng vào tổng giai đoạn).
+* health_samples: thêm chỉ số sinh tồn thưa (VO2 max, VO2 max khi chạy, nhịp thở khi ngủ).
 
-New records:
-* ecg_recordings / irn_alerts: provider classification and device metadata; the
-  ECG waveform is kept compressed, under retention, and never leaves PostgreSQL.
-* workout_routes: TCX export of a workout's GPS route (location scope).
-* paired_devices: what the user wears and when it last synced.
-* hydration_logs, nutrition_logs: HercFit-owned or imported logs.
+Bản ghi mới:
+* ecg_recordings / irn_alerts: phân loại của nhà cung cấp và metadata thiết bị; dạng
+  sóng ECG được giữ ở dạng nén, có thời hạn lưu, và không bao giờ rời PostgreSQL.
+* workout_routes: bản xuất TCX lộ trình GPS của buổi tập (phạm vi location).
+* paired_devices: những gì người dùng đeo và lần đồng bộ gần nhất.
+* hydration_logs, nutrition_logs: nhật ký do HercFit sở hữu hoặc nhập về.
 * symptom_logs, mood_logs, menstrual_period_logs, ovulation_test_logs: Google
-  only accepts writes for these, so HercFit is the system of record.
+  chỉ nhận ghi các loại này, nên HercFit là hệ thống lưu trữ gốc.
 """
 from alembic import op
 

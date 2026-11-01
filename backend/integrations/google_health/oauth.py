@@ -1,12 +1,12 @@
-"""OAuth 2.0 for the Google Health API: consent URL, signed state and token calls.
+"""OAuth 2.0 cho Google Health API: URL đồng ý, state có chữ ký và các lời gọi token.
 
-The connect flow is separate from sign-in. Sign-in stays identity-only; this flow
-asks for offline access to read-only health scopes, and the callback accepts only
-the Google account the user signed in with.
+Luồng kết nối tách khỏi đăng nhập. Đăng nhập chỉ lấy danh tính; luồng này
+xin truy cập offline vào các scope sức khoẻ chỉ đọc, và callback chỉ chấp nhận
+tài khoản Google mà người dùng đã đăng nhập.
 
-The state parameter is an HS256 JWT with its own audience and token type, so it
-can never be replayed as a HercFit access token. Its nonce must also match an
-HttpOnly cookie, binding the callback to the browser that started the flow.
+Tham số state là JWT HS256 với audience và loại token riêng, nên nó
+không bao giờ phát lại được như access token của HercFit. Nonce của nó cũng phải khớp một
+cookie HttpOnly, gắn callback với trình duyệt đã bắt đầu luồng.
 """
 import logging
 from datetime import datetime, timedelta, timezone
@@ -24,8 +24,8 @@ from integrations.google_health.client import GoogleHealthError, ReauthRequired
 logger = logging.getLogger(__name__)
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 SCOPE_PREFIX = "https://www.googleapis.com/auth/googlehealth."
-# The default connect flow asks for these read scopes; write scopes are only requested
-# when the user enables an export group (contract/scopes.py bundles).
+# Luồng kết nối mặc định xin các scope đọc này; scope ghi chỉ được xin
+# khi người dùng bật một nhóm xuất (các gói trong contract/scopes.py).
 SCOPES = {
     "activity": SCOPE_PREFIX + "activity_and_fitness.readonly",
     "health_metrics": SCOPE_PREFIX + "health_metrics_and_measurements.readonly",
@@ -45,16 +45,16 @@ TIMEOUT = 15.0
 
 def authorization_url(*, state: str, code_challenge: str, login_hint: str | None,
                       scopes: list[str] | None = None) -> str:
-    """Consent URL. `scopes` asks for extra feature bundles (incremental authorization);
-    include_granted_scopes keeps what the user already granted."""
+    """URL đồng ý. `scopes` xin thêm các gói tính năng (uỷ quyền tăng dần);
+    include_granted_scopes giữ những gì người dùng đã cấp."""
     params = {
         "client_id": settings.GOOGLE_OAUTH_CLIENT_ID or "",
         "redirect_uri": settings.google_health_redirect_uri,
         "response_type": "code",
         "scope": " ".join((*IDENTITY_SCOPES, *(scopes or SCOPES.values()))),
         "access_type": "offline",
-        # Always show consent so Google returns a refresh token and lets the user
-        # review each health scope (granular consent).
+        # Luôn hiển thị màn hình đồng ý để Google trả về refresh token và cho người dùng
+        # xem lại từng scope sức khoẻ (đồng ý chi tiết).
         "prompt": "consent",
         "include_granted_scopes": "true",
         "state": state,
@@ -67,8 +67,8 @@ def authorization_url(*, state: str, code_challenge: str, login_hint: str | None
 
 
 def create_state(user_id: UUID, nonce: str, share_with_assistant: bool | None, then: str | None = None) -> str:
-    """`share` None (incremental authorization) leaves the assistant consent unchanged.
-    `then` names what the callback finishes once the scopes are granted (export/switch.py)."""
+    """`share` là None (uỷ quyền tăng dần) thì giữ nguyên consent của trợ lý.
+    `then` gọi tên việc callback làm nốt khi scope đã được cấp (export/switch.py)."""
     now = datetime.now(timezone.utc)
     claims = {"sub": str(user_id), "nonce": nonce, "share": share_with_assistant,
               "iat": int(now.timestamp()), "exp": int((now + timedelta(seconds=STATE_SECONDS)).timestamp()),
@@ -148,7 +148,7 @@ async def fetch_userinfo(http: httpx.AsyncClient, access_token: str) -> dict[str
 
 
 async def revoke(http: httpx.AsyncClient, token: str | None) -> bool:
-    """Best effort: a token that is already invalid needs no revocation."""
+    """Cố gắng hết mức: token đã không còn hợp lệ thì không cần thu hồi."""
     if not token:
         return False
     try:

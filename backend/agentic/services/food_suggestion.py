@@ -1,9 +1,9 @@
-"""Meal and food suggestions must be grounded in the catalog.
+"""Gợi ý bữa ăn và thực phẩm phải dựa trên catalog.
 
-The router can decide to "answer" a request like "gợi ý bữa sáng nhiều protein" from general
-knowledge, after which the reply model sees no tool output and may claim the catalog returned
-nothing. Suggestions are therefore routed by code to one read-only catalog lookup (several
-names in one list_foods call) and then answered directly from that result.
+Router có thể quyết định "trả lời" một yêu cầu như "gợi ý bữa sáng nhiều protein" từ tri thức
+chung, khi đó model trả lời không thấy output tool nào và có thể nói catalog không trả về
+gì. Vì vậy gợi ý được code định tuyến tới một lần tra catalog chỉ đọc (nhiều
+tên trong một lời gọi list_foods) rồi trả lời trực tiếp từ kết quả đó.
 """
 import re
 
@@ -14,7 +14,7 @@ CATALOG_READS = frozenset({'list_foods', 'get_foods', 'resolve_foods'})
 
 _SUGGEST = re.compile(r'\b(?:gợi ý|đề xuất|tư vấn|nên ăn|ăn gì|món gì|món nào|thực đơn|recommend|suggest)\b')
 _FOOD = re.compile(r'\b(?:món|bữa|ăn|thực đơn|thức ăn|đồ ăn|protein|đạm|calo|kcal|breakfast|lunch|dinner|meal|food)\b')
-# Logging, editing and training requests keep their own routes.
+# Yêu cầu ghi, sửa và tập luyện giữ các tuyến riêng của chúng.
 _EXCLUDE = re.compile(r'\b(?:ghi|lưu|thêm|tạo|xoá|xóa|sửa|cập nhật|nhật ký|đã ăn|bài tập|giáo án|lịch tập|kế hoạch tập)\b')
 
 LOOKUP_INSTRUCTION = (
@@ -44,7 +44,7 @@ def lookup_decision():
 
 
 def lookup_completed(state, result):
-    """The suggestion lookup succeeded: answer from it without another routing call."""
+    """Lần tra gợi ý đã thành công: trả lời từ đó mà không gọi định tuyến thêm."""
     if (state.get('decision') or {}).get('intent') != INTENT or result.get('pending_action'):
         return False
     if result.get('status') not in (None, 'running'):

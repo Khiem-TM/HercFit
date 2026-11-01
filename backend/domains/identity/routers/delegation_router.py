@@ -1,9 +1,9 @@
-"""Delegated identity for the agent service (POST /api/v2/auth/delegations).
+"""Danh tính uỷ quyền cho service agent (POST /api/v2/auth/delegations).
 
-The agent presents the user's access token *and* proves it is the agent service
-(core/service_auth.py). The backend answers with a short-lived delegated token:
-reads with it are recognized as the assistant's, so consent applies on every
-path, whatever headers the caller sets.
+Agent trình access token của người dùng *và* chứng minh mình là service agent
+(core/service_auth.py). Backend trả về token uỷ quyền ngắn hạn:
+lệnh đọc bằng token này được nhận diện là của trợ lý, nên consent áp dụng trên mọi
+đường đi, bất kể bên gọi đặt header gì.
 """
 from datetime import datetime
 

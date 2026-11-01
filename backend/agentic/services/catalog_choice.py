@@ -1,10 +1,10 @@
-"""Choosing between an existing catalog record and a new variant.
+"""Chọn giữa một bản ghi catalog có sẵn và một biến thể mới.
 
-Research never decides on its own that a researched item is new when the resolver
-returns similar records. The user picks one of those records (reuse) or confirms a
-distinct variant; the choice survives one turn through `catalog_choice` and is matched
-against the reply deterministically. Every command is rebuilt against the live catalog
-(fresh fingerprints and versions), including after a 409 from the finalization API.
+Tra cứu không bao giờ tự quyết rằng món đã tra cứu là mới khi bộ giải quyết
+trả về các bản ghi tương tự. Người dùng chọn một trong các bản ghi đó (dùng lại) hoặc xác nhận
+một biến thể riêng; lựa chọn được giữ qua một lượt trong `catalog_choice` và được so khớp
+tất định với câu trả lời. Mỗi lệnh được dựng lại theo catalog hiện tại
+(dấu vân tay và phiên bản mới), kể cả sau lỗi 409 từ API finalize.
 """
 import re
 from datetime import datetime, timezone
@@ -19,9 +19,9 @@ from agentic.research.sources import TIER_RANK, rate
 from domains.catalog.schemas.foods import FoodCreate
 
 FINALIZATIONS = {'foods': FoodFinalization, 'exercises': ExerciseFinalization}
-# "400-700 kcal", "380 calo", "khoảng 250 Calories": a value or a range with an energy unit.
+# "400-700 kcal", "380 calo", "khoảng 250 Calories": một giá trị hoặc một khoảng có đơn vị năng lượng.
 ENERGY = re.compile(r'(\d+(?:[.,]\d+)?)\s*(?:(?:-|–|—|đến|tới)\s*(\d+(?:[.,]\d+)?)\s*)?(?:kcal|calo(?:ries?)?|cal)\b', re.I)
-# A question or a rumour is not an estimate ("có thật ... 1600 kcal không vậy").
+# Một câu hỏi hay lời đồn không phải là ước tính ("có thật ... 1600 kcal không vậy").
 QUESTION = re.compile(r'\?|\b(?:co that|co phai|bao nhieu|khong vay|khong nhi|phai khong)\b')
 TIER_LABEL = {'primary': 'Nguồn chính thống', 'professional': 'Nguồn chuyên môn', 'secondary': 'Báo, nguồn tham khảo',
               'unknown': 'Chưa kiểm chứng'}
@@ -32,7 +32,7 @@ MAX_OPTIONS = 5
 
 
 async def lookups(domain, query, name):
-    """Resolver results for the research query and the candidate's own name, as the API re-checks both."""
+    """Kết quả bộ giải quyết cho truy vấn tra cứu và cho chính tên của ứng viên, vì API kiểm tra lại cả hai."""
     ctx = request_context.get()
     found = await ctx.backend.call('resolve_' + domain, {'query': query}, ctx.token)
     named = found if not name or normalize_food_text(name) == normalize_food_text(query) else \
@@ -52,7 +52,7 @@ def name_taken(found):
 
 
 def settle(found, resolution, existing_id=None):
-    """(resolution, existing record) the live catalog still allows for a choice, or (None, None) to ask again."""
+    """(resolution, bản ghi có sẵn) mà catalog hiện tại vẫn cho phép với một lựa chọn, hoặc (None, None) để hỏi lại."""
     matches = {m['id']: m for m in merged(found)}
     if not matches:
         return 'create', None
@@ -64,7 +64,7 @@ def settle(found, resolution, existing_id=None):
 
 
 def attest(candidate, owner_id, secret):
-    """Sign the immutable research content once; resolution fields stay outside the signature."""
+    """Ký nội dung tra cứu bất biến một lần; các trường resolution nằm ngoài chữ ký."""
     command = FINALIZATIONS[candidate['domain']].model_validate({
         'candidate_id': candidate['research_id'], 'candidate_revision': 1, 'query': candidate['query'],
         'payload': candidate['payload'], 'evidence': candidate['evidence'], 'sources': candidate['sources'],
@@ -74,9 +74,9 @@ def attest(candidate, owner_id, secret):
 
 
 def command(candidate, resolution, found, existing=None):
-    """The next revision of the finalization command; the signed research content is reused unchanged."""
+    """Bản sửa đổi tiếp theo của lệnh finalize; nội dung tra cứu đã ký được dùng lại nguyên vẹn."""
     query, payload = candidate['query'], candidate['payload']
-    # A distinct variant cannot take over a query that already names another record.
+    # Một biến thể riêng không được chiếm một truy vấn đã gọi tên bản ghi khác.
     query_named = any(m.get('exact') for m in found['query']['matches'])
     alias = (normalize_food_text(query) != normalize_food_text(payload['name_vi']) and resolution != 'reuse'
              and not (resolution == 'create_distinct' and query_named))
@@ -98,7 +98,7 @@ def revise(candidate, resolution, found, existing=None):
 
 
 def form(domain, query, found, candidate=None):
-    """(clarification, catalog_choice): one single-choice question over the similar records."""
+    """(clarification, catalog_choice): một câu hỏi chọn một trên các bản ghi tương tự."""
     noun = NOUN[domain]
     matches = merged(found)[:MAX_OPTIONS]
     options, choices, seen = [], {}, set()
@@ -112,7 +112,7 @@ def form(domain, query, found, candidate=None):
                         'description': description, 'ref': {'kind': 'food' if domain == 'foods' else 'exercise', 'id': match['id']},
                         'value': value})
         choices[canon(value)] = {'kind': 'reuse' if candidate else 'use', 'id': match['id'], 'name_vi': match['name_vi']}
-    # The same name as an existing record is not a distinct variant: reuse it, or describe the difference.
+    # Trùng tên với bản ghi có sẵn thì không phải biến thể riêng: dùng lại nó, hoặc mô tả điểm khác biệt.
     if not (candidate and name_taken(found)):
         value = f'Tạo {noun} mới, khác các bản đã có: {query}'
         options.append({'id': 'create_distinct', 'label': f'Tạo {noun} mới khác các bản trên',
@@ -127,7 +127,7 @@ def form(domain, query, found, candidate=None):
 
 
 def carried(previous):
-    """The previous turn's choice, only while its form is the one the user is answering."""
+    """Lựa chọn của lượt trước, chỉ khi form của nó là form người dùng đang trả lời."""
     choice = previous.get('catalog_choice')
     if previous.get('status') != 'needs_input' or not choice or not choice.get('choices'):
         return None
@@ -142,7 +142,7 @@ def chosen(state, reply):
 
 
 def apply(state, option):
-    """State update for a matched reply; None lets normal routing continue with the chosen record."""
+    """Cập nhật state cho câu trả lời đã khớp; None để định tuyến bình thường tiếp tục với bản ghi đã chọn."""
     choice = state['catalog_choice']
     domain, candidate = choice['domain'], choice.get('candidate')
     if option['kind'] == 'use' or (option['kind'] == 'reuse' and not candidate):
@@ -178,17 +178,17 @@ def _clip(text, limit):
 
 
 def estimate_form(target, claims, documents, product=None):
-    """(clarification, catalog_choice) offering each sourced energy figure for the item, or a manual form.
+    """(clarification, catalog_choice) đưa ra từng con số năng lượng có nguồn cho món đó, hoặc một form nhập tay.
 
-    Each option is a number that appears in a verified quote about this item; the user, not the
-    model, decides whether an estimate for another size or recipe fits what they ate."""
+    Mỗi lựa chọn là một con số xuất hiện trong trích dẫn đã kiểm chứng về món này; người dùng, không phải
+    model, quyết định một ước tính cho khẩu phần hay công thức khác có hợp với những gì họ đã ăn không."""
     from agentic.components.reranker import relevance
     found = []
     for claim in claims:
         if claim.field != 'energy_kcal':
             continue
         source = documents.get(claim.source_id) or {}
-        # The quote itself must be about the item: "100 g avocado: 160 kcal" on a page about the drink is a part, not the drink.
+        # Bản thân trích dẫn phải nói về món đó: "100 g bơ: 160 kcal" trên trang nói về đồ uống là một thành phần, không phải đồ uống.
         if QUESTION.search(normalize_food_text(claim.quote)) or relevance(target, claim.quote) < .5:
             continue
         url = source.get('url') or ''
@@ -212,7 +212,7 @@ def estimate_form(target, claims, documents, product=None):
         choices[canon(value)] = option
     if not options:
         return manual_form('foods', target), None
-    # Label values the user has instead of these estimates: the label form, behind its own option.
+    # Giá trị trên nhãn mà người dùng có, thay cho các ước tính này: form nhập nhãn, nằm sau lựa chọn riêng của nó.
     label = manual_form('foods', target)['questions']
     options.append({'id': 'estimate-label', 'label': 'Nhập theo nhãn/app của hãng',
                     'description': 'Chọn khẩu phần, năng lượng và macro trên nhãn', 'value': LABEL_VALUE})
@@ -244,7 +244,7 @@ def _nutrient(question_id, label, question, unit, high, step, required=False):
 
 
 def manual_form(domain, target):
-    """Card frames for the values a label, an app or the user can supply: numbers and choices, nothing typed."""
+    """Khung trên thẻ cho các giá trị mà nhãn, ứng dụng hoặc người dùng có thể cung cấp: số và lựa chọn, không gõ tay."""
     if domain == 'foods':
         return {'intro': f'Bạn chọn số liệu dinh dưỡng của "{target}" theo nhãn hoặc app của hãng.', 'questions': [
             {'id': 'q1', 'label': 'Khẩu phần', 'question': f'Số liệu trên nhãn của "{target}" tính cho khẩu phần nào?',
@@ -266,7 +266,7 @@ def manual_form(domain, target):
 
 
 def estimate_draft(target, option):
-    """A CUSTOM food from the estimate the user chose: energy only, per serving (PORTION), with its basis."""
+    """Một thực phẩm CUSTOM từ ước tính người dùng đã chọn: chỉ năng lượng, theo khẩu phần (PORTION), kèm căn cứ."""
     name = target[:1].upper() + target[1:]
     payload = FoodCreate.model_validate({
         'name_vi': name, 'serving_unit': 'PORTION', 'energy_kcal': option['energy_kcal'],

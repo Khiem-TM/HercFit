@@ -1,4 +1,4 @@
-"""Transaction management decorator for FastAPI endpoint handlers."""
+"""Decorator quản lý transaction cho handler endpoint FastAPI."""
 
 from functools import wraps
 from typing import Any, Callable

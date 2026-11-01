@@ -1,4 +1,4 @@
-"""Durable ingestion worker. Leases fence late workers after recovery."""
+"""Worker tiếp nhận bền vững. Lease fence các worker đến muộn sau khi khôi phục."""
 from agentic.observability import observer, annotate
 from agentic.observability.persistence import worker_context
 from datetime import datetime, timezone
@@ -41,7 +41,7 @@ async def process(job, client):
             done, _ = await asyncio.wait({work, lease}, return_when=asyncio.FIRST_COMPLETED)
             if work in done:
                 return await work
-            await lease  # propagate a lost lease and cancel in-flight API work
+            await lease  # truyền tiếp lỗi mất lease và huỷ công việc API đang chạy
             raise RuntimeError('LeaseLost')
         finally:
             for task in (work, lease):
@@ -51,14 +51,14 @@ async def process(job, client):
 
 async def _process(job, client):
     async with get_db_session() as session:
-        # The embedded text gets the same context header that prepare counted into the token budget.
+        # Văn bản được embed nhận cùng phần đầu ngữ cảnh mà prepare đã tính vào ngân sách token.
         rows=(await session.execute(text('''SELECT c.id,c.content,c.heading,COALESCE(r.metadata->>'title',d.title) AS title,
             COALESCE((r.metadata->'processing'->>'contextual_header')::boolean,false) AS contextual
             FROM knowledge_chunks c JOIN knowledge_revisions r ON r.id=c.revision_id JOIN knowledge_documents d ON d.id=r.document_id
             WHERE c.revision_id=:revision_id AND NOT EXISTS (
                 SELECT 1 FROM knowledge_embeddings e WHERE e.chunk_id=c.id AND e.profile_id=:profile_id)
             ORDER BY c.position'''),job)).mappings().all()
-    # Existing vectors are reused after retries or restarts; completion is checked below.
+    # Vector có sẵn được dùng lại sau khi thử lại hoặc khởi động lại; việc hoàn tất được kiểm tra bên dưới.
     annotate(chunk_count=len(rows))
     batch_size = settings().KNOWLEDGE_EMBEDDING_BATCH_SIZE
     for start in range(0,len(rows),batch_size):

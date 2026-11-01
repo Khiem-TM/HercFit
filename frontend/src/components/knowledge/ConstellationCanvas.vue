@@ -33,7 +33,7 @@ const stars = Array.from({ length: 110 }, (_, i) => ({
   animationDelay: `${-(i % 13)}s`, width: `${i % 9 === 0 ? 2 : 1}px`,
 }))
 
-/** Hubs are suns, groups are rings, records are stars: shape tells depth at a glance. */
+/** Hub là mặt trời, nhóm là vòng, bản ghi là ngôi sao: nhìn hình dạng biết ngay độ sâu. */
 function glyph(kind: string, color: string) {
   const key = `${kind}:${color}`
   if (glyphs.has(key)) return glyphs.get(key)!
@@ -67,7 +67,7 @@ function nodeData(node: KnowledgeNode) {
 
 function animateTo(node: NodeSingular, position: Point, opacity = 1, done?: () => void) {
   node.stop()
-  // A visible star drops its inline opacity so class styles (muted, trail) apply again.
+  // Ngôi sao đang hiển thị bỏ opacity inline để style theo class (mờ, vệt) áp dụng lại.
   const settle = () => { if (opacity === 1) node.removeStyle('opacity'); done?.() }
   if (reduced.value) {
     node.position(position).style('opacity', opacity)
@@ -87,7 +87,7 @@ function render() {
   const added: NodeSingular[] = []
   cy.batch(() => {
     cy!.edges().filter(edge => !wanted.has(edge.id())).remove()
-    // Folding branches glide back into their parent before disappearing.
+    // Nhánh đang thu gọn trượt về node cha trước khi biến mất.
     cy!.nodes('.knowledge').forEach(node => {
       if (visible.has(node.id()) || node.hasClass('leaving')) return
       const parent = props.index.byId.get(node.id())?.parent
@@ -106,7 +106,7 @@ function render() {
         continue
       }
       const parent = record.parent ? cy!.getElementById(record.parent) as NodeSingular : undefined
-      // New stars bloom out of their parent; the very first sky is drawn in place so it can be framed.
+      // Ngôi sao mới nở ra từ node cha; bầu trời đầu tiên được vẽ tại chỗ để căn khung được.
       const origin = painted && parent?.nonempty() ? { ...parent.position() } : target
       const node = cy!.add({ group: 'nodes', data: nodeData(record), position: origin, classes: 'knowledge' })
       node.style('opacity', painted ? 0 : 1)
@@ -131,7 +131,7 @@ function render() {
     requestAnimationFrame(() => fit(false))
   } else if (added.length) {
     hinted.value = false
-    // Keep a branch that just opened, and the star that opened it, on screen.
+    // Giữ nhánh vừa mở, và ngôi sao đã mở nó, trong màn hình.
     const parentId = props.index.byId.get(added[0].id())?.parent
     const parent = parentId ? cy.getElementById(parentId) : cy.collection()
     reveal(added.reduce<Collection>((all, node) => all.union(node), parent), targets)
@@ -213,7 +213,7 @@ function zoom(factor: number) {
   else cy.stop().animate({ zoom: level, pan }, { duration: 300, easing: 'ease-out-cubic' })
 }
 
-/** Centre a node, e.g. after choosing it from the timeline or the inspector. */
+/** Căn giữa một node, ví dụ sau khi chọn nó từ dòng thời gian hoặc bảng chi tiết. */
 function focus(id: string) {
   const node = cy?.getElementById(id)
   if (!cy || !node || node.empty()) return
@@ -290,7 +290,7 @@ onMounted(() => {
   })
   setTimeout(() => { hinted.value = false }, 7000)
   cy.on('tap', event => { if (event.target === cy) emit('clear') })
-  // Resizing the panel or the details keeps the middle of the sky in the middle.
+  // Đổi kích thước bảng hoặc khung chi tiết vẫn giữ giữa bầu trời ở chính giữa.
   let frame = { width: 0, height: 0 }
   resize = new ResizeObserver(([entry]) => {
     if (!cy || !entry) return

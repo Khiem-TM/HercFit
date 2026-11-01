@@ -7,7 +7,7 @@ import { dayLabel, fmt, num } from './healthFormat'
 import type { HealthData } from './useHealthData'
 
 const props = defineProps<{ data: HealthData }>()
-/** Complete past days only: at least two meals with known energy and a device total. */
+/** Chỉ các ngày đã trọn trong quá khứ: ít nhất hai bữa có năng lượng đã biết và có tổng từ thiết bị. */
 const rows = computed(() => props.data.progress.flatMap(day => {
   const intake = num(day.calories_in.actual)
   const out = num(day.calories_out_actual)

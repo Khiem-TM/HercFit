@@ -1,4 +1,4 @@
-"""Content-free model/node measurements; no prompts, completions, or credentials."""
+"""Số đo model/node không chứa nội dung; không có prompt, completion hay thông tin xác thực."""
 from agentic.observability import graph_config
 from contextvars import ContextVar
 from time import perf_counter
@@ -9,7 +9,7 @@ active_metrics = ContextVar('agent_node_metrics', default=None)
 
 
 def record_jev_result(result):
-    """Measure every gateway attempt without retaining inputs or answers."""
+    """Đo mọi lần thử qua gateway mà không giữ đầu vào hay câu trả lời."""
     metrics = active_metrics.get()
     if metrics is None:
         return
@@ -28,10 +28,10 @@ def record_jev_result(result):
 
 
 def merge_retrieval(previous, current):
-    """One knowledge-graph summary per run: the latest status and domains, every attempt counted.
+    """Mỗi lượt chạy một bản tóm tắt knowledge graph: trạng thái và miền mới nhất, đếm mọi lần thử.
 
-    `status` and `duration_ms` keep their single-attempt meaning for the latest read and the
-    total time; `statuses` lists each attempt in order (bounded)."""
+    `status` và `duration_ms` giữ nghĩa một lần thử cho lần đọc mới nhất và
+    tổng thời gian; `statuses` liệt kê từng lần thử theo thứ tự (có giới hạn)."""
     if not previous:
         return {**current, 'attempts': current.get('attempts', 1),
                 'statuses': list(current.get('statuses') or [current.get('status')])}
@@ -42,7 +42,7 @@ def merge_retrieval(previous, current):
 
 
 def merge_jev_metrics(telemetry, events):
-    """Keep shadow spend distinct and never charge cached usage twice."""
+    """Giữ chi phí shadow riêng biệt và không bao giờ tính số liệu cache hai lần."""
     for event in events:
         if event.get('cached'):
             telemetry['jev_cache_hits'] = telemetry.get('jev_cache_hits', 0) + 1
@@ -114,8 +114,8 @@ class _MeasuredModel:
         callbacks = config.get('callbacks')
         if callbacks is not None and not isinstance(callbacks, list):
             callbacks = callbacks.copy()
-            # Structured-output RunnableSequences invoke the LLM as a child;
-            # its usage callback must survive child callback-manager creation.
+            # RunnableSequence đầu ra có cấu trúc gọi LLM như một node con;
+            # callback số liệu sử dụng của nó phải sống sót qua việc tạo callback manager con.
             callbacks.add_handler(usage, inherit=True)
         else:
             callbacks = [*(callbacks or []), usage]

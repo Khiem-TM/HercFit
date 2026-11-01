@@ -1,4 +1,4 @@
-"""Centralized API router aggregating all domain routers."""
+"""Router API tập trung, gom router của mọi miền."""
 
 from fastapi import APIRouter, Depends
 
@@ -26,7 +26,7 @@ from domains.identity.schemas.auth_session import LogoutResponse
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
-# Before profile_router so /profile/export and /profile/erase are matched first.
+# Đặt trước profile_router để /profile/export và /profile/erase được khớp trước.
 api_router.include_router(privacy_router)
 api_router.include_router(profile_router)
 api_router.include_router(body_metrics_router)
@@ -37,7 +37,7 @@ for domain_router in (preview_router, food_router, exercise_router, plan_router,
                       training_analytics_router, nutrition_router, integration_router, health_router, assistant_router):
     api_router.include_router(domain_router)
 
-# Alias routes: /api/login and /api/logout
+# Route bí danh: /api/login và /api/logout
 alias_router = APIRouter(tags=["auth"], dependencies=[Depends(limit_auth)])
 alias_router.add_api_route(
     "/login",

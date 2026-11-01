@@ -1,4 +1,4 @@
-"""Approved document revisions, isolated embedding profiles and durable jobs."""
+"""Các bản sửa đổi tài liệu đã duyệt, hồ sơ embedding tách biệt và job bền vững."""
 from alembic import op
 revision='0006_knowledge'
 down_revision='0005_research_catalog'

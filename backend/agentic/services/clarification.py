@@ -1,16 +1,16 @@
-"""Turn a needs_input reply into standard card frames, one per missing field; never a free-text box.
+"""Biến câu trả lời needs_input thành các khung thẻ chuẩn, mỗi trường còn thiếu một khung; không bao giờ là ô văn bản tự do.
 
-Frames (`ClarifyQuestion.mode`) are answered on the card: a choice (single, quick_reply, multiple), a number
-with its unit and plausible range, or the per-exercise sets editor. The model only drafts questions, labels,
-values and number ranges; code validates every frame. Catalog identity and images are copied from records
-that tools returned in this turn, so an option can never point to an invented food/exercise or image. A
-question that asks the user to pick records ("những bài nào trong danh sách?") gets the records the reply
-listed as options from code when the model left it without any; the "số hiệp × reps × mức tạ" question after
-it becomes the sets editor. When the model fails, the questions of the reply are framed by code the same way.
+Các khung (`ClarifyQuestion.mode`) được trả lời trên thẻ: một lựa chọn (single, quick_reply, multiple), một con số
+kèm đơn vị và khoảng hợp lý, hoặc trình sửa set theo từng bài tập. Model chỉ soạn câu hỏi, nhãn,
+giá trị và khoảng số; code kiểm tra mọi khung. Định danh và ảnh catalog được chép từ bản ghi
+mà tool trả về trong lượt này, nên một lựa chọn không bao giờ trỏ tới thực phẩm/bài tập hay ảnh bịa ra. Một
+câu hỏi yêu cầu người dùng chọn bản ghi ("những bài nào trong danh sách?") nhận các bản ghi mà câu trả lời
+đã liệt kê làm lựa chọn do code điền khi model để trống; câu hỏi "số hiệp × reps × mức tạ" sau
+nó trở thành trình sửa set. Khi model thất bại, các câu hỏi trong câu trả lời được code dựng khung theo cùng cách.
 
-A question no frame fits (a name, a free description) stays in the reply for the chat box, and a reply with
-nothing to frame gets no form at all: a summary or a courtesy line never reaches the user as a question (run
-433a847a: two nutrition summary lines became two "Tự nhập" questions after the meal was already saved).
+Câu hỏi không khung nào vừa (một cái tên, một mô tả tự do) ở lại trong câu trả lời cho ô chat, và câu trả lời
+không có gì để dựng khung thì hoàn toàn không có form: một bản tóm tắt hay câu lịch sự không bao giờ đến người dùng như câu hỏi (lượt chạy
+433a847a: hai dòng tóm tắt dinh dưỡng thành hai câu hỏi "Tự nhập" sau khi bữa ăn đã được lưu).
 """
 from agentic.prompts.registry import get_prompt
 import json
@@ -33,8 +33,8 @@ OPTION_LIMIT = 12  # ClarifyQuestion.options
 PRESET_LIMIT = 6  # NumberFrame.presets
 
 
-# No length limits on drafts: one over-long label or a seventh option used to fail validation and
-# discard the whole form. Sizes are clipped when the form is built.
+# Không giới hạn độ dài bản nháp: một nhãn quá dài hay lựa chọn thứ bảy từng làm hỏng bước kiểm tra và
+# bỏ cả form. Kích thước được cắt khi dựng form.
 class OptionDraft(BaseModel):
     model_config = ConfigDict(extra='forbid')
     label: str
@@ -47,7 +47,7 @@ class QuestionDraft(BaseModel):
     model_config = ConfigDict(extra='forbid')
     label: str
     question: str
-    # 'text': the answer is a name or a free description; it is left in the reply for the chat box, never put on the card.
+    # 'text': câu trả lời là một cái tên hoặc mô tả tự do; nó được để lại trong câu trả lời cho ô chat, không bao giờ đưa lên thẻ.
     mode: Literal['single', 'multiple', 'quick_reply', 'number', 'text']
     options: list[OptionDraft] = Field(default_factory=list, description=f'At most {OPTION_LIMIT}')
     unit: str | None = Field(default=None, description='number: one of ' + ', '.join(NUMBER_UNITS))
@@ -67,7 +67,7 @@ class ClarificationDraft(BaseModel):
 
 
 def catalog_groups(state) -> list[dict]:
-    """Catalog records (foods/exercises) of each successful tool call in this turn, with the call's search text."""
+    """Bản ghi catalog (thực phẩm/bài tập) của mỗi lần gọi tool thành công trong lượt này, kèm văn bản tìm kiếm của lần gọi."""
     groups = []
     for output in (state or {}).get('tool_outputs', []):
         tool = output.get('tool') or ''
@@ -86,7 +86,7 @@ def catalog_groups(state) -> list[dict]:
 
 
 def catalog_index(state) -> dict[str, dict]:
-    """Catalog records returned by successful tool calls in this turn, by id."""
+    """Bản ghi catalog do các lần gọi tool thành công trong lượt này trả về, theo id."""
     return {record['id']: record for group in catalog_groups(state) for record in group['records']}
 
 
@@ -96,12 +96,12 @@ PICK = re.compile(r'\b(?:bai|mon|dong tac|loai|bien the)(?: tap| an)? (?:nao|gi)
 PLURAL = re.compile(r'\b(?:nhung|cac)\b')
 # "số hiệp × reps × mức tạ": the performance of each strength exercise.
 SETS = re.compile(r'\b(?:hiep|sets?|reps?|muc ta)\b')
-# Labels that name the topic, not an exercise ("Chi tiết từng bài", "Câu 2").
+# Nhãn gọi tên chủ đề, không phải bài tập ("Chi tiết từng bài", "Câu 2").
 GENERIC_LABEL = re.compile(r'^(?:chi tiet|cau \d|tra loi|thong tin|bai tap|so hiep|khoi luong|rpe)')
 COMMON = {'ban', 'nao', 'nay', 'cua', 'cho', 'trong', 'nhung', 'cac', 'khong', 'hay', 'voi', 'mot', 'sach', 'danh'}
 
-# A value asked by its unit (accents stripped): the label for a bare "Câu 2", the unit, range, step and presets.
-# "mấy giờ" asks a time of day, not a duration, so it is no number frame.
+# Giá trị được hỏi theo đơn vị (đã bỏ dấu): nhãn cho "Câu 2" trần, đơn vị, khoảng, bước và giá trị có sẵn.
+# "mấy giờ" hỏi giờ trong ngày, không phải thời lượng, nên không phải khung nhập số.
 NUMBER_HINTS = (
     (re.compile(r'\b(?:can nang|nang bao nhieu|bao nhieu (?:kg|ky|can)|may (?:kg|ky|can))\b'), 'Cân nặng', 'kg', 30, 250, 0.1, ()),
     (re.compile(r'\b(?:chieu cao|cao bao nhieu|bao nhieu cm)\b'), 'Chiều cao', 'cm', 100, 230, 1, ()),
@@ -124,7 +124,7 @@ NUMBER_HINTS = (
     (re.compile(r'\b(?:bao nhieu ngay|may ngay)\b'), 'Số ngày', 'ngày', 1, 365, 1, ()),
     (re.compile(r'\b(?:bao nhieu buoc|so buoc)\b'), 'Số bước', 'bước', 0, 50000, 500, (5000, 8000, 10000)),
 )
-# Units the model may name, folded to the canonical ones of NumberFrame.
+# Các đơn vị model có thể gọi tên, quy về đơn vị chuẩn của NumberFrame.
 UNIT_ALIASES = {
     'kilogram': 'kg', 'kgs': 'kg', 'ky': 'kg', 'can': 'kg', 'gram': 'g', 'gam': 'g', 'grams': 'g', 'gr': 'g',
     'mililit': 'ml', 'mililiter': 'ml', 'calo': 'kcal', 'cal': 'kcal', 'calories': 'kcal', 'kilocalories': 'kcal',
@@ -162,7 +162,7 @@ def fold(text: str) -> str:
 
 
 def position(text: str, record: dict) -> int:
-    """Where the record's name first appears in the folded reply, or -1."""
+    """Vị trí tên bản ghi xuất hiện lần đầu trong câu trả lời đã chuẩn hoá, hoặc -1."""
     found = [text.find(fold(name)) for name in (record['name'], record.get('name_en')) if name]
     return min((index for index in found if index >= 0), default=-1)
 
@@ -185,7 +185,7 @@ def canonical_unit(unit: str | None) -> str | None:
 
 
 def number_frame(unit, low=None, high=None, step=None, default=None, presets=()) -> dict | None:
-    """A NumberFrame within the unit's plausible range, or None for a unit the card cannot ask in."""
+    """Một NumberFrame trong khoảng hợp lý của đơn vị, hoặc None với đơn vị mà thẻ không hỏi được."""
     unit = canonical_unit(unit)
     if unit is None:
         return None
@@ -195,9 +195,9 @@ def number_frame(unit, low=None, high=None, step=None, default=None, presets=())
     if low >= high:
         low, high = floor, ceiling
     step = step if step and 0 < step <= high - low else base
-    # The stepper moves on multiples of the step: 0.25..24 h by 1 h starts at 1 h, not at 0.25 → 1.25 → 2.25.
+    # Bộ tăng giảm di chuyển theo bội số của bước: 0.25..24 h với bước 1 h bắt đầu từ 1 h, không phải 0.25 → 1.25 → 2.25.
     aligned = round(math.ceil(round(low / step, 9)) * step, 6)
-    if aligned >= high:  # no multiple of the step inside the range: the unit's own range
+    if aligned >= high:  # không có bội số nào của bước nằm trong khoảng: dùng khoảng riêng của đơn vị
         low, high, step = floor, ceiling, base
         aligned = round(math.ceil(round(low / step, 9)) * step, 6)
     low = aligned
@@ -207,7 +207,7 @@ def number_frame(unit, low=None, high=None, step=None, default=None, presets=())
 
 
 def catalog_choices(groups: list[dict], reply: str, taken: set[str], listed_only: bool = False) -> list[dict]:
-    """Records of the groups not offered yet; the ones the reply listed, in the reply's order, when there are any."""
+    """Bản ghi của các nhóm chưa được đưa ra; những bản ghi câu trả lời đã liệt kê, theo thứ tự của câu trả lời, nếu có."""
     records = {}
     for group in groups:
         for record in group['records']:
@@ -220,10 +220,10 @@ def catalog_choices(groups: list[dict], reply: str, taken: set[str], listed_only
 
 
 def with_catalog_options(questions: list[dict], groups: list[dict], reply: str) -> list[dict]:
-    """Give a pick question the catalog records it asks about: all of them when the model left it without options,
-    the other records the reply listed when the model offered only some (seen: one option out of twelve)."""
+    """Cho câu hỏi chọn các bản ghi catalog mà nó hỏi tới: tất cả khi model để nó không có lựa chọn,
+    các bản ghi khác mà câu trả lời đã liệt kê khi model chỉ đưa một phần (đã thấy: một lựa chọn trên mười hai)."""
     taken = {option['id'] for question in questions for option in question.get('options') or [] if option.get('ref')}
-    # A search that matched one record already identified it; several matches are the open choice.
+    # Lần tìm kiếm khớp một bản ghi là đã xác định được nó; khớp nhiều bản ghi mới là lựa chọn còn mở.
     pool = [group for group in groups if len(group['records']) > 1] or groups
     result = []
     for question in questions:
@@ -252,7 +252,7 @@ def with_catalog_options(questions: list[dict], groups: list[dict], reply: str) 
 
 
 def logs_training(state) -> bool:
-    """This turn logs a training session (its first routing decision), so strength picks need their sets."""
+    """Lượt này ghi một buổi tập (quyết định định tuyến đầu tiên của nó), nên lựa chọn bài sức mạnh cần các set."""
     return 'LOG_EXERCISE' in {((state or {}).get('turn') or {}).get('intent'), ((state or {}).get('decision') or {}).get('intent')}
 
 
@@ -263,22 +263,22 @@ def sets_question(question_id: str, sources: list[str] | None = None, rows: list
 
 
 def with_sets_editor(questions: list[dict], groups: list[dict], reply: str, training_log: bool = False) -> list[dict]:
-    """Sets × reps × load is asked with the per-exercise editor, one row per exercise the user picks.
+    """Sets × reps × mức tạ được hỏi bằng trình sửa theo từng bài, mỗi bài người dùng chọn một dòng.
 
-    An open sets question follows the earlier exercise picks; with none, the strength exercises looked up this turn
-    become a (code-owned) pick just before it. Open sets questions naming one exercise each merge into one editor.
-    When a training log picks strength exercises and asks no sets at all, the editor is added after the picks: the
-    log cannot be written without them.
+    Câu hỏi set còn mở đi sau các lựa chọn bài tập trước đó; nếu không có, các bài sức mạnh đã tra trong lượt này
+    trở thành một lựa chọn (do code quyết định) ngay trước nó. Các câu hỏi set mở, mỗi câu gọi tên một bài, gộp thành một trình sửa.
+    Khi nhật ký tập chọn bài sức mạnh mà không hỏi set nào, trình sửa được thêm sau các lựa chọn: nhật ký
+    không thể ghi khi thiếu chúng.
     """
     text = fold(reply)
     strength = {record['id']: record for group in groups for record in group['records'] if record.get('exercise_kind') == 'STRENGTH'}
-    # The ones the reply listed first, in its order, then the rest of the lookups (the reply may only give examples).
+    # Những bản ghi câu trả lời liệt kê trước, theo thứ tự của nó, rồi phần còn lại của các lần tra (câu trả lời có thể chỉ nêu ví dụ).
     candidates = sorted(strength.values(), key=lambda record: (position(text, record) < 0, max(position(text, record), 0)))
     result, picks, named, has_sets = [], [], [], False
     for question in questions:
         asks_sets = question['mode'] == 'text' and SETS.search(normalize_food_text(question['label'] + ' ' + question['question']))
         if question['mode'] in {'single', 'multiple'} and any((o.get('ref') or {}).get('kind') == 'exercise' for o in question['options']):
-            picks.append(question['id'])  # e.g. one pick per muscle group
+            picks.append(question['id'])  # ví dụ mỗi nhóm cơ một lựa chọn
         elif asks_sets and not picks and not candidates and not GENERIC_LABEL.match(normalize_food_text(question['label'])):
             named.append(question)  # "Đẩy ngực máy: số hiệp × reps @ tạ?", one per exercise, no lookup this turn
             if len(named) > 1:
@@ -308,7 +308,7 @@ def with_sets_editor(questions: list[dict], groups: list[dict], reply: str, trai
 
 
 def settled(question: dict) -> dict:
-    """Choices with their selection bounds; a choice without choices is open until a frame is found for it."""
+    """Các lựa chọn cùng giới hạn chọn; lựa chọn chưa có phương án thì còn mở cho đến khi tìm được khung cho nó."""
     options = question.get('options') or []
     mode = question.get('mode', 'text')
     if mode not in {'single', 'multiple', 'quick_reply'}:
@@ -316,7 +316,7 @@ def settled(question: dict) -> dict:
     if not options:
         return {**question, 'mode': 'text', 'options': []}
     if mode == 'multiple' and len(options) < 2:
-        mode = 'single'  # one record is a one-tap pick
+        mode = 'single'  # một bản ghi là lựa chọn một chạm
     limit = question.get('max_select') or 1
     max_select = min(limit if limit > 1 else len(options), len(options)) if mode == 'multiple' else 1
     return {**question, 'mode': mode, 'options': options, 'min_select': 1, 'max_select': max(1, max_select)}
@@ -352,7 +352,7 @@ def reply_choices(question: dict, reply: str) -> list[dict]:
             continue  # a summary line ("Phở bò tái + trứng luộc — 14:37 (01/11/2026)") lists no choices
         item = ITEM.match(text)
         label, _, rest = (item.group(1) if item else text).partition(':')
-        # Every word of the line's topic is in the question: "Level hiện tại" is not "tập tại nhà" for sharing "tại".
+        # Mọi từ trong chủ đề của dòng đều có trong câu hỏi: "Level hiện tại" không phải "tập tại nhà" chỉ vì chung chữ "tại".
         named = _words(label) - COMMON
         if rest.strip() and named and named <= words:
             options = listed_choices(question['id'], rest)
@@ -362,7 +362,7 @@ def reply_choices(question: dict, reply: str) -> list[dict]:
 
 
 def framed(question: dict, reply: str = '') -> dict | None:
-    """The card frame of a question, or None when its answer is a name or a description (left for the chat box)."""
+    """Khung trên thẻ của một câu hỏi, hoặc None khi câu trả lời là một cái tên hay mô tả (để cho ô chat)."""
     if question.get('mode') != 'text':
         return question
     asked = normalize_food_text(question['label'] + ' ' + question['question'])
@@ -384,42 +384,42 @@ def framed(question: dict, reply: str = '') -> dict | None:
 
 
 def to_form(questions: list[dict], groups: list[dict], reply: str, training_log: bool, intro: str | None) -> dict | None:
-    """Validated card frames for the drafted questions, or None when no question fits a frame."""
+    """Các khung trên thẻ đã kiểm tra cho câu hỏi đã soạn, hoặc None khi không câu hỏi nào vừa một khung."""
     questions = [settled(question) for question in with_catalog_options(questions[:QUESTION_LIMIT], groups, reply)]
     questions = with_sets_editor(questions, groups, reply, training_log)
     frames = [frame for frame in (framed(question, reply) for question in questions) if frame]
     if len(frames) < len(questions):
         logger.info('clarification_open_questions count=%s', len(questions) - len(frames))
-        # The reply asks something the card cannot: the bubble keeps the whole reply instead of a short intro.
+        # Câu trả lời hỏi điều thẻ không hỏi được: bong bóng chat giữ toàn bộ câu trả lời thay vì lời dẫn ngắn.
         intro = None
     return Clarification.sanitize({'intro': clip(intro, 300) if intro else None, 'questions': frames})
 
 
 def split_reply(reply: str) -> tuple[list[str], list[str], list[str]]:
-    """(lead paragraphs, listed items, paragraphs after the last item) of a reply, markup removed."""
+    """(các đoạn dẫn, các mục liệt kê, các đoạn sau mục cuối) của một câu trả lời, đã bỏ markup."""
     lead, items, tail = [], [], []
     for line in (reply or '').splitlines():
         text = plain(line)
         match = ITEM.match(text)
         if match:
             items.append(match.group(1).strip())
-            tail = []  # only the paragraph after the last item can be a closing question
+            tail = []  # chỉ đoạn sau mục cuối cùng mới có thể là câu hỏi kết
         elif text:
             (tail if items else lead).append(text)
     return lead, items, tail
 
 
 def intro_of(reply: str) -> str | None:
-    """The paragraph before a list of questions: the bubble shows it while the form holds the questions."""
+    """Đoạn văn trước danh sách câu hỏi: bong bóng chat hiển thị nó trong khi form chứa các câu hỏi."""
     lead, items, _ = split_reply(reply)
     return clip(' '.join(lead), 300) if lead and any('?' in item or BLANK.match(item) for item in items) else None
 
 
 def fallback_clarification(reply: str, groups: list[dict] | None = None, training_log: bool = False) -> dict | None:
-    """Frames for the reply's questions, without a model call; None when the reply asks nothing a card can hold."""
+    """Khung cho các câu hỏi trong câu trả lời, không gọi model; None khi câu trả lời không hỏi gì mà thẻ chứa được."""
     _, items, tail = split_reply(reply)
-    # Only questions are questions: listed records, sub-details and summaries (a meal's nutrition lines) are not;
-    # a blank to fill in ("Năng lượng: ... kcal") is.
+    # Chỉ câu hỏi mới là câu hỏi: bản ghi được liệt kê, chi tiết phụ và tóm tắt (các dòng dinh dưỡng của bữa ăn) thì không;
+    # một chỗ trống cần điền ("Năng lượng: ... kcal") thì có.
     asked = [text for text in items if '?' in text or BLANK.match(text)]
     questions = []
     for text in asked:
@@ -438,11 +438,11 @@ def fallback_clarification(reply: str, groups: list[dict] | None = None, trainin
                           'mode': 'text'})
     closing = ' '.join(tail)
     if questions and '?' in closing and re.search(r'\b(?:ngoai ra|neu co|tuy chon)\b', normalize_food_text(closing)):
-        # A closing "ngoài ra ...?" paragraph after the list is an optional extra question.
+        # Đoạn kết "ngoài ra ...?" sau danh sách là một câu hỏi thêm tuỳ chọn.
         questions.append({'id': f'q{len(questions) + 1}', 'label': 'Thông tin thêm', 'question': clip(closing, 300),
                           'mode': 'text', 'required': False})
     if not questions:
-        # The sentences that ask, not the start of a long summary.
+        # Những câu đặt câu hỏi, không phải phần mở đầu của một bản tóm tắt dài.
         for sentence in (plain(part) for part in re.findall(r'[^.!?\n]*\?', reply or '')):
             if sentence:
                 questions.append({'id': f'q{len(questions) + 1}', 'label': f'Câu {len(questions) + 1}',
@@ -455,12 +455,12 @@ def fallback_clarification(reply: str, groups: list[dict] | None = None, trainin
 
 
 def asks(reply: str) -> bool:
-    """Whether the reply asks anything: a question mark or a numbered/bulleted item."""
+    """Câu trả lời có hỏi gì không: một dấu hỏi hoặc một mục đánh số/gạch đầu dòng."""
     return '?' in (reply or '') or any(ITEM.match(line) for line in (reply or '').splitlines())
 
 
 def grounded(question: dict, reply: str) -> bool:
-    """A drafted question must come from the reply: most of its words appear there."""
+    """Câu hỏi đã soạn phải đến từ câu trả lời: phần lớn từ ngữ của nó xuất hiện ở đó."""
     words = _words(question['label'] + ' ' + question['question'])
     return not words or len(words & _words(reply)) / len(words) >= .5
 
@@ -472,7 +472,7 @@ def question_from_draft(number: int, draft: QuestionDraft, catalog: dict[str, di
             'required': draft.required, 'min_select': 1, 'max_select': draft.max_select, 'number': None}
     if draft.mode == 'number':
         frame = number_frame(draft.unit, draft.min, draft.max, draft.step, draft.default, draft.presets)
-        # A unit the card cannot ask in is framed again from the question's own words.
+        # Đơn vị mà thẻ không hỏi được thì dựng khung lại từ chính lời của câu hỏi.
         return {**base, 'mode': 'number', 'options': [], 'number': frame, 'max_select': 1} if frame else {**base, 'mode': 'text', 'options': []}
     options, seen = [], set()
     for option in draft.options if draft.mode != 'text' else []:
@@ -494,11 +494,11 @@ def question_from_draft(number: int, draft: QuestionDraft, catalog: dict[str, di
 async def build_clarification(model, state, reply: str) -> dict | None:
     groups = catalog_groups(state)
     if not asks(reply):
-        # Nothing to turn into choices; a model would invent questions (seen: a training-goal form
-        # after a nutrition search).
+        # Không có gì để biến thành lựa chọn; model sẽ bịa câu hỏi (đã thấy: form mục tiêu tập luyện
+        # sau một lần tìm kiếm dinh dưỡng).
         return fallback_clarification(reply, groups, logs_training(state))
     catalog = {record['id']: record for group in groups for record in group['records']}
-    # Records the reply listed go first, so the listing cap never hides what the user was shown.
+    # Các bản ghi câu trả lời đã liệt kê đứng đầu, để giới hạn số mục không bao giờ giấu những gì người dùng đã thấy.
     text = fold(reply)
     shown = sorted(catalog.values(), key=lambda record: position(text, record) < 0)
     listing = [{'id': record['id'], 'name': record['name']} for record in shown[:24]]
@@ -515,9 +515,9 @@ async def build_clarification(model, state, reply: str) -> dict | None:
             if question:
                 questions.append(question)
         if not all(grounded(question, reply) for question in questions):
-            questions = []  # an off-topic question discards the drafted form
+            questions = []  # câu hỏi lạc đề sẽ bỏ form đã soạn
         if questions:
-            # The bubble shows the intro instead of the long list, so keep one even if the model left it out.
+            # Bong bóng chat hiển thị lời dẫn thay cho danh sách dài, nên giữ một lời dẫn kể cả khi model bỏ sót.
             return to_form(questions, groups, reply, logs_training(state), draft.intro or intro_of(reply))
     except Exception as exc:
         logger.warning('Clarification draft failed (%s); framing the reply instead', type(exc).__name__)

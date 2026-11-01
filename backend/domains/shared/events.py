@@ -1,12 +1,12 @@
-"""Transactional domain events (outbox): business facts other parts react to.
+"""Sự kiện miền có transaction (outbox): dữ kiện nghiệp vụ mà các phần khác phản ứng theo.
 
-`publish` inserts in the caller's transaction, so an event exists exactly when
-the change that caused it committed. Consumers (workers, the agent service)
-claim undelivered events with `pending` and acknowledge them with `delivered`;
-each consumer keeps its own delivery rows, so a slow consumer never blocks
-another, and events committed out of id order are still seen.
+`publish` chèn trong transaction của bên gọi, nên sự kiện tồn tại đúng khi
+thay đổi gây ra nó đã commit. Consumer (worker, service agent)
+lấy sự kiện chưa giao bằng `pending` và xác nhận bằng `delivered`;
+mỗi consumer giữ dòng giao nhận riêng, nên consumer chậm không bao giờ chặn
+consumer khác, và sự kiện commit không theo thứ tự id vẫn được thấy.
 
-Payloads carry identifiers and decisions only, never health values.
+Payload chỉ mang định danh và quyết định, không bao giờ có giá trị sức khoẻ.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ async def publish(session: AsyncSession, topic: str, user_id: UUID | None, paylo
 
 async def pending(session: AsyncSession, consumer: str, topics: tuple[str, ...], *, limit: int = 100,
                   lookback_days: int = 7) -> list[dict[str, Any]]:
-    """Undelivered events for this consumer, oldest first, locked against concurrent consumers."""
+    """Các sự kiện chưa giao cho consumer này, cũ nhất trước, khoá chống consumer đồng thời."""
     rows = await session.execute(text("""
         SELECT e.id, e.topic, e.user_id, e.payload, e.occurred_at FROM domain_events e
         WHERE e.topic = ANY(:topics) AND e.occurred_at > now() - make_interval(days => :days)

@@ -1,15 +1,15 @@
-"""Explicit projections from parsed Google Health points to HercFit business rows.
+"""Phép chiếu tường minh từ các điểm Google Health đã phân tích sang dòng nghiệp vụ của HercFit.
 
-Each column names the exact schema path it comes from (discovery revision in
-contract/registry.DISCOVERY_REVISION), replacing the tolerant key search of
-mappers.py. Unit conversions are explicit: grams -> kg, millimetres -> m or cm,
-durations in seconds. A value the adapter flagged (BAD_TYPE, OUT_OF_RANGE) is
-None here, and the flag travels with the source record, so "no data", "zero"
-and "rejected" stay distinguishable.
+Mỗi cột gọi tên đúng đường dẫn schema nó lấy từ đó (revision discovery trong
+contract/registry.DISCOVERY_REVISION), thay cho việc tìm khoá dễ dãi của
+mappers.py. Quy đổi đơn vị là tường minh: gam -> kg, milimét -> m hoặc cm,
+thời lượng tính bằng giây. Giá trị mà adapter gắn cờ (BAD_TYPE, OUT_OF_RANGE) là
+None ở đây, và cờ đi cùng bản ghi nguồn, nên "không có dữ liệu", "bằng 0"
+và "bị từ chối" vẫn phân biệt được.
 
-Civil (wall-clock) dates come from the time Google recorded with the point
-(civil time or physical time + recorded UTC offset); the user's *current*
-timezone is only a fallback for points that carry neither.
+Ngày địa phương (theo đồng hồ) lấy từ thời điểm Google ghi cùng điểm dữ liệu
+(giờ địa phương hoặc giờ vật lý + độ lệch UTC đã ghi); múi giờ *hiện tại* của người dùng
+chỉ là phương án dự phòng cho điểm không có cả hai.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def _scaled(value: Any, factor: float) -> float | None:
 
 
 def source_summary(parsed: Parsed) -> dict[str, str]:
-    """Compact data_source JSON stored on business rows (provenance, never identity)."""
+    """JSON data_source gọn lưu trên dòng nghiệp vụ (nguồn gốc, không bao giờ là định danh)."""
     source = parsed.data_source or {}
     device = source.get("device") or {}
     application = source.get("application") or {}
@@ -59,10 +59,10 @@ def civil_date(parsed: Parsed, fallback_zone: str, *, use_end: bool = False) -> 
 
 
 # ---------------------------------------------------------------------------
-# daily_health_summaries columns
+# Các cột của daily_health_summaries
 # ---------------------------------------------------------------------------
 def rollup_columns(parsed: Parsed) -> dict[str, Any]:
-    """Columns from one dailyRollUp window (value schema: <Type>RollupValue)."""
+    """Các cột từ một cửa sổ dailyRollUp (schema giá trị: <Type>RollupValue)."""
     value, kind = parsed.value, parsed.data_type
     if kind == "steps":
         return {"steps": _bounded("steps", value.get("countSum"))}
@@ -93,14 +93,14 @@ def rollup_columns(parsed: Parsed) -> dict[str, Any]:
                 levels[level] = levels.get(level, 0) + entry["activeMinutesSum"]
         if not levels:
             return {}
-        # Light activity does not count toward the WHO moderate-to-vigorous guideline.
+        # Vận động nhẹ không tính vào khuyến nghị vận động vừa-mạnh của WHO.
         total = sum(minutes for level, minutes in levels.items() if level not in LIGHT_LEVELS)
         return {"active_minutes": _bounded("active_minutes", total), "active_minutes_by_level": levels}
     return {}
 
 
 def daily_columns(parsed: Parsed) -> dict[str, Any]:
-    """Columns from one daily-* data point (value schema: Daily<Type>)."""
+    """Các cột từ một data point daily-* (schema giá trị: Daily<Type>)."""
     value, kind = parsed.value, parsed.data_type
     if kind == "daily-resting-heart-rate":
         return {"resting_hr_bpm": _bounded("resting_hr_bpm", value.get("beatsPerMinute"))}
@@ -128,17 +128,17 @@ def merge_days(target: dict[date, dict[str, Any]], day: date | None, columns: di
 # ---------------------------------------------------------------------------
 # body_metrics, health_samples
 # ---------------------------------------------------------------------------
-BODY = {  # data type: (column, value path, factor, digits)
+BODY = {  # loại dữ liệu: (cột, đường dẫn giá trị, hệ số, số chữ số)
     "weight": ("weight_kg", "weightGrams", 0.001, 3),
     "height": ("height_cm", "heightMillimeters", 0.1, 3),
     "body-fat": ("body_fat_pct", "percentage", 1.0, 2),
 }
-SAMPLES = {  # data type: (sample_type, value path, unit, detail paths)
+SAMPLES = {  # loại dữ liệu: (sample_type, đường dẫn giá trị, đơn vị, các đường dẫn chi tiết)
     "blood-glucose": ("BLOOD_GLUCOSE", "bloodGlucoseMilligramsPerDeciliter", "mg/dL",
                       ("mealType", "measurementTiming", "specimen", "measurementSource")),
     "core-body-temperature": ("CORE_BODY_TEMPERATURE", "temperatureCelsius", "C", ("measurementLocation",)),
 }
-# Sparse vitals the job pipeline adds (migration 0020 widened health_samples).
+# Các chỉ số sinh tồn thưa mà pipeline job thêm vào (migration 0020 đã nới health_samples).
 EXTRA_SAMPLES = {
     "vo2-max": ("VO2_MAX", "vo2Max", "mL/kg/min", ("measurementMethod",)),
     "run-vo2-max": ("RUN_VO2_MAX", "runVo2Max", "mL/kg/min", ()),
@@ -147,7 +147,7 @@ EXTRA_SAMPLES = {
 
 
 def external_id(parsed: Parsed, moment: datetime | None) -> str:
-    """Google's resource name when the type is identifiable, else a stable type+time key."""
+    """Tên tài nguyên của Google khi loại có định danh, nếu không thì khoá ổn định loại+thời điểm."""
     if parsed.resource_name:
         return parsed.resource_name[:255]
     return f"{parsed.data_type}:{moment.isoformat() if moment else 'unknown'}"[:255]
@@ -176,7 +176,7 @@ def sample_row(parsed: Parsed) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
-# Sessions
+# Phiên
 # ---------------------------------------------------------------------------
 def _minutes(value: Any) -> int | None:
     return value if isinstance(value, int) and 0 <= value <= 2880 else None
@@ -204,7 +204,7 @@ def sleep_row(parsed: Parsed, fallback_zone: str) -> dict[str, Any] | None:
     is_nap = bool(metadata.get("nap", False))
     return {
         "external_id": external_id(parsed, start), "start_at": start, "end_at": end,
-        # A night belongs to the civil date the user woke up on.
+        # Một đêm thuộc ngày địa phương mà người dùng thức dậy.
         "local_date": civil_date(parsed, fallback_zone, use_end=True),
         "sleep_type": value.get("type"), "is_main": bool(metadata.get("mainSleep", not is_nap)), "is_nap": is_nap,
         "minutes_asleep": asleep, "minutes_awake": _minutes(summary.get("minutesAwake")),
@@ -213,8 +213,8 @@ def sleep_row(parsed: Parsed, fallback_zone: str) -> dict[str, Any] | None:
         "rem_minutes": stages.get("REM"), "awake_minutes": stages.get("AWAKE"),
         "efficiency_pct": round(min(100.0, 100 * asleep / in_period), 2) if asleep and in_period else None,
         "data_source": source_summary(parsed),
-        # Detail (M3 columns): segments are kept as-is. Short awakenings may
-        # overlap stages, so they are never added to stage totals.
+        # Chi tiết (cột M3): các đoạn được giữ nguyên. Lần thức giấc ngắn có thể
+        # chồng lên giai đoạn, nên không bao giờ được cộng vào tổng giai đoạn.
         "stages": _segments(value.get("stages")), "short_awakenings": _segments(value.get("shortAwakenings")),
     }
 
@@ -223,7 +223,7 @@ ZONES = {"lightTime": "light", "moderateTime": "moderate", "vigorousTime": "vigo
 
 
 def _pauses(events: list[Any] | None) -> list[dict[str, Any]]:
-    """Pause windows from START/PAUSE/RESUME events (manual and automatic)."""
+    """Các cửa sổ tạm dừng từ sự kiện START/PAUSE/RESUME (thủ công và tự động)."""
     pauses, opened = [], None
     for event in sorted((e for e in events or [] if isinstance(e, dict) and isinstance(e.get("eventTime"), datetime)),
                         key=lambda e: e["eventTime"]):
@@ -284,7 +284,7 @@ def workout_row(parsed: Parsed, fallback_zone: str) -> dict[str, Any] | None:
         "avg_speed_mps": bounded(_scaled(speed, 0.001), 0, 1000, 3),
         "run_vo2_max": bounded(metrics.get("runVo2Max"), 0, 100, 2),
         "data_source": source_summary(parsed),
-        # Detail (M3 columns). Device sessions have no sets/reps; none are invented.
+        # Chi tiết (cột M3). Phiên của thiết bị không có set/số lần; không bịa ra cái nào.
         "elapsed_seconds": round((end - start).total_seconds()),
         "pauses": _pauses(value.get("exerciseEvents")),
         "splits": [_split(item) for item in (value.get("splitSummaries") or value.get("splits") or [])
@@ -294,7 +294,7 @@ def workout_row(parsed: Parsed, fallback_zone: str) -> dict[str, Any] | None:
 
 
 def main_sleep_minutes(rows: list[dict[str, Any]]) -> dict[date, int]:
-    """Minutes asleep per wake-up date; naps are excluded."""
+    """Số phút ngủ theo ngày thức dậy; không tính giấc ngủ ngắn ban ngày."""
     totals: dict[date, int] = {}
     for row in rows:
         if not row["is_nap"] and row.get("minutes_asleep") is not None and row.get("local_date") is not None:
@@ -307,7 +307,7 @@ def utc_offset(parsed: Parsed) -> timedelta | None:
 
 
 # ---------------------------------------------------------------------------
-# Profile and settings (users.getProfile / users.getSettings)
+# Hồ sơ và cài đặt (users.getProfile / users.getSettings)
 # ---------------------------------------------------------------------------
 def provider_profile(profile: dict[str, Any] | None, settings: dict[str, Any] | None) -> dict[str, Any]:
     profile, settings = profile or {}, settings or {}
@@ -335,16 +335,16 @@ def provider_timezone(settings: dict[str, Any] | None) -> str | None:
         return None
     try:
         ZoneInfo(zone)
-    except (ValueError, KeyError):  # ZoneInfoNotFoundError is a KeyError
+    except (ValueError, KeyError):  # ZoneInfoNotFoundError là một KeyError
         return None
     return zone
 
 
 # ---------------------------------------------------------------------------
-# ECG, IRN, hydration and nutrition logs (job pipeline, migration 0020)
+# Nhật ký ECG, IRN, nước uống và dinh dưỡng (pipeline job, migration 0020)
 # ---------------------------------------------------------------------------
 def ecg_row(parsed: Parsed, fallback_zone: str) -> dict[str, Any] | None:
-    """Provider classification and metadata. The waveform is returned separately and never projected further."""
+    """Phân loại và metadata của nhà cung cấp. Dạng sóng được trả về riêng và không bao giờ được chiếu thêm."""
     start, end = parsed.time.physical_start, parsed.time.physical_end
     if start is None or end is None:
         return None
@@ -373,7 +373,7 @@ def irn_row(parsed: Parsed, fallback_zone: str) -> dict[str, Any] | None:
     device = value.get("medicalDeviceInfo") or {}
     windows = [{"start": w["startTime"].isoformat() if isinstance(w.get("startTime"), datetime) else None,
                 "end": w["endTime"].isoformat() if isinstance(w.get("endTime"), datetime) else None,
-                "positive": bool(w.get("positive"))}  # individual heart beats stay in the source record
+                "positive": bool(w.get("positive"))}  # từng nhịp tim riêng lẻ ở lại trong bản ghi nguồn
                for w in value.get("alertWindows") or [] if isinstance(w, dict)]
     return {"external_id": external_id(parsed, start), "started_at": start, "ended_at": end,
             "utc_offset_s": parsed.time.start_offset_s, "local_date": civil_date(parsed, fallback_zone),

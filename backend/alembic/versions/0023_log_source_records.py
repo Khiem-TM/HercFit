@@ -1,9 +1,9 @@
-"""Provenance for imported hydration and nutrition logs.
+"""Nguồn gốc cho nhật ký nước uống và dinh dưỡng được nhập về.
 
-0020 created hydration_logs and nutrition_logs without source_record_id, while the
-ingestion pipeline links every imported row to its health_source_records entry
-(integrations/google_health/ingest/apply.py LINK_TABLES). The first real primary
-import of either type failed on the missing column. Additive only.
+0020 tạo hydration_logs và nutrition_logs mà không có source_record_id, trong khi
+pipeline nhập liên kết mọi dòng nhập về với mục health_source_records của nó
+(integrations/google_health/ingest/apply.py LINK_TABLES). Lần nhập primary thật đầu tiên
+của hai loại này thất bại vì thiếu cột. Chỉ cộng thêm.
 """
 from alembic import op
 

@@ -51,7 +51,7 @@ const bars = computed(() => {
 .mini-bars i { flex: 1; border-radius: 3px 3px 1px 1px; background: var(--accent); opacity: .5; transform-origin: bottom; animation: grow 700ms ease-out backwards; }
 .mini-bars i:last-child { opacity: 1; }
 .mini-bars i.missing { background: light-dark(#18181824, #ffffff24); }
-/* Not `.ring`: Tailwind generates a utility of that name, which adds a blue box-shadow. */
+/* Không dùng `.ring`: Tailwind sinh một tiện ích cùng tên, nó thêm box-shadow màu xanh. */
 .progress-ring { width: 42px; height: 42px; flex-shrink: 0; transform: rotate(-90deg); }
 .ring-track, .ring-fill { fill: none; stroke: light-dark(#18181810, #ffffff10); stroke-width: 3; }
 .ring-fill { stroke: var(--accent); stroke-linecap: round; animation: ring-in 900ms ease-out backwards; transition: stroke-dashoffset 700ms; }

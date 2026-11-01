@@ -1,4 +1,4 @@
-"""Read-only context for the HercFit assistant (one round trip per conversation turn)."""
+"""Ngữ cảnh chỉ đọc cho trợ lý HercFit (mỗi lượt hội thoại một lượt gọi)."""
 from fastapi import APIRouter
 
 from api.dependencies import UserContextDep
@@ -11,5 +11,5 @@ router = APIRouter(prefix="/assistant", tags=["assistant"])
 
 @router.get("/context", response_model=AssistantContextRead)
 async def get_assistant_context(service: UserContextDep, timezone: TimeZoneName = "Asia/Ho_Chi_Minh"):
-    # Who reads (user or assistant) comes from the authenticated principal, not a header.
+    # Ai đọc (người dùng hay trợ lý) lấy từ principal đã xác thực, không phải header.
     return await assistant_context.build(service.session, service.user, timezone=timezone)

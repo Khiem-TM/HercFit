@@ -1,12 +1,12 @@
-"""One switch for syncing HercFit to Google Health (the user turns it on once).
+"""Một công tắc để đồng bộ HercFit lên Google Health (người dùng bật một lần).
 
-On: every export group that is rolled out (GH_EXPORT_GROUPS) and verified is enabled,
-and the records HercFit already holds are sent once (one history operation); later
-changes follow through capture. When Google permissions are missing, the caller asks
-for all of them on a single consent screen and the OAuth callback finishes turning the
-switch on (`then="export_all"` in the signed state).
-Off: no group sends anything any more; reading from Google is not affected, and data
-already on Google stays there.
+Bật: mọi nhóm xuất đã mở (GH_EXPORT_GROUPS) và đã kiểm chứng đều được bật,
+và các bản ghi HercFit đang có được gửi một lần (một operation lịch sử); các thay đổi
+sau đó đi qua capture. Khi còn thiếu quyền Google, bên gọi xin
+tất cả trên một màn hình đồng ý và OAuth callback bật nốt
+công tắc (`then="export_all"` trong state đã ký).
+Tắt: không nhóm nào gửi gì nữa; việc đọc từ Google không bị ảnh hưởng, và dữ liệu
+đã có trên Google vẫn ở đó.
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ GROUP_LABELS = {"body": "Chỉ số cơ thể", "hydration": "Nước uống", "
 
 
 def available_groups() -> list[str]:
-    """Groups this deployment may write: rolled out and every type's create verified."""
+    """Các nhóm mà bản triển khai này được ghi: đã mở và lệnh tạo của mọi loại đều đã kiểm chứng."""
     verified = settings.verified_capabilities
     return [group for group in EXPORT_ROLLOUT if group in settings.GH_EXPORT_GROUPS
             and all(runtime_enabled(data_type, Op.CREATE, verified=verified) for data_type in EXPORT_GROUPS[group])]
@@ -38,8 +38,8 @@ def _writable(group: str, granted: list[str]) -> bool:
 
 
 def missing_bundles(granted: list[str]) -> list[str]:
-    """Everything the switch needs that the user has not granted: the read bundles and the
-    write bundles of the available groups, asked for together on one consent screen."""
+    """Mọi thứ công tắc cần mà người dùng chưa cấp: các gói đọc và các
+    gói ghi của nhóm khả dụng, xin cùng lúc trên một màn hình đồng ý."""
     owned = set(contract_scopes.granted_bundles(granted))
     reads = [key for key in contract_scopes.BUNDLES if not key.endswith("_write") and key not in owned]
     writes = [contract_scopes.EXPORT_GROUP_BUNDLES[group] for group in available_groups() if not _writable(group, granted)]
@@ -73,10 +73,10 @@ async def state(session, connection) -> dict[str, Any]:
 
 
 async def enable_all(session, connection, user_id: UUID) -> UUID | None:
-    """Enable every available group the granted scopes allow and send what HercFit already has.
+    """Bật mọi nhóm khả dụng mà các scope đã cấp cho phép và gửi những gì HercFit đang có.
 
-    Returns the history operation (None when no group could be enabled). Runs in the caller's
-    transaction: the API request, or the OAuth callback after the user granted the scopes.
+    Trả về operation lịch sử (None khi không bật được nhóm nào). Chạy trong transaction
+    của bên gọi: request API, hoặc OAuth callback sau khi người dùng đã cấp scope.
     """
     granted = list(connection.granted_scopes or [])
     groups = [group for group in available_groups() if _writable(group, granted)]

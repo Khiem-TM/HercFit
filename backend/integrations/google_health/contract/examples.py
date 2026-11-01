@@ -1,9 +1,9 @@
-"""Deterministic, schema-valid synthetic payloads built from the discovery snapshot.
+"""Payload tổng hợp tất định, hợp lệ theo schema, dựng từ ảnh chụp discovery.
 
-They exercise the adapters for every data type without a Google account. They
-are synthetic: values are plausible placeholders, not recordings. Hand-written
-fixtures under contract/fixtures/ cover the semantics (time zones, DST, nights
-across midnight, unit conversion) that a schema alone cannot.
+Chúng chạy thử adapter cho mọi loại dữ liệu mà không cần tài khoản Google. Chúng
+là dữ liệu tổng hợp: giá trị là phần giữ chỗ hợp lý, không phải bản ghi thật. Các fixture
+viết tay trong contract/fixtures/ bao quát phần ngữ nghĩa (múi giờ, đổi giờ mùa hè, đêm
+vắt qua nửa đêm, quy đổi đơn vị) mà riêng schema không thể hiện được.
 """
 from __future__ import annotations
 

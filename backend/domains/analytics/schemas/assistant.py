@@ -1,4 +1,4 @@
-"""Assistant context snapshot: what HercFit already knows about the user."""
+"""Ảnh chụp ngữ cảnh trợ lý: những gì HercFit đã biết về người dùng."""
 from typing import Any
 
 from pydantic import BaseModel
@@ -15,5 +15,5 @@ class AssistantContextRead(BaseModel):
     running: dict[str, Any]
     training_4w: dict[str, Any]
     inventory: dict[str, Any]
-    # Coaching facts with no stored value; the only ones the assistant may ask the user for.
+    # Các dữ kiện huấn luyện chưa có giá trị đã lưu; chỉ những dữ kiện này trợ lý mới được hỏi người dùng.
     missing: list[str]

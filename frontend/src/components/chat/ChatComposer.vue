@@ -73,7 +73,7 @@ function insertQuickPrefix(prefix: string): void {
   <div
     class="w-full rounded-[24px] border border-ink/[0.09] bg-panel-raised/90 p-1.5 shadow-[0_24px_64px_rgb(var(--c-shadow)/calc(0.68*var(--shadow-k)))] backdrop-blur-xl transition-colors focus-within:border-ink/[0.18]"
   >
-    <!-- Outer Layer Top Strip -->
+    <!-- Dải trên cùng của lớp ngoài -->
     <div class="flex items-center justify-between px-3.5 py-2 text-xs">
       <div class="flex items-center gap-2 text-on-surface-variant">
         <Sparkles class="h-3.5 w-3.5 text-primary" />
@@ -100,7 +100,7 @@ function insertQuickPrefix(prefix: string): void {
       </div>
     </div>
 
-    <!-- Inner Prompt Container -->
+    <!-- Khung nhập prompt bên trong -->
     <div
       class="rounded-[18px] border border-ink/[0.07] bg-sunken px-4 pt-3.5 pb-2.5"
     >
@@ -115,7 +115,7 @@ function insertQuickPrefix(prefix: string): void {
         @keydown="handleKeydown"
       />
 
-      <!-- Inner Bottom Toolbar -->
+      <!-- Thanh công cụ dưới cùng bên trong -->
       <div class="mt-2 flex items-center justify-between gap-2 pt-1">
         <div class="flex flex-wrap items-center gap-1.5">
           <button
@@ -146,7 +146,7 @@ function insertQuickPrefix(prefix: string): void {
           </button>
         </div>
 
-        <!-- Circular Send / Stop Button -->
+        <!-- Nút tròn Gửi / Dừng -->
         <button
           v-if="isStreaming"
           type="button"

@@ -1,4 +1,4 @@
-"""Reusable ordered food/exercise components for schedules and actual logs."""
+"""Thành phần thực phẩm/bài tập có thứ tự, dùng lại cho lịch và nhật ký thực tế."""
 
 from decimal import Decimal
 from typing import Annotated, Literal

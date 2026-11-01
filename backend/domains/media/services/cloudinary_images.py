@@ -1,4 +1,4 @@
-"""Bounded image decoding and authenticated, server-only Cloudinary requests."""
+"""Giải mã ảnh có giới hạn và request Cloudinary đã xác thực, chỉ phía server."""
 from agentic.observability import observed
 from dataclasses import dataclass
 from io import BytesIO
@@ -33,7 +33,7 @@ def prepare_image(content: bytes) -> PreparedImage:
                 source.load()
                 image = ImageOps.exif_transpose(source)
                 image.thumbnail((1600, 1600))
-                # Re-encode pixels only: strips EXIF/GPS and untrusted metadata.
+                # Chỉ mã hoá lại điểm ảnh: bỏ EXIF/GPS và metadata không tin cậy.
                 mode = "RGBA" if "A" in image.getbands() or "transparency" in image.info else "RGB"
                 clean = Image.new(mode, image.size)
                 clean.paste(image.convert(mode))
@@ -78,7 +78,7 @@ class CloudinaryImages:
                     raise ValueError("Invalid response")
                 return result
         except (httpx.HTTPError, ValueError) as exc:
-            # Do not leak provider response bodies or credentials to clients/logs.
+            # Không làm lộ body phản hồi hay thông tin xác thực của nhà cung cấp ra client/log.
             raise HTTPException(502, "Không thể lưu ảnh trên Cloudinary; vui lòng thử lại") from exc
 
     @observed('cloudinary.upload', 'tool', output=False)

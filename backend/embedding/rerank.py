@@ -4,7 +4,7 @@ import httpx
 
 
 class RerankClient:
-    """Cross-encoder relevance scores from an OpenAI-style /rerank endpoint."""
+    """Điểm liên quan của cross-encoder từ endpoint /rerank kiểu OpenAI."""
 
     def __init__(self, settings, transport=None):
         settings.check_embedding()
@@ -18,7 +18,7 @@ class RerankClient:
 
     @observed('rerank.request', 'reranker', capture=('query',), output=False)
     async def rerank(self, query, documents):
-        """One score per document, in input order."""
+        """Mỗi tài liệu một điểm, theo thứ tự đầu vào."""
         if not documents or len(documents)>64:
             raise ValueError('Rerank batch must contain 1..64 documents')
         annotate(model=self.settings.RERANK_MODEL, input_count=len(documents))

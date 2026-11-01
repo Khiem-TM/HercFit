@@ -1,4 +1,4 @@
-"""Backend tool contract and declaration; execution always uses ToolAgent."""
+"""Hợp đồng và khai báo tool của backend; việc thực thi luôn dùng ToolAgent."""
 from dataclasses import dataclass
 from typing import Any
 from pydantic import BaseModel
@@ -21,8 +21,8 @@ class ToolSpec:
 
     def normalize(self, args):
         value = self.schema.model_validate(args)
-        # Materialize defaults only for creates, so previews contain the exact
-        # timestamps/defaults that will be sent. PATCH/PUT preserve omissions.
+        # Chỉ điền giá trị mặc định cho lệnh tạo, để bản xem trước chứa đúng
+        # thời điểm/giá trị mặc định sẽ được gửi. PATCH/PUT giữ nguyên các trường bị bỏ trống.
         return value.model_dump(mode='json', exclude_unset=self.method != 'POST')
 
     def request_parts(self, args):
