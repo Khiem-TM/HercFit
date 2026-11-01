@@ -1,6 +1,7 @@
 # Đọc biến môi trường từ .env
 
 from enum import StrEnum
+from typing import Literal
 
 from dotenv import find_dotenv
 from pydantic import Field, SecretStr, computed_field
@@ -27,6 +28,9 @@ class LogLevel(StrEnum):
         }
         return mapping[self]
 
+
+READER_V2_CHOICES = ("training", "nutrition", "body", "wellbeing", "analytics", "agent")
+ReaderDomain = Literal["training", "nutrition", "body", "wellbeing", "analytics", "agent"]
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -81,6 +85,51 @@ class Settings(BaseSettings):
     GOOGLE_HEALTH_SYNC_LOOP: bool = True
     GOOGLE_HEALTH_SYNC_INTERVAL_MINUTES: int = Field(default=360, ge=15, le=7 * 24 * 60)
     GOOGLE_HEALTH_BACKFILL_DAYS: int = Field(default=30, ge=1, le=90)
+    # Google Health API root. Overridden only for tests or an emulator: https, or plain http
+    # on localhost (a user's access token is never sent over plain http to another host).
+    GOOGLE_HEALTH_API_ROOT: str = Field(
+        default="https://health.googleapis.com",
+        pattern=r"^(https://[A-Za-z0-9.-]+(:[0-9]+)?|http://(localhost|127\.0\.0\.1)(:[0-9]+)?)/?$")
+    # Health platform (docs/google_health/). Capabilities confirmed with a real Google
+    # test account, as "data-type:op" (e.g. "weight:create"); writes stay off otherwise.
+    GOOGLE_HEALTH_VERIFIED_CAPABILITIES: list[str] = []
+    # v4beta is used per data type, only for types listed here (M7).
+    GH_V4BETA_TYPES: list[str] = []
+    # off: legacy in-process sync only; shadow: the job pipeline also writes the source
+    # layer for comparison; primary: the job pipeline owns business tables (M4).
+    GH_INGEST_V2: Literal["off", "shadow", "primary"] = "off"
+    # true: the API never runs Google calls in-process (callback/sync enqueue jobs for workers).
+    GH_WORKER_EXTERNAL: bool = False
+    GH_WEBHOOK_ENABLED: bool = False
+    # Webhook endpoint secret(s) configured as the subscriber's endpointAuthorization.
+    GH_WEBHOOK_SECRET: SecretStr | None = None
+    GH_WEBHOOK_PREVIOUS_SECRETS: list[SecretStr] = []
+    GH_WEBHOOK_VERIFY_SIGNATURE: bool = True
+    GH_WEBHOOK_KEYSET_URL: str = "https://www.gstatic.com/googlehealthapi/webhooks/webhooks_public_keyset.json"
+    # Webhook subscriber provisioning (python -m integrations.google_health.subscriptions). The admin
+    # credential is a Cloud access token passed at run time (GH_ADMIN_ACCESS_TOKEN), never stored.
+    GH_PROJECT_NUMBER: str | None = None
+    GH_SUBSCRIBER_ID: str = Field(default="hercfit-main", pattern=r"^[a-z]([a-z0-9-]{2,34}[a-z0-9])$")
+    GH_WEBHOOK_PUBLIC_URL: str | None = None
+    # Kill switch and allowed groups for HercFit -> Google writes (M6).
+    GH_EXPORT_DISPATCH: bool = False
+    GH_EXPORT_GROUPS: list[str] = []
+    HEALTH_RETENTION_ENFORCE: bool = False
+    # Requests per minute to Google per user and for the whole project (quota guard).
+    GH_USER_RPM: int = Field(default=300, ge=1, le=10_000)
+    GH_PROJECT_RPM: int = Field(default=3_000, ge=1, le=1_000_000)
+    # Per-route request counts and latency (api_route_usage), flushed once a minute.
+    API_ROUTE_METRICS: bool = True
+    # Reader switches per domain while consumers move to the new health records (core/flags.py).
+    READER_V2_DOMAINS: list[ReaderDomain] = []
+    # Delegated identity for the agent service: it proves itself with an HMAC over each
+    # delegation request; the backend then issues a short-lived delegated token.
+    AGENT_SERVICE_SECRET: SecretStr | None = None
+    AGENT_SERVICE_PREVIOUS_SECRETS: list[SecretStr] = []
+    AGENT_TOKEN_AUDIENCE: str = "hercfit-agent"
+    AGENT_DELEGATION_MINUTES: int = Field(default=10, ge=1, le=60)
+    # true: a user token with the self-declared X-HercFit-Client: agent header is refused.
+    AGENT_DELEGATION_REQUIRED: bool = False
     # Fernet keys (urlsafe base64, 32 bytes) for provider tokens at rest. The first
     # key encrypts; previous keys still decrypt during a rotation.
     TOKEN_ENCRYPTION_KEY: SecretStr | None = None
@@ -137,6 +186,20 @@ class Settings(BaseSettings):
     def google_health_redirect_uri(self) -> str:
         return self.GOOGLE_HEALTH_REDIRECT_URI or (
             f"{self.FRONTEND_URL.rstrip('/')}/api/integrations/google-health/callback")
+
+    @property
+    def agent_service_secrets(self) -> list[str]:
+        secrets = [self.AGENT_SERVICE_SECRET, *self.AGENT_SERVICE_PREVIOUS_SECRETS]
+        return [secret.get_secret_value() for secret in secrets if secret and secret.get_secret_value()]
+
+    @property
+    def webhook_secrets(self) -> list[str]:
+        secrets = [self.GH_WEBHOOK_SECRET, *self.GH_WEBHOOK_PREVIOUS_SECRETS]
+        return [secret.get_secret_value() for secret in secrets if secret and secret.get_secret_value()]
+
+    @property
+    def verified_capabilities(self) -> frozenset[str]:
+        return frozenset(self.GOOGLE_HEALTH_VERIFIED_CAPABILITIES)
 
     @property
     def google_health_configured(self) -> bool:

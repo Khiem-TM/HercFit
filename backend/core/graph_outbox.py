@@ -167,6 +167,24 @@ PROFILE_GUARD_SQL = """
                 IS NOT DISTINCT FROM kg_training_profile(NEW.personal_info)"""
 
 PUBLISH_DDL = """
+-- Consent for the assistant to use device data: user_consents (migration 0017)
+-- is the source of truth, and an active provider connection must exist. Tables
+-- are resolved at run time, so earlier migrations can install this function.
+CREATE OR REPLACE FUNCTION kg_device_consent(owner uuid) RETURNS boolean
+LANGUAGE plpgsql STABLE AS $$
+BEGIN
+    IF to_regclass('health_connections') IS NULL THEN
+        RETURN false;
+    END IF;
+    IF to_regclass('user_consents') IS NULL THEN
+        RETURN EXISTS (SELECT 1 FROM health_connections c WHERE c.user_id = owner
+                       AND c.share_with_assistant AND c.is_active);
+    END IF;
+    RETURN EXISTS (SELECT 1 FROM health_connections c WHERE c.user_id = owner AND c.is_active)
+       AND EXISTS (SELECT 1 FROM user_consents u WHERE u.user_id = owner AND u.purpose = 'assistant'
+                   AND u.data_group = 'device' AND u.granted);
+END $$;
+
 CREATE OR REPLACE FUNCTION kg_publish_backend(kind text, data jsonb,
                                               force_delete boolean DEFAULT false)
 RETURNS void LANGUAGE plpgsql AS $$
@@ -189,12 +207,10 @@ BEGIN
                    OR (kind = 'Goal' AND data->>'status' <> 'IN_PROGRESS')
                    THEN 'delete' ELSE 'upsert' END;
     -- Device data reaches the assistant only with the user's consent; without it
-    -- the record is published as a tombstone. Nested so health_connections is only
-    -- resolved for device data (it does not exist before migration 0014).
+    -- the record is published as a tombstone (kg_device_consent).
     IF action = 'upsert' AND (kind IN ('DailyHealth', 'SleepSession', 'DeviceWorkout')
             OR (kind = 'BodyMetric' AND COALESCE(data->>'source', 'MANUAL') <> 'MANUAL')) THEN
-        IF NOT EXISTS (SELECT 1 FROM health_connections c WHERE c.user_id = entity_owner::uuid
-                       AND c.share_with_assistant AND c.is_active) THEN
+        IF NOT kg_device_consent(entity_owner::uuid) THEN
             action := 'delete';
         END IF;
     END IF;
@@ -358,8 +374,23 @@ END $$;
 CREATE OR REPLACE FUNCTION kg_capture_health_consent() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-    IF TG_OP = 'INSERT' OR OLD.share_with_assistant IS DISTINCT FROM NEW.share_with_assistant
-       OR OLD.is_active IS DISTINCT FROM NEW.is_active THEN
+    -- share_with_assistant is only a mirror once user_consents exists (migration 0017);
+    -- consent changes then republish through kg_capture_user_consent.
+    IF TG_OP = 'INSERT' OR OLD.is_active IS DISTINCT FROM NEW.is_active
+       OR (to_regclass('user_consents') IS NULL
+           AND OLD.share_with_assistant IS DISTINCT FROM NEW.share_with_assistant) THEN
+        PERFORM kg_republish_health(NEW.user_id);
+    END IF;
+    RETURN NULL;
+END $$;
+
+CREATE OR REPLACE FUNCTION kg_capture_user_consent() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    -- Granting or revoking assistant access to device data republishes it
+    -- as upserts or tombstones in the same transaction.
+    IF NEW.purpose = 'assistant' AND NEW.data_group = 'device'
+       AND (TG_OP = 'INSERT' OR OLD.granted IS DISTINCT FROM NEW.granted) THEN
         PERFORM kg_republish_health(NEW.user_id);
     END IF;
     RETURN NULL;
@@ -383,7 +414,11 @@ def _health_trigger_statements() -> tuple[str, ...]:
                        "DROP TRIGGER IF EXISTS kg_health_consent ON health_connections; "
                        "CREATE TRIGGER kg_health_consent AFTER INSERT OR UPDATE ON health_connections "
                        "FOR EACH ROW EXECUTE FUNCTION kg_capture_health_consent();")
-    return (*captures, consent)
+    user_consent = _guarded("user_consents",
+                            "DROP TRIGGER IF EXISTS kg_user_consent ON user_consents; "
+                            "CREATE TRIGGER kg_user_consent AFTER INSERT OR UPDATE ON user_consents "
+                            "FOR EACH ROW EXECUTE FUNCTION kg_capture_user_consent();")
+    return (*captures, consent, user_consent)
 
 
 def _publish_sql(profile: bool = True) -> str:
