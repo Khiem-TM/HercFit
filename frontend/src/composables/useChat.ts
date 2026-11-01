@@ -365,6 +365,9 @@ export function useChat() {
 
       const result: ChatResponse = await resp.json()
       pendingAction.value = result.pending_action || null
+      // The request the user just answered no longer needs confirmation; its badge says what was decided.
+      const asked = messages.value.find((m) => m.status === 'pending_confirmation' && m.pending_action?.action_id === action.action_id)
+      if (asked) asked.status = decision === 'reject' ? 'rejected' : result.status === 'failed' ? 'completed' : 'confirmed'
 
       messages.value.push({
         id: result.run_id || crypto.randomUUID(),

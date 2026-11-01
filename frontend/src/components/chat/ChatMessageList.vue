@@ -100,6 +100,13 @@ function host(url: string): string {
               >
                 CẦN XÁC NHẬN
               </span>
+              <span
+                v-else-if="msg.status === 'confirmed' || msg.status === 'rejected'"
+                class="rounded-full border px-2 py-0.5 font-label-telemetry text-[10px]"
+                :class="msg.status === 'confirmed' ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-ink/15 bg-ink/[0.04] text-on-surface-variant'"
+              >
+                {{ msg.status === 'confirmed' ? 'ĐÃ XÁC NHẬN' : 'ĐÃ TỪ CHỐI' }}
+              </span>
             </div>
 
             <!-- Message Text -->

@@ -17,7 +17,9 @@ from agentic.tools.policy import CAPABILITY_GUIDANCE, CATALOG_DEPENDENCIES, COAC
 from agentic.components.context_filter import compact_evidence, model_graph_context
 from agentic.services.routing import latest_request
 from agentic.services.clarification import build_clarification
+from agentic.core.app.schemas.response import Clarification
 from agentic.services.failure_reply import failure_reply
+from agentic.services.write_reply import claims_pending, reads_after_writes, write_reply
 from agentic.tools.output import bounded_json
 from agentic.security.content_filter import assess
 from agentic.security.input_guard import safe_query
@@ -73,7 +75,8 @@ def without_known_questions(clarification, card):
     if not clarification or not card:
         return clarification
     kept = personal_context.unanswered(clarification.get('questions') or [], card)
-    return {**clarification, 'questions': kept} if kept else None
+    # A dropped pick takes its sets editor and its conditional questions with it.
+    return Clarification.sanitize({**clarification, 'questions': kept}) if kept else None
 
 
 class OrchestrationAgent:
@@ -284,6 +287,11 @@ class OrchestrationAgent:
             # Written by code from the executed writes: a model once reported an unsaved meal as logged.
             text = failure_reply(state)
             return {'reply': text, 'status': 'failed', 'messages': [AIMessage(content=text, name='orchestration_agent')]}
+        # What this turn's confirmed writes saved, written by code from the backend's records: models restated
+        # saved meals and weights as previews still waiting for confirmation (runs 433a847a, 2446b7af).
+        saved = write_reply(state)
+        if saved and status != 'needs_input' and not reads_after_writes(state):
+            return {'reply': saved, 'status': 'completed', 'messages': [AIMessage(content=saved, name='orchestration_agent')]}
         personalized = bool(decision.get('personalize'))
         prompt = get_prompt("orchestration.answer")
         if decision.get('domain') in TRAINING_DOMAINS or decision.get('topic') in {'running', 'strength', 'training', 'recovery'}:
@@ -310,6 +318,9 @@ class OrchestrationAgent:
         safety = state.get('safety') or {}
         if safety.get('guidance'):
             tail.append('Lưu ý an toàn (bắt buộc tuân theo): ' + safety['guidance'])
+        if saved:
+            tail.append('Đã lưu xong (người dùng đã xác nhận, backend đã thực thi; HercFit tự báo phần này, không nhắc lại, '
+                        'không nói còn chờ xác nhận):\n' + saved + '\nChỉ trả lời phần còn lại của yêu cầu.')
         tail.append('Yêu cầu trả lời: '+instruction+'\nKết quả thực thi: '+bounded_json(evidence,60000))
         request = layout(prompt+'\n'+CAPABILITY_GUIDANCE, state.get('messages',[]), tail)
         text = ''
@@ -326,20 +337,27 @@ class OrchestrationAgent:
                 break
             request = layout(prompt+'\n'+CAPABILITY_GUIDANCE, state.get('messages',[]),
                              [*tail, 'Bước này không có công cụ: chỉ trả lời bằng văn bản cho người dùng, không gọi tool.'])
-        if not text.strip():
+        if saved and claims_pending(text):
+            # Still calls the saved write a pending preview: only the code-owned summary is said.
+            text = ''
+        if not text.strip() and not saved:
             text = verified_fallback(state)
         if personalized:
             text = with_sources(text, state.get('research_evidence'))
-        result_state = {'reply':text, 'status':status if status in {'needs_input','failed'} else 'completed',
-                        'messages':[AIMessage(content=text,name='orchestration_agent')]}
+        reply = '\n\n'.join(part for part in (saved, text.strip()) if part)
+        result_state = {'reply':reply, 'status':status if status in {'needs_input','failed'} else 'completed',
+                        'messages':[AIMessage(content=reply,name='orchestration_agent')]}
         if status == 'needs_input':
-            # Structured form generation never streams (clarify role).
-            # A deterministic form (record/variant choice) wins over a model-drafted one.
-            form = state.get('clarification') or await build_clarification(self.models.get('clarify'), state, text)
+            # Structured form generation never streams (clarify role); it is framed from the question, never from
+            # the summary of what was saved. A deterministic form (record/variant choice) wins over a drafted one.
+            form = state.get('clarification') or (await build_clarification(self.models.get('clarify'), state, text) if text.strip() else None)
             if not state.get('catalog_choice'):
                 # Never ask for facts HercFit already stores; an emptied form ends the turn normally.
                 form = without_known_questions(form, card)
-            result_state['clarification'] = form
-            if form is None:
+            result_state['clarification'] = Clarification.sanitize(form)
+            if result_state['clarification'] is None:
                 result_state['status'] = 'completed'
+            elif saved:
+                # The bubble shows a form's intro instead of the reply; the summary of what was saved stays visible.
+                result_state['clarification']['intro'] = None
         return result_state

@@ -1,18 +1,21 @@
-"""Turn a needs_input reply into a structured human-in-the-loop form, one question per missing field.
+"""Turn a needs_input reply into standard card frames, one per missing field; never a free-text box.
 
-The model only drafts questions, labels and values. Catalog identity and images are
-copied from records that tools returned in this turn, so an option can never point
-to an invented food/exercise or an invented image. A question that asks the user to
-pick records ("những bài nào trong danh sách?") gets the records the reply listed as
-options from code when the model left it without any, so a catalog pick never reaches
-the user as a bare text box; the "số hiệp × reps × mức tạ" question after it becomes a
-per-exercise sets editor. When the model fails, the numbered questions of the reply
-are split into questions the same way, so every needs_input reply still reaches the
-user as a form.
+Frames (`ClarifyQuestion.mode`) are answered on the card: a choice (single, quick_reply, multiple), a number
+with its unit and plausible range, or the per-exercise sets editor. The model only drafts questions, labels,
+values and number ranges; code validates every frame. Catalog identity and images are copied from records
+that tools returned in this turn, so an option can never point to an invented food/exercise or image. A
+question that asks the user to pick records ("những bài nào trong danh sách?") gets the records the reply
+listed as options from code when the model left it without any; the "số hiệp × reps × mức tạ" question after
+it becomes the sets editor. When the model fails, the questions of the reply are framed by code the same way.
+
+A question no frame fits (a name, a free description) stays in the reply for the chat box, and a reply with
+nothing to frame gets no form at all: a summary or a courtesy line never reaches the user as a question (run
+433a847a: two nutrition summary lines became two "Tự nhập" questions after the meal was already saved).
 """
 from agentic.prompts.registry import get_prompt
 import json
 import logging
+import math
 import re
 import unicodedata
 from typing import Literal
@@ -20,13 +23,14 @@ from typing import Literal
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, ConfigDict, Field
 
-from agentic.core.app.schemas.response import Clarification
+from agentic.core.app.schemas.response import NUMBER_UNITS, Clarification
 from domains.catalog.models.foods import normalize_food_text
 
 logger = logging.getLogger(__name__)
-PROMPT = get_prompt('clarification.form', 'v2')
+PROMPT = get_prompt('clarification.form', 'v3')
 QUESTION_LIMIT = 8
 OPTION_LIMIT = 12  # ClarifyQuestion.options
+PRESET_LIMIT = 6  # NumberFrame.presets
 
 
 # No length limits on drafts: one over-long label or a seventh option used to fail validation and
@@ -43,10 +47,15 @@ class QuestionDraft(BaseModel):
     model_config = ConfigDict(extra='forbid')
     label: str
     question: str
-    mode: Literal['single', 'multiple', 'quick_reply', 'text']
+    # 'text': the answer is a name or a free description; it is left in the reply for the chat box, never put on the card.
+    mode: Literal['single', 'multiple', 'quick_reply', 'number', 'text']
     options: list[OptionDraft] = Field(default_factory=list, description=f'At most {OPTION_LIMIT}')
-    allow_free_text: bool = True
-    free_text_hint: str | None = None
+    unit: str | None = Field(default=None, description='number: one of ' + ', '.join(NUMBER_UNITS))
+    min: float | None = None
+    max: float | None = None
+    step: float | None = None
+    default: float | None = None
+    presets: list[float] = Field(default_factory=list, description=f'number: at most {PRESET_LIMIT} common values')
     max_select: int = 1
     required: bool = True
 
@@ -91,6 +100,49 @@ SETS = re.compile(r'\b(?:hiep|sets?|reps?|muc ta)\b')
 GENERIC_LABEL = re.compile(r'^(?:chi tiet|cau \d|tra loi|thong tin|bai tap|so hiep|khoi luong|rpe)')
 COMMON = {'ban', 'nao', 'nay', 'cua', 'cho', 'trong', 'nhung', 'cac', 'khong', 'hay', 'voi', 'mot', 'sach', 'danh'}
 
+# A value asked by its unit (accents stripped): the label for a bare "Câu 2", the unit, range, step and presets.
+# "mấy giờ" asks a time of day, not a duration, so it is no number frame.
+NUMBER_HINTS = (
+    (re.compile(r'\b(?:can nang|nang bao nhieu|bao nhieu (?:kg|ky|can)|may (?:kg|ky|can))\b'), 'Cân nặng', 'kg', 30, 250, 0.1, ()),
+    (re.compile(r'\b(?:chieu cao|cao bao nhieu|bao nhieu cm)\b'), 'Chiều cao', 'cm', 100, 230, 1, ()),
+    (re.compile(r'\b(?:ty le mo|phan tram mo|body ?fat|bao nhieu % mo)\b'), 'Tỉ lệ mỡ', '%', 3, 60, 0.5, ()),
+    (re.compile(r'\b(?:thoi luong|keo dai|may phut|bao nhieu phut|tap (?:trong )?bao lau)\b'), 'Thời lượng', 'phút', 5, 300, 5, (30, 45, 60, 90)),
+    (re.compile(r'\b(?:may tieng|bao nhieu tieng|bao nhieu gio|ngu bao lau)\b'), 'Số giờ', 'giờ', 0.5, 16, 0.5, (1, 2, 7, 8)),
+    (re.compile(r'\b(?:bao nhieu km|may km|quang duong|cu ly)\b'), 'Quãng đường', 'km', 0.5, 100, 0.1, (3, 5, 10)),
+    (re.compile(r'\b(?:bao nhieu buoi|may buoi|so buoi)\b'), 'Số buổi', 'buổi', 1, 14, 1, (2, 3, 4, 5)),
+    (re.compile(r'\b(?:bao nhieu (?:suat|phan)|may (?:suat|phan))\b'), 'Khẩu phần', 'suất', 0.25, 10, 0.25, (0.5, 1, 1.5, 2)),
+    (re.compile(r'\b(?:bao nhieu qua|may qua)\b'), 'Số quả', 'quả', 1, 20, 1, (1, 2, 3)),
+    (re.compile(r'\b(?:bao nhieu (?:ly|coc)|may (?:ly|coc))\b'), 'Số ly', 'ly', 0.5, 10, 0.5, (1, 2)),
+    (re.compile(r'\b(?:bao nhieu (?:to|bat)|may (?:to|bat))\b'), 'Số tô', 'tô', 0.5, 5, 0.5, (1, 2)),
+    (re.compile(r'\b(?:bao nhieu (?:gram|gam|g)|may (?:gram|gam))\b'), 'Khối lượng', 'g', 5, 2000, 5, (50, 100, 200)),
+    (re.compile(r'\bbao nhieu ml\b'), 'Thể tích', 'ml', 50, 3000, 50, (250, 330, 500)),
+    (re.compile(r'\b(?:bao nhieu (?:kcal|calo|calories)|nang luong)\b'), 'Năng lượng', 'kcal', 0, 5000, 10, ()),
+    (re.compile(r'\b(?:nhip tim|bpm)\b'), 'Nhịp tim', 'bpm', 30, 220, 1, ()),
+    (re.compile(r'\b(?:bao nhieu tuoi|may tuoi)\b'), 'Tuổi', 'tuổi', 10, 100, 1, ()),
+    (re.compile(r'\brpe\b'), 'RPE', 'RPE', 1, 10, 0.5, (6, 7, 8, 9)),
+    (re.compile(r'\b(?:bao nhieu tuan|may tuan)\b'), 'Số tuần', 'tuần', 1, 52, 1, (4, 8, 12)),
+    (re.compile(r'\b(?:bao nhieu ngay|may ngay)\b'), 'Số ngày', 'ngày', 1, 365, 1, ()),
+    (re.compile(r'\b(?:bao nhieu buoc|so buoc)\b'), 'Số bước', 'bước', 0, 50000, 500, (5000, 8000, 10000)),
+)
+# Units the model may name, folded to the canonical ones of NumberFrame.
+UNIT_ALIASES = {
+    'kilogram': 'kg', 'kgs': 'kg', 'ky': 'kg', 'can': 'kg', 'gram': 'g', 'gam': 'g', 'grams': 'g', 'gr': 'g',
+    'mililit': 'ml', 'mililiter': 'ml', 'calo': 'kcal', 'cal': 'kcal', 'calories': 'kcal', 'kilocalories': 'kcal',
+    'min': 'phút', 'mins': 'phút', 'minute': 'phút', 'minutes': 'phút', 'p': 'phút', 'tieng': 'giờ', 'h': 'giờ',
+    'hour': 'giờ', 'hours': 'giờ', 'kilomet': 'km', 'centimet': 'cm', 'phan tram': '%', 'percent': '%',
+    'nhip/phut': 'bpm', 'set': 'hiệp', 'sets': 'hiệp', 'rep': 'reps', 'session': 'buổi', 'sessions': 'buổi',
+    'day': 'ngày', 'days': 'ngày', 'week': 'tuần', 'weeks': 'tuần', 'serving': 'suất', 'servings': 'suất',
+    'trai': 'quả', 'chiec': 'cái', 'steps': 'bước', 'age': 'tuổi', 'nam tuoi': 'tuổi',
+}
+CANONICAL_UNITS = {normalize_food_text(unit): unit for unit in NUMBER_UNITS} | {key: value for key, value in UNIT_ALIASES.items()}
+# "Năng lượng: ... kcal", "Protein: ___ g": a value to fill in, unlike "Phở bò tái: 1 suất → 431.7 kcal".
+BLANK = re.compile(r'^(?P<label>[^:?]{1,60}):\s*(?:\.{2,}|…|_{2,})\s*(?P<unit>[^\s?.…_]{1,12})?\s*\??$')
+WEEKDAYS = re.compile(r'\b(?:ngay nao trong tuan|thu may|nhung ngay(?: cu the)? nao|ngay tap|t2\s*[-,/]\s*t)')
+WEEKDAY_OPTIONS = ('Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật')
+# "nhẹ / vừa / mạnh", "tăng cơ, giảm mỡ hay kết hợp": the reply already names the choices.
+SLASHED = re.compile(r'^[^?/]{1,40}(?:\s*/\s*[^?/]{1,40}){1,5}$')
+OR_LIST = re.compile(r'\s*,\s*(?:hay|hoặc)\s+|\s*,\s*|\s+(?:hay|hoặc)\s+')
+
 
 def plain(text: str) -> str:
     return re.sub(r'\*\*|__|`|^\s*#+\s*', '', text).strip()
@@ -122,6 +174,38 @@ def catalog_option(record: dict) -> dict:
             'value': clip(record['name'], 300)}
 
 
+def text_option(question_id: str, index: int, label: str) -> dict:
+    label = clip(label[:1].upper() + label[1:], 120)
+    return {'id': f'{question_id}-opt-{index}', 'label': label, 'description': None, 'image_url': None, 'ref': None, 'value': label}
+
+
+def canonical_unit(unit: str | None) -> str | None:
+    key = normalize_food_text(unit or '').strip(' .')
+    return CANONICAL_UNITS.get(key)
+
+
+def number_frame(unit, low=None, high=None, step=None, default=None, presets=()) -> dict | None:
+    """A NumberFrame within the unit's plausible range, or None for a unit the card cannot ask in."""
+    unit = canonical_unit(unit)
+    if unit is None:
+        return None
+    floor, ceiling, base = NUMBER_UNITS[unit]
+    low = floor if low is None else min(max(floor, low), ceiling)
+    high = ceiling if high is None else max(min(ceiling, high), floor)
+    if low >= high:
+        low, high = floor, ceiling
+    step = step if step and 0 < step <= high - low else base
+    # The stepper moves on multiples of the step: 0.25..24 h by 1 h starts at 1 h, not at 0.25 → 1.25 → 2.25.
+    aligned = round(math.ceil(round(low / step, 9)) * step, 6)
+    if aligned >= high:  # no multiple of the step inside the range: the unit's own range
+        low, high, step = floor, ceiling, base
+        aligned = round(math.ceil(round(low / step, 9)) * step, 6)
+    low = aligned
+    values = sorted({value for value in presets or () if low <= value <= high})[:PRESET_LIMIT]
+    return {'unit': unit, 'min': low, 'max': high, 'step': step,
+            'default': default if default is not None and low <= default <= high else None, 'presets': values}
+
+
 def catalog_choices(groups: list[dict], reply: str, taken: set[str], listed_only: bool = False) -> list[dict]:
     """Records of the groups not offered yet; the ones the reply listed, in the reply's order, when there are any."""
     records = {}
@@ -144,7 +228,7 @@ def with_catalog_options(questions: list[dict], groups: list[dict], reply: str) 
     result = []
     for question in questions:
         mode, options = question.get('mode'), question.get('options') or []
-        if not pool or mode == 'quick_reply' or (options and not any(option.get('ref') for option in options)):
+        if not pool or mode in {'quick_reply', 'number', 'sets'} or (options and not any(option.get('ref') for option in options)):
             result.append(question)
             continue
         text = normalize_food_text(question['label'] + ' ' + question['question'])
@@ -163,7 +247,7 @@ def with_catalog_options(questions: list[dict], groups: list[dict], reply: str) 
         merged = [*options, *(catalog_option(record) for record in records)]
         multiple = mode == 'multiple' or (mode != 'single' and bool(PLURAL.search(text)))
         result.append({**question, 'mode': 'multiple' if multiple else 'single', 'options': merged,
-                       'allow_free_text': True, 'min_select': 1, 'max_select': len(merged) if multiple else 1})
+                       'min_select': 1, 'max_select': len(merged) if multiple else 1})
     return result
 
 
@@ -174,15 +258,15 @@ def logs_training(state) -> bool:
 
 def sets_question(question_id: str, sources: list[str] | None = None, rows: list[dict] | None = None, base: dict | None = None) -> dict:
     return {'id': question_id, 'label': 'Chi tiết từng bài', 'question': 'Số hiệp × reps × mức tạ của từng bài?',
-            'free_text_hint': None, 'required': True, 'min_select': 1, 'max_select': 1,
-            **(base or {}), 'mode': 'sets', 'for_questions': sources or [], 'options': rows or [], 'allow_free_text': True}
+            'required': True, 'min_select': 1, 'max_select': 1,
+            **(base or {}), 'mode': 'sets', 'for_questions': sources or [], 'options': rows or [], 'number': None}
 
 
 def with_sets_editor(questions: list[dict], groups: list[dict], reply: str, training_log: bool = False) -> list[dict]:
     """Sets × reps × load is asked with the per-exercise editor, one row per exercise the user picks.
 
-    A typed sets question follows the earlier exercise picks; with none, the strength exercises looked up this turn
-    become a (code-owned) pick just before it. Typed sets questions naming one exercise each merge into one editor.
+    An open sets question follows the earlier exercise picks; with none, the strength exercises looked up this turn
+    become a (code-owned) pick just before it. Open sets questions naming one exercise each merge into one editor.
     When a training log picks strength exercises and asks no sets at all, the editor is added after the picks: the
     log cannot be written without them.
     """
@@ -203,8 +287,7 @@ def with_sets_editor(questions: list[dict], groups: list[dict], reply: str, trai
             if not picks and len(candidates) > 1:
                 options = [catalog_option(record) for record in candidates[:OPTION_LIMIT]]
                 result.append({'id': 'exercises', 'label': 'Bài tập đã tập', 'question': 'Bạn đã tập những bài nào?', 'mode': 'multiple',
-                               'options': options, 'allow_free_text': True, 'free_text_hint': None, 'required': True,
-                               'min_select': 1, 'max_select': len(options)})
+                               'options': options, 'required': True, 'min_select': 1, 'max_select': len(options)})
                 picks.append('exercises')
             if picks:
                 question = sets_question(question['id'], picks, base=question)
@@ -225,17 +308,95 @@ def with_sets_editor(questions: list[dict], groups: list[dict], reply: str, trai
 
 
 def settled(question: dict) -> dict:
-    """A choice question without choices can only be answered by typing; a multiple one picks at least two."""
+    """Choices with their selection bounds; a choice without choices is open until a frame is found for it."""
     options = question.get('options') or []
-    mode = question.get('mode', 'text') if options else 'text'
+    mode = question.get('mode', 'text')
+    if mode not in {'single', 'multiple', 'quick_reply'}:
+        return question
+    if not options:
+        return {**question, 'mode': 'text', 'options': []}
+    if mode == 'multiple' and len(options) < 2:
+        mode = 'single'  # one record is a one-tap pick
     limit = question.get('max_select') or 1
     max_select = min(limit if limit > 1 else len(options), len(options)) if mode == 'multiple' else 1
-    return {**question, 'mode': mode, 'options': options, 'max_select': max(1, max_select),
-            'allow_free_text': question.get('allow_free_text', True) or mode == 'text'}
+    return {**question, 'mode': mode, 'options': options, 'min_select': 1, 'max_select': max(1, max_select)}
 
 
-def fallback_clarification(reply: str, groups: list[dict] | None = None, training_log: bool = False) -> dict:
-    """Form split from the reply's numbered/bulleted questions, without a model call."""
+def choice_like(part: str) -> bool:
+    return (len(part.split()) <= 5 and not normalize_food_text(part).startswith('ban ') and bool(re.search(r'[^\W\d_]', part))
+            and part.count('(') == part.count(')'))
+
+
+def listed_choices(question_id: str, text: str) -> list[dict]:
+    """Options the question itself names: "nhẹ / vừa / mạnh?", or after a label "tăng cơ, giảm mỡ hay kết hợp?"."""
+    asked = plain(text).split('?')[0].strip(' :.*')
+    if SLASHED.match(asked):
+        parts = [part.strip(' *.') for part in asked.split('/')]
+    elif re.search(r'\s(?:hay|hoặc)\s', asked) and ',' in asked:
+        parts = [part.strip(' *.') for part in OR_LIST.split(asked)]
+    else:
+        return []
+    parts = [part for part in parts if part]
+    # Short worded choices only: "Bạn muốn ăn cơm/phở" is a sentence, "(01/11/2026)" a date, not options.
+    if not 2 <= len(parts) <= 6 or not all(choice_like(part) for part in parts):
+        return []
+    return [text_option(question_id, index + 1, part) for index, part in enumerate(parts)]
+
+
+def reply_choices(question: dict, reply: str) -> list[dict]:
+    """Choices the reply listed for this question ("- Cường độ: nhẹ / vừa / mạnh?") when the draft left them out."""
+    words = _words(question['label'] + ' ' + question['question']) - COMMON
+    for line in (reply or '').splitlines():
+        text = plain(line)
+        if '?' not in text:
+            continue  # a summary line ("Phở bò tái + trứng luộc — 14:37 (01/11/2026)") lists no choices
+        item = ITEM.match(text)
+        label, _, rest = (item.group(1) if item else text).partition(':')
+        # Every word of the line's topic is in the question: "Level hiện tại" is not "tập tại nhà" for sharing "tại".
+        named = _words(label) - COMMON
+        if rest.strip() and named and named <= words:
+            options = listed_choices(question['id'], rest)
+            if options:
+                return options
+    return []
+
+
+def framed(question: dict, reply: str = '') -> dict | None:
+    """The card frame of a question, or None when its answer is a name or a description (left for the chat box)."""
+    if question.get('mode') != 'text':
+        return question
+    asked = normalize_food_text(question['label'] + ' ' + question['question'])
+    base = {key: value for key, value in question.items() if key != 'unit'}
+    base.update(options=[], min_select=1, max_select=1, number=None)
+    if question.get('unit') and canonical_unit(question['unit']):
+        return {**base, 'mode': 'number', 'number': number_frame(question['unit'])}
+    for pattern, label, unit, low, high, step, presets in NUMBER_HINTS:
+        if pattern.search(asked):
+            named = {'label': label} if re.match(r'^Câu \d+$', question['label']) else {}
+            return {**base, **named, 'mode': 'number', 'number': number_frame(unit, low, high, step, None, presets)}
+    if WEEKDAYS.search(asked):
+        options = [text_option(question['id'], index + 1, day) for index, day in enumerate(WEEKDAY_OPTIONS)]
+        return {**base, 'mode': 'multiple', 'options': options, 'max_select': len(options)}
+    options = listed_choices(question['id'], question['question']) or reply_choices(question, reply)
+    if options:
+        return {**base, 'mode': 'single', 'options': options}
+    return None
+
+
+def to_form(questions: list[dict], groups: list[dict], reply: str, training_log: bool, intro: str | None) -> dict | None:
+    """Validated card frames for the drafted questions, or None when no question fits a frame."""
+    questions = [settled(question) for question in with_catalog_options(questions[:QUESTION_LIMIT], groups, reply)]
+    questions = with_sets_editor(questions, groups, reply, training_log)
+    frames = [frame for frame in (framed(question, reply) for question in questions) if frame]
+    if len(frames) < len(questions):
+        logger.info('clarification_open_questions count=%s', len(questions) - len(frames))
+        # The reply asks something the card cannot: the bubble keeps the whole reply instead of a short intro.
+        intro = None
+    return Clarification.sanitize({'intro': clip(intro, 300) if intro else None, 'questions': frames})
+
+
+def split_reply(reply: str) -> tuple[list[str], list[str], list[str]]:
+    """(lead paragraphs, listed items, paragraphs after the last item) of a reply, markup removed."""
     lead, items, tail = [], [], []
     for line in (reply or '').splitlines():
         text = plain(line)
@@ -245,30 +406,52 @@ def fallback_clarification(reply: str, groups: list[dict] | None = None, trainin
             tail = []  # only the paragraph after the last item can be a closing question
         elif text:
             (tail if items else lead).append(text)
-    # Listed records and sub-details next to the questions are not questions themselves; when the questions are in
-    # the prose (a summary list, then "Xác nhận lưu nhé?"), no listed line is.
-    asked = [text for text in items if '?' in text]
-    items = asked or ([] if '?' in (reply or '') else items)
+    return lead, items, tail
+
+
+def intro_of(reply: str) -> str | None:
+    """The paragraph before a list of questions: the bubble shows it while the form holds the questions."""
+    lead, items, _ = split_reply(reply)
+    return clip(' '.join(lead), 300) if lead and any('?' in item or BLANK.match(item) for item in items) else None
+
+
+def fallback_clarification(reply: str, groups: list[dict] | None = None, training_log: bool = False) -> dict | None:
+    """Frames for the reply's questions, without a model call; None when the reply asks nothing a card can hold."""
+    _, items, tail = split_reply(reply)
+    # Only questions are questions: listed records, sub-details and summaries (a meal's nutrition lines) are not;
+    # a blank to fill in ("Năng lượng: ... kcal") is.
+    asked = [text for text in items if '?' in text or BLANK.match(text)]
     questions = []
-    for text in items:
+    for text in asked:
+        blank = BLANK.match(text)
+        if blank:
+            label = blank['label'].strip()
+            questions.append({'id': f'q{len(questions) + 1}', 'label': label, 'question': f'{label} là bao nhiêu?', 'mode': 'text',
+                              'unit': blank['unit']})
+            continue
         label, _, rest = text.partition(':')
         if not rest.strip() or len(label) > 60:
             label, rest = f'Câu {len(questions) + 1}', text
-        questions.append({'id': f'q{len(questions) + 1}', 'label': label.strip(), 'question': clip(rest.strip(), 300), 'mode': 'text'})
+        rest = rest.strip()
+        # "Mục tiêu chính: tăng cơ, giảm mỡ…?" reads as its own sentence on the card.
+        questions.append({'id': f'q{len(questions) + 1}', 'label': label.strip(), 'question': clip(rest[:1].upper() + rest[1:], 300),
+                          'mode': 'text'})
     closing = ' '.join(tail)
-    if questions and ('?' in closing or re.search(r'\b(?:ngoai ra|neu co|tuy chon)\b', normalize_food_text(closing))):
-        # A closing "ngoài ra ..." paragraph after the list is an optional extra question.
+    if questions and '?' in closing and re.search(r'\b(?:ngoai ra|neu co|tuy chon)\b', normalize_food_text(closing)):
+        # A closing "ngoài ra ...?" paragraph after the list is an optional extra question.
         questions.append({'id': f'q{len(questions) + 1}', 'label': 'Thông tin thêm', 'question': clip(closing, 300),
                           'mode': 'text', 'required': False})
-    intro = clip(' '.join(lead), 300) if lead and questions else None
     if not questions:
         # The sentences that ask, not the start of a long summary.
-        sentences = [plain(part) for part in re.findall(r'[^.!?\n]*\?', reply or '') if plain(part)]
-        text = ' '.join(sentences) or plain(reply or '') or 'Bạn bổ sung thêm thông tin giúp mình nhé.'
-        questions = [{'id': 'q1', 'label': 'Trả lời', 'question': clip(text, 300), 'mode': 'text'}]
-    questions = [settled(question) for question in with_catalog_options(questions[:QUESTION_LIMIT], groups or [], reply)]
-    questions = with_sets_editor(questions, groups or [], reply, training_log)
-    return Clarification(intro=intro, questions=questions).model_dump(mode='json')
+        for sentence in (plain(part) for part in re.findall(r'[^.!?\n]*\?', reply or '')):
+            if sentence:
+                questions.append({'id': f'q{len(questions) + 1}', 'label': f'Câu {len(questions) + 1}',
+                                  'question': clip(sentence, 300), 'mode': 'text'})
+    strength = any(record.get('exercise_kind') == 'STRENGTH' for group in groups or [] for record in group['records'])
+    if not questions and strength and SETS.search(normalize_food_text(reply or '')):
+        # "Bạn ghi giúp từng bài: số hiệp × reps × mức tạ." asks without a question mark: the sets editor.
+        questions.append({'id': 'q1', 'label': 'Chi tiết từng bài', 'question': 'Số hiệp × reps × mức tạ của từng bài?', 'mode': 'text'})
+    return to_form(questions, groups or [], reply or '', training_log, intro_of(reply))
 
 
 def asks(reply: str) -> bool:
@@ -285,6 +468,12 @@ def grounded(question: dict, reply: str) -> bool:
 def question_from_draft(number: int, draft: QuestionDraft, catalog: dict[str, dict]) -> dict | None:
     if not draft.question.strip():
         return None
+    base = {'id': f'q{number}', 'label': clip(draft.label.strip(), 60) or f'Câu {number}', 'question': clip(draft.question.strip(), 300),
+            'required': draft.required, 'min_select': 1, 'max_select': draft.max_select, 'number': None}
+    if draft.mode == 'number':
+        frame = number_frame(draft.unit, draft.min, draft.max, draft.step, draft.default, draft.presets)
+        # A unit the card cannot ask in is framed again from the question's own words.
+        return {**base, 'mode': 'number', 'options': [], 'number': frame, 'max_select': 1} if frame else {**base, 'mode': 'text', 'options': []}
     options, seen = [], set()
     for option in draft.options if draft.mode != 'text' else []:
         record = catalog.get(option.ref_id or '')
@@ -299,13 +488,10 @@ def question_from_draft(number: int, draft: QuestionDraft, catalog: dict[str, di
             'image_url': record['image_url'] if record else None,
             'ref': {'kind': record['kind'], 'id': option.ref_id} if record else None, 'value': clip(value, 300),
         })
-    return {'id': f'q{number}', 'label': clip(draft.label.strip(), 60) or f'Câu {number}', 'question': clip(draft.question.strip(), 300),
-            'mode': draft.mode, 'options': options[:OPTION_LIMIT], 'allow_free_text': draft.allow_free_text,
-            'free_text_hint': clip(draft.free_text_hint, 120) if draft.free_text_hint else None,
-            'required': draft.required, 'min_select': 1, 'max_select': draft.max_select}
+    return {**base, 'mode': draft.mode, 'options': options[:OPTION_LIMIT]}
 
 
-async def build_clarification(model, state, reply: str) -> dict:
+async def build_clarification(model, state, reply: str) -> dict | None:
     groups = catalog_groups(state)
     if not asks(reply):
         # Nothing to turn into choices; a model would invent questions (seen: a training-goal form
@@ -331,11 +517,8 @@ async def build_clarification(model, state, reply: str) -> dict:
         if not all(grounded(question, reply) for question in questions):
             questions = []  # an off-topic question discards the drafted form
         if questions:
-            questions = [settled(question) for question in with_catalog_options(questions, groups, reply)]
-            questions = with_sets_editor(questions, groups, reply, logs_training(state))
             # The bubble shows the intro instead of the long list, so keep one even if the model left it out.
-            intro = clip(draft.intro, 300) if draft.intro else fallback_clarification(reply).get('intro')
-            return Clarification(intro=intro, questions=questions).model_dump(mode='json')
+            return to_form(questions, groups, reply, logs_training(state), draft.intro or intro_of(reply))
     except Exception as exc:
-        logger.warning('Clarification draft failed (%s); splitting the reply instead', type(exc).__name__)
+        logger.warning('Clarification draft failed (%s); framing the reply instead', type(exc).__name__)
     return fallback_clarification(reply, groups, logs_training(state))

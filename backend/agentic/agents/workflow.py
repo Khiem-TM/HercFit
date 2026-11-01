@@ -162,9 +162,11 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
                                 {'tool':'tool','research':'research','answer':'answer','context':'context'})
     graph.add_conditional_edges('context',lambda s:'research' if s['decision']['action']=='research' else 'answer',
                                 {'research':'research','answer':'answer'})
+    # A code-owned reply (what a confirmed write saved) ends the turn without another routing call.
     graph.add_conditional_edges('tool',lambda s:'confirmation' if s.get('pending_action') else
         ('tool' if continue_catalog_lookup(s) else
-         ('answer' if s.get('fast_read_complete') and s.get('status')=='running' and s.get('decision',{}).get('action')=='answer' else 'orchestrator')))
+         ('answer' if s.get('status')=='running' and (s.get('prepared_reply') or (
+             s.get('fast_read_complete') and s.get('decision',{}).get('action')=='answer')) else 'orchestrator')))
     # A personalized answer is written from the user's data and the research evidence, whatever research found.
     graph.add_conditional_edges('research',lambda s:'answer' if (s.get('decision') or {}).get('personalize') or s.get('research_answer')
                                 or s.get('prepared_reply') or s.get('status') in {'needs_input','failed'} else 'orchestrator')

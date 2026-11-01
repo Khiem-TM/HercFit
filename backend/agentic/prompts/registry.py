@@ -20,6 +20,7 @@ from agentic.prompts.v2.domains import COACH_GUIDANCE as COACH_GUIDANCE_V2, HEAL
 from agentic.prompts.v2.personal import PERSONAL_ROUTING, PERSONALIZED_ANSWER
 from agentic.prompts.v3.domains import COACH_GUIDANCE as COACH_GUIDANCE_V3
 from agentic.prompts.v3.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V3
+from agentic.prompts.v3.clarification import PROMPT as CLARIFICATION_PROMPT_V3
 
 
 TEMPLATES = MappingProxyType({
@@ -45,6 +46,8 @@ TEMPLATES = MappingProxyType({
     ('training.coach', 'v3'): COACH_GUIDANCE_V3,
     # v3: sourced context API first; missing coverage is unknown, never "not worn".
     ('health.guidance', 'v3'): HEALTH_GUIDANCE_V3,
+    # v3: card frames only (choices, numbers with a unit, catalog picks); no free-text answers.
+    ('clarification.form', 'v3'): CLARIFICATION_PROMPT_V3,
 })
 
 _QUESTIONS = {

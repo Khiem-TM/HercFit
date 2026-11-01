@@ -1,6 +1,7 @@
 /** Presentation helpers for confirmation cards. Values come from the server dry-run (display). */
 
-export type CardKind = 'meal' | 'training' | 'plan' | 'catalog' | 'generic'
+/** Card frames: a server dry-run drawn by its own card, or the labelled fields of the payload. */
+export type CardKind = 'meal' | 'training' | 'plan' | 'catalog' | 'fields'
 export type MediaKind = 'foods' | 'meals' | 'exercises' | 'trainings'
 type Row = Record<string, any>
 
@@ -40,8 +41,31 @@ export const TOOL_TITLES: Record<string, string> = {
   create_exercises: 'Thêm bài tập vào catalog của bạn',
   finalize_exercises: 'Thêm bài tập vào catalog của bạn',
   create_metrics: 'Ghi số đo cơ thể',
+  update_metrics: 'Sửa số đo cơ thể',
+  delete_metrics: 'Xoá số đo cơ thể',
   create_goals: 'Thiết lập mục tiêu',
+  update_goals: 'Sửa mục tiêu',
+  delete_goals: 'Xoá mục tiêu',
+  complete_goal: 'Hoàn thành mục tiêu',
+  cancel_goal: 'Huỷ mục tiêu',
+  update_profile: 'Cập nhật hồ sơ',
+  merge_personal_info: 'Cập nhật thông tin cá nhân',
+  onboard: 'Lưu hồ sơ ban đầu',
   update_training_profile: 'Cập nhật hồ sơ vận động viên',
+}
+
+/** What a write without a dry-run does, said on its card. */
+export const ACTION_NOTES: Record<string, string> = {
+  update_meals: 'Bữa ăn được lưu thành bản mới; bản cũ vẫn có trong lịch sử.',
+  delete_meals: 'Bữa ăn sẽ bị xoá khỏi nhật ký.',
+  update_trainings: 'Buổi tập được lưu thành bản mới; bản cũ vẫn có trong lịch sử.',
+  delete_trainings: 'Buổi tập sẽ bị xoá khỏi nhật ký.',
+  update_metrics: 'Số đo được lưu thành bản mới.',
+  delete_metrics: 'Số đo sẽ bị xoá.',
+  delete_goals: 'Mục tiêu sẽ bị xoá.',
+  complete_goal: 'Mục tiêu sẽ được đánh dấu hoàn thành.',
+  cancel_goal: 'Mục tiêu sẽ bị huỷ.',
+  end_training_plan: 'Lịch tập sẽ kết thúc; các buổi đã ghi được giữ nguyên.',
 }
 
 /** Card title for a catalog write; a reused record is not a new catalog entry. */
@@ -71,11 +95,115 @@ export function unverifiedText(fields: unknown): string {
   return [...new Set(fields.map(field => FIELD_LABELS[field] || field))].join(', ')
 }
 
+/** Why a dry-run cannot be drawn by its card frame, or null; such a display falls back to the fields card. */
+export function displayError(kind: CardKind, display?: Row | null): string | null {
+  if (!display || typeof display !== 'object') return 'thiếu dữ liệu xem trước'
+  const list = (value: unknown) => (Array.isArray(value) ? (value as Row[]) : null)
+  switch (kind) {
+    case 'meal': {
+      const items = list(display.items)
+      if (!items?.length) return 'bữa ăn không có món'
+      if (items.some(item => typeof item?.food_snapshot?.name_vi !== 'string')) return 'món ăn thiếu tên'
+      return typeof display.consumed_at === 'string' ? null : 'thiếu thời điểm ăn'
+    }
+    case 'training': {
+      const items = list(display.items)
+      if (!items?.length) return 'buổi tập không có bài'
+      if (items.some(item => typeof item?.exercise_snapshot?.name_vi !== 'string')) return 'bài tập thiếu tên'
+      return typeof display.started_at === 'string' ? null : 'thiếu thời điểm bắt đầu'
+    }
+    case 'plan':
+      if (!list(display.entries)) return 'lịch tập không có buổi'
+      return typeof display.start_date === 'string' && typeof display.end_date === 'string' ? null : 'thiếu ngày của lịch'
+    case 'catalog':
+      return display.kind === 'catalog_candidate' && typeof display.record?.name_vi === 'string' ? null : 'bản ghi catalog thiếu tên'
+    default:
+      return null
+  }
+}
+
 export function cardKind(tool: string, display?: Row | null): CardKind {
   const kind = TOOL_KIND[tool]
-  if (!kind || !display) return 'generic'
-  if (kind === 'catalog' && display.kind !== 'catalog_candidate') return 'generic'
-  return kind
+  return kind && !displayError(kind, display) ? kind : 'fields'
+}
+
+export interface FieldRow { label: string; value: string }
+
+const FIELD_NAMES: Record<string, string> = {
+  name: 'Tên', title: 'Tiêu đề', note: 'Ghi chú', description: 'Mô tả', timezone: 'Múi giờ',
+  consumed_at: 'Thời điểm ăn', started_at: 'Bắt đầu', ended_at: 'Kết thúc', recorded_at: 'Thời điểm đo',
+  start_date: 'Ngày bắt đầu', end_date: 'Ngày kết thúc', target_date: 'Hạn mục tiêu', effective_date: 'Áp dụng từ',
+  weight_kg: 'Cân nặng', height_cm: 'Chiều cao', body_fat_pct: 'Tỉ lệ mỡ', muscle_mass_kg: 'Khối lượng cơ',
+  goal_types: 'Loại mục tiêu', targets: 'Chỉ tiêu', items: 'Mục', entries: 'Buổi', duration_seconds: 'Thời lượng',
+  session_rpe: 'RPE buổi', discipline: 'Loại buổi tập', reason: 'Lý do', level: 'Trình độ', focus: 'Trọng tâm',
+  days_per_week: 'Số buổi/tuần', minutes_per_session: 'Phút mỗi buổi', equipment: 'Dụng cụ', sex: 'Giới tính',
+  age: 'Tuổi', activity_level: 'Mức vận động', display_name: 'Tên hiển thị', resting_hr: 'Nhịp tim nghỉ',
+  max_hr: 'Nhịp tim tối đa', threshold_pace_seconds_per_km: 'Pace ngưỡng', one_rep_maxes: '1RM',
+  weight: 'Cân nặng', body_fat: 'Tỉ lệ mỡ', energy_kcal: 'Năng lượng', protein_g: 'Protein',
+}
+const FIELD_UNITS: Record<string, string> = {
+  weight_kg: 'kg', height_cm: 'cm', body_fat_pct: '%', muscle_mass_kg: 'kg', energy_kcal: 'kcal', protein_g: 'g',
+  resting_hr: 'bpm', max_hr: 'bpm',
+}
+// Identity, versioning and provenance fields are for the API, not for the person confirming.
+const HIDDEN = new Set(['resource_id', 'expected_version_id', 'source_entry_id', 'data_quality', 'attestation', 'context',
+  'additional_metrics', 'payload_hash'])
+const isId = (key: string) => key === 'id' || key.endsWith('_id') || key.endsWith('_ids')
+const OPERATORS: Record<string, string> = { eq: '=', gte: '≥', lte: '≤' }
+// Codes the backend stores, as the person reads them (goal types are lowercase in the API, any case accepted).
+const VALUE_LABELS: Record<string, Record<string, string>> = {
+  goal_types: { fat_loss: 'Giảm mỡ', muscle_gain: 'Tăng cơ', maintenance: 'Duy trì', fitness: 'Khoẻ hơn' },
+  discipline: { strength: 'Gym', endurance: 'Sức bền', sport: 'Thể thao', mixed: 'Kết hợp' },
+  intensity: { light: 'Nhẹ', moderate: 'Vừa', vigorous: 'Mạnh' },
+}
+const valueLabel = (key: string, value: string) => VALUE_LABELS[key]?.[value.toLowerCase()] ?? value
+
+function target(value: Row): string {
+  const unit = value.unit ? ` ${value.unit}` : ''
+  const goal = value.operator === 'range' ? `${fmt(value.min, 2)}–${fmt(value.max, 2)}${unit}`
+    : `${OPERATORS[value.operator] ?? ''} ${fmt(value.value, 2)}${unit}`.trim()
+  return value.baseline !== undefined && value.baseline !== null ? `${goal} (từ ${fmt(value.baseline, 2)}${unit})` : goal
+}
+
+function day(value: string): string {
+  const [year, month, date] = value.split('-')
+  return `${date}/${month}/${year}`
+}
+
+/** One payload value as the person reads it: units, local times, "Có/Không", counts for lists of records. */
+export function fieldText(key: string, value: unknown): string {
+  if (value === null || value === undefined || value === '') return ''
+  if (typeof value === 'boolean') return value ? 'Có' : 'Không'
+  if (key === 'duration_seconds') return minutes(value)
+  if (key.endsWith('pace_seconds_per_km')) return `${pace(value)} /km`
+  if (typeof value === 'number' || (FIELD_UNITS[key] && num(value) !== null)) return fmt(value, 2, FIELD_UNITS[key] ?? '')
+  if (typeof value === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return when(value) || value
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return day(value)
+    return valueLabel(key, value)
+  }
+  if (Array.isArray(value)) {
+    if (value.every(item => item === null || typeof item !== 'object')) {
+      return value.filter(item => item !== null && item !== '').map(item => valueLabel(key, String(item))).join(', ')
+    }
+    return `${value.length} mục`
+  }
+  if (typeof value === 'object') {
+    return Object.entries(value as Row)
+      .filter(([name, item]) => !HIDDEN.has(name) && !isId(name) && item !== null && item !== undefined && item !== '')
+      .map(([name, item]) => `${FIELD_NAMES[name] || name}: ${item && typeof item === 'object' && !Array.isArray(item) && 'operator' in item
+        ? target(item) : fieldText(name, item)}`)
+      .join(' · ')
+  }
+  return String(value)
+}
+
+/** Labelled rows of a write that has no dry-run card; ids and versions stay hidden. */
+export function fieldRows(payload?: Row | null): FieldRow[] {
+  return Object.entries(payload || {})
+    .filter(([key]) => !HIDDEN.has(key) && !isId(key))
+    .map(([key, value]) => ({ label: FIELD_NAMES[key] || key.replace(/_/g, ' '), value: fieldText(key, value) }))
+    .filter(row => row.value)
 }
 
 export function num(value: unknown): number | null {

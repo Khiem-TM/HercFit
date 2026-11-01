@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { Minus, Plus, Trash2 } from 'lucide-vue-next'
-import { defaultGroup, formatGroup, groupsFor, type Answer, type SetGroup, type SetRow } from '@/features/chat/clarification'
+import { defaultGroup, formatGroup, groupError, groupsFor, SET_LIMITS, type Answer, type SetGroup, type SetRow } from '@/features/chat/clarification'
 import CatalogImage from './CatalogImage.vue'
 
 /** Sets × reps × kg for each exercise; rows the user has not touched show (and send) the default 3 × 10. */
 const props = defineProps<{ rows: SetRow[]; answer: Answer; disabled?: boolean }>()
 const emit = defineEmits<{ change: [sets: Record<string, SetGroup[]>] }>()
 
-const LIMITS = { sets: [1, 20], reps: [1, 100] } as const
+const LIMITS = SET_LIMITS
 const FIELDS = ['sets', 'reps'] as const
 
 function update(row: SetRow, groups: SetGroup[]) {
@@ -29,9 +29,10 @@ function count(row: SetRow, index: number, field: 'sets' | 'reps', raw: string) 
   edit(row, index, { [field]: Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : min })
 }
 
+// Blank means no external load; a load outside 0–500 kg is kept and flagged (groupError) rather than dropped.
 function load(row: SetRow, index: number, raw: string) {
   const value = Number(raw.replace(',', '.'))
-  edit(row, index, { kg: raw.trim() === '' || !Number.isFinite(value) || value < 0 ? null : Math.round(value * 100) / 100 })
+  edit(row, index, { kg: raw.trim() === '' || !Number.isFinite(value) ? null : Math.round(value * 100) / 100 })
 }
 
 function add(row: SetRow) {
@@ -87,13 +88,14 @@ function remove(row: SetRow, index: number) {
           <span>{{ field === 'sets' ? 'hiệp' : 'reps' }}</span>
         </template>
         <span aria-hidden="true">@</span>
-        <span class="inline-flex items-center rounded-lg border border-white/15 bg-[#111111] pr-2">
+        <span class="inline-flex items-center rounded-lg border bg-sunken pr-2" :class="groupError(group) ? 'border-amber-400/60' : 'border-ink/15'">
           <input
             :value="group.kg ?? ''"
             type="text"
             inputmode="decimal"
             placeholder="—"
             :disabled="disabled"
+            :aria-invalid="Boolean(groupError(group))"
             aria-label="Mức tạ (kg), bỏ trống nếu không dùng tạ"
             class="h-8 w-14 bg-transparent text-center text-sm text-primary placeholder:text-outline focus:outline-none"
             @change="load(row, index, ($event.target as HTMLInputElement).value)"

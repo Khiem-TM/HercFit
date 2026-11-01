@@ -45,19 +45,20 @@ def mode_form(request: str) -> dict:
     """The choice form; intensity (and duration, when the request has none) only after "ghi nhanh"."""
     quick = {'question': 'q1', 'option_ids': ['gym-quick']}
     questions = [
-        {'id': 'q1', 'label': MODE_LABEL, 'question': 'Bạn muốn ghi buổi gym thế nào?', 'mode': 'single', 'allow_free_text': False,
+        {'id': 'q1', 'label': MODE_LABEL, 'question': 'Bạn muốn ghi buổi gym thế nào?', 'mode': 'single',
          'options': [
              {'id': 'gym-detailed', 'label': 'Nhập chi tiết từng bài', 'value': DETAILED_VALUE,
               'description': 'Chọn bài, số hiệp × reps × mức tạ — theo dõi khối lượng, 1RM, tiến bộ'},
              {'id': 'gym-quick', 'label': 'Ghi nhanh theo cường độ', 'value': QUICK_VALUE,
               'description': 'Chỉ chọn nhẹ / vừa / mạnh để ước tính calories'}]},
-        {'id': 'q2', 'label': INTENSITY_LABEL, 'question': 'Buổi gym của bạn ở mức nào?', 'mode': 'single', 'allow_free_text': False,
+        {'id': 'q2', 'label': INTENSITY_LABEL, 'question': 'Buổi gym của bạn ở mức nào?', 'mode': 'single',
          'show_if': quick, 'options': [{'id': key, 'label': label, 'value': label, 'description': hint} for key, label, _, hint in INTENSITIES]},
     ]
     if not DURATION.search(normalize_food_text(request or '')):
-        questions.append({'id': 'q3', 'label': DURATION_LABEL, 'question': 'Buổi gym kéo dài khoảng bao lâu?', 'mode': 'quick_reply',
-                          'show_if': quick, 'options': [{'id': f'gym-{minutes}', 'label': f'{minutes} phút', 'value': f'{minutes} phút'}
-                                                        for minutes in (30, 45, 60, 90)]})
+        # Answered as "60 phút" on the card (stepper or preset), which parse_choice reads back.
+        questions.append({'id': 'q3', 'label': DURATION_LABEL, 'question': 'Buổi gym kéo dài khoảng bao lâu?', 'mode': 'number',
+                          'show_if': quick, 'options': [],
+                          'number': {'unit': 'phút', 'min': 10, 'max': 300, 'step': 5, 'default': 60, 'presets': [30, 45, 60, 90]}})
     return {'intro': 'Bạn muốn ghi buổi gym chi tiết hay chỉ ước tính nhanh calories?', 'questions': questions}
 
 

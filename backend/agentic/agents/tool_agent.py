@@ -9,6 +9,7 @@ from time import perf_counter
 from pydantic import ValidationError
 from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 from agentic.services import catalog_choice
+from agentic.services.write_reply import executed_writes, repeats_write, write_reply
 from agentic.core.context import request_context
 from agentic.tools.integrations.backend_client import BackendError
 from agentic.core.providers.fpt import strip_tool_markup
@@ -93,8 +94,30 @@ class ToolAgent:
             handoff=research_handoff(state,decision['domain']) if not decision.get('read_only') else None
             if handoff:
                 return {'status':'running','error':None,'research_handoff':handoff}
+            if executed_writes(state):
+                # The write was saved; prose here restated it as still pending and became a question (run 433a847a).
+                return self.saved(state,'prose')
             return {'status':'needs_input','error':strip_tool_markup(str(result.content)) or 'Cần bổ sung dữ liệu để chọn tool.'}
+        if any(self.repeats(state,call) for call in calls):
+            # The router sent an executed write back to the tool step; a second preview would save it twice.
+            return self.saved(state,'repeat')
         return await self.execute_calls(state, calls, [result])
+
+    @staticmethod
+    def repeats(state, call):
+        spec=REGISTRY.get(call['name'])
+        if not spec or not spec.write or not executed_writes(state):
+            return False
+        try:
+            return repeats_write(state,call['name'],spec.normalize(clamp_catalog_query(call['name'],call['args'])))
+        except (ValidationError,ValueError):
+            return False
+
+    @staticmethod
+    def saved(state, reason):
+        """End the turn with the code-owned summary of what it saved (the answer node returns it unchanged)."""
+        annotate(post_write_reply=reason)
+        return {'status':'running','error':None,'prepared_reply':write_reply(state)}
 
     async def propose_finalization(self, state, candidate):
         name='finalize_'+candidate['domain']

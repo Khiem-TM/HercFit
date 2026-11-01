@@ -109,9 +109,13 @@ class Runtime:
 
     @staticmethod
     def clarification(state,reply):
-        # Every needs_input reply is answered through a form, even when a branch skipped the answer node.
+        # A needs_input reply gets card frames even when a branch skipped the answer node; a question no frame
+        # fits stays in the reply for the chat box. Older checkpoints may hold free-text questions: dropped.
         if state.get('status')!='needs_input': return None
-        return Clarification.model_validate(state.get('clarification') or fallback_clarification(reply, catalog_groups(state), logs_training(state))).model_dump(mode='json')
+        form=state.get('clarification')
+        if form is None:
+            form=fallback_clarification(reply, catalog_groups(state), logs_training(state))
+        return Clarification.sanitize(form)
 
     async def run(self,input,thread_id,emit=None):
         annotate(business_run_id=thread_id, graph_thread_id=thread_id)

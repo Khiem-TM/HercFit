@@ -273,19 +273,36 @@ export interface ClarifyOption {
   value: string
 }
 
+/** Units a number frame can ask in (the agent's NUMBER_UNITS). */
+export type NumberUnit =
+  | 'kg' | 'g' | 'ml' | 'kcal' | 'phút' | 'giờ' | 'km' | 'cm' | '%' | 'bpm' | 'tuổi' | 'RPE' | 'bước' | 'buổi'
+  | 'ngày' | 'tuần' | 'hiệp' | 'reps' | 'lần' | 'suất' | 'phần' | 'quả' | 'ly' | 'cốc' | 'chai' | 'lon' | 'hộp'
+  | 'bát' | 'tô' | 'đĩa' | 'lát' | 'miếng' | 'cái'
+
+/** One value picked with a stepper or a preset within [min, max]. */
+export interface NumberFrame {
+  unit: NumberUnit
+  min: number
+  max: number
+  step: number
+  default?: number | null
+  presets?: number[]
+}
+
+/** Card frames; every one is answered on the card, never with typed free text. */
+export type ClarifyMode = 'single' | 'multiple' | 'quick_reply' | 'number' | 'sets'
+
 export interface ClarifyQuestion {
   id: string
   /** Short topic, prefixes the answer in the composed reply. */
   label: string
   question: string
   /**
-   * 'text' has no options: typed answer only. 'sets' edits sets × reps × kg per exercise: the exercises
-   * picked in `for_questions`, or its own options.
+   * 'number' picks a value of `number`. 'sets' edits sets × reps × kg per exercise: the exercises picked in
+   * `for_questions`, or its own options.
    */
-  mode: 'single' | 'multiple' | 'quick_reply' | 'text' | 'sets'
+  mode: ClarifyMode
   options: ClarifyOption[]
-  allow_free_text: boolean
-  free_text_hint?: string | null
   /** Optional questions can be skipped. */
   required: boolean
   min_select: number
@@ -293,6 +310,7 @@ export interface ClarifyQuestion {
   for_questions?: string[]
   /** Asked only when the earlier question was answered with one of these options. */
   show_if?: { question: string; option_ids: string[] } | null
+  number?: NumberFrame | null
 }
 
 /** Human-in-the-loop form, asked one question at a time and answered as one message. */
@@ -335,8 +353,11 @@ export interface ChatMessage {
   pending_action?: PendingAction | null
   clarification?: Clarification | null
   illustrations?: Illustration[]
-  /** Client-only states: 'streaming' while tokens arrive, 'stopped' after the user cancels. */
-  status?: ChatStatus | 'streaming' | 'stopped'
+  /**
+   * Client-only states: 'streaming' while tokens arrive, 'stopped' after the user cancels, and 'confirmed' /
+   * 'rejected' for a confirmation request the user has answered.
+   */
+  status?: ChatStatus | 'streaming' | 'stopped' | 'confirmed' | 'rejected'
   timestamp: string
 }
 

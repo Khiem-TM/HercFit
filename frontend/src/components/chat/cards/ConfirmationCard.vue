@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import { CalendarDays, Check, Dumbbell, Loader2, ShieldAlert, UtensilsCrossed, X } from 'lucide-vue-next'
+import { CalendarDays, Check, Dumbbell, Loader2, Ruler, ShieldAlert, Target, Trash2, UserRound, UtensilsCrossed, X } from 'lucide-vue-next'
 import type { PendingAction } from '@/types/api'
 import CatalogCardBody from './CatalogCardBody.vue'
+import FieldsCardBody from './FieldsCardBody.vue'
 import MealCardBody from './MealCardBody.vue'
 import PhotoAttachment from './PhotoAttachment.vue'
 import PlanCardBody from './PlanCardBody.vue'
@@ -44,13 +45,20 @@ const subtitle = computed(() => {
   if (kind.value === 'catalog') return value.resolution === 'reuse' ? 'Không tạo bản ghi mới; lưu liên kết nguồn nghiên cứu' : 'Bản ghi CUSTOM chỉ bạn nhìn thấy'
   return ''
 })
-const icon = computed(() => ({ meal: UtensilsCrossed, training: Dumbbell, plan: CalendarDays, catalog: kind.value === 'catalog' && display.value?.domain === 'exercises' ? Dumbbell : UtensilsCrossed, generic: ShieldAlert })[kind.value])
+// A fields card is named by what it changes: deletions, measurements, goals, the profile, journals, plans.
+function fieldsIcon(tool: string) {
+  if (tool.startsWith('delete_')) return Trash2
+  if (tool.endsWith('_metrics')) return Ruler
+  if (tool.includes('goal')) return Target
+  if (tool.includes('profile') || tool === 'merge_personal_info' || tool === 'onboard') return UserRound
+  if (tool.endsWith('_meals')) return UtensilsCrossed
+  if (tool.endsWith('_trainings')) return Dumbbell
+  if (tool.includes('plan')) return CalendarDays
+  return ShieldAlert
+}
+const icon = computed(() => ({ meal: UtensilsCrossed, training: Dumbbell, plan: CalendarDays, catalog: kind.value === 'catalog' && display.value?.domain === 'exercises' ? Dumbbell : UtensilsCrossed, fields: fieldsIcon(props.action.tool) })[kind.value])
 const expires = computed(() => new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date(props.action.expires_at)))
 const photoLabel = computed(() => kind.value === 'meal' ? 'Ảnh bữa ăn của bạn' : 'Ảnh buổi tập của bạn')
-
-const rawEntries = computed(() => Object.entries(props.action.payload || {})
-  .filter(([key, value]) => key !== 'resource_id' && value !== null && value !== undefined && value !== '')
-  .map(([key, value]) => ({ key, value: typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value) })))
 
 function decide(decision: 'approve' | 'reject') {
   emit('confirm', decision, decision === 'approve' ? { photo: photo.value, imageSource: imageSource.value } : {})
@@ -78,12 +86,7 @@ function decide(decision: 'approve' | 'reject') {
     <TrainingCardBody v-else-if="kind === 'training'" :training="display!" />
     <PlanCardBody v-else-if="kind === 'plan'" :plan="display!" />
     <CatalogCardBody v-else-if="kind === 'catalog'" v-model="imageSource" :candidate="display!" :disabled="busy" />
-    <dl v-else class="m-5 space-y-2 rounded-xl border border-white/[0.06] bg-[#111111] p-3.5">
-      <div v-for="entry in rawEntries" :key="entry.key" class="flex flex-col gap-1 border-b border-white/[0.04] pb-2 last:border-b-0 last:pb-0 sm:flex-row sm:justify-between">
-        <dt class="font-label-code text-xs text-on-surface-variant">{{ entry.key }}</dt>
-        <dd class="max-w-full overflow-x-auto whitespace-pre-wrap text-xs text-primary sm:text-right">{{ entry.value }}</dd>
-      </div>
-    </dl>
+    <FieldsCardBody v-else :tool="action.tool" :payload="action.payload || {}" />
 
     <div v-if="kind === 'meal' || kind === 'training'" class="mx-5 mt-4">
       <PhotoAttachment v-model="photo" :label="photoLabel" :disabled="busy" />

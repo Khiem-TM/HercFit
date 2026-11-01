@@ -122,8 +122,7 @@ def form(domain, query, found, candidate=None):
                 else f'Bạn muốn tạo {noun} "{query}" mới?')
     clarification = {'intro': f'HercFit tìm thấy {noun} tương tự "{query}" trong catalog.', 'questions': [{
         'id': 'q1', 'label': 'Chọn bản ghi', 'question': question, 'mode': 'single', 'options': options,
-        'allow_free_text': True, 'free_text_hint': f'Hoặc mô tả {noun} bạn muốn', 'required': True,
-        'min_select': 1, 'max_select': 1}]}
+        'required': True, 'min_select': 1, 'max_select': 1}]}
     return clarification, {'domain': domain, 'query': query, 'choices': choices, 'candidate': candidate}
 
 
@@ -213,25 +212,57 @@ def estimate_form(target, claims, documents, product=None):
         choices[canon(value)] = option
     if not options:
         return manual_form('foods', target), None
+    # Label values the user has instead of these estimates: the label form, behind its own option.
+    label = manual_form('foods', target)['questions']
+    options.append({'id': 'estimate-label', 'label': 'Nhập theo nhãn/app của hãng',
+                    'description': 'Chọn khẩu phần, năng lượng và macro trên nhãn', 'value': LABEL_VALUE})
     clarification = {'intro': None, 'questions': [{
-        'id': 'q1', 'label': 'Năng lượng', 'question': f'Bạn muốn ghi năng lượng cho "{target}" theo mức nào?',
-        'mode': 'single', 'options': options, 'allow_free_text': True,
-        'free_text_hint': 'Hoặc nhập theo nhãn/app của hãng, VD: 1 ly 500 ml, 350 kcal', 'required': True,
-        'min_select': 1, 'max_select': 1}]}
+        'id': 'q1', 'label': 'Mức năng lượng', 'question': f'Bạn muốn ghi năng lượng cho "{target}" theo mức nào?',
+        'mode': 'single', 'options': options, 'required': True, 'min_select': 1, 'max_select': 1},
+        *({**question, 'id': 'label-' + question['id'], 'show_if': {'question': 'q1', 'option_ids': ['estimate-label']}}
+          for question in label)]}
     return clarification, {'domain': 'foods', 'query': target, 'choices': choices, 'candidate': None}
 
 
+LABEL_VALUE = 'Ghi theo số liệu trên nhãn/app của hãng'
+FOOD_BASIS = (('basis-serving', '1 suất / ly / hộp', '1 suất (theo nhãn)'), ('basis-100g', '100 g', '100 g'),
+              ('basis-100ml', '100 ml', '100 ml'))
+EXERCISE_KINDS = (('kind-strength', 'Sức mạnh (tạ, máy, trọng lượng cơ thể)', 'Sức mạnh'),
+                  ('kind-endurance', 'Sức bền (chạy, đạp xe, bơi, chèo)', 'Sức bền'),
+                  ('kind-sport', 'Thể thao / vận động khác', 'Thể thao'))
+MUSCLES = ('Ngực', 'Lưng', 'Vai', 'Tay trước', 'Tay sau', 'Đùi trước', 'Đùi sau', 'Mông', 'Bắp chân', 'Bụng / core', 'Toàn thân')
+EQUIPMENT = ('Tạ đòn', 'Tạ đơn', 'Máy', 'Cáp', 'Trọng lượng cơ thể', 'Dây kháng lực', 'Không dùng dụng cụ')
+
+
+def _choices(prefix, labels):
+    return [{'id': f'{prefix}-{index + 1}', 'label': label, 'value': label} for index, label in enumerate(labels)]
+
+
+def _nutrient(question_id, label, question, unit, high, step, required=False):
+    return {'id': question_id, 'label': label, 'question': question, 'mode': 'number', 'options': [], 'required': required,
+            'min_select': 1, 'max_select': 1, 'number': {'unit': unit, 'min': 0, 'max': high, 'step': step, 'default': None, 'presets': []}}
+
+
 def manual_form(domain, target):
-    """Free-text question for the values a label, an app or the user can supply."""
+    """Card frames for the values a label, an app or the user can supply: numbers and choices, nothing typed."""
     if domain == 'foods':
-        question, hint = f'Bạn có số liệu dinh dưỡng của "{target}" trên nhãn hoặc app của hãng không?', \
-            'VD: 1 ly 500 ml, 350 kcal, 5 g protein, 40 g carb, 18 g fat'
-    else:
-        question, hint = f'Bạn mô tả giúp bài tập "{target}": loại bài, nhóm cơ chính và dụng cụ?', \
-            'VD: sức mạnh, đùi trước và mông, tạ đơn'
-    return {'intro': None, 'questions': [{'id': 'q1', 'label': 'Số liệu' if domain == 'foods' else 'Mô tả', 'question': question,
-                                          'mode': 'text', 'options': [], 'allow_free_text': True, 'free_text_hint': hint,
-                                          'required': True, 'min_select': 1, 'max_select': 1}]}
+        return {'intro': f'Bạn chọn số liệu dinh dưỡng của "{target}" theo nhãn hoặc app của hãng.', 'questions': [
+            {'id': 'q1', 'label': 'Khẩu phần', 'question': f'Số liệu trên nhãn của "{target}" tính cho khẩu phần nào?',
+             'mode': 'single', 'options': [{'id': key, 'label': label, 'value': value} for key, label, value in FOOD_BASIS],
+             'required': True, 'min_select': 1, 'max_select': 1},
+            _nutrient('q2', 'Năng lượng', 'Năng lượng của khẩu phần đó?', 'kcal', 5000, 5, required=True),
+            _nutrient('q3', 'Protein', 'Protein (nếu nhãn có)?', 'g', 500, 0.5),
+            _nutrient('q4', 'Carb', 'Carbohydrate (nếu nhãn có)?', 'g', 500, 0.5),
+            _nutrient('q5', 'Fat', 'Chất béo (nếu nhãn có)?', 'g', 500, 0.5)]}
+    strength = {'question': 'q1', 'option_ids': ['kind-strength']}
+    return {'intro': f'Bạn chọn giúp thông tin bài tập "{target}".', 'questions': [
+        {'id': 'q1', 'label': 'Loại bài', 'question': f'"{target}" thuộc loại bài nào?', 'mode': 'single',
+         'options': [{'id': key, 'label': label, 'value': value} for key, label, value in EXERCISE_KINDS],
+         'required': True, 'min_select': 1, 'max_select': 1},
+        {'id': 'q2', 'label': 'Nhóm cơ chính', 'question': 'Bài tập tác động nhóm cơ chính nào?', 'mode': 'multiple',
+         'options': _choices('muscle', MUSCLES), 'required': True, 'min_select': 1, 'max_select': 4, 'show_if': strength},
+        {'id': 'q3', 'label': 'Dụng cụ', 'question': 'Bài tập dùng dụng cụ gì?', 'mode': 'single',
+         'options': _choices('equipment', EQUIPMENT), 'required': True, 'min_select': 1, 'max_select': 1, 'show_if': strength}]}
 
 
 def estimate_draft(target, option):

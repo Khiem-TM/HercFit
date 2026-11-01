@@ -3,7 +3,7 @@ import { computed, nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 import { ArrowLeft, ArrowRight, PencilLine, Send, SkipForward } from 'lucide-vue-next'
 import type { Clarification } from '@/types/api'
 import {
-  answerText, choosesOnce, composeReply, emptyAnswer, isAnswered, setRows, visibleIndexes, type Answer,
+  answerText, choosesOnce, composeReply, emptyAnswer, initialAnswer, isAnswered, setRows, visibleIndexes, type Answer,
 } from '@/features/chat/clarification'
 import ClarificationQuestion from './ClarificationQuestion.vue'
 
@@ -27,7 +27,7 @@ watch(() => props.clarification, () => {
   step.value = 0
   furthest.value = 0
   editing.value = false
-  answers.value = questions.value.map(() => emptyAnswer())
+  answers.value = questions.value.map(initialAnswer)
 }, { immediate: true })
 
 const reviewing = computed(() => step.value >= total.value)
@@ -44,8 +44,8 @@ const complete = computed(() => order.value.every(i => {
   const value = answers.value[i] ?? emptyAnswer()
   return isAnswered(questions.value[i], value, rows(i)) || (!questions.value[i].required && value.skipped)
 }))
-// A lone pick-only question answers on tap, like quick replies.
-const showNext = computed(() => !(single.value && choosesOnce(current.value) && !current.value.allow_free_text))
+// A lone choice answers on tap, like quick replies; numbers, multiple picks and sets need "Gửi".
+const showNext = computed(() => !(single.value && choosesOnce(current.value)))
 
 function go(position: number) {
   step.value = position
