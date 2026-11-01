@@ -1,6 +1,6 @@
 """Existing public-query privacy and clinical-topic guards."""
 import re
-from models.foods import normalize_food_text
+from domains.catalog.models.foods import normalize_food_text
 
 class ClinicalQuestion(ValueError):
     pass

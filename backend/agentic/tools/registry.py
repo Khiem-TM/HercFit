@@ -3,15 +3,16 @@ from uuid import UUID
 from agentic.tools.definitions.base import ToolSpec
 from agentic.tools.schemas.common import Empty, Resource, VersionedResource, PersonalInfo, TimezoneQuery, TemplatePreview
 from pydantic import create_model
-from schemas.common import Pagination
-from schemas.user import UserRead, UserUpdate, OnboardingInput
-from schemas.body_metrics import BodyMetricCreate, BodyMetricRead, BodyMetricQuery
-from schemas.goal import GoalCreate, GoalRead, GoalUpdateRequest
-from schemas.foods import FoodCreate, FoodRead, FoodQuery
-from schemas.exercises import ExerciseCreate, ExerciseRead, ExerciseQuery
-from schemas.journals import MealCreate, MealReplace, MealRead, TrainingCreate, TrainingReplace, TrainingRead
-from schemas.tracking import JournalQuery, DateRangeQuery
-from schemas.progress import ProgressRead
+from domains.shared.schemas.common import Pagination
+from domains.identity.schemas.user import UserRead, UserUpdate, OnboardingInput
+from domains.body.schemas.body_metrics import BodyMetricCreate, BodyMetricRead, BodyMetricQuery
+from domains.goals_plans.schemas.goal import GoalCreate, GoalRead, GoalUpdateRequest
+from domains.catalog.schemas.foods import FoodCreate, FoodRead, FoodQuery
+from domains.catalog.schemas.exercises import ExerciseCreate, ExerciseRead, ExerciseQuery
+from domains.nutrition.schemas.meals import MealCreate, MealReplace, MealRead
+from domains.training.schemas.trainings import TrainingCreate, TrainingReplace, TrainingRead
+from domains.shared.schemas.tracking import JournalQuery, DateRangeQuery
+from domains.analytics.schemas.progress import ProgressRead
 
 
 REGISTRY: dict[str, ToolSpec] = {}
@@ -57,11 +58,29 @@ for domain, schema in [('foods', FoodFinalization), ('exercises', ExerciseFinali
         'Save the immutable verified research command after human confirmation.', True)
 
 # Training plans (prescriptions) and deterministic coaching analytics.
-from schemas.plans import PlanInput, PlanRead, PlanEnd, TrainingPlanCreate, TrainingPlanRead, TrainingPlanReplace, TrainingPlanEntryRead
-from schemas.tracking import ScheduleEntryQuery
-from schemas.training import (
-    AnalyticsQuery, InsightQuery, InsightsRead, RunningSummaryRead, StrengthProgressQuery, StrengthProgressRead,
-    StrengthRecordsRead, TemplateSummary, TrainingLoadRead, TrainingProfile, TrainingProfileRead, TrainingSummaryRead,
+from domains.goals_plans.schemas.plans import (
+    PlanInput,
+    PlanRead,
+    PlanEnd,
+    TrainingPlanCreate,
+    TrainingPlanRead,
+    TrainingPlanReplace,
+    TrainingPlanEntryRead,
+)
+from domains.shared.schemas.tracking import ScheduleEntryQuery
+from domains.training.schemas.training import (
+    AnalyticsQuery,
+    InsightQuery,
+    InsightsRead,
+    RunningSummaryRead,
+    StrengthProgressQuery,
+    StrengthProgressRead,
+    StrengthRecordsRead,
+    TemplateSummary,
+    TrainingLoadRead,
+    TrainingProfile,
+    TrainingProfileRead,
+    TrainingSummaryRead,
 )
 
 
@@ -81,7 +100,7 @@ add('update_training_plans','training_plans','PUT','/training-plans/{resource_id
     'Replace a training schedule as a complete new version. Read it first. Must await confirmation.',True)
 add('end_training_plan','training_plans','POST','/training-plans/{resource_id}/end',with_id(PlanEnd),TrainingPlanRead,'End a training schedule after confirmation.',True)
 
-from schemas.nutrition import NutritionTargetsRead
+from domains.nutrition.schemas.nutrition import NutritionTargetsRead
 add('get_nutrition_targets','progress','GET','/nutrition/targets',TimezoneQuery,NutritionTargetsRead,
     'Daily energy and macro targets computed by the backend (Mifflin-St Jeor BMR, TDEE, goal adjustment with safety '
     'floors), kcal eaten and remaining today, smoothed weight trend and adaptive expenditure. Never compute these yourself.')
@@ -98,10 +117,17 @@ add('get_running_summary','coaching','GET','/training/running/summary',Analytics
 # Device data synchronized from Google Health (read-only). Connecting and syncing are
 # the user's actions in Settings, never tools; reads answer 403 consent_required while
 # the user has not allowed the assistant to use the data.
-from schemas.health import (
-    DailyHealthRead, DeviceWorkoutRead, HealthConnectionRead, HealthOverviewQuery, HealthOverviewRead,
-    HealthProfileRead, HealthSampleQuery, HealthSampleRead, SleepSessionRead,
+from domains.health_records.schemas.health import (
+    DailyHealthRead,
+    DeviceWorkoutRead,
+    HealthOverviewQuery,
+    HealthOverviewRead,
+    HealthProfileRead,
+    HealthSampleQuery,
+    HealthSampleRead,
+    SleepSessionRead,
 )
+from integrations.google_health.schemas import HealthConnectionRead
 add('get_health_connection','health','GET','/integrations/google-health',Empty,HealthConnectionRead,
     'Whether Google Health is connected, consent to share with the assistant, last sync and record counts. Check this when health data is missing.')
 add('get_health_profile','health','GET','/health/profile',TimezoneQuery,HealthProfileRead,

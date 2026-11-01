@@ -11,12 +11,12 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from agentic.core.context import request_context
-from models.foods import normalize_food_text
+from domains.catalog.models.foods import normalize_food_text
 from agentic.research.attestation import sign
 from agentic.research.contracts import ExerciseFinalization, FoodFinalization
 from agentic.research.quotes import canon, number_values
 from agentic.research.sources import TIER_RANK, rate
-from schemas.foods import FoodCreate
+from domains.catalog.schemas.foods import FoodCreate
 
 FINALIZATIONS = {'foods': FoodFinalization, 'exercises': ExerciseFinalization}
 # "400-700 kcal", "380 calo", "khoảng 250 Calories": a value or a range with an energy unit.

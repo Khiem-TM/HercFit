@@ -10,7 +10,7 @@ code on the next turn without a routing model call.
 """
 import re
 
-from models.foods import normalize_food_text
+from domains.catalog.models.foods import normalize_food_text
 
 # Accents stripped: "tập tạ", "thể hình", "phòng tập"...
 GYM = re.compile(r'\b(?:gym|tap ta|nang ta|cu ta|the hinh|phong tap|weight ?training|strength training|tap suc manh)\b')

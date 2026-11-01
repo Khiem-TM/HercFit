@@ -3,8 +3,8 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 from pydantic import Field
-from schemas.common import InputSchema
-from schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName
+from domains.shared.schemas.common import InputSchema
+from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName
 
 class Empty(InputSchema):
     pass

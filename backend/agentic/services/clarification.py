@@ -21,7 +21,7 @@ from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, ConfigDict, Field
 
 from agentic.core.app.schemas.response import Clarification
-from models.foods import normalize_food_text
+from domains.catalog.models.foods import normalize_food_text
 
 logger = logging.getLogger(__name__)
 PROMPT = get_prompt('clarification.form', 'v2')

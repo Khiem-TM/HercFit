@@ -4,7 +4,7 @@ import asyncio
 import httpx
 from pydantic import TypeAdapter
 from agentic.tools.registry import REGISTRY
-from schemas.user import UserRead
+from domains.identity.schemas.user import UserRead
 
 class BackendError(Exception):
     def __init__(self, status, detail):

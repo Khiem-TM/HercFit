@@ -11,9 +11,18 @@ from datetime import date, datetime, timedelta, timezone
 from statistics import mean, median, pstdev
 from zoneinfo import ZoneInfo
 
-from schemas.health import (
-    ACTIVITY_LABELS, ACTIVITY_ORDER, BMI_LABELS, HRV_DROP_PCT, RHR_ELEVATION_BPM, WHO_ACTIVE_MINUTES_PER_WEEK,
-    WORN_DAY_MIN_STEPS, activity_level_from_exercise, activity_level_from_steps, classify_bmi, recommended_sleep_hours,
+from domains.health_records.schemas.health import (
+    ACTIVITY_LABELS,
+    ACTIVITY_ORDER,
+    BMI_LABELS,
+    HRV_DROP_PCT,
+    RHR_ELEVATION_BPM,
+    WHO_ACTIVE_MINUTES_PER_WEEK,
+    WORN_DAY_MIN_STEPS,
+    activity_level_from_exercise,
+    activity_level_from_steps,
+    classify_bmi,
+    recommended_sleep_hours,
 )
 
 from .intents import label as intent_label

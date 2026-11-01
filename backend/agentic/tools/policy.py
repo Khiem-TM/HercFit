@@ -1,6 +1,6 @@
 from agentic.prompts.registry import get_prompt
 import re
-from models.foods import normalize_food_text
+from domains.catalog.models.foods import normalize_food_text
 from agentic.tools.registry import REGISTRY
 
 COACH_GUIDANCE = get_prompt('training.coach', 'v3')

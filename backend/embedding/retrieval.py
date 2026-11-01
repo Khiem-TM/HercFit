@@ -6,7 +6,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from fastapi import HTTPException
-from models.foods import normalize_food_text
+from domains.catalog.models.foods import normalize_food_text
 
 class SearchRequest(BaseModel):
     model_config=ConfigDict(extra='forbid')

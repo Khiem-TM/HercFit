@@ -18,7 +18,7 @@ from datetime import datetime, time, timedelta, timezone
 from .driver import create_driver, value
 from .intents import hub as intent_hub, label as intent_label
 from .model import DISCIPLINES, FOCUS, LEVELS, LOCAL, SEX, parse_time
-from schemas.health import ACTIVITY_LABELS, BMI_LABELS
+from domains.health_records.schemas.health import ACTIVITY_LABELS, BMI_LABELS
 
 log = logging.getLogger(__name__)
 

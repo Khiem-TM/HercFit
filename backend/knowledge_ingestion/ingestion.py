@@ -5,7 +5,7 @@ import json
 from uuid import uuid4
 from sqlalchemy import text
 from pydantic import BaseModel, ConfigDict, Field
-from models.foods import normalize_food_text
+from domains.catalog.models.foods import normalize_food_text
 from knowledge_ingestion.preparation import load_prepared
 
 class Manifest(BaseModel):

@@ -24,9 +24,9 @@ from agentic.services.research_budget import research_lease, reserve, reserve_do
 from agentic.research.contracts import ResearchPlan, ResearchDraft, ResearchResult, ResearchStatus, QA_INTENTS
 from agentic.research.evidence import audit
 from agentic.research.sources import quality_gate, rate, social
-from schemas.foods import FoodCreate
-from schemas.exercises import ExerciseCreate
-from models.foods import normalize_food_text
+from domains.catalog.schemas.foods import FoodCreate
+from domains.catalog.schemas.exercises import ExerciseCreate
+from domains.catalog.models.foods import normalize_food_text
 
 PROMPT = get_prompt('research.extract')
 

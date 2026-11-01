@@ -20,8 +20,10 @@ from core.settings import settings
 from agentic.observability import observer
 from agentic.observability.middleware import ObservabilityMiddleware
 from core.media_limits import ImageUploadLimit
-from routers import api_router
-from services.common import request_validation_error
+from core.route_metrics import RouteMetricsMiddleware
+from api.v1 import api_router
+from api.v2 import api_v2_router
+from domains.shared.services.common import request_validation_error
 
 
 @asynccontextmanager
@@ -42,15 +44,26 @@ async def lifespan(app: FastAPI):
             pass  # Optional RAG configuration cannot disable CRUD/chat.
     cleanup_task = None
     if all((settings.CLOUDINARY_CLOUD_NAME, settings.CLOUDINARY_API_KEY, settings.CLOUDINARY_API_SECRET)):
-        from services.image_cleanup import cleanup_loop
+        from domains.media.services.image_cleanup import cleanup_loop
         cleanup_task = asyncio.create_task(cleanup_loop())
     health_task = None
-    if settings.google_health_configured and settings.GOOGLE_HEALTH_SYNC_LOOP:
-        from services.google_health.scheduler import health_sync_loop
+    # With an external worker (python -m workers run) the API never calls Google in-process.
+    if settings.google_health_configured and settings.GOOGLE_HEALTH_SYNC_LOOP and not settings.GH_WORKER_EXTERNAL:
+        from integrations.google_health.scheduler import health_sync_loop
         health_task = asyncio.create_task(health_sync_loop())
+    metrics_stop, metrics_task = asyncio.Event(), None
+    if settings.API_ROUTE_METRICS:
+        from core.database import get_db_session
+        from core.route_metrics import flush_loop
+        app.openapi()  # build (and cache) the schema the route table reads, before the first request
+        metrics_task = asyncio.create_task(flush_loop(metrics_stop, get_db_session))
     try:
         yield
     finally:
+        if metrics_task is not None:
+            metrics_stop.set()  # last flush before the pool closes
+            with suppress(asyncio.CancelledError, asyncio.TimeoutError):
+                await asyncio.wait_for(metrics_task, 5)
         for task in (cleanup_task, health_task):
             if task is not None:
                 task.cancel()
@@ -72,6 +85,9 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Idempotency-Key"], expose_headers=["Location", "X-Request-ID", "X-Trace-ID"],
     )
+    # Outermost: per-route counts and latency for every /api request (core/route_metrics.py).
+    app.add_middleware(RouteMetricsMiddleware)
+    app.include_router(api_v2_router, prefix="/api/v2")
     app.include_router(api_router, prefix="/api")
     from embedding.router import router as embedding_router
     app.include_router(embedding_router, prefix="/api")

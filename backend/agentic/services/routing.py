@@ -9,7 +9,7 @@ from typing import Callable
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
-from schemas.progress import ProgressRead
+from domains.analytics.schemas.progress import ProgressRead
 from agentic.tools.registry import REGISTRY
 
 TEMPLATE_ID = 'progress.explicit_dates'

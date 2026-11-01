@@ -1,7 +1,7 @@
 """Conservative JEV read routing; all writes keep the existing orchestration path."""
 import math
 import re
-from models.foods import normalize_food_text
+from domains.catalog.models.foods import normalize_food_text
 from agentic.services.routing import latest_request
 from agentic.prompts.v2.routing import JEV_READ_ROUTES
 from agentic.prompts.registry import get_questions

@@ -2,10 +2,10 @@ from enum import StrEnum
 from typing import Any, ClassVar, Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from models.foods import normalize_food_text
+from domains.catalog.models.foods import normalize_food_text
 from agentic.research.evidence import audit
-from schemas.foods import FoodCreate, FoodRead
-from schemas.exercises import ExerciseCreate, ExerciseRead
+from domains.catalog.schemas.foods import FoodCreate, FoodRead
+from domains.catalog.schemas.exercises import ExerciseCreate, ExerciseRead
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra='forbid')

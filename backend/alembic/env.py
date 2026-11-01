@@ -9,7 +9,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from core.database import get_sqlalchemy_url
-from models import Base
+from domains.registry import Base
 
 config = context.config
 if config.config_file_name is not None:

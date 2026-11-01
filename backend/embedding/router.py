@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request
-from routers.dependencies import SessionDep, CurrentUserDep
+from api.dependencies import SessionDep, CurrentUserDep
 from embedding.config import settings
 from embedding.retrieval import SearchRequest, search
 

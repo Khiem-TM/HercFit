@@ -11,7 +11,7 @@ so only sources with the 'met' scope can back configuration.default_met.
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-from models.foods import normalize_food_text
+from domains.catalog.models.foods import normalize_food_text
 
 TIER_RANK = {'primary': 0, 'professional': 1, 'secondary': 2, 'unknown': 3}
 ALL = frozenset({'nutrition', 'exercise', 'qa'})
