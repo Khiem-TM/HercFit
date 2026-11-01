@@ -51,7 +51,7 @@ const suggestionCards = [
     <div class="relative mb-6 flex h-28 w-28 items-center justify-center">
       <!-- Outer Subtle Glow -->
       <div
-        class="pointer-events-none absolute inset-0 rounded-full bg-white/[0.06] blur-2xl"
+        class="pointer-events-none absolute inset-0 rounded-full bg-ink/[0.06] blur-2xl"
       />
 
       <!-- Rotating Orbital SVG Rings -->
@@ -88,23 +88,23 @@ const suggestionCards = [
         />
         <defs>
           <linearGradient id="orbRingGrad" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6" />
-            <stop offset="50%" stop-color="#8f918c" stop-opacity="0.15" />
-            <stop offset="100%" stop-color="#ffffff" stop-opacity="0.5" />
+            <stop offset="0%" style="stop-color: rgb(var(--c-ink))" stop-opacity="0.6" />
+            <stop offset="50%" style="stop-color: rgb(var(--c-outline))" stop-opacity="0.15" />
+            <stop offset="100%" style="stop-color: rgb(var(--c-ink))" stop-opacity="0.5" />
           </linearGradient>
         </defs>
       </svg>
 
       <!-- 3D Metallic Obsidian Sphere Core -->
       <div
-        class="relative h-16 w-16 overflow-hidden rounded-full border border-white/25 shadow-[0_12px_36px_rgba(0,0,0,0.85),inset_0_2px_12px_rgba(255,255,255,0.35)]"
+        class="relative h-16 w-16 overflow-hidden rounded-full border border-ink/25 shadow-[0_12px_36px_rgb(var(--c-shadow)/calc(0.85*var(--shadow-k))),inset_0_2px_12px_rgba(255,255,255,0.35)]"
         style="background: radial-gradient(circle at 32% 28%, #5a5d64 0%, #232529 42%, #0b0b0d 82%, #1f2024 100%);"
       >
         <div
-          class="absolute -left-2 -top-2 h-10 w-10 rounded-full bg-white/20 blur-md"
+          class="absolute -left-2 -top-2 h-10 w-10 rounded-full bg-ink/20 blur-md"
         />
         <div
-          class="absolute bottom-1 right-1 h-6 w-6 rounded-full bg-white/10 blur-sm"
+          class="absolute bottom-1 right-1 h-6 w-6 rounded-full bg-ink/10 blur-sm"
         />
       </div>
     </div>
@@ -131,17 +131,17 @@ const suggestionCards = [
         v-for="card in suggestionCards"
         :key="card.title"
         type="button"
-        class="group flex flex-col items-start justify-between rounded-2xl border border-white/[0.08] bg-[#181818]/90 p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:bg-[#202020] hover:shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
+        class="group flex flex-col items-start justify-between rounded-2xl border border-ink/[0.08] bg-panel-raised/90 p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-ink/20 hover:bg-panel-hover hover:shadow-[0_16px_40px_rgb(var(--c-shadow)/calc(0.5*var(--shadow-k)))]"
         @click="emit('select-prompt', card.prompt)"
       >
         <div
-          class="mb-4 flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.09] bg-[#111111] text-on-surface-variant transition-colors group-hover:border-white/25 group-hover:text-primary"
+          class="mb-4 flex h-9 w-9 items-center justify-center rounded-xl border border-ink/[0.09] bg-sunken text-on-surface-variant transition-colors group-hover:border-ink/25 group-hover:text-primary"
         >
           <component :is="card.icon" class="h-4 w-4" />
         </div>
 
         <div>
-          <h3 class="text-sm font-semibold text-primary group-hover:text-white">
+          <h3 class="text-sm font-semibold text-primary group-hover:text-ink">
             {{ card.title }}
           </h3>
           <p class="mt-1.5 line-clamp-3 text-xs leading-relaxed text-outline">

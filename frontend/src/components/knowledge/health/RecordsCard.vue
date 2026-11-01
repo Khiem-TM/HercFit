@@ -81,9 +81,9 @@ const details = (record: Record<string, string>) => Object.entries(record).map((
 
 <style scoped src="./healthCard.css"></style>
 <style scoped>
-h4 { display: flex; align-items: center; gap: 6px; margin: 18px 0 0; font-size: 11.5px; font-weight: 500; color: #d9d8d2; }
-h4 small { font: 9.5px 'JetBrains Mono', monospace; color: #8d949c; }
+h4 { display: flex; align-items: center; gap: 6px; margin: 18px 0 0; font-size: 11.5px; font-weight: 500; color: light-dark(#363530, #d9d8d2); }
+h4 small { font: 9.5px 'JetBrains Mono', monospace; color: light-dark(#60676e, #8d949c); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.chips span { padding: 4px 9px; border: 1px solid #ffffff14; border-radius: 14px; font-size: 10px; color: #c9cbcf; }
-.none { margin: 8px 0 0; font-size: 10.5px; color: #8d949c; }
+.chips span { padding: 4px 9px; border: 1px solid light-dark(#18181814, #ffffff14); border-radius: 14px; font-size: 10px; color: light-dark(#3d3f42, #c9cbcf); }
+.none { margin: 8px 0 0; font-size: 10.5px; color: light-dark(#60676e, #8d949c); }
 </style>

@@ -47,7 +47,7 @@ function remove(row: SetRow, index: number) {
 
 <template>
   <ul class="mt-3 space-y-2">
-    <li v-for="row in rows" :key="row.id" class="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+    <li v-for="row in rows" :key="row.id" class="rounded-xl border border-ink/10 bg-ink/[0.03] p-3">
       <div class="flex items-center gap-3">
         <CatalogImage v-if="row.image_url" :src="row.image_url" :alt="row.label" icon="exercise" rounded="rounded-lg" class="h-10 w-10 shrink-0" />
         <span class="min-w-0 flex-1 text-sm font-medium text-primary">{{ row.label }}</span>
@@ -63,7 +63,7 @@ function remove(row: SetRow, index: number) {
       >
         <template v-for="field in FIELDS" :key="field">
           <span v-if="field === 'reps'" aria-hidden="true">×</span>
-          <span class="inline-flex items-center rounded-lg border border-white/15 bg-[#111111]">
+          <span class="inline-flex items-center rounded-lg border border-ink/15 bg-sunken">
             <button type="button" :disabled="disabled" class="grid h-8 w-8 place-items-center text-on-surface hover:text-primary disabled:opacity-40"
                     :aria-label="`Giảm ${field === 'sets' ? 'số hiệp' : 'số reps'}`" @click="step(row, index, field, -1)">
               <Minus class="h-3.5 w-3.5" aria-hidden="true" />
@@ -108,7 +108,7 @@ function remove(row: SetRow, index: number) {
       </div>
 
       <button type="button" :disabled="disabled"
-              class="mt-2 inline-flex min-h-[32px] items-center gap-1 text-[11px] text-[#d4b77d] hover:text-primary disabled:opacity-40"
+              class="mt-2 inline-flex min-h-[32px] items-center gap-1 text-[11px] text-gold hover:text-primary disabled:opacity-40"
               @click="add(row)">
         <Plus class="h-3 w-3" aria-hidden="true" />Thêm nhóm hiệp khác (đổi reps hoặc mức tạ)
       </button>

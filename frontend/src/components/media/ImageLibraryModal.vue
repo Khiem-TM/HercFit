@@ -119,29 +119,29 @@ onUnmounted(() => previousFocus?.focus())
   <dialog ref="dialog" :aria-labelledby="labelId" class="image-library" @cancel.prevent="close" @click="event => { if (event.target === dialog) close() }">
     <div class="flex items-center justify-between gap-4">
       <h2 :id="labelId" class="text-lg font-medium">Ảnh của bạn</h2>
-      <button type="button" aria-label="Đóng quản lý ảnh" :disabled="busy" class="rounded-lg p-2 hover:bg-white/10" @click="close"><X class="h-5 w-5" /></button>
+      <button type="button" aria-label="Đóng quản lý ảnh" :disabled="busy" class="rounded-lg p-2 hover:bg-ink/10" @click="close"><X class="h-5 w-5" /></button>
     </div>
     <p class="mb-5 mt-1 text-xs leading-5 text-outline">Thêm ảnh cho thực phẩm, bữa ăn, bài tập và buổi tập đã lưu.</p>
     <label class="mb-4 block text-xs">Loại dữ liệu
-      <select v-model="kind" :disabled="busy" class="mt-2 w-full rounded-lg border border-white/15 bg-[#202020] p-3">
+      <select v-model="kind" :disabled="busy" class="mt-2 w-full rounded-lg border border-ink/15 bg-panel-hover p-3">
         <option v-for="option in kinds" :key="option.value" :value="option.value">{{ option.label }}</option>
       </select>
     </label>
     <p v-if="loading" role="status" class="py-6 text-sm text-outline">Đang tải danh sách…</p>
     <label v-else-if="records.length" class="block text-xs">Chọn bản ghi
-      <select v-model="selectedId" :disabled="busy" class="mt-2 w-full rounded-lg border border-white/15 bg-[#202020] p-3">
+      <select v-model="selectedId" :disabled="busy" class="mt-2 w-full rounded-lg border border-ink/15 bg-panel-hover p-3">
         <option v-for="record in records" :key="record.id" :value="record.id">{{ record.name_vi || record.name }}</option>
       </select>
     </label>
     <p v-else class="py-6 text-sm text-outline">Chưa có dữ liệu trong nhóm này. Hãy tạo bản ghi trước khi thêm ảnh.</p>
     <template v-if="cover">
-      <div class="my-4 flex h-52 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black/20">
+      <div class="my-4 flex h-52 items-center justify-center overflow-hidden rounded-xl border border-ink/10 bg-black/20">
         <img v-if="cover.image_url" :src="cover.image_url" :alt="selectedName" class="h-full w-full object-contain" />
         <ImagePlus v-else class="h-10 w-10 text-outline" :stroke-width="1" aria-hidden="true" />
       </div>
       <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="chooseFile" />
       <div class="flex flex-wrap gap-3">
-        <button type="button" :disabled="busy" class="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-xs font-medium text-black disabled:opacity-50" @click="fileInput?.click()">
+        <button type="button" :disabled="busy" class="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-xs font-medium text-black disabled:opacity-50" @click="fileInput?.click()">
           <LoaderCircle v-if="busy" class="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           <ImagePlus v-else class="h-4 w-4" aria-hidden="true" />
           {{ busy ? 'Đang xử lý…' : cover.image_url ? 'Thay ảnh' : 'Tải ảnh lên' }}
@@ -156,6 +156,6 @@ onUnmounted(() => previousFocus?.focus())
 </template>
 
 <style scoped>
-.image-library { width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow-y: auto; margin: auto; padding: 24px; border: 1px solid #ffffff1a; border-radius: 16px; background: #171717; color: #e5e2e1; }
-.image-library::backdrop { background: #0009; backdrop-filter: blur(4px); }
+.image-library { width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow-y: auto; margin: auto; padding: 24px; border: 1px solid light-dark(#1818181a, #ffffff1a); border-radius: 16px; background: light-dark(#fdfcf9, #171717); color: light-dark(#2e2c2b, #e5e2e1); }
+.image-library::backdrop { background: light-dark(#0000004c, #0009); backdrop-filter: blur(4px); }
 </style>

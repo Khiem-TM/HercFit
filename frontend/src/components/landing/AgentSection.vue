@@ -123,6 +123,6 @@ const agents = [
 
 <style scoped>
 .is-selected {
-  box-shadow: inset 0 0 0 1px #8f918c;
+  box-shadow: inset 0 0 0 1px light-dark(#676964, #8f918c);
 }
 </style>

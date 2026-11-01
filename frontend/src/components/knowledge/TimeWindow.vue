@@ -177,10 +177,10 @@ onBeforeUnmount(() => clearTimeout(timer))
     <div ref="track" class="track" :style="bandStyle" @pointerdown="grab" @pointermove="drag" @pointerup="release" @pointercancel="release" @lostpointercapture="release">
       <span v-if="loading" class="loading-line" aria-hidden="true" />
       <svg class="bars dim" :viewBox="`0 0 ${count} 30`" preserveAspectRatio="none" aria-hidden="true">
-        <rect v-for="bar in bars" :key="bar.key" :x="bar.x" :y="bar.y" width=".68" :height="bar.height" :fill="bar.fill" />
+        <rect v-for="bar in bars" :key="bar.key" :x="bar.x" :y="bar.y" width=".68" :height="bar.height" :style="{ fill: bar.fill }" />
       </svg>
       <svg class="bars lit" :viewBox="`0 0 ${count} 30`" preserveAspectRatio="none" aria-hidden="true">
-        <rect v-for="bar in bars" :key="bar.key" :x="bar.x" :y="bar.y" width=".68" :height="bar.height" :fill="bar.fill" />
+        <rect v-for="bar in bars" :key="bar.key" :x="bar.x" :y="bar.y" width=".68" :height="bar.height" :style="{ fill: bar.fill }" />
       </svg>
       <span v-if="quiet" class="quiet">Chưa có hoạt động nào trong {{ count }} ngày lưu giữ</span>
       <span class="band" data-grip="band" aria-hidden="true" />
@@ -206,37 +206,37 @@ onBeforeUnmount(() => clearTimeout(timer))
 </template>
 
 <style scoped>
-.time-window { --accent: #d4b77d; display: flex; flex-direction: column; gap: 6px; padding: 0 var(--gutter, 26px) 10px; }
+.time-window { --accent: light-dark(#87671a, #d4b77d); display: flex; flex-direction: column; gap: 6px; padding: 0 var(--gutter, 26px) 10px; }
 .window-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
-.range { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: 10px; color: #8f8c84; }
+.range { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: 10px; color: light-dark(#6e6b64, #8f8c84); }
 .range svg { flex-shrink: 0; color: var(--accent); }
-.range strong { font: 500 11px 'JetBrains Mono', monospace; color: #efe3c4; letter-spacing: .02em; white-space: nowrap; }
+.range strong { font: 500 11px 'JetBrains Mono', monospace; color: light-dark(#847755, #efe3c4); letter-spacing: .02em; white-space: nowrap; }
 .range span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.presets { display: flex; gap: 2px; padding: 2px; border: 1px solid #ffffff0c; border-radius: 9px; background: #0c0d11; }
-.presets button { padding: 4px 9px; border-radius: 7px; font-size: 10px; color: #8f8c84; white-space: nowrap; transition: color 200ms, background 200ms; }
-.presets button:hover { color: #efe3c4; }
-.presets button[aria-pressed=true] { background: #d4b77d1f; color: #f3e6c6; }
-.track { position: relative; height: 40px; border: 1px solid #ffffff0b; border-radius: 10px; background: linear-gradient(#0c0d11, #0f1015); cursor: pointer; user-select: none; touch-action: pan-y; }
+.presets { display: flex; gap: 2px; padding: 2px; border: 1px solid light-dark(#1818180c, #ffffff0c); border-radius: 9px; background: light-dark(#eeedeb, #0c0d11); }
+.presets button { padding: 4px 9px; border-radius: 7px; font-size: 10px; color: light-dark(#6e6b64, #8f8c84); white-space: nowrap; transition: color 200ms, background 200ms; }
+.presets button:hover { color: light-dark(#847755, #efe3c4); }
+.presets button[aria-pressed=true] { background: light-dark(#87671a1f, #d4b77d1f); color: light-dark(#867854, #f3e6c6); }
+.track { position: relative; height: 40px; border: 1px solid light-dark(#1818180b, #ffffff0b); border-radius: 10px; background: linear-gradient(light-dark(#eeedeb, #0c0d11), light-dark(#f1f0ee, #0f1015)); cursor: pointer; user-select: none; touch-action: pan-y; }
 .bars { position: absolute; left: 0; top: 5px; width: 100%; height: calc(100% - 10px); pointer-events: none; }
 .bars.dim { opacity: .22; filter: saturate(.5); }
 .bars.lit { clip-path: inset(0 calc(100% - var(--right)) 0 var(--left)); transition: clip-path 120ms ease-out; }
 .dragging .bars.lit { transition: none; }
-.quiet { position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; color: #6f6c65; pointer-events: none; }
-.band { position: absolute; top: 0; bottom: 0; left: var(--left); width: calc(var(--right) - var(--left)); border-radius: 9px; background: linear-gradient(180deg, #d4b77d17, #d4b77d06); box-shadow: inset 0 0 0 1px #d4b77d45, 0 0 22px #d4b77d12; cursor: grab; transition: left 120ms ease-out, width 120ms ease-out; }
+.quiet { position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; color: light-dark(#8d8982, #6f6c65); pointer-events: none; }
+.band { position: absolute; top: 0; bottom: 0; left: var(--left); width: calc(var(--right) - var(--left)); border-radius: 9px; background: linear-gradient(180deg, light-dark(#87671a17, #d4b77d17), light-dark(#87671a06, #d4b77d06)); box-shadow: inset 0 0 0 1px light-dark(#87671a45, #d4b77d45), 0 0 22px light-dark(#87671a12, #d4b77d12); cursor: grab; transition: left 120ms ease-out, width 120ms ease-out; }
 .dragging .band { cursor: grabbing; transition: none; }
 .handle { position: absolute; top: -4px; bottom: -4px; left: var(--left); width: 16px; margin-left: -8px; display: flex; justify-content: center; cursor: ew-resize; touch-action: none; outline: none; transition: left 120ms ease-out; }
 .handle.end { left: var(--right); }
 .dragging .handle { transition: none; }
-.handle::before { content: ''; width: 4px; height: 100%; border-radius: 3px; background: linear-gradient(#f3e6c6, #d4b77d); box-shadow: 0 0 12px #d4b77d70; transition: transform 200ms, box-shadow 200ms; }
-.handle:hover::before, .handle.active::before { transform: scaleX(1.6); box-shadow: 0 0 16px #d4b77d; }
-.handle:focus-visible::before { box-shadow: 0 0 0 2px #101216, 0 0 0 4px #f3e6c6; }
-.axis { position: relative; height: 11px; font: 8px 'JetBrains Mono', monospace; color: #6f6c65; letter-spacing: .04em; }
+.handle::before { content: ''; width: 4px; height: 100%; border-radius: 3px; background: linear-gradient(light-dark(#867854, #f3e6c6), light-dark(#87671a, #d4b77d)); box-shadow: 0 0 12px light-dark(#87671a70, #d4b77d70); transition: transform 200ms, box-shadow 200ms; }
+.handle:hover::before, .handle.active::before { transform: scaleX(1.6); box-shadow: 0 0 16px light-dark(#87671a, #d4b77d); }
+.handle:focus-visible::before { box-shadow: 0 0 0 2px light-dark(#f3f2ef, #101216), 0 0 0 4px light-dark(#867854, #f3e6c6); }
+.axis { position: relative; height: 11px; font: 8px 'JetBrains Mono', monospace; color: light-dark(#8d8982, #6f6c65); letter-spacing: .04em; }
 .axis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
 .axis .edge-start { left: 0; transform: none; }
 .axis .edge-end { left: auto; right: 0; transform: none; }
-.loading-line { position: absolute; left: 8px; right: 8px; top: -1px; height: 1px; background: linear-gradient(90deg, transparent, #f3e6c6, transparent) no-repeat; background-size: 35% 100%; animation: scan 1.1s linear infinite; }
-.note { margin: 0; font-size: 10px; line-height: 1.5; color: #b9a98a; }
-.note.warn { color: #e8b99d; }
+.loading-line { position: absolute; left: 8px; right: 8px; top: -1px; height: 1px; background: linear-gradient(90deg, transparent, light-dark(#867854, #f3e6c6), transparent) no-repeat; background-size: 35% 100%; animation: scan 1.1s linear infinite; }
+.note { margin: 0; font-size: 10px; line-height: 1.5; color: light-dark(#786642, #b9a98a); }
+.note.warn { color: light-dark(#946142, #e8b99d); }
 .note button { margin-left: 4px; text-decoration: underline; }
 @keyframes scan { from { background-position: -40% 0; } to { background-position: 140% 0; } }
 @media (pointer: coarse) { .handle { width: 26px; margin-left: -13px; } .track { height: 46px; } }

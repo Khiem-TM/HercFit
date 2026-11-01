@@ -77,7 +77,7 @@ onBeforeUnmount(() => {
   >
     <div class="grain-overlay pointer-events-none" aria-hidden="true" />
     <div
-      class="relative z-10 w-full max-w-md rounded-3xl border border-white/15 bg-[#141414] p-8 text-center shadow-2xl"
+      class="relative z-10 w-full max-w-md rounded-3xl border border-ink/15 bg-panel p-8 text-center shadow-2xl"
     >
       <p class="font-label-telemetry text-[10px] uppercase tracking-[0.22em] text-outline">
         PROTOCOL // AUTHENTICATION REQUIRED
@@ -96,7 +96,7 @@ onBeforeUnmount(() => {
       </div>
       <button
         type="button"
-        class="mt-6 w-full rounded-xl bg-white px-5 py-3 font-label-code text-xs font-semibold uppercase tracking-[0.18em] text-[#0e0e0e] transition-transform hover:scale-[1.02]"
+        class="mt-6 w-full rounded-xl bg-ink px-5 py-3 font-label-code text-xs font-semibold uppercase tracking-[0.18em] text-paper transition-transform hover:scale-[1.02]"
         @click="loginWithGoogle"
       >
         [ ĐĂNG NHẬP VỚI GOOGLE ]

@@ -51,8 +51,8 @@ summary { cursor: pointer; list-style: none; }
 summary::-webkit-details-marker { display: none; }
 summary > span { display: flex; flex-direction: column; }
 summary .eyeline { margin-bottom: 7px; }
-.title { font-size: 14px; font-weight: 500; color: #e9e8e2; }
-summary::after { content: 'Mở bảng'; float: right; margin-top: -26px; font-size: 10px; color: #a9c9d4; }
+.title { font-size: 14px; font-weight: 500; color: light-dark(#2a2924, #e9e8e2); }
+summary::after { content: 'Mở bảng'; float: right; margin-top: -26px; font-size: 10px; color: light-dark(#2d4952, #a9c9d4); }
 details[open] summary::after { content: 'Thu gọn'; }
-.none { font-size: 10.5px; color: #8d949c; }
+.none { font-size: 10.5px; color: light-dark(#60676e, #8d949c); }
 </style>

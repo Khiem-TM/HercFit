@@ -31,7 +31,7 @@ function choose(event: Event) {
 </script>
 
 <template>
-  <div class="rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-3">
+  <div class="rounded-xl border border-dashed border-ink/15 bg-ink/[0.02] p-3">
     <div class="flex items-center gap-3">
       <div v-if="preview" class="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg">
         <img :src="preview" :alt="`Ảnh đính kèm: ${model?.name}`" class="h-full w-full object-cover" />
@@ -48,7 +48,7 @@ function choose(event: Event) {
         type="button"
         :disabled="disabled"
         :aria-describedby="hintId"
-        class="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-white/15 px-3 text-xs text-primary hover:bg-white/[0.06] disabled:opacity-50"
+        class="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-ink/15 px-3 text-xs text-primary hover:bg-ink/[0.06] disabled:opacity-50"
         @click="input?.click()"
       >
         <Camera class="h-4 w-4" aria-hidden="true" />Thêm ảnh
@@ -58,7 +58,7 @@ function choose(event: Event) {
         type="button"
         :disabled="disabled"
         aria-label="Bỏ ảnh đính kèm"
-        class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-on-surface-variant hover:bg-white/[0.06] disabled:opacity-50"
+        class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-on-surface-variant hover:bg-ink/[0.06] disabled:opacity-50"
         @click="model = null"
       >
         <X class="h-4 w-4" aria-hidden="true" />

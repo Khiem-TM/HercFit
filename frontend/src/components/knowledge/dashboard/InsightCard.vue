@@ -34,8 +34,8 @@ const bars = computed(() => {
 </template>
 
 <style scoped>
-.insight-card { container: insight / inline-size; min-width: 0; display: flex; flex-direction: column; gap: 9px; text-align: left; padding: 16px; border: 1px solid #ffffff12; border-radius: 16px; background: radial-gradient(ellipse at 100% 0, color-mix(in srgb, var(--accent) 11%, transparent), transparent 65%), #171a20; box-shadow: 0 2px 3px #0001; animation: arrive 450ms ease-out backwards; animation-delay: var(--delay); transition: transform 220ms, border-color 220ms, box-shadow 220ms; }
-.insight-card:hover, .insight-card:focus-visible { transform: translateY(-4px); border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 12px 26px #0004; }
+.insight-card { container: insight / inline-size; min-width: 0; display: flex; flex-direction: column; gap: 9px; text-align: left; padding: 16px; border: 1px solid light-dark(#18181812, #ffffff12); border-radius: 16px; background: radial-gradient(ellipse at 100% 0, color-mix(in srgb, var(--accent) 11%, transparent), transparent 65%), light-dark(#fffefd, #171a20); box-shadow: 0 2px 3px light-dark(#00000008, #0001); animation: arrive 450ms ease-out backwards; animation-delay: var(--delay); transition: transform 220ms, border-color 220ms, box-shadow 220ms; }
+.insight-card:hover, .insight-card:focus-visible { transform: translateY(-4px); border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 12px 26px light-dark(#00000022, #0004); }
 .insight-card:active { transform: translateY(-1px) scale(.985); }
 .insight-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .card-heading { display: flex; align-items: center; gap: 8px; color: var(--accent); font-size: 12px; font-weight: 500; }
@@ -43,17 +43,17 @@ const bars = computed(() => {
 .open-icon { margin-left: auto; opacity: .5; transition: transform 220ms, opacity 220ms; }
 .insight-card:hover .open-icon { transform: translate(2px, -2px); opacity: 1; }
 .card-body { display: flex; gap: 12px; align-items: center; justify-content: space-between; min-height: 42px; }
-.card-value { font-family: 'Playfair Display', serif; font-size: clamp(24px, 13cqi, 36px); letter-spacing: -.025em; line-height: 1.15; color: #f4ecdc; overflow-wrap: anywhere; transition: font-size 200ms; }
-.card-caption { font-size: 11px; line-height: 1.6; color: #adaaa1; }
-.card-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 5px 10px; margin-top: auto; padding-top: 10px; border-top: 1px solid #ffffff0d; font-size: 10px; line-height: 1.5; color: #96978f; }
+.card-value { font-family: 'Playfair Display', serif; font-size: clamp(24px, 13cqi, 36px); letter-spacing: -.025em; line-height: 1.15; color: light-dark(#2a2418, #f4ecdc); overflow-wrap: anywhere; transition: font-size 200ms; }
+.card-caption { font-size: 11px; line-height: 1.6; color: light-dark(#58554d, #adaaa1); }
+.card-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 5px 10px; margin-top: auto; padding-top: 10px; border-top: 1px solid light-dark(#1818180d, #ffffff0d); font-size: 10px; line-height: 1.5; color: light-dark(#63645d, #96978f); }
 .quick-label { color: var(--accent); white-space: nowrap; }
 .mini-bars { height: clamp(27px, 14cqi, 44px); display: flex; align-items: flex-end; gap: 4px; margin: 4px 0; }
 .mini-bars i { flex: 1; border-radius: 3px 3px 1px 1px; background: var(--accent); opacity: .5; transform-origin: bottom; animation: grow 700ms ease-out backwards; }
 .mini-bars i:last-child { opacity: 1; }
-.mini-bars i.missing { background: #ffffff24; }
+.mini-bars i.missing { background: light-dark(#18181824, #ffffff24); }
 /* Not `.ring`: Tailwind generates a utility of that name, which adds a blue box-shadow. */
 .progress-ring { width: 42px; height: 42px; flex-shrink: 0; transform: rotate(-90deg); }
-.ring-track, .ring-fill { fill: none; stroke: #ffffff10; stroke-width: 3; }
+.ring-track, .ring-fill { fill: none; stroke: light-dark(#18181810, #ffffff10); stroke-width: 3; }
 .ring-fill { stroke: var(--accent); stroke-linecap: round; animation: ring-in 900ms ease-out backwards; transition: stroke-dashoffset 700ms; }
 @keyframes arrive { from { opacity: 0; transform: translateY(8px); } }
 @keyframes grow { from { transform: scaleY(0); } }

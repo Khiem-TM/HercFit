@@ -45,34 +45,34 @@ const maxSessions = computed(() => Math.max(1, ...(summary.value?.weeks.map(item
 </template>
 
 <style scoped>
-.training-widget { container: training / inline-size; min-width: 0; padding: clamp(16px, 2.2cqi, 24px); border: 1px solid #e3a37f26; border-radius: 18px; background: linear-gradient(125deg, #e3a37f08, transparent 60%), #14171d; }
+.training-widget { container: training / inline-size; min-width: 0; padding: clamp(16px, 2.2cqi, 24px); border: 1px solid light-dark(#9b552a26, #e3a37f26); border-radius: 18px; background: linear-gradient(125deg, light-dark(#9b552a08, #e3a37f08), transparent 60%), light-dark(#fdfcf9, #14171d); }
 .widget-head { display: flex; justify-content: space-between; gap: 12px; }
-.eyeline { display: flex; align-items: center; gap: 6px; margin: 0 0 7px; font: 9px 'JetBrains Mono', monospace; letter-spacing: .12em; color: #e3a37f; }
-h3 { margin: 0; font-size: 14px; font-weight: 500; color: #e9e8e2; }
-.refresh { align-self: flex-start; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #ffffff13; border-radius: 50%; color: #c1a08b; }
-.refresh:hover { background: #e3a37f12; }
+.eyeline { display: flex; align-items: center; gap: 6px; margin: 0 0 7px; font: 9px 'JetBrains Mono', monospace; letter-spacing: .12em; color: light-dark(#9b552a, #e3a37f); }
+h3 { margin: 0; font-size: 14px; font-weight: 500; color: light-dark(#2a2924, #e9e8e2); }
+.refresh { align-self: flex-start; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid light-dark(#18181813, #ffffff13); border-radius: 50%; color: light-dark(#835f47, #c1a08b); }
+.refresh:hover { background: light-dark(#9b552a12, #e3a37f12); }
 .progress-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 23px 0 14px; }
-.week-label { font-size: 10px; color: #a99c93; }
+.week-label { font-size: 10px; color: light-dark(#665b52, #a99c93); }
 .progress-heading p { margin: 4px 0 0; }
-.progress-heading p strong { font-family: 'Playfair Display', serif; font-size: clamp(28px, 8cqi, 42px); color: #f0e3d8; transition: font-size 200ms; }
-.progress-heading p > span { color: #b3a69b; font-size: 11px; }
-.progress-percent { display: flex; align-items: center; gap: 3px; font: 24px 'JetBrains Mono', monospace; color: #e3a37f; }
-.progress-percent small { font-size: 12px; }.progress-percent.complete { color: #a8cf9a; }
-.progress-track { height: 10px; border-radius: 8px; overflow: hidden; background: #ffffff0a; }
-.progress-track > span { display: block; width: 100%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #a86d4c, #edbb99); transform-origin: left; transition: transform 750ms cubic-bezier(.2,.8,.2,1); }
-.progress-note { color: #b1a499; font-size: 11px; margin: 10px 0 20px; line-height: 1.6; }
-.training-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 14px 0; border-block: 1px solid #ffffff0c; }
+.progress-heading p strong { font-family: 'Playfair Display', serif; font-size: clamp(28px, 8cqi, 42px); color: light-dark(#322820, #f0e3d8); transition: font-size 200ms; }
+.progress-heading p > span { color: light-dark(#5f544a, #b3a69b); font-size: 11px; }
+.progress-percent { display: flex; align-items: center; gap: 3px; font: 24px 'JetBrains Mono', monospace; color: light-dark(#9b552a, #e3a37f); }
+.progress-percent small { font-size: 12px; }.progress-percent.complete { color: light-dark(#517c40, #a8cf9a); }
+.progress-track { height: 10px; border-radius: 8px; overflow: hidden; background: light-dark(#1818180a, #ffffff0a); }
+.progress-track > span { display: block; width: 100%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, light-dark(#904c22, #a86d4c), light-dark(#97613a, #edbb99)); transform-origin: left; transition: transform 750ms cubic-bezier(.2,.8,.2,1); }
+.progress-note { color: light-dark(#61554b, #b1a499); font-size: 11px; margin: 10px 0 20px; line-height: 1.6; }
+.training-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 14px 0; border-block: 1px solid light-dark(#1818180c, #ffffff0c); }
 .training-stats > div { display: flex; flex-direction: column; gap: 5px; }
-.training-stats strong { color: #f0e3d8; font: 18px 'JetBrains Mono', monospace; }.training-stats span { color: #a59c96; font-size: 10px; }
-.weekly-history { margin-top: 18px; }.weekly-history > p { display: flex; justify-content: space-between; gap: 10px; color: #ba9b83; font: 9px 'JetBrains Mono', monospace; margin: 0 0 10px; }.weekly-history > p span { color: #8f8c86; font: 10px Geist, sans-serif; }
+.training-stats strong { color: light-dark(#322820, #f0e3d8); font: 18px 'JetBrains Mono', monospace; }.training-stats span { color: light-dark(#645c57, #a59c96); font-size: 10px; }
+.weekly-history { margin-top: 18px; }.weekly-history > p { display: flex; justify-content: space-between; gap: 10px; color: light-dark(#815f43, #ba9b83); font: 9px 'JetBrains Mono', monospace; margin: 0 0 10px; }.weekly-history > p span { color: light-dark(#6e6b65, #8f8c86); font: 10px Geist, sans-serif; }
 .weeks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .weeks button { display: flex; flex-direction: column; gap: 8px; text-align: left; padding: 10px 8px; border: 1px solid transparent; border-radius: 9px; transition: background 200ms, border-color 200ms, transform 200ms; }
-.weeks button:hover { background: #ffffff05; transform: translateY(-2px); }.weeks button[aria-pressed=true] { border-color: #e3a37f38; background: #e3a37f0a; }
-.week-count { font: 13px 'JetBrains Mono', monospace; color: #e0c4af; }.week-count small { font: 9px Geist, sans-serif; color: #a8988d; }
-.week-track { display: block; height: 4px; background: #ffffff08; border-radius: 4px; }.week-track i { display: block; height: 100%; background: #e3a37f; border-radius: inherit; transition: width 400ms; opacity: .65; }.week-date { font-size: 10px; color: #a99c93; }
-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; font-size: 10px; color: #8f8c86; line-height: 1.6; } footer button { display: flex; align-items: center; gap: 4px; white-space: nowrap; color: #e3a37f; min-height: 26px; }
-.notice { padding: 12px; border: 1px solid #e3a37f33; border-radius: 10px; font-size: 11px; color: #d4b69f; line-height: 1.6; }.notice button { text-decoration: underline; margin-left: 4px; }
-.loading-state { padding: 35px 0; color: #b1a499; font-size: 11px; }.loading-state span { display: block; margin-top: 16px; height: 10px; border-radius: 6px; background: #e3a37f15; }
+.weeks button:hover { background: light-dark(#18181805, #ffffff05); transform: translateY(-2px); }.weeks button[aria-pressed=true] { border-color: light-dark(#9b552a38, #e3a37f38); background: light-dark(#9b552a0a, #e3a37f0a); }
+.week-count { font: 13px 'JetBrains Mono', monospace; color: light-dark(#886a53, #e0c4af); }.week-count small { font: 9px Geist, sans-serif; color: light-dark(#6b5c52, #a8988d); }
+.week-track { display: block; height: 4px; background: light-dark(#18181808, #ffffff08); border-radius: 4px; }.week-track i { display: block; height: 100%; background: light-dark(#9b552a, #e3a37f); border-radius: inherit; transition: width 400ms; opacity: .65; }.week-date { font-size: 10px; color: light-dark(#665b52, #a99c93); }
+footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; font-size: 10px; color: light-dark(#6e6b65, #8f8c86); line-height: 1.6; } footer button { display: flex; align-items: center; gap: 4px; white-space: nowrap; color: light-dark(#9b552a, #e3a37f); min-height: 26px; }
+.notice { padding: 12px; border: 1px solid light-dark(#9b552a33, #e3a37f33); border-radius: 10px; font-size: 11px; color: light-dark(#86654c, #d4b69f); line-height: 1.6; }.notice button { text-decoration: underline; margin-left: 4px; }
+.loading-state { padding: 35px 0; color: light-dark(#61554b, #b1a499); font-size: 11px; }.loading-state span { display: block; margin-top: 16px; height: 10px; border-radius: 6px; background: light-dark(#9b552a15, #e3a37f15); }
 .spinning { animation: spin 1s linear infinite; }@keyframes spin { to { transform: rotate(360deg); } }
 @container training (max-width: 360px) { .weeks { grid-template-columns: repeat(2, 1fr); } .training-stats strong { font-size: 16px; } }
 @container training (min-width: 560px) { .training-stats strong { font-size: 22px; } .weeks button { padding: 12px 10px; } }

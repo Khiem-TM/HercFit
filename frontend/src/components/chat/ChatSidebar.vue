@@ -6,6 +6,7 @@ import {
 } from 'lucide-vue-next'
 import type { SessionSummary, UserProfile } from '@/types/api'
 import ChatHistoryList from './ChatHistoryList.vue'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 
 const props = defineProps<{
   sessions: SessionSummary[]
@@ -42,7 +43,7 @@ const userInitials = computed(() => {
 <template>
   <aside
     id="chat-sidebar"
-    class="relative z-20 flex h-full min-h-0 w-[272px] shrink-0 flex-col overflow-hidden border-r border-white/[0.07] bg-[#0e0e0e] select-none"
+    class="relative z-20 flex h-full min-h-0 w-[272px] shrink-0 flex-col overflow-hidden border-r border-ink/[0.07] bg-sunken select-none"
   >
     <!-- Top Section: Brand Toggle + New Chat Button -->
     <div class="flex shrink-0 flex-col gap-2 p-3">
@@ -52,7 +53,7 @@ const userInitials = computed(() => {
           class="flex items-center gap-2.5 text-primary transition-opacity hover:opacity-80"
         >
           <span
-            class="flex h-7 w-7 items-center justify-center rounded-lg border border-white/15 bg-white/[0.04] font-headline-md text-sm font-bold tracking-wider"
+            class="flex h-7 w-7 items-center justify-center rounded-lg border border-ink/15 bg-ink/[0.04] font-headline-md text-sm font-bold tracking-wider"
           >
             H
           </span>
@@ -64,7 +65,7 @@ const userInitials = computed(() => {
         <button
           ref="collapseButton"
           type="button"
-          class="flex h-8 w-8 items-center justify-center rounded-lg text-outline transition-colors hover:bg-white/[0.06] hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/60"
+          class="flex h-8 w-8 items-center justify-center rounded-lg text-outline transition-colors hover:bg-ink/[0.06] hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink/60"
           title="Ẩn thanh bên"
           aria-label="Ẩn thanh bên"
           aria-controls="chat-sidebar"
@@ -79,7 +80,7 @@ const userInitials = computed(() => {
       <button
         type="button"
         :disabled="isStreaming"
-        class="group flex w-full items-center gap-3 rounded-xl border border-white/[0.09] bg-[#171717] px-3.5 py-2.5 text-left text-sm font-medium text-primary transition-all duration-200 hover:border-white/25 hover:bg-[#202020] disabled:opacity-50"
+        class="group flex w-full items-center gap-3 rounded-xl border border-ink/[0.09] bg-panel px-3.5 py-2.5 text-left text-sm font-medium text-primary transition-all duration-200 hover:border-ink/25 hover:bg-panel-hover disabled:opacity-50"
         title="Cuộc trò chuyện mới"
         @click="emit('new-chat')"
       >
@@ -97,14 +98,14 @@ const userInitials = computed(() => {
     />
 
     <!-- Bottom Section: User Avatar (opens Profile & Settings Modal) -->
-    <div class="shrink-0 border-t border-white/[0.07] p-3">
+    <div class="flex shrink-0 items-center gap-2 border-t border-ink/[0.07] p-3">
       <button
         type="button"
-        class="group flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/[0.06]"
+        class="group flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-ink/[0.06]"
         title="Hồ sơ cá nhân & Cài đặt"
         @click="emit('open-user-modal')"
       >
-        <div class="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border border-white/20 bg-[#1c1b1b]">
+        <div class="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border border-ink/20 bg-panel-raised">
           <img
             v-if="user?.avatar_url"
             :src="user.avatar_url"
@@ -119,7 +120,7 @@ const userInitials = computed(() => {
             {{ userInitials }}
           </div>
           <span
-            class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#0e0e0e] bg-emerald-400"
+            class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-sunken bg-emerald-400"
           />
         </div>
 
@@ -132,6 +133,7 @@ const userInitials = computed(() => {
           </p>
         </div>
       </button>
+      <ThemeToggle />
     </div>
   </aside>
 </template>

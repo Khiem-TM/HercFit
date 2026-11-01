@@ -54,12 +54,12 @@ const errors = computed(() => Object.keys((props.connection?.last_run?.counts?.e
 
 <style scoped src="./healthCard.css"></style>
 <style scoped>
-.link { font-size: 10px; color: #a9c9d4; border-bottom: 1px solid #a9c9d455; }
+.link { font-size: 10px; color: light-dark(#2d4952, #a9c9d4); border-bottom: 1px solid light-dark(#2d495255, #a9c9d455); }
 dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 18px; margin: 16px 0 0; }
 dl div { min-width: 0; }
-dt { font-size: 10px; color: #8d949c; }
-dd { margin: 3px 0 0; font-size: 11.5px; color: #e4e3dd; overflow-wrap: anywhere; }
+dt { font-size: 10px; color: light-dark(#60676e, #8d949c); }
+dd { margin: 3px 0 0; font-size: 11.5px; color: light-dark(#2d2d28, #e4e3dd); overflow-wrap: anywhere; }
 .records { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-.records span { display: flex; align-items: baseline; gap: 5px; padding: 6px 10px; border: 1px solid #ffffff10; border-radius: 10px; font-size: 10px; color: #a3a8ae; }
-.records strong { font: 600 13px Geist, sans-serif; color: #f1f0eb; }
+.records span { display: flex; align-items: baseline; gap: 5px; padding: 6px 10px; border: 1px solid light-dark(#18181810, #ffffff10); border-radius: 10px; font-size: 10px; color: light-dark(#53575d, #a3a8ae); }
+.records strong { font: 600 13px Geist, sans-serif; color: light-dark(#24231f, #f1f0eb); }
 </style>

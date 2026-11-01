@@ -12,9 +12,9 @@ const meals = computed(() => records(props.graph, 'Meal'))
 const meal = computed(() => meals.value.find(item => item.id === selectedId.value) ?? meals.value[0])
 const foods = computed(() => props.graph.nodes.filter(node => node.kind === 'MealItem' && node.parent === meal.value?.id))
 const macros = computed(() => meal.value ? [
-  { label: 'Protein', color: '#a8cf9a', value: numericDetail(meal.value, 'Protein') },
-  { label: 'Carb', color: '#d4b77d', value: numericDetail(meal.value, 'Carb') },
-  { label: 'Chất béo', color: '#b9a9e3', value: numericDetail(meal.value, 'Chất béo') },
+  { label: 'Protein', color: 'light-dark(#517c40, #a8cf9a)', value: numericDetail(meal.value, 'Protein') },
+  { label: 'Carb', color: 'light-dark(#87671a, #d4b77d)', value: numericDetail(meal.value, 'Carb') },
+  { label: 'Chất béo', color: 'light-dark(#715d9d, #b9a9e3)', value: numericDetail(meal.value, 'Chất béo') },
 ] : [])
 const maxMacro = computed(() => Math.max(1, ...macros.value.map(item => item.value ?? 0)))
 const incomplete = computed(() => meal.value && (detail(meal.value, 'Ghi chú') || macros.value.some(item => item.value == null) || !detail(meal.value, 'Năng lượng')))
@@ -39,20 +39,20 @@ const incomplete = computed(() => meal.value && (detail(meal.value, 'Ghi chú') 
 </template>
 
 <style scoped>
-.nutrition-detail { color: #dedfd7; }
-.meal-label { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 12px; }.meal-label > span { color: #8e998a; font-size: 10px; }
-.meal-select { width: 100%; min-width: 0; border: 1px solid #a8cf9a35; border-radius: 10px; background: #141b17; padding: 11px 10px; font-size: 12px; color: #d8e5d1; text-overflow: ellipsis; }
+.nutrition-detail { color: light-dark(#30312b, #dedfd7); }
+.meal-label { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 12px; }.meal-label > span { color: light-dark(#5e685a, #8e998a); font-size: 10px; }
+.meal-select { width: 100%; min-width: 0; border: 1px solid light-dark(#517c4035, #a8cf9a35); border-radius: 10px; background: light-dark(#fffefc, #141b17); padding: 11px 10px; font-size: 12px; color: light-dark(#283223, #d8e5d1); text-overflow: ellipsis; }
 .energy { display: flex; align-items: center; gap: 13px; padding: 22px 0; }
-.energy-icon { display: grid; place-items: center; background: #a8cf9a0d; color: #a8cf9a; border: 1px solid #a8cf9a22; border-radius: 14px; width: 48px; height: 54px; flex-shrink: 0; }
-.energy-label { color: #a2ad9b; font-size: 11px; }.energy div > strong { display: block; margin-top: 4px; font: 28px 'Playfair Display', serif; color: #ecf0e4; }
-.fiber { margin-left: auto; font-size: 10px; color: #99a391; }.fiber strong { display: block; margin-top: 6px; font: 12px 'JetBrains Mono', monospace; color: #d9e2ce; }
-.macros { display: grid; gap: 14px; padding: 16px; border: 1px solid #ffffff0d; border-radius: 12px; background: #ffffff02; }
-.macro > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; }.macro > div > span { display: flex; align-items: center; gap: 7px; color: #b7bdb2; }.macro > div i { width: 5px; height: 5px; border-radius: 50%; background: var(--macro); }.macro strong { color: var(--macro); font: 11px 'JetBrains Mono', monospace; }
-.macro-track { display: block; height: 5px; border-radius: 4px; background: #ffffff09; margin-top: 8px; overflow: hidden; }.macro-track i { display: block; height: 100%; width: 100%; background: var(--macro); border-radius: inherit; transform-origin: left; transition: transform 500ms cubic-bezier(.2,.8,.2,1); }
-.macro-note { color: #91998c; font-size: 10px; line-height: 1.6; margin: 9px 0 18px; }.incomplete { padding: 10px 12px; border: 1px solid #d4b77d25; background: #d4b77d08; color: #c9bb9b; border-radius: 9px; font-size: 11px; line-height: 1.6; }
-.food-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 22px 0 8px; }.food-heading h4 { font-size: 12px; font-weight: 500; margin: 0; }.food-heading > span { font-size: 10px; color: #8e998a; }
-.foods { list-style: none; padding: 0; margin: 0; }.foods li { display: flex; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid #ffffff0b; }.food-icon { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; color: #9dab93; border-radius: 9px; background: #a8cf9a09; }.foods li > div { min-width: 0; }.foods strong { font-size: 12px; font-weight: 400; color: #dde4d5; overflow-wrap: anywhere; }.foods li > div > span { display: block; margin-top: 4px; font-size: 10px; color: #939e8b; }.foods button { margin-left: auto; flex-shrink: 0; padding: 8px; border-radius: 8px; color: #a8cf9a; }.foods button:hover { background: #a8cf9a14; }
-.meal-link { display: flex; justify-content: center; align-items: center; gap: 8px; width: 100%; margin-top: 20px; padding: 11px; background: #a8cf9a0c; border: 1px solid #a8cf9a2b; border-radius: 10px; color: #c4dcb8; font-size: 12px; transition: background 180ms; }.meal-link:hover { background: #a8cf9a1c; }
-.empty { padding: 22px 0; color: #a2ad9b; font-size: 12px; line-height: 1.7; }.empty > span { font-size: 11px; color: #929b8c; }
+.energy-icon { display: grid; place-items: center; background: light-dark(#517c400d, #a8cf9a0d); color: light-dark(#517c40, #a8cf9a); border: 1px solid light-dark(#517c4022, #a8cf9a22); border-radius: 14px; width: 48px; height: 54px; flex-shrink: 0; }
+.energy-label { color: light-dark(#505a4a, #a2ad9b); font-size: 11px; }.energy div > strong { display: block; margin-top: 4px; font: 28px 'Playfair Display', serif; color: light-dark(#23261d, #ecf0e4); }
+.fiber { margin-left: auto; font-size: 10px; color: light-dark(#586150, #99a391); }.fiber strong { display: block; margin-top: 6px; font: 12px 'JetBrains Mono', monospace; color: light-dark(#2c3323, #d9e2ce); }
+.macros { display: grid; gap: 14px; padding: 16px; border: 1px solid light-dark(#1818180d, #ffffff0d); border-radius: 12px; background: light-dark(#18181802, #ffffff02); }
+.macro > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11px; }.macro > div > span { display: flex; align-items: center; gap: 7px; color: light-dark(#474c42, #b7bdb2); }.macro > div i { width: 5px; height: 5px; border-radius: 50%; background: var(--macro); }.macro strong { color: var(--macro); font: 11px 'JetBrains Mono', monospace; }
+.macro-track { display: block; height: 5px; border-radius: 4px; background: light-dark(#18181809, #ffffff09); margin-top: 8px; overflow: hidden; }.macro-track i { display: block; height: 100%; width: 100%; background: var(--macro); border-radius: inherit; transform-origin: left; transition: transform 500ms cubic-bezier(.2,.8,.2,1); }
+.macro-note { color: light-dark(#5f675a, #91998c); font-size: 10px; line-height: 1.6; margin: 9px 0 18px; }.incomplete { padding: 10px 12px; border: 1px solid light-dark(#87671a25, #d4b77d25); background: light-dark(#87671a08, #d4b77d08); color: light-dark(#7b6b47, #c9bb9b); border-radius: 9px; font-size: 11px; line-height: 1.6; }
+.food-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 22px 0 8px; }.food-heading h4 { font-size: 12px; font-weight: 500; margin: 0; }.food-heading > span { font-size: 10px; color: light-dark(#5e685a, #8e998a); }
+.foods { list-style: none; padding: 0; margin: 0; }.foods li { display: flex; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid light-dark(#1818180b, #ffffff0b); }.food-icon { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; color: light-dark(#515d47, #9dab93); border-radius: 9px; background: light-dark(#517c4009, #a8cf9a09); }.foods li > div { min-width: 0; }.foods strong { font-size: 12px; font-weight: 400; color: light-dark(#2b3025, #dde4d5); overflow-wrap: anywhere; }.foods li > div > span { display: block; margin-top: 4px; font-size: 10px; color: light-dark(#5b6553, #939e8b); }.foods button { margin-left: auto; flex-shrink: 0; padding: 8px; border-radius: 8px; color: light-dark(#517c40, #a8cf9a); }.foods button:hover { background: light-dark(#517c4014, #a8cf9a14); }
+.meal-link { display: flex; justify-content: center; align-items: center; gap: 8px; width: 100%; margin-top: 20px; padding: 11px; background: light-dark(#517c400c, #a8cf9a0c); border: 1px solid light-dark(#517c402b, #a8cf9a2b); border-radius: 10px; color: light-dark(#627c55, #c4dcb8); font-size: 12px; transition: background 180ms; }.meal-link:hover { background: light-dark(#517c401c, #a8cf9a1c); }
+.empty { padding: 22px 0; color: light-dark(#505a4a, #a2ad9b); font-size: 12px; line-height: 1.7; }.empty > span { font-size: 11px; color: light-dark(#5d6658, #929b8c); }
 @media (prefers-reduced-motion: reduce) { .macro-track i { transition: none; } }
 </style>

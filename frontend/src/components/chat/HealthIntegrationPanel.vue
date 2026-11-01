@@ -65,9 +65,9 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
     </div>
     <div v-if="error" class="rounded-xl border border-error/40 bg-error/10 px-4 py-2.5 text-xs text-error">{{ error }}</div>
 
-    <div class="space-y-3 rounded-2xl border border-white/[0.08] bg-[#161616] p-4">
+    <div class="space-y-3 rounded-2xl border border-ink/[0.08] bg-panel p-4">
       <div class="flex items-start gap-3">
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-ink/10 bg-ink/5">
           <HeartPulse class="h-4 w-4 text-primary" />
         </div>
         <div class="min-w-0 flex-1">
@@ -76,7 +76,7 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
             <span
               v-if="connection?.status"
               class="rounded-full px-2 py-0.5 font-label-code text-[10px]"
-              :class="needsReauth ? 'bg-amber-400/15 text-amber-300' : isConnected ? 'bg-emerald-400/15 text-emerald-300' : 'bg-white/10 text-outline'"
+              :class="needsReauth ? 'bg-amber-400/15 text-amber-300' : isConnected ? 'bg-emerald-400/15 text-emerald-300' : 'bg-ink/10 text-outline'"
             >
               {{ needsReauth ? 'CẦN KẾT NỐI LẠI' : isConnected ? 'ĐANG HOẠT ĐỘNG' : 'ĐÃ NGẮT' }}
             </span>
@@ -103,7 +103,7 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
             <span class="text-primary">{{ when(connection.last_sync_at) }}<template v-if="connection.last_run"> · {{ RUN_STATUS[connection.last_run.status] }}</template></span></div>
           <div class="flex justify-between gap-3"><span class="text-outline">Lần kế tiếp</span><span class="text-primary">{{ when(connection.next_sync_at) }}</span></div>
           <div v-if="records.length" class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            <div v-for="[key, count] in records" :key="key" class="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2">
+            <div v-for="[key, count] in records" :key="key" class="rounded-xl border border-ink/[0.06] bg-ink/[0.03] px-3 py-2">
               <div class="font-label-code text-sm text-primary">{{ count }}</div>
               <div class="text-[11px] text-outline">{{ RECORD_LABELS[key] }}</div>
             </div>
@@ -118,7 +118,7 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
           <input
             v-model="share"
             type="checkbox"
-            class="mt-0.5 accent-white"
+            class="mt-0.5 accent-ink"
             :disabled="busy"
             @change="isConnected && setConsent(share)"
           />
@@ -131,7 +131,7 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
             v-if="!isConnected || needsReauth || missing.length"
             type="button"
             :disabled="busy"
-            class="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-semibold text-[#0e0e0e] transition-colors hover:bg-white/90 disabled:opacity-50"
+            class="inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-2 text-xs font-semibold text-paper transition-colors hover:bg-ink/90 disabled:opacity-50"
             @click="connect(share)"
           >
             <Loader2 v-if="busy" class="h-3.5 w-3.5 animate-spin" />
@@ -142,7 +142,7 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
             v-if="connection.status === 'ACTIVE'"
             type="button"
             :disabled="busy"
-            class="inline-flex items-center gap-2 rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold text-primary transition-colors hover:bg-white/10 disabled:opacity-50"
+            class="inline-flex items-center gap-2 rounded-xl border border-ink/20 px-4 py-2 text-xs font-semibold text-primary transition-colors hover:bg-ink/10 disabled:opacity-50"
             @click="handleSync"
           >
             <RefreshCw class="h-3.5 w-3.5" :class="busy && 'animate-spin'" />
@@ -164,12 +164,12 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
         <div v-if="confirmDisconnect" class="space-y-2 rounded-xl border border-error/25 bg-error/[0.06] p-3 text-xs">
           <p class="text-on-surface-variant">HercFit sẽ thu hồi quyền tại Google và xoá token đã lưu.</p>
           <label class="flex items-center gap-2 text-on-surface-variant">
-            <input v-model="purge" type="checkbox" class="accent-white" />
+            <input v-model="purge" type="checkbox" class="accent-ink" />
             <span>Xoá luôn dữ liệu đã đồng bộ (không thể hoàn tác)</span>
           </label>
           <div class="flex gap-2">
             <button type="button" :disabled="busy" class="rounded-xl border border-error/40 bg-error/15 px-3 py-1.5 font-semibold text-error hover:bg-error/25 disabled:opacity-50" @click="handleDisconnect">Xác nhận ngắt</button>
-            <button type="button" class="rounded-xl border border-white/15 px-3 py-1.5 text-primary hover:bg-white/10" @click="confirmDisconnect = false">Huỷ</button>
+            <button type="button" class="rounded-xl border border-ink/15 px-3 py-1.5 text-primary hover:bg-ink/10" @click="confirmDisconnect = false">Huỷ</button>
           </div>
         </div>
       </template>

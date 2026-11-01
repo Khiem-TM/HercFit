@@ -16,7 +16,7 @@ const icons = { food: UtensilsCrossed, exercise: Dumbbell, run: Footprints, none
 </script>
 
 <template>
-  <div class="relative overflow-hidden bg-[#232323]" :class="rounded">
+  <div class="relative overflow-hidden bg-panel-hover" :class="rounded">
     <img
       v-if="src && !failed"
       :src="src"

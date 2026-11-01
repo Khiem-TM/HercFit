@@ -81,9 +81,9 @@ const format = (hours: number) => duration(hours * 60)
 
 <style scoped src="./healthCard.css"></style>
 <style scoped>
-.last-night { margin-top: 14px; padding: 11px 0; border-block: 1px solid #ffffff0c; font-size: 11px; color: #c9cbcf; }
-.last-night > span { font-size: 10px; color: #8d949c; }
+.last-night { margin-top: 14px; padding: 11px 0; border-block: 1px solid light-dark(#1818180c, #ffffff0c); font-size: 11px; color: light-dark(#3d3f42, #c9cbcf); }
+.last-night > span { font-size: 10px; color: light-dark(#60676e, #8d949c); }
 .last-night p { margin: 4px 0 0; line-height: 1.6; }
-.last-night strong { color: #f1f0eb; font-weight: 600; }
-.last-night .device { font-size: 10px; color: #8d949c; }
+.last-night strong { color: light-dark(#24231f, #f1f0eb); font-weight: 600; }
+.last-night .device { font-size: 10px; color: light-dark(#60676e, #8d949c); }
 </style>

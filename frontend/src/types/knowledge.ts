@@ -102,15 +102,17 @@ export const emptyKnowledgeGraph = (status = 'loading'): KnowledgeGraph => ({
   status, lag_ms: null, profile: null, insights: [], intents: [], nodes: [], edges: [], timeline: [],
 })
 
-export const hubTheme: Record<KnowledgeHub, { label: string; color: string }> = {
-  goal: { label: 'Mục tiêu', color: '#d4b77d' },
-  body: { label: 'Cơ thể', color: '#8fc3d4' },
-  nutrition: { label: 'Dinh dưỡng', color: '#a8cf9a' },
-  training: { label: 'Tập luyện', color: '#e3a37f' },
-  conversation: { label: 'Hội thoại', color: '#b9a9e3' },
+/** `color` is drawn on dark surfaces (and on the star map, which stays a night sky); `light` reads on paper. */
+export const hubTheme: Record<KnowledgeHub, { label: string; color: string; light: string }> = {
+  goal: { label: 'Mục tiêu', color: '#d4b77d', light: '#87671a' },
+  body: { label: 'Cơ thể', color: '#8fc3d4', light: '#367689' },
+  nutrition: { label: 'Dinh dưỡng', color: '#a8cf9a', light: '#517c40' },
+  training: { label: 'Tập luyện', color: '#e3a37f', light: '#9b552a' },
+  conversation: { label: 'Hội thoại', color: '#b9a9e3', light: '#715d9d' },
 }
 
 export const ROOT_COLOR = '#fff1ce'
+const ROOT_LIGHT = '#7a6230'
 
 export const kindLabels: Record<string, string> = {
   User: 'Hồ sơ của bạn', Hub: 'Nhóm tri thức', Group: 'Nhóm con', Goal: 'Mục tiêu', BodyMetric: 'Số đo cơ thể',
@@ -118,6 +120,13 @@ export const kindLabels: Record<string, string> = {
   Exercise: 'Bài tập', Intent: 'Ý định hội thoại', Run: 'Lượt hội thoại',
 }
 
+/** Theme-aware CSS colour (light-dark()) for styles; no hub means the user's own root. */
 export function hubColor(hub: string | null | undefined): string {
+  const theme = hub && hub in hubTheme ? hubTheme[hub as KnowledgeHub] : { color: ROOT_COLOR, light: ROOT_LIGHT }
+  return `light-dark(${theme.light}, ${theme.color})`
+}
+
+/** Plain colour for the star map (canvas cannot resolve light-dark()); the map is a night sky in both themes. */
+export function skyColor(hub: string | null | undefined): string {
   return hub && hub in hubTheme ? hubTheme[hub as KnowledgeHub].color : ROOT_COLOR
 }

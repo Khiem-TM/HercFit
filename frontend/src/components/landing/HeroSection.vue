@@ -59,7 +59,7 @@ function handleStart(): void {
             cy="300"
             rx="360"
             ry="140"
-            stroke="#8f918c"
+            style="stroke: rgb(var(--c-outline))"
             stroke-dasharray="3 3"
             stroke-width="0.75"
             transform="rotate(-18 400 300)"
@@ -69,7 +69,7 @@ function handleStart(): void {
             cy="300"
             rx="340"
             ry="110"
-            stroke="#8f918c"
+            style="stroke: rgb(var(--c-outline))"
             stroke-width="0.75"
             transform="rotate(22 400 300)"
           ></ellipse>
@@ -77,11 +77,11 @@ function handleStart(): void {
             cx="400"
             cy="300"
             r="210"
-            stroke="#454743"
+            style="stroke: rgb(var(--c-outline-variant))"
             stroke-width="0.5"
           ></circle>
           <line
-            stroke="#454743"
+            style="stroke: rgb(var(--c-outline-variant))"
             stroke-dasharray="2 4"
             stroke-width="0.5"
             x1="400"
@@ -90,7 +90,7 @@ function handleStart(): void {
             y2="550"
           ></line>
           <line
-            stroke="#454743"
+            style="stroke: rgb(var(--c-outline-variant))"
             stroke-dasharray="2 4"
             stroke-width="0.5"
             x1="100"
@@ -99,9 +99,9 @@ function handleStart(): void {
             y2="300"
           ></line>
 
-          <circle cx="210" cy="240" fill="#ffffff" r="3"></circle>
+          <circle cx="210" cy="240" style="fill: rgb(var(--c-primary))" r="3"></circle>
           <text
-            fill="#8f918c"
+            style="fill: rgb(var(--c-outline))"
             font-family="JetBrains Mono"
             font-size="9"
             letter-spacing="0.1em"
@@ -110,9 +110,9 @@ function handleStart(): void {
           >
             T12: KINETIC FLUX
           </text>
-          <circle cx="590" cy="360" fill="#ffffff" r="3"></circle>
+          <circle cx="590" cy="360" style="fill: rgb(var(--c-primary))" r="3"></circle>
           <text
-            fill="#8f918c"
+            style="fill: rgb(var(--c-outline))"
             font-family="JetBrains Mono"
             font-size="9"
             letter-spacing="0.1em"
@@ -128,7 +128,7 @@ function handleStart(): void {
         >
           <img
             alt="Classical Marble Sculpture Torso Back View"
-            class="max-h-full w-auto object-contain filter grayscale contrast-125 brightness-95 select-none pointer-events-none drop-shadow-[0_25px_35px_rgba(0,0,0,0.9)]"
+            class="max-h-full w-auto object-contain filter grayscale contrast-125 brightness-95 select-none pointer-events-none drop-shadow-[0_25px_35px_rgb(var(--c-shadow)/calc(0.9*var(--shadow-k)))]"
             decoding="async"
             fetchpriority="high"
             height="576"

@@ -79,17 +79,17 @@ const sourceClass = (source: ValueSource) => source.toLowerCase()
 .link { font-size: 10px; color: #a9c9d4; border-bottom: 1px solid #a9c9d455; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 14px 18px; margin-top: 18px; }
 .tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.tile-label { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 10px; color: #8d949c; }
-.tile strong { font: 600 clamp(18px, 4.6cqi, 22px) Geist, sans-serif; color: #f1f0eb; }
-.tile strong small { margin-left: 4px; font-size: 10.5px; font-weight: 400; color: #a3a8ae; }
-.tile em { font-style: normal; font-size: 10px; color: #8d949c; line-height: 1.45; }
-.source { display: inline-block; padding: 1px 6px; border-radius: 10px; font: 500 8.5px Geist, sans-serif; letter-spacing: .02em; border: 1px solid #ffffff1f; color: #c3c6ca; white-space: nowrap; }
-.source.measured { border-color: #3987e566; color: #a9c8f2; }
-.source.provider { border-color: #9085e966; color: #c9c2f5; }
+.tile-label { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 10px; color: light-dark(#60676e, #8d949c); }
+.tile strong { font: 600 clamp(18px, 4.6cqi, 22px) Geist, sans-serif; color: light-dark(#24231f, #f1f0eb); }
+.tile strong small { margin-left: 4px; font-size: 10.5px; font-weight: 400; color: light-dark(#53575d, #a3a8ae); }
+.tile em { font-style: normal; font-size: 10px; color: light-dark(#60676e, #8d949c); line-height: 1.45; }
+.source { display: inline-block; padding: 1px 6px; border-radius: 10px; font: 500 8.5px Geist, sans-serif; letter-spacing: .02em; border: 1px solid light-dark(#1818181f, #ffffff1f); color: light-dark(#404246, #c3c6ca); white-space: nowrap; }
+.source.measured { border-color: light-dark(#0d60b866, #3987e566); color: light-dark(#4f719f, #a9c8f2); }
+.source.provider { border-color: light-dark(#624cc066, #9085e966); color: light-dark(#71679e, #c9c2f5); }
 .source.derived { border-style: dashed; }
-.level { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: baseline; margin-top: 18px; padding: 12px 0; border-block: 1px solid #ffffff0c; font-size: 11px; color: #d9d8d2; }
-.level > span { grid-row: span 2; font-size: 10px; color: #8d949c; }
+.level { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: baseline; margin-top: 18px; padding: 12px 0; border-block: 1px solid light-dark(#1818180c, #ffffff0c); font-size: 11px; color: light-dark(#363530, #d9d8d2); }
+.level > span { grid-row: span 2; font-size: 10px; color: light-dark(#60676e, #8d949c); }
 .level p { margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.level small { color: #8d949c; font-size: 10px; }
+.level small { color: light-dark(#60676e, #8d949c); font-size: 10px; }
 .note .source { margin-right: 3px; }
 </style>

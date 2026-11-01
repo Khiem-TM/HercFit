@@ -6,7 +6,7 @@ import { setTarget, shortDate, stepBars, stepSummary, WORKOUT } from '@/features
 const props = defineProps<{ plan: Record<string, any> }>()
 const VISIBLE = 8
 const entries = computed(() => (props.plan.entries || []) as Record<string, any>[])
-const tone = { easy: 'bg-[#aacbd5]', hard: 'bg-[#e3a98c]', calm: 'bg-[#5d5c58]' }
+const tone = { easy: 'bg-mist', hard: 'bg-clay', calm: 'bg-stone' }
 </script>
 
 <template>
@@ -14,9 +14,9 @@ const tone = { easy: 'bg-[#aacbd5]', hard: 'bg-[#e3a98c]', calm: 'bg-[#5d5c58]' 
     <p class="pt-3 font-label-telemetry text-[11px] uppercase tracking-[0.14em] text-on-surface-variant">
       {{ entries.length }} buổi · {{ plan.start_date }} → {{ plan.end_date }}
     </p>
-    <ol class="mt-1 divide-y divide-white/[0.06]">
+    <ol class="mt-1 divide-y divide-ink/[0.06]">
       <li v-for="entry in entries.slice(0, VISIBLE)" :key="entry.id" class="grid grid-cols-[52px_1fr] gap-3.5 py-3">
-        <div class="self-start rounded-lg bg-white/[0.04] py-1.5 text-center">
+        <div class="self-start rounded-lg bg-ink/[0.04] py-1.5 text-center">
           <p class="text-[11px] capitalize text-on-surface-variant">{{ shortDate(entry.scheduled_date).dow }}</p>
           <p class="font-label-code text-xs text-primary">{{ shortDate(entry.scheduled_date).day }}</p>
         </div>

@@ -58,9 +58,9 @@ function decide(decision: 'approve' | 'reject') {
 </script>
 
 <template>
-  <article class="overflow-hidden rounded-2xl border border-white/[0.14] bg-[#181818] shadow-[0_20px_50px_rgba(0,0,0,0.55)]" :aria-label="`Xác nhận: ${title}`">
-    <header class="flex items-start gap-3.5 border-b border-white/[0.08] px-5 py-4">
-      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-[#d4b77d]">
+  <article class="overflow-hidden rounded-2xl border border-ink/[0.14] bg-panel-raised shadow-[0_20px_50px_rgb(var(--c-shadow)/calc(0.55*var(--shadow-k)))]" :aria-label="`Xác nhận: ${title}`" :data-card="kind">
+    <header class="flex items-start gap-3.5 border-b border-ink/[0.08] px-5 py-4">
+      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ink/[0.06] text-gold">
         <component :is="icon" class="h-5 w-5" :stroke-width="1.6" aria-hidden="true" />
       </div>
       <div class="min-w-0 flex-1">
@@ -89,13 +89,13 @@ function decide(decision: 'approve' | 'reject') {
       <PhotoAttachment v-model="photo" :label="photoLabel" :disabled="busy" />
     </div>
 
-    <footer class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.08] px-5 py-4">
+    <footer class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/[0.08] px-5 py-4">
       <p class="text-[11px] text-on-surface-variant">Chỉ lưu khi bạn bấm xác nhận.</p>
       <div class="flex gap-2">
         <button
           type="button"
           :disabled="busy"
-          class="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.04] px-4 text-xs font-medium text-on-surface transition-colors hover:border-white/30 hover:bg-white/[0.08] disabled:opacity-50"
+          class="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-ink/15 bg-ink/[0.04] px-4 text-xs font-medium text-on-surface transition-colors hover:border-ink/30 hover:bg-ink/[0.08] disabled:opacity-50"
           @click="decide('reject')"
         >
           <X class="h-3.5 w-3.5" aria-hidden="true" />Từ chối
@@ -103,7 +103,7 @@ function decide(decision: 'approve' | 'reject') {
         <button
           type="button"
           :disabled="busy"
-          class="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-white px-4 text-xs font-semibold text-[#0e0e0e] transition-transform hover:scale-[1.02] disabled:opacity-50 motion-reduce:transition-none motion-reduce:hover:scale-100"
+          class="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-ink px-4 text-xs font-semibold text-paper transition-transform hover:scale-[1.02] disabled:opacity-50 motion-reduce:transition-none motion-reduce:hover:scale-100"
           @click="decide('approve')"
         >
           <Loader2 v-if="busy" class="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />

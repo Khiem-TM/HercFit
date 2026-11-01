@@ -2,6 +2,7 @@
 import { shallowRef } from "vue";
 import { Menu, UserRound, X } from "lucide-vue-next";
 import { useAuth } from "@/composables/useAuth";
+import ThemeToggle from "@/components/ThemeToggle.vue";
 
 const { isAuthenticated, loginWithGoogle } = useAuth();
 const menuOpen = shallowRef(false);
@@ -80,6 +81,7 @@ function handleEnterChat(): void {
         >
           {{ isAuthenticated ? "VÀO CHAT AI" : "ĐĂNG NHẬP GOOGLE" }}
         </button>
+        <ThemeToggle class="!h-8 !w-8 !rounded-full" />
         <button
           type="button"
           class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity"

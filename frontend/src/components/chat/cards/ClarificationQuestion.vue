@@ -55,7 +55,7 @@ defineExpose({ focus: () => heading.value?.focus() })
 <template>
   <div role="group" :aria-labelledby="`${freeId}-q`">
     <p class="font-label-telemetry text-[10px] uppercase tracking-[0.16em] text-on-surface-variant">
-      <span v-if="showLabel" class="text-[#d4b77d]">{{ question.label }} · </span>{{ hint }}
+      <span v-if="showLabel" class="text-gold">{{ question.label }} · </span>{{ hint }}
     </p>
     <h4 :id="`${freeId}-q`" ref="heading" tabindex="-1" class="mt-2 font-headline-md text-lg leading-snug text-primary focus:outline-none">
       {{ question.question }}
@@ -72,14 +72,14 @@ defineExpose({ focus: () => heading.value?.focus() })
         type="button"
         :disabled="disabled"
         :aria-pressed="picked(option.id)"
-        class="overflow-hidden rounded-xl border-2 bg-white/[0.03] text-left transition-colors disabled:opacity-50"
-        :class="picked(option.id) ? 'border-[#d4b77d]' : 'border-white/10 hover:border-white/30'"
+        class="overflow-hidden rounded-xl border-2 bg-ink/[0.03] text-left transition-colors disabled:opacity-50"
+        :class="picked(option.id) ? 'border-gold' : 'border-ink/10 hover:border-ink/30'"
         @click="pick(option.id)"
       >
         <CatalogImage :src="option.image_url" :alt="option.label" :icon="option.ref?.kind === 'exercise' ? 'exercise' : 'food'" rounded="rounded-none" class="h-20 w-full" />
         <span class="block px-3 py-2">
           <span class="flex items-center gap-1.5 text-sm font-medium text-primary">
-            <Check v-if="picked(option.id)" class="h-3.5 w-3.5 text-[#d4b77d]" aria-hidden="true" />{{ option.label }}
+            <Check v-if="picked(option.id)" class="h-3.5 w-3.5 text-gold" aria-hidden="true" />{{ option.label }}
           </span>
           <span v-if="option.description" class="mt-0.5 block text-[11px] text-on-surface-variant">{{ option.description }}</span>
         </span>
@@ -96,12 +96,12 @@ defineExpose({ focus: () => heading.value?.focus() })
         :aria-pressed="picked(option.id)"
         class="inline-flex min-h-[40px] items-center gap-1.5 border px-4 text-sm transition-colors disabled:opacity-50"
         :class="[
-          picked(option.id) ? 'border-[#d4b77d] bg-[#d4b77d]/15 text-primary' : 'border-white/15 bg-white/[0.04] text-on-surface hover:border-white/30',
+          picked(option.id) ? 'border-gold bg-gold/15 text-primary' : 'border-ink/15 bg-ink/[0.04] text-on-surface hover:border-ink/30',
           option.description ? 'rounded-xl py-2 text-left' : 'rounded-full',
         ]"
         @click="pick(option.id)"
       >
-        <Check v-if="picked(option.id)" class="h-3.5 w-3.5 shrink-0 text-[#d4b77d]" aria-hidden="true" />
+        <Check v-if="picked(option.id)" class="h-3.5 w-3.5 shrink-0 text-gold" aria-hidden="true" />
         <span>
           {{ option.label }}
           <span v-if="option.description" class="block text-[11px] text-on-surface-variant">{{ option.description }}</span>

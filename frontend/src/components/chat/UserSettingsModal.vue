@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-vue-next'
 import { useAuth } from '@/composables/useAuth'
+import { type ThemeMode, useTheme } from '@/composables/useTheme'
 import HealthIntegrationPanel from '@/components/chat/HealthIntegrationPanel.vue'
 
 type SettingsTab = 'profile' | 'metrics' | 'integrations' | 'settings'
@@ -39,6 +40,10 @@ const {
   logout,
 } = useAuth()
 
+const { mode: themeMode, setMode: setThemeMode } = useTheme()
+const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
+  { value: 'dark', label: 'Tối' }, { value: 'light', label: 'Sáng' }, { value: 'system', label: 'Theo hệ thống' },
+]
 const isExporting = ref(false)
 const isErasing = ref(false)
 const eraseEmail = ref('')
@@ -194,15 +199,15 @@ async function handleErase(): Promise<void> {
       @click.self="emit('close')"
     >
       <div
-        class="relative flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#121212] text-primary shadow-[0_32px_90px_rgba(0,0,0,0.85)]"
+        class="relative flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-ink/15 bg-sunken text-primary shadow-[0_32px_90px_rgb(var(--c-shadow)/calc(0.85*var(--shadow-k)))]"
       >
         <!-- Modal Header -->
         <div
-          class="flex items-center justify-between border-b border-white/[0.08] px-6 py-4"
+          class="flex items-center justify-between border-b border-ink/[0.08] px-6 py-4"
         >
           <div class="flex items-center gap-3">
             <div
-              class="h-10 w-10 overflow-hidden rounded-full border border-white/20 bg-[#1c1b1b]"
+              class="h-10 w-10 overflow-hidden rounded-full border border-ink/20 bg-panel-raised"
             >
               <img
                 v-if="user?.avatar_url"
@@ -230,7 +235,7 @@ async function handleErase(): Promise<void> {
 
           <button
             type="button"
-            class="flex h-8 w-8 items-center justify-center rounded-full text-outline transition-colors hover:bg-white/10 hover:text-primary"
+            class="flex h-8 w-8 items-center justify-center rounded-full text-outline transition-colors hover:bg-ink/10 hover:text-primary"
             @click="emit('close')"
           >
             <X class="h-4 w-4" />
@@ -238,13 +243,13 @@ async function handleErase(): Promise<void> {
         </div>
 
         <!-- Tabs Navigation -->
-        <div class="flex border-b border-white/[0.08] bg-[#0e0e0e] px-6">
+        <div class="flex border-b border-ink/[0.08] bg-sunken px-6">
           <button
             type="button"
             class="flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-medium transition-colors"
             :class="
               activeTab === 'profile'
-                ? 'border-white text-primary'
+                ? 'border-ink text-primary'
                 : 'border-transparent text-outline hover:text-on-surface-variant'
             "
             @click="activeTab = 'profile'"
@@ -258,7 +263,7 @@ async function handleErase(): Promise<void> {
             class="flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-medium transition-colors"
             :class="
               activeTab === 'metrics'
-                ? 'border-white text-primary'
+                ? 'border-ink text-primary'
                 : 'border-transparent text-outline hover:text-on-surface-variant'
             "
             @click="activeTab = 'metrics'"
@@ -272,7 +277,7 @@ async function handleErase(): Promise<void> {
             class="flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-medium transition-colors"
             :class="
               activeTab === 'integrations'
-                ? 'border-white text-primary'
+                ? 'border-ink text-primary'
                 : 'border-transparent text-outline hover:text-on-surface-variant'
             "
             @click="activeTab = 'integrations'"
@@ -286,7 +291,7 @@ async function handleErase(): Promise<void> {
             class="flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-medium transition-colors"
             :class="
               activeTab === 'settings'
-                ? 'border-white text-primary'
+                ? 'border-ink text-primary'
                 : 'border-transparent text-outline hover:text-on-surface-variant'
             "
             @click="activeTab = 'settings'"
@@ -328,7 +333,7 @@ async function handleErase(): Promise<void> {
                 v-model="profileForm.fullname"
                 type="text"
                 required
-                class="w-full rounded-xl border border-white/10 bg-[#181818] px-3.5 py-2.5 text-sm text-primary focus:border-white/30 focus:outline-none"
+                class="w-full rounded-xl border border-ink/10 bg-panel-raised px-3.5 py-2.5 text-sm text-primary focus:border-ink/30 focus:outline-none"
                 placeholder="Nguyễn Văn A"
               />
             </div>
@@ -341,7 +346,7 @@ async function handleErase(): Promise<void> {
                 <input
                   v-model="profileForm.nick_name"
                   type="text"
-                  class="w-full rounded-xl border border-white/10 bg-[#181818] px-3.5 py-2.5 text-sm text-primary focus:border-white/30 focus:outline-none"
+                  class="w-full rounded-xl border border-ink/10 bg-panel-raised px-3.5 py-2.5 text-sm text-primary focus:border-ink/30 focus:outline-none"
                   placeholder="Tên gọi trong đoạn chat"
                 />
               </div>
@@ -355,7 +360,7 @@ async function handleErase(): Promise<void> {
                   type="number"
                   min="1"
                   max="120"
-                  class="w-full rounded-xl border border-white/10 bg-[#181818] px-3.5 py-2.5 text-sm text-primary focus:border-white/30 focus:outline-none"
+                  class="w-full rounded-xl border border-ink/10 bg-panel-raised px-3.5 py-2.5 text-sm text-primary focus:border-ink/30 focus:outline-none"
                   placeholder="25"
                 />
               </div>
@@ -367,7 +372,7 @@ async function handleErase(): Promise<void> {
                 <select
                   id="profile-sex"
                   v-model="profileForm.sex"
-                  class="w-full rounded-xl border border-white/10 bg-[#181818] px-3.5 py-2.5 text-sm text-primary focus:border-white/30 focus:outline-none"
+                  class="w-full rounded-xl border border-ink/10 bg-panel-raised px-3.5 py-2.5 text-sm text-primary focus:border-ink/30 focus:outline-none"
                 >
                   <option value="">Không cung cấp</option>
                   <option value="MALE">Nam</option>
@@ -381,7 +386,7 @@ async function handleErase(): Promise<void> {
               <button
                 type="submit"
                 :disabled="isSavingProfile"
-                class="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-xs font-semibold text-[#0e0e0e] transition-transform hover:scale-[1.02] disabled:opacity-50"
+                class="inline-flex items-center gap-2 rounded-xl bg-ink px-5 py-2.5 text-xs font-semibold text-paper transition-transform hover:scale-[1.02] disabled:opacity-50"
               >
                 <Loader2 v-if="isSavingProfile" class="h-3.5 w-3.5 animate-spin" />
                 <span>Lưu hồ sơ</span>
@@ -404,7 +409,7 @@ async function handleErase(): Promise<void> {
                     min="20"
                     max="300"
                     required
-                    class="w-full rounded-xl border border-white/10 bg-[#181818] px-3.5 py-2.5 text-sm text-primary focus:border-white/30 focus:outline-none"
+                    class="w-full rounded-xl border border-ink/10 bg-panel-raised px-3.5 py-2.5 text-sm text-primary focus:border-ink/30 focus:outline-none"
                     placeholder="68.5"
                   />
                 </div>
@@ -419,7 +424,7 @@ async function handleErase(): Promise<void> {
                     step="0.1"
                     min="80"
                     max="250"
-                    class="w-full rounded-xl border border-white/10 bg-[#181818] px-3.5 py-2.5 text-sm text-primary focus:border-white/30 focus:outline-none"
+                    class="w-full rounded-xl border border-ink/10 bg-panel-raised px-3.5 py-2.5 text-sm text-primary focus:border-ink/30 focus:outline-none"
                     placeholder="172"
                   />
                 </div>
@@ -434,7 +439,7 @@ async function handleErase(): Promise<void> {
                     step="0.1"
                     min="2"
                     max="70"
-                    class="w-full rounded-xl border border-white/10 bg-[#181818] px-3.5 py-2.5 text-sm text-primary focus:border-white/30 focus:outline-none"
+                    class="w-full rounded-xl border border-ink/10 bg-panel-raised px-3.5 py-2.5 text-sm text-primary focus:border-ink/30 focus:outline-none"
                     placeholder="16.5"
                   />
                 </div>
@@ -449,7 +454,7 @@ async function handleErase(): Promise<void> {
                     step="0.1"
                     min="10"
                     max="180"
-                    class="w-full rounded-xl border border-white/10 bg-[#181818] px-3.5 py-2.5 text-sm text-primary focus:border-white/30 focus:outline-none"
+                    class="w-full rounded-xl border border-ink/10 bg-panel-raised px-3.5 py-2.5 text-sm text-primary focus:border-ink/30 focus:outline-none"
                     placeholder="32.0"
                   />
                 </div>
@@ -459,7 +464,7 @@ async function handleErase(): Promise<void> {
                 <button
                   type="submit"
                   :disabled="isSavingMetric"
-                  class="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-xs font-semibold text-[#0e0e0e] transition-transform hover:scale-[1.02] disabled:opacity-50"
+                  class="inline-flex items-center gap-2 rounded-xl bg-ink px-5 py-2.5 text-xs font-semibold text-paper transition-transform hover:scale-[1.02] disabled:opacity-50"
                 >
                   <Loader2 v-if="isSavingMetric" class="h-3.5 w-3.5 animate-spin" />
                   <span>Ghi nhận chỉ số mới</span>
@@ -468,7 +473,7 @@ async function handleErase(): Promise<void> {
             </form>
 
             <!-- Active Goal Summary -->
-            <div class="rounded-2xl border border-white/[0.08] bg-[#161616] p-4">
+            <div class="rounded-2xl border border-ink/[0.08] bg-panel p-4">
               <p class="font-label-telemetry text-[10px] uppercase tracking-[0.18em] text-outline">
                 MỤC TIÊU HIỆN TẠI
               </p>
@@ -500,7 +505,7 @@ async function handleErase(): Promise<void> {
 
           <!-- TAB 4: Settings & Session -->
           <div v-else class="space-y-5">
-            <div class="rounded-2xl border border-white/[0.08] bg-[#161616] p-4 space-y-2">
+            <div class="rounded-2xl border border-ink/[0.08] bg-panel p-4 space-y-2">
               <div class="flex items-center justify-between text-xs">
                 <span class="text-outline">Đăng nhập Google OAuth</span>
                 <span class="font-label-code text-emerald-400">ĐÃ XÁC THỰC</span>
@@ -513,13 +518,21 @@ async function handleErase(): Promise<void> {
                 <span class="text-outline">Mô hình điều phối Agent</span>
                 <span class="font-label-code text-primary">DeepSeek-V4-Flash // LangGraph</span>
               </div>
-              <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center justify-between gap-3 text-xs">
                 <span class="text-outline">Giao diện</span>
-                <span class="font-label-code text-primary">Olympus Kinetic Obsidian</span>
+                <div class="flex gap-1 rounded-xl border border-ink/10 p-1" role="radiogroup" aria-label="Giao diện">
+                  <button
+                    v-for="option in THEME_OPTIONS" :key="option.value" type="button" role="radio"
+                    :aria-checked="themeMode === option.value"
+                    class="rounded-lg px-2.5 py-1 transition-colors"
+                    :class="themeMode === option.value ? 'bg-ink text-paper font-semibold' : 'text-outline hover:text-primary'"
+                    @click="setThemeMode(option.value)"
+                  >{{ option.label }}</button>
+                </div>
               </div>
             </div>
 
-            <div class="space-y-3 rounded-2xl border border-white/[0.08] bg-[#161616] p-4">
+            <div class="space-y-3 rounded-2xl border border-ink/[0.08] bg-panel p-4">
               <div class="flex items-center justify-between gap-3">
                 <div>
                   <h4 class="text-sm font-medium text-primary">Xuất dữ liệu cá nhân</h4>
@@ -528,7 +541,7 @@ async function handleErase(): Promise<void> {
                 <button
                   type="button"
                   :disabled="isExporting"
-                  class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold text-primary transition-colors hover:bg-white/10 disabled:opacity-50"
+                  class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-ink/20 px-4 py-2 text-xs font-semibold text-primary transition-colors hover:bg-ink/10 disabled:opacity-50"
                   @click="handleExport"
                 >
                   <Loader2 v-if="isExporting" class="h-3.5 w-3.5 animate-spin" />
@@ -553,7 +566,7 @@ async function handleErase(): Promise<void> {
                   type="email"
                   autocomplete="off"
                   :placeholder="user?.email || 'email@example.com'"
-                  class="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#181818] px-3.5 py-2 text-sm text-primary focus:border-white/30 focus:outline-none"
+                  class="min-w-0 flex-1 rounded-xl border border-ink/10 bg-panel-raised px-3.5 py-2 text-sm text-primary focus:border-ink/30 focus:outline-none"
                 />
                 <button
                   type="button"

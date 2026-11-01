@@ -12,6 +12,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <title>HercFit — Trợ lý dinh dưỡng &amp; tập luyện</title>
+    <script>
+      // Theme before the first paint (src/composables/useTheme.ts keeps it in sync afterwards).
+      (function () {
+        try {
+          var mode = localStorage.getItem("hercfit:theme");
+          var light = mode === "light" || (mode === "system" && matchMedia("(prefers-color-scheme: light)").matches);
+          document.documentElement.classList.toggle("light", light);
+          document.documentElement.classList.toggle("dark", !light);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

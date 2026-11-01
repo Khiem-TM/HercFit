@@ -71,7 +71,7 @@ function insertQuickPrefix(prefix: string): void {
 
 <template>
   <div
-    class="w-full rounded-[24px] border border-white/[0.09] bg-[#1a1a1a]/90 p-1.5 shadow-[0_24px_64px_rgba(0,0,0,0.68)] backdrop-blur-xl transition-colors focus-within:border-white/[0.18]"
+    class="w-full rounded-[24px] border border-ink/[0.09] bg-panel-raised/90 p-1.5 shadow-[0_24px_64px_rgb(var(--c-shadow)/calc(0.68*var(--shadow-k)))] backdrop-blur-xl transition-colors focus-within:border-ink/[0.18]"
   >
     <!-- Outer Layer Top Strip -->
     <div class="flex items-center justify-between px-3.5 py-2 text-xs">
@@ -86,14 +86,14 @@ function insertQuickPrefix(prefix: string): void {
       <div class="flex items-center gap-2">
         <span
           v-if="isStreaming"
-          class="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.06] px-2.5 py-0.5 font-label-telemetry text-[10px] text-primary"
+          class="inline-flex items-center gap-1.5 rounded-full border border-ink/15 bg-ink/[0.06] px-2.5 py-0.5 font-label-telemetry text-[10px] text-primary"
         >
           <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
           {{ activeNodeLabel || 'Đang xử lý...' }}
         </span>
         <span
           v-else
-          class="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-0.5 font-label-telemetry text-[10px] tracking-wider text-outline"
+          class="rounded-full border border-ink/[0.08] bg-ink/[0.03] px-2.5 py-0.5 font-label-telemetry text-[10px] tracking-wider text-outline"
         >
           OLYMPUS // V2.4
         </span>
@@ -102,7 +102,7 @@ function insertQuickPrefix(prefix: string): void {
 
     <!-- Inner Prompt Container -->
     <div
-      class="rounded-[18px] border border-white/[0.07] bg-[#101010] px-4 pt-3.5 pb-2.5"
+      class="rounded-[18px] border border-ink/[0.07] bg-sunken px-4 pt-3.5 pb-2.5"
     >
       <textarea
         ref="textareaRef"
@@ -120,7 +120,7 @@ function insertQuickPrefix(prefix: string): void {
         <div class="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] text-on-surface-variant transition-colors hover:border-white/20 hover:bg-white/[0.07] hover:text-primary"
+            class="inline-flex items-center gap-1.5 rounded-full border border-ink/[0.08] bg-ink/[0.03] px-2.5 py-1 text-[11px] text-on-surface-variant transition-colors hover:border-ink/20 hover:bg-ink/[0.07] hover:text-primary"
             @click="insertQuickPrefix('Hôm nay mình vừa ăn 1 tô phở bò tái và 2 quả trứng luộc, tính giúp mình calo nhé.')"
           >
             <Utensils class="h-3 w-3 text-outline" />
@@ -129,7 +129,7 @@ function insertQuickPrefix(prefix: string): void {
 
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] text-on-surface-variant transition-colors hover:border-white/20 hover:bg-white/[0.07] hover:text-primary"
+            class="inline-flex items-center gap-1.5 rounded-full border border-ink/[0.08] bg-ink/[0.03] px-2.5 py-1 text-[11px] text-on-surface-variant transition-colors hover:border-ink/20 hover:bg-ink/[0.07] hover:text-primary"
             @click="insertQuickPrefix('Thiết kế giúp mình lịch tập Push Pull Legs 4 buổi/tuần để tăng cơ.')"
           >
             <Dumbbell class="h-3 w-3 text-outline" />
@@ -138,7 +138,7 @@ function insertQuickPrefix(prefix: string): void {
 
           <button
             type="button"
-            class="hidden items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] text-on-surface-variant transition-colors hover:border-white/20 hover:bg-white/[0.07] hover:text-primary sm:inline-flex"
+            class="hidden items-center gap-1.5 rounded-full border border-ink/[0.08] bg-ink/[0.03] px-2.5 py-1 text-[11px] text-on-surface-variant transition-colors hover:border-ink/20 hover:bg-ink/[0.07] hover:text-primary sm:inline-flex"
             @click="insertQuickPrefix('Tổng hợp tiến độ dinh dưỡng và luyện tập của mình trong tuần này.')"
           >
             <Activity class="h-3 w-3 text-outline" />
@@ -150,7 +150,7 @@ function insertQuickPrefix(prefix: string): void {
         <button
           v-if="isStreaming"
           type="button"
-          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/30 bg-white/10 text-primary transition-all duration-200 hover:scale-105 hover:bg-white/20"
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-ink/30 bg-ink/10 text-primary transition-all duration-200 hover:scale-105 hover:bg-ink/20"
           title="Dừng trả lời"
           aria-label="Dừng trả lời"
           @click="emit('stop')"
@@ -161,7 +161,7 @@ function insertQuickPrefix(prefix: string): void {
           v-else
           type="button"
           :disabled="!draft.trim() || disabled"
-          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#0e0e0e] shadow-[0_0_20px_rgba(255,255,255,0.25)] transition-all duration-200 hover:scale-105 disabled:cursor-not-allowed disabled:bg-white/15 disabled:text-outline disabled:shadow-none"
+          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-paper shadow-[0_0_20px_rgba(255,255,255,0.25)] transition-all duration-200 hover:scale-105 disabled:cursor-not-allowed disabled:bg-ink/15 disabled:text-outline disabled:shadow-none"
           title="Gửi tin nhắn"
           aria-label="Gửi tin nhắn"
           @click="handleSend"

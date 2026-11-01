@@ -74,7 +74,7 @@ function host(url: string): string {
         <!-- Human Message Bubble -->
         <div
           v-if="msg.role === 'human'"
-          class="max-w-[82%] rounded-2xl rounded-tr-sm border border-white/10 bg-[#202020] px-4 py-3 text-sm leading-relaxed text-primary shadow-md"
+          class="max-w-[82%] rounded-2xl rounded-tr-sm border border-ink/10 bg-panel-hover px-4 py-3 text-sm leading-relaxed text-primary shadow-md"
         >
           <p class="whitespace-pre-wrap">{{ msg.content }}</p>
         </div>
@@ -83,7 +83,7 @@ function host(url: string): string {
         <div v-else class="msg-enter flex w-full max-w-[92%] items-start gap-3.5">
           <!-- Mini Kinetic Orb Avatar -->
           <div
-            class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/20 shadow-inner"
+            class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-ink/20 shadow-inner"
             style="background: radial-gradient(circle at 30% 30%, #4b4e54 0%, #18191c 70%, #0b0b0c 100%);"
           >
             <Sparkles class="h-3.5 w-3.5 text-primary" />
@@ -104,7 +104,7 @@ function host(url: string): string {
 
             <!-- Message Text -->
             <div
-              class="rounded-2xl rounded-tl-sm border border-white/[0.08] bg-[#161616]/90 px-5 py-4 text-sm leading-relaxed text-on-surface"
+              class="rounded-2xl rounded-tl-sm border border-ink/[0.08] bg-panel/90 px-5 py-4 text-sm leading-relaxed text-on-surface"
               :aria-busy="msg.status === 'streaming'"
             >
               <!-- renderMarkdown escapes all HTML first and emits a fixed tag allowlist. -->
@@ -115,14 +115,14 @@ function host(url: string): string {
               <!-- Questions may refer to the reply ("trong danh sách trên"), so it stays one tap away. -->
               <details v-if="hidesReply(msg)" class="mt-2">
                 <summary class="cursor-pointer text-xs text-outline hover:text-on-surface">Xem toàn bộ tin nhắn</summary>
-                <div class="md mt-2 border-t border-white/[0.06] pt-2" v-html="renderMarkdown(msg.content)" />
+                <div class="md mt-2 border-t border-ink/[0.06] pt-2" v-html="renderMarkdown(msg.content)" />
               </details>
-              <span v-if="msg.status === 'streaming'" class="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-white/70 align-middle" aria-hidden="true" />
+              <span v-if="msg.status === 'streaming'" class="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-ink/70 align-middle" aria-hidden="true" />
               <p v-if="msg.status === 'stopped'" class="mt-2 text-xs text-outline">Đã dừng theo yêu cầu.</p>
             </div>
 
             <!-- Research illustration (web picture; stored only after a confirmed import) -->
-            <figure v-if="msg.illustrations && msg.illustrations.length" class="max-w-xs overflow-hidden rounded-xl border border-white/[0.08] bg-[#141414]">
+            <figure v-if="msg.illustrations && msg.illustrations.length" class="max-w-xs overflow-hidden rounded-xl border border-ink/[0.08] bg-panel">
               <CatalogImage :src="msg.illustrations[0].url" :alt="msg.illustrations[0].description || 'Ảnh minh hoạ'" rounded="rounded-none" class="aspect-[4/3] w-full" />
               <figcaption class="px-3 py-2 text-[11px] text-outline">Ảnh minh hoạ · {{ host(msg.illustrations[0].url) }}</figcaption>
             </figure>
@@ -148,7 +148,7 @@ function host(url: string): string {
                 :href="src.url"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#141414] px-2.5 py-1 text-xs text-on-surface-variant transition-colors hover:border-white/25 hover:text-primary"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-ink/[0.08] bg-panel px-2.5 py-1 text-xs text-on-surface-variant transition-colors hover:border-ink/25 hover:text-primary"
               >
                 <ExternalLink class="h-3 w-3 text-outline" />
                 <span class="max-w-[220px] truncate">{{ src.title || src.url }}</span>
@@ -172,14 +172,14 @@ function host(url: string): string {
       <!-- Streaming Progress Indicator (hidden once answer tokens are visible) -->
       <div v-if="isStreaming && messages[messages.length - 1]?.status !== 'streaming'" class="flex items-center gap-3.5">
         <div
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/20 bg-[#181818]"
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-ink/20 bg-panel-raised"
         >
           <Loader2 class="h-3.5 w-3.5 animate-spin text-primary" />
         </div>
         <div
-          class="inline-flex items-center gap-2 rounded-full border border-white/[0.09] bg-[#161616] px-4 py-2 text-xs text-on-surface-variant"
+          class="inline-flex items-center gap-2 rounded-full border border-ink/[0.09] bg-panel px-4 py-2 text-xs text-on-surface-variant"
         >
-          <span class="h-2 w-2 animate-ping rounded-full bg-white" />
+          <span class="h-2 w-2 animate-ping rounded-full bg-ink" />
           <span>{{ activeNodeLabel }}</span>
         </div>
       </div>

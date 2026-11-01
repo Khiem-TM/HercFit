@@ -87,6 +87,6 @@ const hrvBaseline = computed(() => recovery.value?.hrv_baseline != null
 <style scoped src="./healthCard.css"></style>
 <style scoped>
 .charts { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); }
-.chart-title { margin: 0 0 6px; font-size: 10.5px; color: #a3a8ae; }
+.chart-title { margin: 0 0 6px; font-size: 10.5px; color: light-dark(#53575d, #a3a8ae); }
 @container card (min-width: 720px) { .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

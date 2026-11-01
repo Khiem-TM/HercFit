@@ -115,23 +115,23 @@ const tooltip = computed(() => {
 <style scoped>
 .line-chart { position: relative; margin: 0; min-width: 0; }
 svg { display: block; overflow: visible; outline: none; cursor: crosshair; }
-svg:focus-visible { outline: 2px solid #8fc3d4; outline-offset: 4px; border-radius: 6px; }
-.axis-grid line { stroke: #ffffff10; stroke-width: 1; shape-rendering: crispEdges; }
-.axis-grid text, .x-axis text { font: 9px 'JetBrains Mono', monospace; fill: #7e8792; font-variant-numeric: tabular-nums; }
-.x-axis text.current { fill: #e9e8e2; }
-.baseline { stroke: #c9ccd1; stroke-opacity: .6; stroke-width: 1; shape-rendering: crispEdges; }
-.key { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 10px; color: #a3a8ae; }
-.key i { width: 14px; height: 1px; background: #c9ccd1; opacity: .7; }
+svg:focus-visible { outline: 2px solid light-dark(#367689, #8fc3d4); outline-offset: 4px; border-radius: 6px; }
+.axis-grid line { stroke: light-dark(#18181810, #ffffff10); stroke-width: 1; shape-rendering: crispEdges; }
+.axis-grid text, .x-axis text { font: 9px 'JetBrains Mono', monospace; fill: light-dark(#69727c, #7e8792); font-variant-numeric: tabular-nums; }
+.x-axis text.current { fill: light-dark(#2a2924, #e9e8e2); }
+.baseline { stroke: light-dark(#3c3e42, #c9ccd1); stroke-opacity: .6; stroke-width: 1; shape-rendering: crispEdges; }
+.key { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 10px; color: light-dark(#53575d, #a3a8ae); }
+.key i { width: 14px; height: 1px; background: light-dark(#3c3e42, #c9ccd1); opacity: .7; }
 .plot { position: relative; }
 .trend { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.ring { stroke: #14171d; stroke-width: 2; }
-.end-label { font: 600 10.5px Geist, sans-serif; fill: #f1f0eb; }
-.crosshair line { stroke: #ffffff45; stroke-width: 1; shape-rendering: crispEdges; }
-.tooltip { position: absolute; top: 4px; z-index: 3; min-width: 120px; padding: 8px 10px; border: 1px solid #ffffff1c; border-radius: 9px; background: #0d0f13f2; box-shadow: 0 10px 28px #0007; pointer-events: none; }
+.ring { stroke: light-dark(#fdfcf9, #14171d); stroke-width: 2; }
+.end-label { font: 600 10.5px Geist, sans-serif; fill: light-dark(#24231f, #f1f0eb); }
+.crosshair line { stroke: light-dark(#18181845, #ffffff45); stroke-width: 1; shape-rendering: crispEdges; }
+.tooltip { position: absolute; top: 4px; z-index: 3; min-width: 120px; padding: 8px 10px; border: 1px solid light-dark(#1818181c, #ffffff1c); border-radius: 9px; background: light-dark(#f0efecf2, #0d0f13f2); box-shadow: 0 10px 28px light-dark(#0000003c, #0007); pointer-events: none; }
 .tooltip p { margin: 0; }
-.when { font-size: 10px; color: #a3a8ae; margin-bottom: 5px !important; }
-.row { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: #a3a8ae; line-height: 1.7; }
+.when { font-size: 10px; color: light-dark(#53575d, #a3a8ae); margin-bottom: 5px !important; }
+.row { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: light-dark(#53575d, #a3a8ae); line-height: 1.7; }
 .row i { width: 10px; height: 2px; border-radius: 2px; flex: none; }
-.row i.base { background: #c9ccd1; opacity: .6; }
-.row strong { color: #f1f0eb; font-weight: 600; }
+.row i.base { background: light-dark(#3c3e42, #c9ccd1); opacity: .6; }
+.row strong { color: light-dark(#24231f, #f1f0eb); font-weight: 600; }
 </style>

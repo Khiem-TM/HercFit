@@ -114,11 +114,11 @@ onUnmounted(() => {
         <div
           class="history-row group relative w-full min-w-0 rounded-lg transition-colors"
           :class="item.session_id === activeSessionId || item.session_id === openSessionId
-            ? 'bg-white/[0.09] text-primary' : 'text-on-surface-variant hover:bg-white/[0.05] hover:text-primary'"
+            ? 'bg-ink/[0.09] text-primary' : 'text-on-surface-variant hover:bg-ink/[0.05] hover:text-primary'"
         >
           <button
             type="button"
-            class="block h-10 w-full min-w-0 truncate rounded-lg text-left text-[13px] font-medium focus-visible:outline focus-visible:outline-1 focus-visible:outline-white/60 disabled:cursor-wait"
+            class="block h-10 w-full min-w-0 truncate rounded-lg text-left text-[13px] font-medium focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink/60 disabled:cursor-wait"
             :class="compact ? 'flex items-center justify-center' : ['px-3', { 'pr-11': item.session_id === openSessionId }]"
             :title="item.title || 'Cuộc trò chuyện mới'"
             :aria-label="compact ? item.title || 'Cuộc trò chuyện mới' : undefined"
@@ -132,7 +132,7 @@ onUnmounted(() => {
           <button
             v-if="!compact"
             type="button"
-            class="history-actions absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-md text-outline hover:bg-white/10 hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-white/60"
+            class="history-actions absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-md text-outline hover:bg-ink/10 hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink/60"
             :class="{ 'is-open': item.session_id === openSessionId }"
             :aria-label="`Tùy chọn: ${item.title || 'Cuộc trò chuyện mới'}`"
             aria-haspopup="dialog"
@@ -155,12 +155,12 @@ onUnmounted(() => {
       role="dialog"
       aria-label="Tùy chọn hội thoại"
       tabindex="-1"
-      class="fixed z-50 w-60 max-w-[calc(100vw-16px)] rounded-xl border border-white/10 bg-[#202020] p-1.5 font-body-md text-on-surface shadow-xl shadow-black/40 outline-none"
+      class="fixed z-50 w-60 max-w-[calc(100vw-16px)] rounded-xl border border-ink/10 bg-panel-hover p-1.5 font-body-md text-on-surface shadow-xl shadow-black/40 outline-none"
       :style="position"
       @keydown.down.prevent="deleteButton?.focus()"
       @keydown.up.prevent="deleteButton?.focus()"
     >
-      <div class="flex items-start gap-2.5 border-b border-white/[0.08] px-2.5 pb-3 pt-2">
+      <div class="flex items-start gap-2.5 border-b border-ink/[0.08] px-2.5 pb-3 pt-2">
         <Clock3 class="mt-0.5 h-4 w-4 shrink-0 text-outline" aria-hidden="true" />
         <div>
           <p class="text-[11px] text-outline">Tương tác cuối</p>

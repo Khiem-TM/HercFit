@@ -2,7 +2,7 @@
 import { computed, shallowRef } from 'vue'
 import { ChevronRight, Maximize2 } from 'lucide-vue-next'
 import type { KnowledgeNode } from '@/types/knowledge'
-import { hubColor, kindLabels, ROOT_COLOR } from '@/types/knowledge'
+import { hubColor, kindLabels } from '@/types/knowledge'
 import ImageLightbox from './ImageLightbox.vue'
 import { mediaCaption, mediaTarget, sizedImage } from './knowledgeMedia'
 import { ancestors, type TreeIndex } from './knowledgeTree'
@@ -11,7 +11,7 @@ import { useNodeImage } from './useNodeImage'
 const props = defineProps<{ node?: KnowledgeNode; index: TreeIndex; expanded: ReadonlySet<string>; roomy?: boolean }>()
 const emit = defineEmits<{ select: [id: string]; toggle: [id: string]; expand: [] }>()
 
-const color = computed(() => (props.node?.kind === 'User' ? ROOT_COLOR : hubColor(props.node?.hub)))
+const color = computed(() => hubColor(props.node?.kind === 'User' ? null : props.node?.hub))
 const trail = computed(() => props.node ? ancestors(props.index, props.node.id).map(id => props.index.byId.get(id)).filter(Boolean) as KnowledgeNode[] : [])
 const children = computed(() => props.node ? (props.index.children.get(props.node.id) ?? []).map(id => props.index.byId.get(id)!).filter(Boolean) : [])
 const shownChildren = computed(() => props.roomy ? children.value : children.value.slice(0, 18))
@@ -106,42 +106,42 @@ const showMedia = computed(() => Boolean(url.value && !failed.value))
 </template>
 
 <style scoped>
-.inspector { --accent: #d4b77d; container: inspector / inline-size; padding: 14px var(--gutter, 24px) 18px; overflow-y: auto; overscroll-behavior: contain; animation: rise 360ms cubic-bezier(.2,.8,.2,1) both; }
-.trail { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; font-size: 10px; color: #6f6c65; }
-.trail button { color: #a7a196; transition: color 200ms; }
-.trail button:hover { color: #f0e3c4; }
-.trail span { color: #d8cfbc; }
+.inspector { --accent: light-dark(#87671a, #d4b77d); container: inspector / inline-size; padding: 14px var(--gutter, 24px) 18px; overflow-y: auto; overscroll-behavior: contain; animation: rise 360ms cubic-bezier(.2,.8,.2,1) both; }
+.trail { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; font-size: 10px; color: light-dark(#8d8982, #6f6c65); }
+.trail button { color: light-dark(#605a50, #a7a196); transition: color 200ms; }
+.trail button:hover { color: light-dark(#857755, #f0e3c4); }
+.trail span { color: light-dark(#423b2b, #d8cfbc); }
 .lead { display: grid; gap: 14px; }
 .lead.with-media { grid-template-areas: "media" "facts"; }
 .facts { grid-area: facts; min-width: 0; }
-.eyeline { display: flex; align-items: center; gap: 7px; font: 8px 'JetBrains Mono', monospace; letter-spacing: .2em; text-transform: uppercase; color: color-mix(in srgb, var(--accent) 80%, #fff); margin: 0 0 8px; }
+.eyeline { display: flex; align-items: center; gap: 7px; font: 8px 'JetBrains Mono', monospace; letter-spacing: .2em; text-transform: uppercase; color: color-mix(in srgb, var(--accent) 80%, light-dark(#181818, #fff)); margin: 0 0 8px; }
 .eyeline i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
-h3 { font: 19px 'Playfair Display', serif; font-weight: 400; color: #f2eadb; margin: 0 0 6px; letter-spacing: -.01em; transition: font-size 260ms; }
-.summary { font-size: 11px; color: #9a968c; line-height: 1.6; margin: 0 0 12px; }
+h3 { font: 19px 'Playfair Display', serif; font-weight: 400; color: light-dark(#2c261a, #f2eadb); margin: 0 0 6px; letter-spacing: -.01em; transition: font-size 260ms; }
+.summary { font-size: 11px; color: light-dark(#67635a, #9a968c); line-height: 1.6; margin: 0 0 12px; }
 dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 16px; margin: 0 0 12px; }
 dt, dd { margin: 0; }
-dt { font-size: 9px; color: #7f7c74; text-transform: uppercase; letter-spacing: .06em; }
-dd { font-size: 12px; color: #e4ddcf; margin-top: 2px; overflow-wrap: anywhere; }
+dt { font-size: 9px; color: light-dark(#7c7971, #7f7c74); text-transform: uppercase; letter-spacing: .06em; }
+dd { font-size: 12px; color: light-dark(#353025, #e4ddcf); margin-top: 2px; overflow-wrap: anywhere; }
 .media { grid-area: media; margin: 0; min-width: 0; opacity: 0; transform: translateY(6px); transition: opacity 420ms ease, transform 420ms cubic-bezier(.2,.8,.2,1); }
 .media.ready { opacity: 1; transform: none; }
-.frame { position: relative; display: block; width: 100%; aspect-ratio: 16 / 10; max-height: 200px; overflow: hidden; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); background: #0c0d11; cursor: zoom-in; box-shadow: 0 10px 30px #0004; transition: max-height 320ms cubic-bezier(.2,.8,.2,1); }
+.frame { position: relative; display: block; width: 100%; aspect-ratio: 16 / 10; max-height: 200px; overflow: hidden; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); background: light-dark(#eeedeb, #0c0d11); cursor: zoom-in; box-shadow: 0 10px 30px light-dark(#00000022, #0004); transition: max-height 320ms cubic-bezier(.2,.8,.2,1); }
 .frame img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 700ms cubic-bezier(.2,.8,.2,1); }
 .frame:hover img, .frame:focus-visible img { transform: scale(1.04); }
 .frame:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.zoom-hint { position: absolute; right: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 12px; background: #0e1014cc; color: #efe3c4; font-size: 10px; opacity: 0; transition: opacity 200ms; backdrop-filter: blur(6px); }
+.zoom-hint { position: absolute; right: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 12px; background: light-dark(#f1f0edcc, #0e1014cc); color: light-dark(#847755, #efe3c4); font-size: 10px; opacity: 0; transition: opacity 200ms; backdrop-filter: blur(6px); }
 .frame:hover .zoom-hint, .frame:focus-visible .zoom-hint { opacity: 1; }
-figcaption { margin-top: 6px; font-size: 10px; color: #8d8a82; }
-.branch { border-top: 1px solid #ffffff0a; padding-top: 10px; margin-top: 4px; }
-.branch-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; font-size: 10px; color: #8d8a82; }
-.toggle { font-size: 10px; color: color-mix(in srgb, var(--accent) 85%, #fff); padding: 4px 10px; border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 20px; transition: background 200ms; }
+figcaption { margin-top: 6px; font-size: 10px; color: light-dark(#706d65, #8d8a82); }
+.branch { border-top: 1px solid light-dark(#1818180a, #ffffff0a); padding-top: 10px; margin-top: 4px; }
+.branch-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; font-size: 10px; color: light-dark(#706d65, #8d8a82); }
+.toggle { font-size: 10px; color: color-mix(in srgb, var(--accent) 85%, light-dark(#181818, #fff)); padding: 4px 10px; border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 20px; transition: background 200ms; }
 .toggle:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chips button { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 5px 10px; border: 1px solid #ffffff0e; border-radius: 16px; font-size: 10px; color: #c9c4b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: border-color 200ms, color 200ms, background 200ms; }
-.chips button:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: #f1e6cb; background: #ffffff05; }
+.chips button { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 5px 10px; border: 1px solid light-dark(#1818180e, #ffffff0e); border-radius: 16px; font-size: 10px; color: light-dark(#474339, #c9c4b8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: border-color 200ms, color 200ms, background 200ms; }
+.chips button:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: light-dark(#312913, #f1e6cb); background: light-dark(#18181805, #ffffff05); }
 .chips i { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
-.chips small { font: 9px 'JetBrains Mono', monospace; color: #8a867c; }
-.chips .linked small { color: #c8ad74; }
-.chips .more { border-style: dashed; color: color-mix(in srgb, var(--accent) 80%, #fff); }
+.chips small { font: 9px 'JetBrains Mono', monospace; color: light-dark(#747067, #8a867c); }
+.chips .linked small { color: light-dark(#836519, #c8ad74); }
+.chips .more { border-style: dashed; color: color-mix(in srgb, var(--accent) 80%, light-dark(#181818, #fff)); }
 .roomy h3 { font-size: 23px; }
 .roomy .summary { font-size: 12px; }
 .roomy dd { font-size: 13px; }

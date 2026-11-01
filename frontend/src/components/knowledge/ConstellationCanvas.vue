@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 import cytoscape, { type Collection, type Core, type NodeSingular, type StylesheetCSS } from 'cytoscape'
 import type { KnowledgeNode } from '@/types/knowledge'
-import { hubColor, ROOT_COLOR } from '@/types/knowledge'
+import { ROOT_COLOR, skyColor } from '@/types/knowledge'
 import { createConstellationMotion } from './constellationMotion'
 import { ancestors, radialLayout, visibleEdges, type Point, type TreeIndex } from './knowledgeTree'
 
@@ -59,7 +59,7 @@ function display(node: KnowledgeNode) {
 }
 
 function nodeData(node: KnowledgeNode) {
-  const color = node.kind === 'User' ? ROOT_COLOR : hubColor(node.hub)
+  const color = node.kind === 'User' ? ROOT_COLOR : skyColor(node.hub)
   const size = SIZE[node.kind] ?? (node.depth >= 4 ? 18 : 24)
   return { id: node.id, kind: node.kind, display: display(node), color, size, glyph: glyph(node.kind, color),
            font: node.kind === 'User' ? 15 : node.kind === 'Hub' ? 12 : node.depth >= 4 ? 9 : 10.5 }
@@ -115,7 +115,7 @@ function render() {
     }
     for (const edge of edges) {
       if (cy!.getElementById(edge.id).nonempty() || cy!.getElementById(edge.source).empty() || cy!.getElementById(edge.target).empty()) continue
-      const color = edge.kind === 'link' ? '#d4b77d' : hubColor(props.index.byId.get(edge.target)?.hub)
+      const color = edge.kind === 'link' ? '#d4b77d' : skyColor(props.index.byId.get(edge.target)?.hub)
       cy!.add({ group: 'edges', data: { id: edge.id, source: edge.source, target: edge.target, kind: edge.kind, color } })
     }
     const depth = Math.max(0, ...props.visible.map(id => props.index.byId.get(id)?.depth ?? 0))
