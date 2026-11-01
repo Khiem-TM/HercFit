@@ -1,0 +1,12 @@
+{
+  "_about": "Synthetic v4beta skin temperature sample: two sensor readings for one observation (wrist, at rest).",
+  "name": "users/me/dataTypes/skin-temperature-sensors/dataPoints/st-1",
+  "dataSource": {"recordingMethod": "PASSIVELY_MEASURED", "platform": "FITBIT", "device": {"formFactor": "WATCH", "displayName": "Pixel Watch 3"}},
+  "skinTemperatureSensors": {
+    "sampleTime": {"physicalTime": "2026-10-29T20:00:00Z", "utcOffset": "25200s"},
+    "sensorData": [
+      {"temperatureCelsius": 33.9},
+      {"temperatureCelsius": 34.1}
+    ]
+  }
+}

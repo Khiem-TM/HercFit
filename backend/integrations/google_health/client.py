@@ -1,0 +1,268 @@
+"""Async client for health.googleapis.com (v4 by default, v4beta per data type).
+
+* Paging never truncates silently: `*_all` helpers return `Fetch(points, complete,
+  next_token)`. A budget that runs out leaves `complete=False` and the token to
+  continue from; callers must not treat a partial read as the full window.
+* Errors carry an `error_class` that decides what happens next:
+  TRANSIENT (retry later), RATE_LIMIT (retry after Retry-After), PERMISSION (scope
+  missing or revoked: stop this type, never tombstone), REAUTH (refresh token
+  dead), SCHEMA (request rejected, e.g. a filter: needs a code fix), UNSUPPORTED
+  (type or resource not available), PROVIDER (other 4xx).
+* Retries cover 429/5xx/network with full-jitter exponential backoff.
+
+Provider bodies may echo request details, so only status codes and machine
+reasons are logged.
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import random
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import date
+from typing import Any
+
+import httpx
+
+logger = logging.getLogger(__name__)
+ROOT_URL = "https://health.googleapis.com"
+BASE_URL = f"{ROOT_URL}/v4"
+TIMEOUT = httpx.Timeout(20.0, connect=5.0)
+MAX_ATTEMPTS = 4
+BACKOFF_BASE = 1.0
+BACKOFF_CAP = 20.0
+RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+TRANSIENT, RATE_LIMIT, PERMISSION, REAUTH, SCHEMA, UNSUPPORTED, PROVIDER = (
+    "TRANSIENT", "RATE_LIMIT", "PERMISSION", "REAUTH", "SCHEMA", "UNSUPPORTED", "PROVIDER")
+
+
+class GoogleHealthError(Exception):
+    """A provider call failed; `code` is a short loggable reason, `error_class` drives retries."""
+
+    def __init__(self, code: str, status: int | None = None, error_class: str = PROVIDER,
+                 retry_after: float | None = None):
+        super().__init__(code)
+        self.code = code
+        self.status = status
+        self.error_class = error_class
+        self.retry_after = retry_after
+
+
+class ReauthRequired(GoogleHealthError):
+    def __init__(self, status: int | None = None):
+        super().__init__("reauth_required", status, REAUTH)
+
+
+@dataclass
+class Page:
+    points: list[dict[str, Any]]
+    next_token: str | None
+
+
+@dataclass
+class Fetch:
+    points: list[dict[str, Any]] = field(default_factory=list)
+    complete: bool = True
+    next_token: str | None = None
+    pages: int = 0
+
+
+def error_reason(response: httpx.Response) -> str | None:
+    """Google's machine-readable reason (e.g. SERVICE_DISABLED), never the free-text message."""
+    try:
+        error = response.json().get("error") or {}
+    except (ValueError, AttributeError):
+        return None
+    for detail in error.get("details") or []:
+        if isinstance(detail, dict) and detail.get("reason"):
+            return str(detail["reason"])[:64]
+    status = error.get("status")
+    return str(status)[:64] if status else None
+
+
+def classify(status: int, reason: str | None) -> tuple[str, str]:
+    """(code, error_class) for a final non-2xx response."""
+    if status == 400:
+        return "invalid_request", SCHEMA
+    if status == 403:
+        if reason in ("SERVICE_DISABLED", "API_DISABLED", "ACCESS_TOKEN_SCOPE_INSUFFICIENT"):
+            return "forbidden", PERMISSION if reason == "ACCESS_TOKEN_SCOPE_INSUFFICIENT" else PROVIDER
+        return "forbidden", PERMISSION
+    if status == 404:
+        return "unavailable", UNSUPPORTED
+    if status == 409:
+        return "already_exists", PROVIDER
+    if status == 429:
+        return "rate_limited", RATE_LIMIT
+    if status >= 500:
+        return "provider_error", TRANSIENT
+    return "provider_error", PROVIDER
+
+
+def civil_date(day: date) -> dict[str, Any]:
+    return {"date": {"year": day.year, "month": day.month, "day": day.day}}
+
+
+def field_path(data_type: str) -> str:
+    """Filters use snake_case field paths; the URL uses kebab-case type ids."""
+    return data_type.replace("-", "_")
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    value = response.headers.get("retry-after", "")
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        return None
+
+
+class GoogleHealthClient:
+    def __init__(self, access_token: str, http: httpx.AsyncClient, *,
+                 sleep: Callable[[float], Any] = asyncio.sleep, base_url: str | None = None,
+                 jitter: Callable[[float, float], float] = random.uniform,
+                 on_request: Callable[[], Any] | None = None):
+        from core.settings import settings
+
+        self._headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+        self._http = http
+        self._sleep = sleep
+        # GOOGLE_HEALTH_API_ROOT points tests or an emulator elsewhere (https, or http on localhost only).
+        self._root = settings.GOOGLE_HEALTH_API_ROOT.rstrip("/")
+        self._base = (base_url or f"{self._root}/v4").rstrip("/")
+        self._jitter = jitter
+        self._on_request = on_request  # quota hook (token bucket) awaited before each attempt
+
+    def for_version(self, api_version: str) -> GoogleHealthClient:
+        clone = GoogleHealthClient.__new__(GoogleHealthClient)
+        clone.__dict__.update(self.__dict__)
+        clone._base = f"{self._root}/{api_version}"
+        return clone
+
+    def _backoff(self, attempt: int) -> float:
+        return self._jitter(0, min(BACKOFF_CAP, BACKOFF_BASE * 2 ** (attempt - 1)))
+
+    async def _request(self, method: str, path: str, *, params: dict | None = None,
+                       body: dict | None = None, retry: bool = True, raw: bool = False) -> Any:
+        """`retry=False` for non-idempotent writes: an unknown outcome is surfaced, never re-sent.
+        `raw=True` returns the response bytes (media downloads such as TCX)."""
+        label = path.split("/")[-1].split(":")[-1]
+        attempts = MAX_ATTEMPTS if retry else 1
+        for attempt in range(1, attempts + 1):
+            if self._on_request is not None:
+                await self._on_request()
+            try:
+                response = await self._http.request(method, f"{self._base}/{path}", params=params, json=body,
+                                                     headers=self._headers, timeout=TIMEOUT)
+            except httpx.HTTPError as exc:
+                if attempt == attempts:
+                    logger.warning("google_health_network_error path=%s error=%s", label, type(exc).__name__)
+                    raise GoogleHealthError("network", None, TRANSIENT) from None
+                await self._sleep(self._backoff(attempt))
+                continue
+            if response.status_code == 200:
+                if raw:
+                    return response.content
+                return response.json() if response.content else {}
+            if response.status_code in RETRY_STATUSES and attempt < attempts:
+                wait = _retry_after(response)
+                await self._sleep(min(BACKOFF_CAP, wait) if wait is not None else self._backoff(attempt))
+                continue
+            reason = error_reason(response)
+            logger.warning("google_health_http_error path=%s status=%s reason=%s", label, response.status_code, reason)
+            if response.status_code == 401:
+                raise ReauthRequired(401)
+            code, error_class = classify(response.status_code, reason)
+            raise GoogleHealthError(f"{code}:{reason}" if reason else code, response.status_code, error_class,
+                                    _retry_after(response))
+        raise GoogleHealthError("provider_error", None, TRANSIENT)
+
+    # -- user resources ----------------------------------------------------------------------
+    async def get_identity(self) -> dict[str, Any]:
+        return await self._request("GET", "users/me/identity")
+
+    async def get_profile(self) -> dict[str, Any]:
+        return await self._request("GET", "users/me/profile")
+
+    async def get_settings(self) -> dict[str, Any]:
+        return await self._request("GET", "users/me/settings")
+
+    async def list_paired_devices(self) -> list[dict[str, Any]]:
+        return (await self._request("GET", "users/me/pairedDevices")).get("pairedDevices") or []
+
+    async def export_exercise_tcx(self, name: str, *, partial: bool = False) -> bytes:
+        """Route of one exercise as TCX (needs an activity scope AND a location scope).
+
+        `name` is the exercise data point's resource name; `alt=media` downloads the raw file.
+        """
+        if not name.startswith("users/") or "/dataTypes/exercise/dataPoints/" not in name:
+            raise ValueError("not an exercise data point name")
+        params = {"alt": "media", **({"partialData": "true"} if partial else {})}
+        return await self._request("GET", f"{name}:exportExerciseTcx", params=params, raw=True)
+
+    # -- data points ---------------------------------------------------------------------------
+    async def list_page(self, data_type: str, *, filter: str | None = None, page_size: int = 1000,
+                        page_token: str | None = None, reconcile: bool = False) -> Page:
+        params: dict[str, Any] = {"pageSize": page_size}
+        if filter:
+            params["filter"] = filter
+        if page_token:
+            params["pageToken"] = page_token
+        suffix = ":reconcile" if reconcile else ""
+        page = await self._request("GET", f"users/me/dataTypes/{data_type}/dataPoints{suffix}", params=params)
+        return Page(page.get("dataPoints") or [], page.get("nextPageToken") or None)
+
+    async def daily_rollup_page(self, data_type: str, start: date, end_exclusive: date, *, page_size: int = 90,
+                                page_token: str | None = None) -> Page:
+        body: dict[str, Any] = {"range": {"start": civil_date(start), "end": civil_date(end_exclusive)},
+                                "windowSizeDays": 1, "pageSize": page_size}
+        if page_token:
+            body["pageToken"] = page_token
+        page = await self._request("POST", f"users/me/dataTypes/{data_type}/dataPoints:dailyRollUp", body=body)
+        return Page(page.get("rollupDataPoints") or [], page.get("nextPageToken") or None)
+
+    async def list_all(self, data_type: str, *, filter: str | None = None, page_size: int = 1000,
+                       max_pages: int = 50, page_token: str | None = None) -> Fetch:
+        result = Fetch(next_token=page_token)
+        while result.pages < max_pages:
+            page = await self.list_page(data_type, filter=filter, page_size=page_size, page_token=result.next_token)
+            result.points.extend(page.points)
+            result.pages += 1
+            result.next_token = page.next_token
+            if not page.next_token:
+                return result
+        result.complete = False
+        logger.warning("google_health_page_budget type=%s pages=%s", data_type, result.pages)
+        return result
+
+    async def daily_rollup_all(self, data_type: str, start: date, end_exclusive: date, *, page_size: int = 90,
+                               max_pages: int = 50, page_token: str | None = None) -> Fetch:
+        result = Fetch(next_token=page_token)
+        while result.pages < max_pages:
+            page = await self.daily_rollup_page(data_type, start, end_exclusive, page_size=page_size,
+                                                page_token=result.next_token)
+            result.points.extend(page.points)
+            result.pages += 1
+            result.next_token = page.next_token
+            if not page.next_token:
+                return result
+        result.complete = False
+        logger.warning("google_health_page_budget type=%s pages=%s", data_type, result.pages)
+        return result
+
+    # -- writes (each returns a google.longrunning Operation) -----------------------------------
+    async def get_point(self, name: str) -> dict[str, Any]:
+        return await self._request("GET", name)
+
+    async def create_point(self, data_type: str, point: dict[str, Any], *, idempotent: bool = False) -> dict[str, Any]:
+        """Retried by the client only when the point carries a client-provided name (same id on retry)."""
+        return await self._request("POST", f"users/me/dataTypes/{data_type}/dataPoints", body=point,
+                                   retry=idempotent)
+
+    async def patch_point(self, name: str, point: dict[str, Any]) -> dict[str, Any]:
+        return await self._request("PATCH", name, body={**point, "name": name})
+
+    async def batch_delete(self, data_type: str, names: list[str]) -> dict[str, Any]:
+        return await self._request("POST", f"users/me/dataTypes/{data_type}/dataPoints:batchDelete",
+                                   body={"names": names})
