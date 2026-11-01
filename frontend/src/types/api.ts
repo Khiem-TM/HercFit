@@ -421,3 +421,92 @@ export interface NutritionTargets {
   warnings: string[]
   method: Record<string, string>
 }
+
+// ---- Health platform (/api/v2) ------------------------------------------------------------
+export interface ScopeBundle {
+  key: string
+  label: string
+  sensitive: boolean
+  granted: boolean
+  scopes: string[]
+}
+
+/** GET/PUT /api/v2/integrations/google-health/export: the single switch for syncing HercFit to Google. */
+export interface ExportSwitch {
+  available: boolean
+  enabled: boolean
+  partial: boolean
+  groups: { group: string; label: string; enabled: boolean; write_scope_granted: boolean }[]
+  missing_bundles: string[]
+  sent: number
+  pending: number
+  attention: number
+  last_sent_at: string | null
+  authorization_url?: string | null
+  operation_id?: string | null
+}
+
+export type OperationState = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'PARTIAL' | 'FAILED' | 'UNCERTAIN' | 'CANCELLED'
+
+export interface OperationRead {
+  id: string
+  kind: string
+  state: OperationState
+  created_at: string
+  jobs: { total: number; by_state: Record<string, number> }
+  steps: { kind: string; data_type: string | null; state: string; error: string | null }[]
+  exports: Record<string, number>
+}
+
+export interface Capability {
+  data_type: string
+  kind: string
+  scope_group: string
+  family: string
+  read: string[]
+  write: string[]
+  webhook: boolean
+  sensitive: boolean
+  verification: string
+  api_version: string | null
+  beta: boolean
+  granted: boolean
+  enabled: boolean
+  cursor: { complete_through: string | null; status: string; error_code: string | null; updated_at: string } | null
+}
+
+export interface ExportConflict {
+  id: string
+  data_type: string
+  aggregate_type: string
+  aggregate_id: string
+  local_payload: Record<string, unknown>
+  remote_payload: Record<string, unknown> | null
+  detected_at: string
+}
+
+export interface PairedDevice {
+  device_type: string | null
+  device_version: string | null
+  battery_level: number | null
+  battery_status: string | null
+  last_sync_at: string | null
+}
+
+export interface DataSource {
+  source_key: string
+  platform: string | null
+  recording_method: string | null
+  device: string | null
+  application: string | null
+  data_types: string[]
+  records: number
+  last_measured_at: string | null
+}
+
+export interface DevicesRead {
+  devices: PairedDevice[]
+  sources: DataSource[]
+}
+
+export type HealthLogKind = 'hydration' | 'nutrition' | 'symptoms' | 'mood' | 'menstrual-period' | 'ovulation-test'

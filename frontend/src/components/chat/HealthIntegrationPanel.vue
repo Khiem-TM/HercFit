@@ -2,11 +2,19 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { HeartPulse, Link2, Loader2, RefreshCw, Unlink } from 'lucide-vue-next'
 import { CONNECT_RESULT_TEXT, useHealthIntegration } from '@/composables/useHealthIntegration'
+import { useAuth } from '@/composables/useAuth'
+import { createHealthApi } from '@/features/health-integration/api'
+import DevicesCard from '@/features/health-integration/DevicesCard.vue'
+import HealthLogsCard from '@/features/health-integration/HealthLogsCard.vue'
+import PermissionsExportCard from '@/features/health-integration/PermissionsExportCard.vue'
+import SyncStatusCard from '@/features/health-integration/SyncStatusCard.vue'
 
 const props = defineProps<{ result?: string | null }>()
 
 const { connection, loading, busy, error, isConnected, needsReauth, refresh, connect, setConsent, syncNow, disconnect } =
   useHealthIntegration()
+const { authFetch } = useAuth()
+const api = createHealthApi((url, init) => authFetch(url, init))
 const share = ref(true)
 const purge = ref(false)
 const confirmDisconnect = ref(false)
@@ -174,5 +182,12 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
         </div>
       </template>
     </div>
+
+    <template v-if="connection?.configured && isConnected">
+      <SyncStatusCard :api="api" :active="connection.status === 'ACTIVE'" @synced="refresh" />
+      <PermissionsExportCard :api="api" />
+      <DevicesCard :api="api" />
+    </template>
+    <HealthLogsCard :api="api" />
   </div>
 </template>
