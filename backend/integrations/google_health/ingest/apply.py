@@ -10,7 +10,7 @@ báo những gì chế độ primary sẽ thay đổi, không ghi vào bảng ng
 from __future__ import annotations
 
 import zlib
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -182,11 +182,17 @@ async def apply(session, *, connection_id: UUID, user_id: UUID, data_type: str, 
                 {"uid": user_id, "source": HEALTH_PROVIDER, "low": window.utc_start, "high": window.utc_end,
                  "resource": f"%/dataTypes/{data_type}/%", "local": f"{data_type}:%", "keep": sorted(read.seen)})
             outcome["counts"]["body_metrics_removed"] = removed.rowcount or 0
-    elif kind == "sample":
+        if kind == "sample" and data_type in SAMPLE_TYPES and clean:
+            sample_type = projections.SAMPLES[data_type][0]
+            outcome["counts"]["samples_removed"] = await _upsert_and_sweep(
+                session, HealthSample, [], SAMPLE_FIELDS, user_id=user_id, keep=read.seen,
+                column="measured_at", low=window.utc_start, high=window.utc_end - timedelta(microseconds=1), clean=True,
+                where="AND sample_type = :sample_type", params={"sample_type": sample_type})
+    elif kind == "sample" and data_type not in SAMPLE_TYPES:
         sample_type = projections.EXTRA_SAMPLES[data_type][0]
         outcome = {"counts": {"health_samples": await _upsert_and_sweep(
             session, HealthSample, fetched["samples"], SAMPLE_FIELDS, user_id=user_id, keep=read.seen,
-            column="measured_at", low=window.utc_start, high=window.utc_end, clean=clean,
+            column="measured_at", low=window.utc_start, high=window.utc_end - timedelta(microseconds=1), clean=clean,
             where="AND sample_type = :sample_type", params={"sample_type": sample_type})}, "errors": {}}
     elif kind == "ecg":
         rows = fetched["ecg"]

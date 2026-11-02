@@ -53,9 +53,11 @@ async def read(session, user_id: UUID, operation_id: UUID) -> dict[str, Any]:
     jobs = (await session.execute(text("""
         SELECT kind, data_type, state, error_class, error_code, progress -> 'result' AS result
         FROM jobs WHERE operation_id = :id OR root_id IN (SELECT id FROM jobs WHERE operation_id = :id)
+          OR id IN (SELECT job_id FROM operation_jobs WHERE operation_id = :id)
         ORDER BY created_at"""), {"id": operation_id})).mappings().all()
     exports = (await session.execute(text(
-        "SELECT state, count(*) AS n FROM export_outbox WHERE operation_id = :id GROUP BY state"),
+        "SELECT state, count(*) AS n FROM export_outbox WHERE operation_id = :id "
+        "OR id IN (SELECT outbox_id FROM operation_exports WHERE operation_id = :id) GROUP BY state"),
         {"id": operation_id})).mappings().all()
     states: dict[str, int] = {}
     for job in jobs:
@@ -65,7 +67,7 @@ async def read(session, user_id: UUID, operation_id: UUID) -> dict[str, Any]:
     if exports:
         pending = sum(n for state, n in export_states.items() if state in ("PENDING", "DISPATCHING", "SUBMITTED",
                                                                              "VERIFYING"))
-        done = export_states.get("CONFIRMED", 0)
+        done = export_states.get("CONFIRMED", 0) + export_states.get("SUPERSEDED", 0)
         states["QUEUED"] = states.get("QUEUED", 0) + pending
         states["SUCCEEDED"] = states.get("SUCCEEDED", 0) + done
         failed = sum(n for state, n in export_states.items() if state in ("FAILED", "CONFLICT", "BLOCKED_PERMISSION"))

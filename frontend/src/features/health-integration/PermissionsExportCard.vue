@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { AlertTriangle, CloudUpload, Loader2 } from 'lucide-vue-next'
 import type { ExportConflict, ExportSwitch, ScopeBundle } from '@/types/api'
 import { type HealthApi, waitForOperation, OPERATION_TEXT } from './api'
@@ -12,6 +12,8 @@ const conflicts = ref<ExportConflict[]>([])
 const busy = ref(false)
 const error = ref<string | null>(null)
 const note = ref<string | null>(null)
+const controller = new AbortController()
+onUnmounted(() => controller.abort())
 
 const on = computed(() => !!sync.value?.enabled)
 const missing = computed(() => {
@@ -65,6 +67,8 @@ function setSync(enabled: boolean): Promise<void> {
       void waitForOperation(props.api, state.operation_id, async op => {
         note.value = `Gửi dữ liệu hiện có: ${OPERATION_TEXT[op.state]}`
         sync.value = await props.api.exportSwitch().catch(() => sync.value)
+      }, { signal: controller.signal }).catch(() => {
+        if (!controller.signal.aborted) note.value = 'Chưa đọc được tiến độ. Dữ liệu vẫn được xử lý trong nền.'
       })
     }
   })
@@ -74,6 +78,14 @@ function resolve(conflict: ExportConflict, resolution: 'KEEP_LOCAL' | 'ACCEPT_RE
   return guarded(async () => {
     await props.api.resolveConflict(conflict.id, resolution)
     conflicts.value = conflicts.value.filter(item => item.id !== conflict.id)
+  })
+}
+
+function setGroup(group: string, enabled: boolean): Promise<void> {
+  return guarded(async () => {
+    await props.api.setExportGroup(group, enabled)
+    await load()
+    note.value = enabled ? 'Nhóm này sẽ tự gửi các thay đổi mới lên Google Health.' : 'Đã dừng gửi nhóm này.'
   })
 }
 
@@ -124,12 +136,15 @@ defineExpose({ load })
       <div v-if="on || sync.partial" class="space-y-2 rounded-xl border border-ink/[0.06] px-3 py-2.5">
         <p class="text-on-surface-variant">{{ summary }}</p>
         <div class="flex flex-wrap gap-1.5">
-          <span
+          <button
             v-for="group in sync.groups" :key="group.group"
-            class="rounded-full px-2 py-0.5 text-[10.5px]"
+            type="button" role="switch" :aria-checked="group.enabled" :aria-label="`Đồng bộ ${group.label}`"
+            :disabled="busy || !group.write_scope_granted"
+            class="rounded-full px-2 py-0.5 text-[10.5px] disabled:opacity-40"
             :class="group.enabled ? 'bg-emerald-400/15 text-emerald-300' : 'bg-ink/10 text-outline'"
             :title="group.write_scope_granted ? '' : 'Chưa có quyền ghi'"
-          >{{ group.enabled ? '✓' : '·' }} {{ group.label }}</span>
+            @click="setGroup(group.group, !group.enabled)"
+          >{{ group.enabled ? '✓' : '·' }} {{ group.label }}</button>
         </div>
         <p v-if="sync.attention" class="flex items-center gap-1 text-amber-300">
           <AlertTriangle class="h-3 w-3" />{{ sync.attention }} bản ghi chưa gửi được, xem xung đột bên dưới nếu có.

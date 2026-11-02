@@ -23,7 +23,7 @@ from sqlalchemy import text
 from domains.shared.models.basemodel import uuid7
 from integrations.google_health.contract import scopes as contract_scopes
 from integrations.google_health.contract.registry import spec
-from integrations.google_health.export import mapping
+from integrations.google_health.export import mapping, jobs
 
 
 async def _origin(session) -> str | None:
@@ -37,7 +37,7 @@ async def mark_import(session) -> None:
 
 async def _connection(session, user_id: UUID):
     return (await session.execute(text("""
-        SELECT c.id, c.granted_scopes FROM health_connections c
+        SELECT c.id, c.user_id, c.generation, c.granted_scopes FROM health_connections c
         WHERE c.user_id = :u AND c.status = 'ACTIVE' AND c.is_active"""), {"u": user_id})).first()
 
 
@@ -57,6 +57,9 @@ async def capture(session, user_id: UUID, aggregate_type: str, entity: Any, op: 
     connection = await _connection(session, user_id)
     if connection is None:
         return 0
+    # Serialize capture/history for this logical record, including immutable replacements.
+    await session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+                          {"k": f"gh-capture:{connection.id}:{aggregate_type}:{replaces_id or entity.id}"})
     setting = await _setting(session, connection.id, group)
     if setting is None or not setting.enabled:
         return 0
@@ -78,31 +81,47 @@ async def capture(session, user_id: UUID, aggregate_type: str, entity: Any, op: 
             SELECT id, state, payload_sha256 FROM google_resource_mappings WHERE connection_id = :c AND aggregate_type = :t
               AND aggregate_id = :a AND data_type = :d"""),
             {"c": connection.id, "t": aggregate_type, "a": entity.id, "d": data_type})).first()
-        if history and exists and exists.state == "CONFIRMED" and exists.payload_sha256 == mapping.payload_sha256(payload):
-            continue  # đã có trên Google và không đổi: xuất lịch sử chỉ gửi một lần
+        if op != "DELETE" and exists:
+            latest = (await session.execute(text("SELECT id, op, state, payload_sha256 FROM export_outbox "
+                "WHERE mapping_id = :m ORDER BY created_at DESC, id DESC LIMIT 1"), {"m": exists.id})).first()
+            same = latest and latest.op != "DELETE" and latest.payload_sha256 == mapping.payload_sha256(payload)
+            if same and latest.state not in ("FAILED", "SUPERSEDED"):
+                if operation_id:
+                    await session.execute(text("INSERT INTO operation_exports (operation_id, outbox_id) VALUES (:o, :e) "
+                        "ON CONFLICT DO NOTHING"), {"o": operation_id, "e": latest.id})
+                continue
+            unsettled = latest and latest.state not in ("CONFIRMED", "FAILED", "SUPERSEDED")
+            if not unsettled and exists.state == "CONFIRMED" and exists.payload_sha256 == mapping.payload_sha256(payload):
+                continue
         effective = op if op == "DELETE" else ("UPDATE" if exists else "CREATE")
         if effective == "DELETE" and not exists:
             continue
         if exists is None:
+            mapping_id = uuid7()
             await session.execute(text("""
                 INSERT INTO google_resource_mappings (id, connection_id, user_id, aggregate_type, aggregate_id, data_type,
                                                       client_id, local_version, state)
                 VALUES (:id, :c, :u, :t, :a, :d, :client, :version, 'PENDING')"""),
-                {"id": uuid7(), "c": connection.id, "u": user_id, "t": aggregate_type, "a": entity.id, "d": data_type,
+                {"id": mapping_id, "c": connection.id, "u": user_id, "t": aggregate_type, "a": entity.id, "d": data_type,
                  "client": mapping.client_id(aggregate_type, entity.id, data_type),
                  "version": getattr(entity, "version_id", 1)})
+        else:
+            mapping_id = exists.id
         version = getattr(entity, "version_id", 1)
+        outbox_id = uuid7()
         result = await session.execute(text("""
             INSERT INTO export_outbox (id, user_id, connection_id, export_group, aggregate_type, aggregate_id,
                                        aggregate_version, op, data_type, idempotency_key, payload, payload_sha256,
-                                       operation_id)
-            VALUES (:id, :u, :c, :g, :t, :a, :v, :op, :d, :key, CAST(:payload AS jsonb), :sha, :operation)
+                                       operation_id, mapping_id)
+            VALUES (:id, :u, :c, :g, :t, :a, :v, :op, :d, :key, CAST(:payload AS jsonb), :sha, :operation, :mapping)
             ON CONFLICT DO NOTHING"""), {
-            "id": uuid7(), "u": user_id, "c": connection.id, "g": group, "t": aggregate_type, "a": entity.id,
+            "id": outbox_id, "mapping": mapping_id, "u": user_id, "c": connection.id, "g": group, "t": aggregate_type, "a": entity.id,
             "v": version, "op": effective, "d": data_type,
             "key": f"{aggregate_type}:{entity.id}:{data_type}:{version}:{effective}",
             "payload": json.dumps(payload), "sha": mapping.payload_sha256(payload), "operation": operation_id})
         written += result.rowcount or 0
+        if result.rowcount:
+            await jobs.enqueue(session, connection, event_id=outbox_id, operation_id=operation_id)
     return written
 
 

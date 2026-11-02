@@ -16,6 +16,7 @@ const periodEnd = ref('')
 const ovulation = ref('NEGATIVE')
 const busy = ref(false)
 const message = ref<{ tone: 'ok' | 'error'; text: string } | null>(null)
+let pendingWrite: { signature: string; key: string } | null = null
 
 const KINDS: { key: HealthLogKind; label: string }[] = [
   { key: 'hydration', label: 'Nước uống' }, { key: 'mood', label: 'Tâm trạng' }, { key: 'symptoms', label: 'Triệu chứng' },
@@ -46,10 +47,15 @@ function payload(): Record<string, unknown> {
 }
 
 async function save(): Promise<void> {
+  if (busy.value) return
   busy.value = true
   message.value = null
   try {
-    await props.api.createLog(kind.value, payload())
+    const values = payload()
+    const signature = JSON.stringify([kind.value, values])
+    if (pendingWrite?.signature !== signature) pendingWrite = { signature, key: crypto.randomUUID() }
+    await props.api.createLog(kind.value, values, pendingWrite.key)
+    pendingWrite = null
     message.value = { tone: 'ok', text: 'Đã lưu nhật ký.' }
     moods.value = []
     symptoms.value = []

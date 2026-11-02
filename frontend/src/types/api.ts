@@ -209,6 +209,7 @@ export interface HealthConnection {
   granted_scopes: string[]
   missing_scopes: string[]
   share_with_assistant: boolean
+  share_sensitive_with_assistant: boolean
   consented_at: string | null
   timezone: string | null
   provider_profile: Record<string, string | number>

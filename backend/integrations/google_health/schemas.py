@@ -20,6 +20,7 @@ class HealthConnectResponse(BaseModel):
 
 class HealthConsentUpdate(InputSchema):
     share_with_assistant: bool
+    share_sensitive_with_assistant: bool | None = None
 
 class HealthSyncRunRead(ReadSchema):
     id: UUID
@@ -41,6 +42,7 @@ class HealthConnectionRead(BaseModel):
     granted_scopes: list[str] = []
     missing_scopes: list[str] = []
     share_with_assistant: bool = False
+    share_sensitive_with_assistant: bool = False
     consented_at: AwareDatetime | None = None
     timezone: str | None = None
     # Do nhà cung cấp báo: tuổi, membership_start_date, chiều dài sải chân và cài đặt đơn vị.

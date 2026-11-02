@@ -96,7 +96,8 @@ async def stage(session, *, connection_id: UUID, user_id: UUID, generation: int,
             "civil_start": parsed.time.civil_start, "civil_end": parsed.time.civil_end,
             "utc_offset_s": parsed.time.start_offset_s, "civil_date": parsed.time.civil_date,
             "last_seen_root": root_id, "deletion_state": "PRESENT", "generation": generation,
-            "retention_until": retention_until(parsed.data_type, parsed.time.civil_date),
+            "retention_until": (parsed.time.civil_date + timedelta(days=730) if rollup and parsed.time.civil_date
+                                else retention_until(parsed.data_type, parsed.time.civil_date)),
         }
     table = HealthSourceRecord.__table__
     statement = insert(table).values(list(rows.values()))
@@ -114,15 +115,17 @@ async def stage(session, *, connection_id: UUID, user_id: UUID, generation: int,
     return len(result.fetchall())
 
 
-async def sweep(session, *, connection_id: UUID, data_type: str, root_id: UUID, start: date, end: date) -> list[str]:
+async def sweep(session, *, connection_id: UUID, data_type: str, root_id: UUID, start: date, end: date,
+                rollup: bool = False) -> list[str]:
     """Sau một lần fetch trọn vẹn, sạch sẽ trên [start, end]: các dòng nó không thấy đã bị xoá ở nhà cung cấp."""
     result = await session.execute(text("""
         UPDATE health_source_records SET deletion_state = 'DELETED_REMOTE', fetched_at = now()
         WHERE connection_id = :connection AND data_type = :data_type AND deletion_state = 'PRESENT'
+          AND record_kind = :kind
           AND civil_date >= :start AND civil_date <= :end
           AND last_seen_root IS DISTINCT FROM :root
         RETURNING resource_name"""), {"connection": connection_id, "data_type": data_type, "root": root_id,
-                                      "start": start, "end": end})
+                                      "start": start, "end": end, "kind": "DAILY_ROLLUP" if rollup else "POINT"})
     return [row[0] for row in result]
 
 

@@ -4,7 +4,7 @@ Trạng thái (export_outbox.state):
   PENDING -> DISPATCHING -> CONFIRMED            Operation đã xong, hoặc lần đọc lại khớp
   DISPATCHING -> VERIFYING (timeout / 5xx / chưa xong): đọc lại trước mọi việc khác
   VERIFYING -> CONFIRMED (Google đang giữ một data point HercFit ghi với nội dung này)
-            -> PENDING (đã chứng minh vắng mặt: gửi lại) | UNCERTAIN (không kiểm tra được: dừng thử lại mù)
+            -> UNCERTAIN (hết lượt kiểm chứng: dừng, không tự gửi lại lệnh tạo)
   Google tự cấp id cho data point và bỏ qua tên do client đặt (đã kiểm tra bằng tài khoản
   thật ngày 2026-11-01 với weight, nutrition-log và exercise), nên một lệnh tạo bị mất được tìm bằng cách
   liệt kê các ngày của bản ghi và so khớp nội dung do OAuth client của chúng ta ghi.
@@ -66,12 +66,17 @@ def _typed(data_type: str, point: dict[str, Any], shape: dict[str, Any] | None =
 
 async def _next_row(session, connection_id) -> dict[str, Any] | None:
     row = (await session.execute(text("""
-        SELECT o.*, m.id AS mapping_id, m.remote_name, m.client_id, m.remote_sha256, m.owned_by_hercfit
+        SELECT o.*, m.id AS mapping_id, COALESCE(o.remote_name, m.remote_name) AS remote_name,
+               m.client_id, m.remote_sha256, m.confirmed_payload, m.owned_by_hercfit
         FROM export_outbox o
-        LEFT JOIN google_resource_mappings m ON m.connection_id = o.connection_id AND m.aggregate_type = o.aggregate_type
-             AND m.aggregate_id = o.aggregate_id AND m.data_type = o.data_type
-        WHERE o.connection_id = :c AND o.state IN ('PENDING', 'VERIFYING') AND o.available_at <= now()
-        ORDER BY o.created_at LIMIT 1 FOR UPDATE OF o SKIP LOCKED"""), {"c": connection_id})).mappings().first()
+        LEFT JOIN google_resource_mappings m ON m.id = o.mapping_id
+        JOIN google_export_settings s ON s.connection_id = o.connection_id AND s.export_group = o.export_group AND s.enabled
+        WHERE o.connection_id = :c AND o.available_at <= now()
+          AND (o.state IN ('PENDING', 'VERIFYING') OR (o.state = 'DISPATCHING' AND o.lease_until < now()))
+          AND NOT EXISTS (SELECT 1 FROM export_outbox p WHERE p.mapping_id = o.mapping_id
+              AND (p.created_at, p.id) < (o.created_at, o.id)
+              AND p.state IN ('PENDING', 'DISPATCHING', 'VERIFYING', 'SUBMITTED', 'UNCERTAIN', 'CONFLICT', 'BLOCKED_PERMISSION'))
+        ORDER BY o.created_at, o.id LIMIT 1 FOR UPDATE OF o SKIP LOCKED"""), {"c": connection_id})).mappings().first()
     return dict(row) if row else None
 
 
@@ -92,13 +97,17 @@ async def _confirm_mapping(session, row: dict[str, Any], remote_name: str | None
     await session.execute(text("""
         UPDATE google_resource_mappings SET remote_name = COALESCE(CAST(:remote AS varchar), remote_name),
                state = CAST(:state AS varchar),
-               local_version = :version, payload_sha256 = :sha, remote_sha256 = :remote_sha, updated_at = now()
+               local_version = :version, payload_sha256 = :sha, remote_sha256 = :remote_sha,
+               confirmed_payload = CAST(:payload AS jsonb), updated_at = now()
         WHERE id = :id"""), {"id": row["mapping_id"], "remote": remote_name, "version": row["aggregate_version"],
                              "state": "DELETED" if deleted else "CONFIRMED", "sha": row["payload_sha256"],
-                             "remote_sha": _typed(row["data_type"], row["payload"])})
+                             "remote_sha": _typed(row["data_type"], row["payload"]),
+                             "payload": json.dumps(row["payload"])})
 
 
 def _blocked(row: dict[str, Any], connection) -> str | None:
+    if not row.get("mapping_id"):
+        return "missing_mapping"
     if not settings.GH_EXPORT_DISPATCH:
         return "dispatch_disabled"
     if row["export_group"] not in settings.GH_EXPORT_GROUPS:
@@ -122,33 +131,36 @@ async def dispatch(ctx: Context) -> None:
             row = await _next_row(session, connection.id)
             if row is None:
                 break
+            connection = await _connection(session, job)
+            verifying = row["state"] in ("VERIFYING", "DISPATCHING")
+            if not verifying and row["op"] != "DELETE":
+                # A preceding create may have completed since this update was captured.
+                row["op"] = "UPDATE" if row.get("remote_name") else "CREATE"
             reason = _blocked(row, connection)
             if reason:
-                state = "BLOCKED_PERMISSION" if reason == "write_scope_missing" else "PENDING"
+                state = ("BLOCKED_PERMISSION" if reason == "write_scope_missing" else
+                         "UNCERTAIN" if reason == "missing_mapping" else "VERIFYING" if verifying else "PENDING")
                 await _set(session, row, state, error=reason, delay=timedelta(hours=1))
                 done[state] = done.get(state, 0) + 1
                 continue
-            # Một phiên bản mới hơn đang chờ của cùng bản ghi thay cho dòng này.
-            newer = (await session.execute(text("""
-                SELECT 1 FROM export_outbox WHERE aggregate_type = :t AND aggregate_id = :a AND data_type = :d
-                  AND aggregate_version > :v AND state = 'PENDING' LIMIT 1"""),
-                {"t": row["aggregate_type"], "a": row["aggregate_id"], "d": row["data_type"],
-                 "v": row["aggregate_version"]})).first()
-            if newer and row["state"] == "PENDING":
-                await _set(session, row, "SUPERSEDED")
-                done["SUPERSEDED"] = done.get("SUPERSEDED", 0) + 1
-                continue
-            verifying = row["state"] == "VERIFYING"
-            await session.execute(text("UPDATE export_outbox SET state = 'DISPATCHING', attempts = attempts + 1 "
-                                       "WHERE id = :id"), {"id": row["id"]})
-        outcome = await (_verify(client, row) if verifying else _send(client, row))
+            await session.execute(text("UPDATE export_outbox SET state = 'DISPATCHING', op = :op, "
+                                       "attempts = attempts + 1, lease_epoch = lease_epoch + 1, "
+                                       "lease_until = now() + interval '120 seconds', updated_at = now() "
+                                       "WHERE id = :id"), {"id": row["id"], "op": row["op"]})
+        # Keep the durable DISPATCHING marker across a process crash. Hold a shared
+        # settings lock during the call: disabling waits for already-started sends.
         async with fenced(job) as session:
+            enabled = (await session.execute(text("SELECT enabled FROM google_export_settings "
+                "WHERE connection_id = :c AND export_group = :g FOR SHARE"),
+                {"c": connection.id, "g": row["export_group"]})).scalar()
+            if not enabled:
+                await _set(session, row, "VERIFYING" if verifying else "PENDING")
+                continue
+            outcome = await (_verify(client, row) if verifying else _send(client, row))
             await _record(session, row, outcome)
         done[outcome["state"]] = done.get(outcome["state"], 0) + 1
     async with fenced(job) as session:
-        pending = (await session.execute(text(
-            "SELECT 1 FROM export_outbox WHERE connection_id = :c AND state IN ('PENDING', 'VERIFYING') "
-            "AND available_at <= now() LIMIT 1"), {"c": connection.id})).first()
+        pending = await _next_row(session, connection.id)
         if pending:
             await queue.requeue(session, job, {"result": done})
         else:
@@ -163,15 +175,19 @@ async def _send(client, row: dict[str, Any]) -> dict[str, Any]:
             return _from_operation(await client.create_point(data_type, payload), row, fallback_name=None)
         if not row.get("owned_by_hercfit") or not row.get("remote_name"):
             return {"state": "UNCERTAIN", "error": "no_owned_remote_point"}
-        if op == "UPDATE":
+        if op in ("UPDATE", "DELETE"):
             remote = await client.get_point(row["remote_name"])
-            if row.get("remote_sha256") and _typed(data_type, remote, _shape(data_type, payload)) != row["remote_sha256"]:
+            baseline = row.get("confirmed_payload") or payload
+            if row.get("remote_sha256") and _typed(data_type, remote, _shape(data_type, baseline)) != row["remote_sha256"]:
                 return {"state": "CONFLICT", "remote": remote}
+        if op == "UPDATE":
             return _from_operation(await client.patch_point(row["remote_name"], payload), row,
                                    fallback_name=row["remote_name"])
         operation = await client.batch_delete(data_type, [row["remote_name"]])
         return {**_from_operation(operation, row, fallback_name=row["remote_name"]), "deleted": True}
     except GoogleHealthError as exc:
+        if op == "DELETE" and exc.status == 404:
+            return {"state": "CONFIRMED", "deleted": True, "remote_name": row["remote_name"]}
         if exc.error_class == PERMISSION:
             return {"state": "BLOCKED_PERMISSION", "error": exc.code}
         if exc.error_class in (SCHEMA, UNSUPPORTED):
@@ -184,7 +200,10 @@ def _from_operation(operation: dict[str, Any], row: dict[str, Any], *, fallback_
         return {"state": "FAILED", "error": str((operation["error"] or {}).get("code"))[:40], "operation": operation}
     if operation.get("done"):
         response = operation.get("response") or {}
-        return {"state": "CONFIRMED", "remote_name": response.get("name") or fallback_name, "operation": operation}
+        name = response.get("name") or fallback_name
+        if not name:
+            return {"state": "VERIFYING", "error": "missing_remote_name", "operation": operation}
+        return {"state": "CONFIRMED", "remote_name": name, "operation": operation}
     return {"state": "VERIFYING", "error": "operation_pending", "operation": operation,
             "remote_name": fallback_name}
 
@@ -208,7 +227,7 @@ async def _verify(client, row: dict[str, Any]) -> dict[str, Any]:
     try:
         remote = await client.get_point(name)
     except GoogleHealthError as exc:
-        if exc.error_class == UNSUPPORTED:  # 404: đã chứng minh là vắng mặt
+        if exc.status == 404:
             return _absent(row)
         return {"state": "VERIFYING", "error": exc.code}
     if row["op"] == "DELETE":
@@ -218,9 +237,11 @@ async def _verify(client, row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _absent(row: dict[str, Any]) -> dict[str, Any]:
-    if row["op"] == "CREATE" and row["attempts"] < MAX_VERIFY:
-        return {"state": "PENDING", "error": "absent_resend"}  # đã chứng minh vắng mặt, nên gửi lại không thể tạo bản trùng
-    return {"state": "UNCERTAIN", "error": "absent"}
+    if row["op"] == "DELETE":
+        return {"state": "CONFIRMED", "deleted": True, "remote_name": row.get("remote_name")}
+    # An empty list cannot prove a timed-out create was never accepted: visibility
+    # can lag or an older request can still finish. Verify again, never POST twice.
+    return {"state": "VERIFYING", "error": "not_yet_visible"}
 
 
 class _Unsearchable(Exception):
@@ -230,6 +251,8 @@ class _Unsearchable(Exception):
 async def _find_written(client, row: dict[str, Any]) -> str | None:
     """Tên Google của data point do OAuth client của chúng ta ghi với nội dung này, tìm qua danh sách các ngày của nó."""
     data_type, payload = row["data_type"], row["payload"]
+    if Op.LIST not in spec(data_type).read_ops:
+        raise _Unsearchable
     parsed = adapter().parse_point(data_type, payload)
     start = parsed.time.physical_start
     if start is None:
@@ -239,12 +262,17 @@ async def _find_written(client, row: dict[str, Any]) -> str | None:
     query = reads.list_filter(plan, day - timedelta(days=1), day + timedelta(days=2))  # giấc ngủ được xếp vào ngày kết thúc của nó
     fetch = await client.list_all(data_type, filter=query, page_size=plan.page_size, max_pages=5)
     expected, shape = _typed(data_type, payload), parsed.value
-    for point in fetch.points:
-        if selfsource.written_by_us(point.get("dataSource")) and _typed(data_type, point, shape) == expected:
-            return point.get("name")
     if not fetch.complete:
         raise GoogleHealthError("verify_page_budget")
-    return None
+    async with get_db_session() as session:
+        owned = set((await session.execute(text("SELECT remote_name FROM google_resource_mappings "
+            "WHERE connection_id = :c AND id <> :m AND remote_name IS NOT NULL"),
+            {"c": row["connection_id"], "m": row["mapping_id"]})).scalars())
+    matches = {point["name"] for point in fetch.points if point.get("name") and point["name"] not in owned
+               and selfsource.written_by_us(point.get("dataSource")) and _typed(data_type, point, shape) == expected}
+    if len(matches) > 1:
+        raise _Unsearchable
+    return next(iter(matches), None)
 
 
 async def _record(session, row: dict[str, Any], outcome: dict[str, Any]) -> None:

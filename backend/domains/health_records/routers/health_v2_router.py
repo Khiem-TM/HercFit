@@ -12,6 +12,8 @@ from pydantic import BaseModel
 from sqlalchemy import select, tuple_
 
 from api.dependencies import UserContextDep
+from core.idempotency import IdempotentRoute
+from core.transaction import transaction
 from domains.analytics.services import coverage as coverage_service
 from domains.health_records.models.device_records import DeviceWorkout, SleepSession
 from domains.health_records.models.sources import HealthSeriesChunk, HealthSourceRecord
@@ -19,7 +21,7 @@ from domains.health_records.services import logs as log_service
 from domains.identity import consent
 from domains.shared.schemas.tracking import TimeZoneName
 
-router = APIRouter(prefix="/health", tags=["health-data"])
+router = APIRouter(prefix="/health", tags=["health-data"], route_class=IdempotentRoute)
 MAX_SERIES_DAYS = 7
 
 
@@ -160,12 +162,12 @@ async def preview_log(kind: LogKind, payload: dict[str, Any], service: UserConte
     return await log_service.preview(service.session, service.user_id, kind, payload)
 
 
-@router.post("/logs/{kind}", status_code=status.HTTP_201_CREATED, summary="Ghi nhật ký",
+@router.post("/logs/{kind}", status_code=status.HTTP_201_CREATED, summary="Ghi nhật ký", response_model=dict[str, Any],
              description="Gửi kèm preview_sha256 từ /logs/{kind}:preview để ràng buộc lần ghi với đúng bản xem trước.")
+@transaction
 async def create_log(kind: LogKind, payload: dict[str, Any], service: UserContextDep):
     entity = await log_service.create(service.session, service.user_id, kind, payload)
     result = _log(entity)
-    await service.session.commit()
     return result
 
 
@@ -174,18 +176,19 @@ class LogReplace(BaseModel):
     values: dict[str, Any]
 
 
-@router.patch("/logs/{kind}/{log_id}", summary="Sửa nhật ký (cần phiên bản hiện tại)")
+@router.patch("/logs/{kind}/{log_id}", summary="Sửa nhật ký (cần phiên bản hiện tại)", response_model=dict[str, Any])
+@transaction
 async def replace_log(kind: LogKind, log_id: UUID, payload: LogReplace, service: UserContextDep):
     entity = await log_service.replace(service.session, service.user_id, kind, log_id, payload.values,
                                        payload.expected_version_id)
     result = _log(entity)
-    await service.session.commit()
     return result
 
 
 @router.delete("/logs/{kind}/{log_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Xoá nhật ký")
+@transaction
 async def delete_log(kind: LogKind, log_id: UUID, service: UserContextDep,
                      expected_version_id: Annotated[int, Query(ge=1)], remote: bool = False):
     # remote=true xoá cả bản HercFit đã xuất lên Google (lựa chọn tường minh của người dùng).
     await log_service.delete(service.session, service.user_id, kind, log_id, expected_version_id, remote=remote)
-    await service.session.commit()
+    return Response(status_code=204)

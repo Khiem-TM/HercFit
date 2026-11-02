@@ -12,6 +12,8 @@ from sqlalchemy import text
 
 from api.dependencies import service_dependency
 from core.jobs import queue
+from core.idempotency import IdempotentRoute
+from core.transaction import transaction
 from core.rate_limit import SlidingWindowLimiter, enforce
 from core.settings import settings
 from domains.shared import operations
@@ -21,7 +23,7 @@ from integrations.google_health.contract.registry import DATA_TYPES, DISCOVERY_R
 from integrations.google_health.router import COOKIE_PATH, _set_cookie
 from integrations.google_health import oauth
 
-router = APIRouter(prefix="/integrations/google-health", tags=["integrations"])
+router = APIRouter(prefix="/integrations/google-health", tags=["integrations"], route_class=IdempotentRoute)
 ServiceDep = Annotated[HealthConnectionService, service_dependency(HealthConnectionService)]
 _limiter = SlidingWindowLimiter(6)
 
@@ -201,17 +203,28 @@ async def request_scopes(payload: ScopesRequest, service: ServiceDep, response: 
 
 @router.post("/sync-jobs", status_code=status.HTTP_202_ACCEPTED, response_model=SyncAccepted,
              summary="Đồng bộ ngay (tạo công việc, theo dõi qua /operations/{id})")
+@transaction
 async def create_sync(service: ServiceDep):
-    enforce(_limiter, f"sync:{service.user_id}")
     connection = await _connection(service)
     if connection.status != "ACTIVE":
         raise HTTPException(409, "Kết nối Google Health không ở trạng thái hoạt động; hãy kết nối lại.")
-    operation_id = await operations.create(service.session, service.user_id, "health.sync")
+    await service.session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+                                  {"key": f"gh-refresh:{connection.id}"})
+    existing = (await service.session.execute(text("""
+        SELECT o.id FROM operations o WHERE o.user_id = :u AND o.kind = 'health.sync'
+          AND o.result->>'connection_id' = :c
+          AND EXISTS (SELECT 1 FROM jobs j WHERE (j.operation_id = o.id OR j.id IN
+            (SELECT job_id FROM operation_jobs WHERE operation_id = o.id))
+            AND j.state IN ('QUEUED', 'RETRY', 'RUNNING')) ORDER BY o.created_at DESC LIMIT 1"""),
+        {"u": service.user_id, "c": str(connection.id)})).scalar()
+    if existing:
+        return SyncAccepted(operation_id=existing, detail="Đang cập nhật dữ liệu Google Health.")
+    operation_id = await operations.create(service.session, service.user_id, "health.sync",
+                                           {"connection_id": str(connection.id)})
     kind = "GH_LEGACY_SYNC" if settings.GH_INGEST_V2 == "off" else "GH_RECONCILE"
     await queue.enqueue(service.session, kind, user_id=service.user_id, connection_id=connection.id,
                         connection_generation=connection.generation, operation_id=operation_id, priority=90,
-                        dedupe_key=f"manual:{connection.id}", payload={"reason": "manual"})
-    await service.session.commit()
+                        dedupe_key=f"visit:{operation_id}", payload={"reason": "knowledge_visit"})
     return SyncAccepted(operation_id=operation_id, detail="Đã xếp lịch đồng bộ Google Health.")
 
 
@@ -307,6 +320,10 @@ async def put_export_settings(payload: ExportSettingsUpdate, service: ServiceDep
             enabled_at = CASE WHEN EXCLUDED.enabled AND NOT google_export_settings.enabled THEN now()
                               WHEN EXCLUDED.enabled THEN google_export_settings.enabled_at END,
             updated_at = now()"""), {"c": connection.id, "g": payload.group, "enabled": payload.enabled})
+    if payload.enabled:
+        from integrations.google_health.export import jobs as export_jobs
+        from domains.shared.models.basemodel import uuid7
+        await export_jobs.enqueue(service.session, connection, event_id=uuid7())
     await service.session.commit()
     return await _export_groups(service)
 

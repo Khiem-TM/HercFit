@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { HeartPulse, Link2, Loader2, RefreshCw, Unlink } from 'lucide-vue-next'
+import { HeartPulse, Link2, Loader2, Unlink } from 'lucide-vue-next'
 import { CONNECT_RESULT_TEXT, useHealthIntegration } from '@/composables/useHealthIntegration'
 import { useAuth } from '@/composables/useAuth'
 import { createHealthApi } from '@/features/health-integration/api'
@@ -11,14 +11,14 @@ import SyncStatusCard from '@/features/health-integration/SyncStatusCard.vue'
 
 const props = defineProps<{ result?: string | null }>()
 
-const { connection, loading, busy, error, isConnected, needsReauth, refresh, connect, setConsent, syncNow, disconnect } =
+const { connection, loading, busy, error, isConnected, needsReauth, refresh, connect, setConsent, disconnect } =
   useHealthIntegration()
 const { authFetch } = useAuth()
 const api = createHealthApi((url, init) => authFetch(url, init))
 const share = ref(true)
+const shareSensitive = ref(false)
 const purge = ref(false)
 const confirmDisconnect = ref(false)
-const syncMessage = ref<string | null>(null)
 const timers: number[] = []
 
 const resultNotice = computed(() => (props.result ? CONNECT_RESULT_TEXT[props.result] ?? CONNECT_RESULT_TEXT.error : null))
@@ -39,23 +39,22 @@ function when(value: string | null | undefined): string {
   return value ? new Date(value).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : '—'
 }
 
-async function handleSync(): Promise<void> {
-  syncMessage.value = null
-  if (await syncNow()) {
-    syncMessage.value = 'Đang đồng bộ, số liệu sẽ cập nhật sau ít giây.'
-    for (const delay of [4000, 12000, 30000]) timers.push(window.setTimeout(refresh, delay))
-  }
-}
-
 async function handleDisconnect(): Promise<void> {
   await disconnect(purge.value)
   confirmDisconnect.value = false
   purge.value = false
 }
 
+async function saveConsent(): Promise<void> {
+  await setConsent(share.value, shareSensitive.value)
+  share.value = connection.value?.share_with_assistant ?? false
+  shareSensitive.value = connection.value?.share_sensitive_with_assistant ?? false
+}
+
 onMounted(async () => {
   await refresh()
   share.value = connection.value?.connected ? connection.value.share_with_assistant : true
+  shareSensitive.value = connection.value?.share_sensitive_with_assistant ?? false
   // Lần đồng bộ đầu bắt đầu ngay sau màn hình đồng ý; hiển thị kết quả khi nó tới.
   if (props.result === 'connected') for (const delay of [5000, 15000]) timers.push(window.setTimeout(refresh, delay))
 })
@@ -128,10 +127,16 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
             type="checkbox"
             class="mt-0.5 accent-ink"
             :disabled="busy"
-            @change="isConnected && setConsent(share)"
+            @change="isConnected && saveConsent()"
           />
           <span>Cho phép trợ lý AI dùng dữ liệu sức khoẻ <strong>tổng hợp theo ngày</strong> để cá nhân hoá câu trả lời.
             Mẫu thô và chỉ số sinh tồn rời không đưa vào bộ nhớ tri thức; có thể tắt bất cứ lúc nào.</span>
+        </label>
+
+        <label v-if="isConnected" class="flex items-start gap-2 text-xs text-on-surface-variant">
+          <input v-model="shareSensitive" type="checkbox" class="mt-0.5 accent-ink" :disabled="busy"
+            @change="saveConsent" />
+          <span>Cho phép trợ lý AI đọc dữ liệu nhạy cảm: đường huyết, ECG, triệu chứng, tâm trạng và sức khoẻ sinh sản.</span>
         </label>
 
         <div class="flex flex-wrap gap-2">
@@ -147,16 +152,6 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
             <span>{{ needsReauth ? 'Kết nối lại' : isConnected ? 'Cấp thêm quyền' : 'Kết nối bằng Gmail đăng nhập' }}</span>
           </button>
           <button
-            v-if="connection.status === 'ACTIVE'"
-            type="button"
-            :disabled="busy"
-            class="inline-flex items-center gap-2 rounded-xl border border-ink/20 px-4 py-2 text-xs font-semibold text-primary transition-colors hover:bg-ink/10 disabled:opacity-50"
-            @click="handleSync"
-          >
-            <RefreshCw class="h-3.5 w-3.5" :class="busy && 'animate-spin'" />
-            <span>Đồng bộ ngay</span>
-          </button>
-          <button
             v-if="isConnected && !confirmDisconnect"
             type="button"
             :disabled="busy"
@@ -167,7 +162,7 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
             <span>Ngắt kết nối</span>
           </button>
         </div>
-        <p v-if="syncMessage" class="text-[11px] text-outline">{{ syncMessage }}</p>
+        <p class="text-[11px] text-outline">Dữ liệu tự cập nhật khi bạn mở Tri thức. Những thay đổi ở HercFit được tự gửi khi bật đồng bộ lên Google.</p>
 
         <div v-if="confirmDisconnect" class="space-y-2 rounded-xl border border-error/25 bg-error/[0.06] p-3 text-xs">
           <p class="text-on-surface-variant">HercFit sẽ thu hồi quyền tại Google và xoá token đã lưu.</p>
@@ -184,7 +179,7 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
     </div>
 
     <template v-if="connection?.configured && isConnected">
-      <SyncStatusCard :api="api" :active="connection.status === 'ACTIVE'" @synced="refresh" />
+      <SyncStatusCard :api="api" />
       <PermissionsExportCard :api="api" />
       <DevicesCard :api="api" />
     </template>

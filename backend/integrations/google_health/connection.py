@@ -63,6 +63,7 @@ class HealthConnectionService(UserService):
             configured=configured, connected=connection.status in {"ACTIVE", "NEEDS_REAUTH"},
             status=connection.status, account_email=connection.account_email, granted_scopes=granted,
             missing_scopes=oauth.missing_scopes(granted), share_with_assistant=decision.device,
+            share_sensitive_with_assistant=decision.sensitive,
             consented_at=connection.consented_at if decision.device else None, timezone=connection.timezone,
             provider_profile=connection.provider_profile or {}, last_sync_at=connection.last_sync_at,
             last_success_at=connection.last_success_at, next_sync_at=connection.next_sync_at,
@@ -80,12 +81,17 @@ class HealthConnectionService(UserService):
         return oauth.authorization_url(state=state, code_challenge=challenge, login_hint=self.user.email,
                                        scopes=scopes), nonce, verifier
 
-    async def update_consent(self, share_with_assistant: bool) -> HealthConnectionRead:
+    async def update_consent(self, share_with_assistant: bool, *, sensitive: bool | None = None) -> HealthConnectionRead:
+        from core import principal
+        if principal.is_agent():
+            raise HTTPException(403, "Chỉ người dùng được thay đổi quyền chia sẻ với trợ lý.")
         connection = await HealthConnection.for_user(self.session, self.user_id, for_update=True)
         if connection is None:
             raise HTTPException(404, "Chưa kết nối Google Health")
         # user_consents là quyết định; trigger của nó phát lại dữ liệu thiết bị lên graph.
         await consent.set_device(self.session, self.user_id, share_with_assistant)
+        if sensitive is not None:
+            await (consent.grant if sensitive else consent.revoke)(self.session, self.user_id, "sensitive")
         # Bản phản chiếu chỉ giữ để quay lui về code vẫn đọc cột này.
         if connection.share_with_assistant != share_with_assistant:
             connection.share_with_assistant = share_with_assistant
@@ -146,6 +152,23 @@ async def purge_device_data(session, user_id: UUID) -> dict[str, int]:
     counts["body_metrics"] = (await session.execute(text(
         "DELETE FROM body_metrics WHERE user_id = :uid AND source = :source"),
         {"uid": user_id, "source": HEALTH_PROVIDER})).rowcount or 0
+    # Delete imported records before their source layer; preserve manually written logs.
+    for table in ("hydration_logs", "nutrition_logs", "ecg_recordings", "irn_alerts"):
+        counts[table] = (await session.execute(text(f"DELETE FROM {table} WHERE user_id = :u AND source = :s"),
+                            {"u": user_id, "s": HEALTH_PROVIDER})).rowcount or 0
+    for table in ("health_source_records", "health_series_chunks", "paired_devices", "health_coverage",
+                  "health_baselines", "derived_metrics", "context_snapshots"):
+        counts[table] = (await session.execute(text(f"DELETE FROM {table} WHERE user_id = :u"),
+                                               {"u": user_id})).rowcount or 0
+    for table in ("sync_cursors", "shadow_diffs", "health_sync_runs"):
+        await session.execute(text(f"DELETE FROM {table} WHERE connection_id IN "
+            "(SELECT id FROM health_connections WHERE user_id = :u)"), {"u": user_id})
+    await session.execute(text("DELETE FROM webhook_inbox WHERE health_user_id IN "
+        "(SELECT health_user_id FROM health_connections WHERE user_id = :u)"), {"u": user_id})
+    await session.execute(text("UPDATE health_connections SET provider_profile = '{}'::jsonb, "
+        "sync_cursor = '{}'::jsonb, last_sync_at = NULL, last_success_at = NULL WHERE user_id = :u"), {"u": user_id})
+    await consent.set_device(session, user_id, False)
+    await consent.revoke(session, user_id, "sensitive")
     return counts
 
 

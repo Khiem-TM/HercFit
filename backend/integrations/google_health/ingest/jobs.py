@@ -104,7 +104,7 @@ def enabled_types(granted: list[str] | set[str]) -> list[str]:
 
 
 def horizon(data_type: str, mode: str) -> int:
-    if mode == SERIES or spec(data_type).retention is Retention.DETAIL_90D:
+    if mode == SERIES:
         return DETAIL_DAYS
     return HISTORY_DAYS
 
@@ -112,11 +112,13 @@ def horizon(data_type: str, mode: str) -> int:
 async def enqueue_fetch(session, connection: HealthConnection, data_type: str, mode: str, start: date, end: date, *,
                         priority: int, walk_back_to: date | None = None, operation_id: UUID | None = None,
                         reason: str = "scheduled") -> UUID | None:
-    return await queue.enqueue(
-        session, "GH_FETCH_WINDOW", dedupe_key=f"fetch:{connection.id}:{data_type}:{mode}:{start}:{end}",
+    key = f"fetch:{connection.id}:{data_type}:{mode}:{start}:{end}"
+    job_id = await queue.enqueue(
+        session, "GH_FETCH_WINDOW", dedupe_key=key,
         user_id=connection.user_id, connection_id=connection.id, data_type=data_type, window_start=start,
         window_end=end, priority=priority, connection_generation=connection.generation, operation_id=operation_id,
         payload={"mode": mode, "walk_back_to": walk_back_to.isoformat() if walk_back_to else None, "reason": reason})
+    return job_id
 
 
 def today_for(connection: HealthConnection) -> date:
@@ -335,8 +337,7 @@ async def fetch_window(ctx: Context) -> None:
             await stage.stage(session, connection_id=connection.id, user_id=connection.user_id,
                               generation=connection.generation, root_id=job.root_id or job.id, points=parsed,
                               rollup=mode == ROLLUP, zone=connection.timezone or DEFAULT_TIMEZONE)
-            if chunk_index < len(chunks) or page.next_token:
-                await queue.save_progress(session, job, progress)
+            await queue.save_progress(session, job, progress)
     await _finish_window(ctx, connection, progress)
 
 
@@ -348,12 +349,19 @@ async def _finish_window(ctx: Context, connection: HealthConnection, progress: d
     result: dict[str, Any] = {"status": "COMPLETE", **{k: progress[k] for k in ("pages", "points", "rejected", "unknown")}}
     async with fenced(job) as session:
         root = job.root_id or job.id
+        if progress["rejected"]:
+            await _cursor(session, connection, data_type, status="UNCLEAN", error="invalid_points")
+            await queue.needs_attention(session, job, error_class="SCHEMA", error_code="invalid_points")
+            return
         if progress["rejected"] == 0:
             result["deleted_remote"] = len(await stage.sweep(session, connection_id=connection.id, data_type=data_type,
-                                                             root_id=root, start=start, end=end))
+                                                             root_id=root, start=start, end=end, rollup=mode == ROLLUP))
         if settings.GH_INGEST_V2 == "primary":
             outcome = await applying.apply(session, connection_id=connection.id, user_id=connection.user_id,
                                            data_type=data_type, mode=mode, start=start, end=end, zone=zone)
+            if outcome["errors"]:
+                # Roll back sweep and all projections; retry from the durable staged pages.
+                raise GoogleHealthError("apply_storage_error", error_class="TRANSIENT")
             result["applied"] = outcome["counts"]
             await publish(session, "health.records.changed", connection.user_id,
                           {"data_types": [data_type], "start": start.isoformat(), "end": end.isoformat()})
@@ -368,6 +376,17 @@ async def _finish_window(ctx: Context, connection: HealthConnection, progress: d
                       start=start, end=end)
         await _walk_back(session, connection, job)
         await queue.complete(session, job, result)
+    await _touch_sync(job)
+
+
+async def _touch_sync(job: Job) -> None:
+    # The fenced transaction holds a shared connection lock. Updating that same
+    # row there can deadlock with another worker holding a shared lock while
+    # waiting for a business row. Publish this status only after the data commits.
+    async with get_db_session() as session:
+        await session.execute(text("UPDATE health_connections SET last_sync_at = now(), last_success_at = now(), "
+            "last_error_code = NULL WHERE id = :c AND generation = :g AND status = 'ACTIVE'"),
+            {"c": job.connection_id, "g": job.connection_generation})
 
 
 async def _walk_back(session, connection: HealthConnection, job: Job) -> None:
@@ -399,6 +418,11 @@ async def _fetch_series(ctx: Context, connection: HealthConnection, client: Goog
     query = f'{path}.{field} >= "{stamp(low)}" AND {path}.{field} < "{stamp(high)}"'
     fetch = await client.list_all(data_type, filter=query, page_size=plan.page_size, max_pages=reads.MAX_PAGES)
     parsed, rejected, unknown = _parse(data_type, fetch.points, rollup=False)
+    if rejected:
+        async with fenced(job) as session:
+            await _cursor(session, connection, data_type, status="UNCLEAN", error="invalid_points")
+            await queue.needs_attention(session, job, error_class="SCHEMA", error_code="invalid_points")
+        return
     if not fetch.complete:
         async with fenced(job) as session:
             await _cursor(session, connection, data_type, status="INCOMPLETE", error="series_page_budget")
@@ -420,6 +444,7 @@ async def _fetch_series(ctx: Context, connection: HealthConnection, client: Goog
         await _walk_back(session, connection, job)
         await queue.complete(session, job, {"status": "COMPLETE", "points": len(parsed), "chunks": len(rows),
                                             "rejected": rejected, "unknown": unknown, "pages": fetch.pages})
+    await _touch_sync(job)
 
 
 async def identity_refresh(ctx: Context) -> None:

@@ -54,7 +54,9 @@ async def tick(now: datetime | None = None) -> dict[str, int]:
             rows = (await session.execute(text("""
                 SELECT DISTINCT o.connection_id, c.user_id, c.generation FROM export_outbox o
                 JOIN health_connections c ON c.id = o.connection_id AND c.status = 'ACTIVE'
-                WHERE o.state IN ('PENDING', 'VERIFYING') AND o.available_at <= now()"""))).all()
+                JOIN google_export_settings s ON s.connection_id = o.connection_id AND s.export_group = o.export_group AND s.enabled
+                WHERE (o.state IN ('PENDING', 'VERIFYING') OR (o.state = 'DISPATCHING' AND o.lease_until < now()))
+                  AND o.available_at <= now()"""))).all()
             for row in rows:
                 planned["jobs"] += bool(await queue.enqueue(
                     session, "GH_EXPORT_DISPATCH", queue="export", connection_id=row.connection_id,

@@ -1,6 +1,7 @@
 import type {
   Capability, DataSource, DevicesRead, ExportConflict, ExportSwitch, HealthLogKind, OperationRead, OperationState,
   ScopeBundle,
+  HealthConnection,
 } from '@/types/api'
 
 export const V2 = '/api/v2'
@@ -41,12 +42,15 @@ export function createHealthApi(fetcher: Fetcher) {
   }
 
   return {
+    connection: () => call<HealthConnection>('/api/integrations/google-health', undefined,
+      'Không đọc được trạng thái kết nối Google Health.'),
     scopes: () => call<{ granted: string[]; bundles: ScopeBundle[] }>(`${GH}/scopes`, undefined,
       'Không đọc được quyền đã cấp.'),
     capabilities: () => call<{ ingest_mode: string; capabilities: Capability[] }>(`${GH}/capabilities`, undefined,
       'Không đọc được khả năng đồng bộ.'),
     devices: () => call<DevicesRead>(`${GH}/devices`, undefined, 'Không đọc được thiết bị và nguồn dữ liệu.'),
-    startSync: () => call<{ operation_id: string; detail: string }>(`${GH}/sync-jobs`, { method: 'POST' },
+    startSync: (key: string = crypto.randomUUID()) => call<{ operation_id: string; detail: string }>(`${GH}/sync-jobs`,
+      { method: 'POST', headers: { 'Idempotency-Key': key } },
       'Không bắt đầu được đồng bộ.'),
     operation: (id: string) => call<OperationRead>(`${V2}/operations/${id}`, undefined,
       'Không đọc được tiến độ.'),
@@ -57,12 +61,15 @@ export function createHealthApi(fetcher: Fetcher) {
      */
     setExportSwitch: (enabled: boolean) => call<ExportSwitch>(`${GH}/export`, { method: 'PUT', ...json({ enabled }) },
       'Không cập nhật được đồng bộ lên Google.'),
+    setExportGroup: (group: string, enabled: boolean) => call<unknown>(`${GH}/export-settings`,
+      { method: 'PUT', ...json({ group, enabled }) }, 'Không cập nhật được nhóm đồng bộ.'),
     conflicts: () => call<ExportConflict[]>(`${GH}/conflicts`, undefined, 'Không đọc được xung đột.'),
     resolveConflict: (id: string, resolution: 'KEEP_LOCAL' | 'ACCEPT_REMOTE') =>
       call<ExportConflict>(`${GH}/conflicts/${id}:resolve`, { method: 'POST', ...json({ resolution }) },
         'Không xử lý được xung đột.'),
-    createLog: (kind: HealthLogKind, payload: Record<string, unknown>) =>
-      call<Record<string, unknown>>(`${V2}/health/logs/${kind}`, { method: 'POST', ...json(payload) },
+    createLog: (kind: HealthLogKind, payload: Record<string, unknown>, key: string = crypto.randomUUID()) =>
+      call<Record<string, unknown>>(`${V2}/health/logs/${kind}`, { method: 'POST', ...json(payload),
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key } },
         'Không lưu được nhật ký.'),
     logs: (kind: HealthLogKind, limit = 5) =>
       call<{ items: Record<string, unknown>[]; next_cursor: string | null }>(
@@ -75,10 +82,13 @@ export type HealthApi = ReturnType<typeof createHealthApi>
 /** Hỏi định kỳ một operation cho đến khi đạt trạng thái cuối (hoặc hết `attempts`). */
 export async function waitForOperation(api: HealthApi, id: string, onUpdate: (op: OperationRead) => void, {
   attempts = 40, delayMs = 3000, sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
+  signal = undefined as AbortSignal | undefined,
 } = {}): Promise<OperationRead | null> {
   let latest: OperationRead | null = null
   for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (signal?.aborted) return latest
     latest = await api.operation(id)
+    if (signal?.aborted) return latest
     onUpdate(latest)
     if (FINAL_STATES.includes(latest.state)) return latest
     await sleep(delayMs)

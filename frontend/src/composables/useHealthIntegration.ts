@@ -12,7 +12,7 @@ async function detail(response: Response, fallback: string): Promise<string> {
   return fallback
 }
 
-/** Kết nối Google Health: trạng thái, đồng ý OAuth, consent của trợ lý, đồng bộ thủ công và ngắt kết nối. */
+/** Kết nối Google Health: trạng thái, đồng ý OAuth, consent của trợ lý, và ngắt kết nối. */
 export function useHealthIntegration() {
   const { authFetch } = useAuth()
   const connection = shallowRef<HealthConnection | null>(null)
@@ -64,18 +64,13 @@ export function useHealthIntegration() {
     window.location.assign(url)
   }
 
-  async function setConsent(shareWithAssistant: boolean): Promise<void> {
+  async function setConsent(shareWithAssistant: boolean, sensitive?: boolean): Promise<void> {
     const response = await run(() => authFetch(BASE, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ share_with_assistant: shareWithAssistant }),
+      body: JSON.stringify({ share_with_assistant: shareWithAssistant, share_sensitive_with_assistant: sensitive }),
     }), 'Không cập nhật được quyền chia sẻ.')
     if (response) connection.value = await response.json()
-  }
-
-  async function syncNow(): Promise<boolean> {
-    const response = await run(() => authFetch(`${BASE}/sync`, { method: 'POST' }), 'Không bắt đầu được đồng bộ.')
-    return response !== null
   }
 
   async function disconnect(purgeData: boolean): Promise<void> {
@@ -84,7 +79,7 @@ export function useHealthIntegration() {
     if (response) connection.value = await response.json()
   }
 
-  return { connection, loading, busy, error, isConnected, needsReauth, refresh, connect, setConsent, syncNow, disconnect }
+  return { connection, loading, busy, error, isConnected, needsReauth, refresh, connect, setConsent, disconnect }
 }
 
 export const CONNECT_RESULT_TEXT: Record<string, { tone: 'ok' | 'error'; text: string }> = {

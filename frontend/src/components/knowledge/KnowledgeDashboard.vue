@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onUnmounted, shallowRef, useTemplateRef } from 'vue'
-import { HeartPulse, Info, Link2, RefreshCw, RotateCw } from 'lucide-vue-next'
-import { useHealthIntegration } from '@/composables/useHealthIntegration'
+import { computed, shallowRef, useTemplateRef, watch } from 'vue'
+import { HeartPulse, Info, Link2, RefreshCw } from 'lucide-vue-next'
 import { hubColor, type KnowledgeGraph } from '@/types/knowledge'
 import EnergyTargets from './dashboard/EnergyTargets.vue'
 import InsightCard from './dashboard/InsightCard.vue'
@@ -25,15 +24,13 @@ import { useHealthData } from './health/useHealthData'
  * Bản ghi từ knowledge graph (bữa ăn, buổi tập, lần cân) và dữ liệu thiết bị từ Google
  * Health nằm cạnh nhau theo từng mảng, mỗi thẻ ghi rõ nguồn của nó.
  */
-const props = defineProps<{ graph: KnowledgeGraph }>()
+const props = defineProps<{ graph: KnowledgeGraph; revision?: number }>()
 const emit = defineEmits<{ explore: [id: string]; connect: []; 'edit-profile': [] }>()
 
 const RANGES = [7, 14, 28, 90]
 const windowDays = shallowRef(28)
 const { data, loading, failed, refresh } = useHealthData(() => windowDays.value)
-const { syncNow, busy: syncing } = useHealthIntegration()
-const syncNote = shallowRef<string | null>(null)
-const timers: number[] = []
+watch(() => props.revision, () => { void refresh() })
 const root = useTemplateRef<HTMLElement>('root')
 
 const connection = computed(() => data.value?.connection ?? null)
@@ -75,16 +72,6 @@ function jump(id: string) {
   root.value?.querySelector<HTMLElement>(`[data-section="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-async function sync() {
-  syncNote.value = null
-  if (await syncNow()) {
-    syncNote.value = 'Đang đồng bộ, số liệu sẽ cập nhật sau ít giây.'
-    for (const delay of [5000, 15000]) timers.push(window.setTimeout(refresh, delay))
-  } else {
-    syncNote.value = 'Chưa bắt đầu được đồng bộ. Mở Quản lý kết nối để kiểm tra.'
-  }
-}
-onUnmounted(() => timers.forEach(window.clearTimeout))
 </script>
 
 <template>
@@ -96,14 +83,12 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
         </div>
         <span v-if="data" class="window">{{ dayLabel(data.start) }} → {{ dayLabel(data.end) }}</span>
         <button type="button" class="icon" aria-label="Tải lại dữ liệu" :disabled="loading" @click="refresh"><RefreshCw :size="13" :class="{ spinning: loading }" /></button>
-        <button v-if="connection?.status === 'ACTIVE'" type="button" class="action" :disabled="syncing" @click="sync"><RotateCw :size="12" :class="{ spinning: syncing }" />Đồng bộ ngay</button>
       </div>
       <nav class="jump" aria-label="Đi tới mục">
         <button v-for="section in sections" :key="section.id" type="button" @click="jump(section.id)">{{ section.label }}</button>
       </nav>
     </div>
 
-    <p v-if="syncNote" class="hint" role="status">{{ syncNote }}</p>
     <p v-if="connected && connection?.last_sync_at" class="hint">Đồng bộ gần nhất {{ moment(connection.last_sync_at) }} · dữ liệu thiết bị qua Google Health.</p>
     <section v-if="data && (!connected || connection?.status === 'NEEDS_REAUTH')" class="cta">
       <HeartPulse :size="22" :stroke-width="1.4" />

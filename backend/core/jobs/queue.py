@@ -82,6 +82,13 @@ async def enqueue(session, kind: str, *, queue: str = "ingest", dedupe_key: str 
             "progress": json.dumps(progress or {}, default=str), "priority": priority, "run_after": run_after,
             "generation": connection_generation, "parent_id": parent_id, "root_id": root_id,
             "operation_id": operation_id, "max_attempts": max_attempts})).first()
+    if operation_id:
+        target = row[0] if row else (await session.execute(text(
+            "SELECT id FROM jobs WHERE kind = :kind AND dedupe_key = :key "
+            "ORDER BY created_at DESC, id DESC LIMIT 1"), {"kind": kind, "key": dedupe_key})).scalar()
+        if target:
+            await session.execute(text("INSERT INTO operation_jobs (operation_id, job_id) VALUES (:o, :j) "
+                                       "ON CONFLICT DO NOTHING"), {"o": operation_id, "j": target})
     return row[0] if row else None
 
 
@@ -99,6 +106,9 @@ async def claim(session, queues: tuple[str, ...], owner: str, *, lease: timedelt
                       AND NOT EXISTS (SELECT 1 FROM jobs r WHERE r.state = 'RUNNING' AND r.queue = 'ingest'
                                       AND j.queue = 'ingest' AND r.connection_id = j.connection_id
                                       AND r.data_type = j.data_type)
+                      AND NOT EXISTS (SELECT 1 FROM jobs r WHERE r.state = 'RUNNING'
+                                      AND r.kind = 'GH_EXPORT_DISPATCH' AND j.kind = 'GH_EXPORT_DISPATCH'
+                                      AND r.connection_id = j.connection_id)
                     ORDER BY j.priority DESC, j.run_after, j.id
                     LIMIT 1 FOR UPDATE SKIP LOCKED)
                 RETURNING *"""), {"queues": list(queues), "owner": owner[:80], "lease": lease.total_seconds()})).first()

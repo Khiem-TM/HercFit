@@ -325,15 +325,27 @@ async def store(session, user_id: UUID, window: Window, fetched: dict[str, Any])
         return types[data_type].seen if data_type in types else set()
 
     columns = sorted({column for data_type in complete for column in TYPE_COLUMNS.get(data_type, ())})
-    if columns and fetched["days"]:
+    async def daily():
+        clean_columns = sorted({column for data_type in clean for column in TYPE_COLUMNS.get(data_type, ())})
+        for column in clean_columns:
+            # Only clear disappeared values. Clearing present rows first would make
+            # every reconciliation look like a change and unnecessarily bump versions.
+            empty = "'{}'::jsonb" if column == "active_minutes_by_level" else "NULL"
+            present = [day for day, values in fetched["days"].items() if values.get(column) is not None]
+            await session.execute(text(f"UPDATE daily_health_summaries SET {column} = {empty}, "
+                "version_id = version_id + 1, updated_at = now() "
+                "WHERE user_id = :u AND source = :s AND local_date >= :a AND local_date <= :b "
+                f"AND NOT (local_date = ANY(:present)) AND {column} IS DISTINCT FROM {empty}"),
+                {"u": user_id, "s": HEALTH_PROVIDER, "a": window.start, "b": window.end, "present": present})
         fields = (*columns, "timezone", "data_source")
         rows = [{"user_id": user_id, "local_date": day, "source": HEALTH_PROVIDER, "timezone": window.zone,
                  "data_source": {"provider": HEALTH_PROVIDER, "family": "all-sources"},
                  **{column: values.get(column, {} if column == "active_minutes_by_level" else None)
                     for column in columns}}
                 for day, values in sorted(fetched["days"].items())]
-        await guarded("daily_days", lambda: upsert_rows(
-            session, DailyHealthSummary, rows, keys=("user_id", "local_date", "source"), fields=fields))
+        return await upsert_rows(session, DailyHealthSummary, rows, keys=("user_id", "local_date", "source"), fields=fields)
+    if columns:
+        await guarded("daily_days", daily)
 
     async def sessions(name: str, model, rows_key: str, data_type: str, fields: tuple[str, ...]):
         rows = [{"user_id": user_id, "source": HEALTH_PROVIDER, **{k: v for k, v in row.items() if k in fields

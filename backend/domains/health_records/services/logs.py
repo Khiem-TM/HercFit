@@ -207,12 +207,17 @@ async def list_logs(session, user_id: UUID, kind: str, *, start: date | None, en
 
 async def replace(session, user_id: UUID, kind: str, log_id: UUID, payload: dict[str, Any],
                   expected_version_id: int) -> Any:
+    from domains.shared.models.domain import lock_user
+    await lock_user(session, user_id)
     entity = await get(session, user_id, kind, log_id)
     if entity.version_id != expected_version_id:
         raise HTTPException(409, "Version has changed; reload before editing")
     if entity.source == "GOOGLE_HEALTH":
         raise HTTPException(409, "Imported entries are edited in their source app")
-    data = _values(kind, spec(kind)["schema"].model_validate(payload))
+    schema = spec(kind)["schema"]
+    # PATCH preserves omitted values, especially the original measurement time.
+    current = {key: getattr(entity, key) for key in schema.model_fields}
+    data = _values(kind, schema.model_validate({**current, **payload}))
     for key, value in data.items():
         setattr(entity, key, value)
     await session.flush()
@@ -224,6 +229,8 @@ async def replace(session, user_id: UUID, kind: str, log_id: UUID, payload: dict
 async def delete(session, user_id: UUID, kind: str, log_id: UUID, expected_version_id: int, *,
                  remote: bool = False) -> None:
     """Xoá mềm. Bản trên Google chỉ bị xoá khi người dùng yêu cầu tường minh (`remote`)."""
+    from domains.shared.models.domain import lock_user
+    await lock_user(session, user_id)
     entity = await get(session, user_id, kind, log_id)
     if entity.version_id != expected_version_id:
         raise HTTPException(409, "Version has changed; reload before editing")

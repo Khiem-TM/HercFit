@@ -1,5 +1,6 @@
 """GH_HISTORY_EXPORT: người dùng yêu cầu tường minh gửi các bản ghi tạo trước khi bật nhóm."""
 from __future__ import annotations
+from uuid import UUID
 
 from sqlalchemy import select
 
@@ -19,22 +20,38 @@ GROUP_MODELS = {
     "symptoms": [(SymptomLog, "SymptomLog")], "mood": [(MoodLog, "MoodLog")],
     "reproductive": [(MenstrualPeriodLog, "MenstrualPeriodLog"), (OvulationTestLog, "OvulationTestLog")],
 }
-LIMIT = 5000
+LIMIT = 200
 
 
 async def history_export(ctx: Context) -> None:
     job = ctx.job
     group = job.payload["group"]
-    captured = 0
+    captured = int((job.progress or {}).get("captured", 0))
+    index = int((job.progress or {}).get("model", 0))
+    after = (job.progress or {}).get("after")
+    models = GROUP_MODELS.get(group, [])
     async with fenced(job) as session:
-        for model, aggregate in GROUP_MODELS.get(group, []):
+        from domains.shared.models.domain import lock_user
+        await lock_user(session, job.user_id)
+        if index < len(models):
+            model, aggregate = models[index]
             query = select(model).where(model.user_id == job.user_id, model.is_active.is_(True))
             if hasattr(model, "source"):
                 query = query.where(model.source != "GOOGLE_HEALTH")
-            for entity in (await session.execute(query.limit(LIMIT))).scalars():
+            if after:
+                query = query.where(model.id > UUID(after))
+            entities = list((await session.execute(query.order_by(model.id).limit(LIMIT))).scalars())
+            for entity in entities:
                 captured += await capture(session, job.user_id, aggregate, entity, "CREATE", history=True,
                                           operation_id=job.operation_id)
-        await queue.complete(session, job, {"captured": captured})
+            if len(entities) == LIMIT:
+                after = str(entities[-1].id)
+            else:
+                index, after = index + 1, None
+        if index < len(models):
+            await queue.requeue(session, job, {"model": index, "after": after, "captured": captured})
+        else:
+            await queue.complete(session, job, {"captured": captured})
 
 
 HANDLERS = {"GH_HISTORY_EXPORT": history_export}

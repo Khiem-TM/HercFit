@@ -72,7 +72,7 @@ async def callback(
 @router.patch("", response_model=HealthConnectionRead, summary="Bật/tắt cho phép trợ lý dùng dữ liệu sức khoẻ")
 @transaction
 async def update_consent(payload: HealthConsentUpdate, service: HealthConnectionServiceDep):
-    return await service.update_consent(payload.share_with_assistant)
+    return await service.update_consent(payload.share_with_assistant, sensitive=payload.share_sensitive_with_assistant)
 
 
 @router.post("/sync", status_code=status.HTTP_202_ACCEPTED, response_model=HealthSyncAccepted,

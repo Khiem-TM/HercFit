@@ -11,9 +11,11 @@ import { ancestors, collapse, indexTree, visibleIds } from './knowledgeTree'
 import { centreOn, clampDay, dayDiff, rangeLength, recentRange, sameRange } from './timeWindow'
 import { useKnowledgeGraph, type DayRange } from '@/composables/useKnowledgeGraph'
 import { useResizable } from '@/composables/useResizable'
+import { useKnowledgeHealthSync } from '@/features/health-integration/useKnowledgeHealthSync'
 import { hubColor, hubTheme, type KnowledgeHub } from '@/types/knowledge'
 
 const props = defineProps<{ busy: boolean; activity: string; revision: number }>()
+const { message: healthSyncMessage, revision: healthRevision } = useKnowledgeHealthSync(() => schedule(0, 5000))
 const emit = defineEmits<{ close: []; 'open-settings': [tab: 'profile' | 'integrations'] }>()
 type Tab = 'overview' | 'map' | 'timeline'
 const tabs: { id: Tab; label: string; icon: typeof Orbit }[] = [
@@ -334,6 +336,7 @@ onUnmounted(() => {
       </button>
     </div>
 
+    <p v-if="healthSyncMessage" role="status" class="px-5 py-1 text-xs text-outline">{{ healthSyncMessage }}</p>
     <nav class="tabs" role="tablist" aria-label="Chế độ xem" :style="{ '--tabs': tabs.length }">
       <span class="tab-glider" :style="{ transform: `translateX(${activeTab * 100}%)` }" aria-hidden="true" />
       <button v-for="item in tabs" :key="item.id" type="button" role="tab" :aria-selected="tab === item.id"
@@ -344,7 +347,8 @@ onUnmounted(() => {
 
     <div class="content">
       <Transition name="swap" mode="out-in">
-        <KnowledgeDashboard v-if="tab === 'overview'" key="overview" class="scroll" :graph="graph" @explore="reveal"
+        <KnowledgeDashboard v-if="tab === 'overview'" key="overview" class="scroll" :graph="graph"
+                            :revision="healthRevision + revision" @explore="reveal"
                             @connect="emit('open-settings', 'integrations')" @edit-profile="emit('open-settings', 'profile')" />
         <div v-else-if="tab === 'map'" key="map" ref="mapView" class="map-view">
           <div ref="toolbar" class="map-toolbar">

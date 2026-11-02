@@ -41,7 +41,7 @@ def missing_bundles(granted: list[str]) -> list[str]:
     """Mọi thứ công tắc cần mà người dùng chưa cấp: các gói đọc và các
     gói ghi của nhóm khả dụng, xin cùng lúc trên một màn hình đồng ý."""
     owned = set(contract_scopes.granted_bundles(granted))
-    reads = [key for key in contract_scopes.BUNDLES if not key.endswith("_write") and key not in owned]
+    reads = [key for key in contract_scopes.CORE_READ if key not in owned]
     writes = [contract_scopes.EXPORT_GROUP_BUNDLES[group] for group in available_groups() if not _writable(group, granted)]
     return list(dict.fromkeys([*reads, *writes]))
 
@@ -58,6 +58,10 @@ async def state(session, connection) -> dict[str, Any]:
     last = (await session.execute(text(
         "SELECT max(confirmed_at) FROM export_outbox WHERE connection_id = :c AND state = 'CONFIRMED'"),
         {"c": connection.id})).scalar()
+    stranded = (await session.execute(text("SELECT count(*) FROM google_resource_mappings m "
+        "WHERE m.connection_id = :c AND m.state = 'PENDING' AND m.remote_name IS NULL "
+        "AND NOT EXISTS (SELECT 1 FROM export_outbox o WHERE o.mapping_id = m.id)"),
+        {"c": connection.id})).scalar() or 0
     on = bool(groups) and all(group in enabled for group in groups if _writable(group, granted)) \
         and any(group in enabled for group in groups)
     return {
@@ -67,7 +71,7 @@ async def state(session, connection) -> dict[str, Any]:
         "missing_bundles": missing_bundles(granted),
         "sent": counts.get("CONFIRMED", 0), "pending": counts.get("PENDING", 0) + counts.get("DISPATCHING", 0)
         + counts.get("VERIFYING", 0) + counts.get("SUBMITTED", 0),
-        "attention": sum(counts.get(name, 0) for name in ("FAILED", "UNCERTAIN", "BLOCKED_PERMISSION", "CONFLICT")),
+        "attention": stranded + sum(counts.get(name, 0) for name in ("FAILED", "UNCERTAIN", "BLOCKED_PERMISSION", "CONFLICT")),
         "last_sent_at": last,
     }
 
@@ -90,6 +94,8 @@ async def enable_all(session, connection, user_id: UUID) -> UUID | None:
                 enabled_at = CASE WHEN google_export_settings.enabled THEN google_export_settings.enabled_at ELSE now() END,
                 updated_at = now()"""), {"c": connection.id, "g": group})
     operation_id = await operations.create(session, user_id, "health.history_export", {"groups": groups})
+    from integrations.google_health.export import jobs
+    await jobs.enqueue(session, connection, event_id=operation_id, operation_id=operation_id)
     for group in groups:
         await queue.enqueue(session, "GH_HISTORY_EXPORT", queue="export", user_id=user_id, connection_id=connection.id,
                             connection_generation=connection.generation, operation_id=operation_id,
