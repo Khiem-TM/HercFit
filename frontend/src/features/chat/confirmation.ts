@@ -1,7 +1,7 @@
 /** Hàm hỗ trợ trình bày cho thẻ xác nhận. Giá trị lấy từ kết quả chạy thử của server (display). */
 
 /** Khung thẻ: một kết quả chạy thử của server được vẽ bằng thẻ riêng của nó, hoặc các trường có nhãn của payload. */
-export type CardKind = 'meal' | 'training' | 'plan' | 'catalog' | 'fields'
+export type CardKind = 'meal' | 'training' | 'plan' | 'catalog' | 'sport' | 'fields'
 export type MediaKind = 'foods' | 'meals' | 'exercises' | 'trainings'
 type Row = Record<string, any>
 
@@ -9,6 +9,7 @@ const TOOL_KIND: Record<string, CardKind> = {
   create_meals: 'meal',
   create_trainings: 'training',
   create_training_plans: 'plan',
+  log_sport_session: 'sport',
   create_foods: 'catalog',
   finalize_foods: 'catalog',
   create_exercises: 'catalog',
@@ -52,6 +53,11 @@ export const TOOL_TITLES: Record<string, string> = {
   merge_personal_info: 'Cập nhật thông tin cá nhân',
   onboard: 'Lưu hồ sơ ban đầu',
   update_training_profile: 'Cập nhật hồ sơ vận động viên',
+  log_sport_session: 'Ghi buổi thể thao',
+  update_sport_session: 'Sửa buổi thể thao',
+  delete_sport_session: 'Xoá buổi thể thao',
+  log_water: 'Ghi nước uống',
+  delete_water: 'Xoá lần uống nước',
 }
 
 /** Một lệnh ghi không có chạy thử làm gì, được nói trên thẻ của nó. */
@@ -66,6 +72,10 @@ export const ACTION_NOTES: Record<string, string> = {
   complete_goal: 'Mục tiêu sẽ được đánh dấu hoàn thành.',
   cancel_goal: 'Mục tiêu sẽ bị huỷ.',
   end_training_plan: 'Lịch tập sẽ kết thúc; các buổi đã ghi được giữ nguyên.',
+  update_sport_session: 'Buổi thể thao trên Google Health được thay bằng bản mới.',
+  delete_sport_session: 'Buổi thể thao sẽ bị xoá khỏi Google Health.',
+  log_water: 'Ghi thẳng lên Google Health; Google giữ bản gốc.',
+  delete_water: 'Lần uống nước sẽ bị xoá khỏi Google Health.',
 }
 
 /** Tiêu đề thẻ cho lệnh ghi catalog; bản ghi được dùng lại không phải mục catalog mới. */
@@ -117,6 +127,10 @@ export function displayError(kind: CardKind, display?: Row | null): string | nul
       return typeof display.start_date === 'string' && typeof display.end_date === 'string' ? null : 'thiếu ngày của lịch'
     case 'catalog':
       return display.kind === 'catalog_candidate' && typeof display.record?.name_vi === 'string' ? null : 'bản ghi catalog thiếu tên'
+    case 'sport':
+      // POST /api/v2/health/records/exercise:preview: data point sẽ gửi lên Google + giá trị HercFit đã suy ra.
+      if (display.data_type !== 'exercise' || !display.derived || typeof display.derived !== 'object') return 'thiếu bản xem trước buổi tập'
+      return typeof display.data_point?.exercise?.interval?.startTime === 'string' ? null : 'thiếu thời điểm bắt đầu'
     default:
       return null
   }
@@ -140,10 +154,13 @@ const FIELD_NAMES: Record<string, string> = {
   age: 'Tuổi', activity_level: 'Mức vận động', display_name: 'Tên hiển thị', resting_hr: 'Nhịp tim nghỉ',
   max_hr: 'Nhịp tim tối đa', threshold_pace_seconds_per_km: 'Pace ngưỡng', one_rep_maxes: '1RM',
   weight: 'Cân nặng', body_fat: 'Tỉ lệ mỡ', energy_kcal: 'Năng lượng', protein_g: 'Protein',
+  amount_ml: 'Lượng nước', performance: 'Thực hiện', distance_meters: 'Quãng đường', intensity: 'Cường độ',
 }
+// Cùng một trường mang nghĩa khác theo lệnh ghi (nước uống không phải bữa ăn).
+const TOOL_FIELD_NAMES: Record<string, Record<string, string>> = { log_water: { consumed_at: 'Thời điểm uống' } }
 const FIELD_UNITS: Record<string, string> = {
   weight_kg: 'kg', height_cm: 'cm', body_fat_pct: '%', muscle_mass_kg: 'kg', energy_kcal: 'kcal', protein_g: 'g',
-  resting_hr: 'bpm', max_hr: 'bpm',
+  resting_hr: 'bpm', max_hr: 'bpm', amount_ml: 'ml', distance_meters: 'm',
 }
 // Các trường định danh, phiên bản và nguồn gốc dành cho API, không dành cho người đang xác nhận.
 const HIDDEN = new Set(['resource_id', 'expected_version_id', 'source_entry_id', 'data_quality', 'attestation', 'context',
@@ -199,10 +216,11 @@ export function fieldText(key: string, value: unknown): string {
 }
 
 /** Các dòng có nhãn của một lệnh ghi không có thẻ chạy thử; id và phiên bản được ẩn. */
-export function fieldRows(payload?: Row | null): FieldRow[] {
+export function fieldRows(payload?: Row | null, tool = ''): FieldRow[] {
+  const names = { ...FIELD_NAMES, ...TOOL_FIELD_NAMES[tool] }
   return Object.entries(payload || {})
     .filter(([key]) => !HIDDEN.has(key) && !isId(key))
-    .map(([key, value]) => ({ label: FIELD_NAMES[key] || key.replace(/_/g, ' '), value: fieldText(key, value) }))
+    .map(([key, value]) => ({ label: names[key] || key.replace(/_/g, ' '), value: fieldText(key, value) }))
     .filter(row => row.value)
 }
 

@@ -58,7 +58,9 @@ const EXERCISE_LABELS: Record<string, string> = {
   CYCLING: 'Đạp xe', STATIONARY_BIKING: 'Xe đạp tập', SWIMMING: 'Bơi', POOL_SWIMMING: 'Bơi hồ', OPEN_WATER_SWIMMING: 'Bơi ngoài trời',
   WEIGHTLIFTING: 'Tập tạ', STRENGTH_TRAINING: 'Tập sức mạnh', YOGA: 'Yoga', PILATES: 'Pilates', ELLIPTICAL: 'Máy elip',
   ROWING: 'Chèo thuyền', HIIT: 'HIIT', DANCING: 'Nhảy', TENNIS: 'Quần vợt', BADMINTON: 'Cầu lông', FOOTBALL: 'Bóng đá',
-  SOCCER: 'Bóng đá', BASKETBALL: 'Bóng rổ', OTHER: 'Khác',
+  SOCCER: 'Bóng đá', BASKETBALL: 'Bóng rổ', OTHER: 'Khác', SPORT: 'Thể thao', SWIMMING_POOL: 'Bơi hồ',
+  ROWING_MACHINE: 'Máy chèo thuyền', TABLE_TENNIS: 'Bóng bàn', VOLLEYBALL: 'Bóng chuyền', BOXING: 'Quyền anh',
+  PICKELBALL: 'Pickleball',
 }
 export function exerciseLabel(type: string | null | undefined): string {
   if (!type) return 'Vận động'
@@ -70,6 +72,24 @@ export const UNIT_LABELS: Record<string, string> = {
 }
 export const SCOPE_LABELS: Record<string, string> = {
   activity_and_fitness: 'Vận động', health_metrics_and_measurements: 'Chỉ số cơ thể & tim mạch', sleep: 'Giấc ngủ',
-  profile: 'Hồ sơ', settings: 'Cài đặt', nutrition: 'Nước uống',
+  profile: 'Hồ sơ', settings: 'Cài đặt', nutrition: 'Dinh dưỡng & nước uống', ecg: 'ECG', irn: 'Cảnh báo nhịp bất thường',
 }
-export const scopeKey = (scope: string) => scope.split('googlehealth.')[1]?.replace('.readonly', '') ?? scope
+export const scopeKey = (scope: string) => scope.split('googlehealth.')[1]?.replace(/\.(readonly|writeonly)$/, '') ?? scope
+/** "Vận động" cho quyền đọc, "Ghi vận động" cho quyền ghi (HercFit chỉ ghi những gì nó ghi). */
+export function scopeLabel(scope: string): string {
+  const label = SCOPE_LABELS[scopeKey(scope)] ?? scopeKey(scope)
+  return scope.endsWith('.writeonly') ? `Ghi ${label.toLowerCase()}` : label
+}
+/** Số bản ghi đang lưu, gộp theo nhóm người dùng hiểu (khoá là loại dữ liệu Google). */
+const RECORD_GROUPS: [string, string[]][] = [
+  ['Ngày vận động', ['steps']],
+  ['Phiên ngủ', ['sleep']],
+  ['Buổi tập', ['exercise']],
+  ['Số đo cơ thể', ['weight', 'height', 'body-fat']],
+  ['Chỉ số tim mạch', ['daily-resting-heart-rate', 'daily-heart-rate-variability', 'daily-oxygen-saturation',
+    'daily-respiratory-rate', 'heart-rate']],
+  ['Lần uống nước', ['hydration-log']],
+]
+export function recordGroups(records: Record<string, number> | undefined): { label: string; count: number }[] {
+  return RECORD_GROUPS.map(([label, types]) => ({ label, count: types.reduce((sum, type) => sum + (records?.[type] ?? 0), 0) }))
+}

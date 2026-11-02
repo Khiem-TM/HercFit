@@ -24,13 +24,13 @@ const format = (value: number) => `${value > 0 ? '+' : ''}${fmt(value)} kcal`
 <template>
   <section class="card" aria-labelledby="energy-title">
     <header class="card-head">
-      <div><p class="eyeline"><Scale :size="13" /> CÂN BẰNG NĂNG LƯỢNG</p><h3 id="energy-title">Calo nạp so với calo thiết bị ghi nhận</h3></div>
+      <div><p class="eyeline"><Scale :size="13" /> CÂN BẰNG NĂNG LƯỢNG</p><h3 id="energy-title">Calo nạp so với calo tiêu hao</h3></div>
     </header>
     <template v-if="rows.length && energy">
       <div class="kpis">
-        <div class="kpi"><span>Ngày đủ dữ liệu</span><strong>{{ energy.complete_days }}</strong><em>≥ 2 bữa có calo + số liệu thiết bị</em></div>
+        <div class="kpi"><span>Ngày đủ dữ liệu</span><strong>{{ energy.complete_days }}</strong><em>≥ 2 bữa có calo + tổng tiêu hao từ Google</em></div>
         <div class="kpi"><span>Nạp TB</span><strong>{{ fmt(energy.intake_kcal_avg) }}<small>kcal</small></strong></div>
-        <div class="kpi"><span>Tiêu hao TB (thiết bị)</span><strong>{{ fmt(energy.device_expenditure_kcal_avg) }}<small>kcal</small></strong></div>
+        <div class="kpi"><span>Tiêu hao TB</span><strong>{{ fmt(energy.device_expenditure_kcal_avg) }}<small>kcal</small></strong></div>
         <div class="kpi"><span>Chênh lệch TB</span><strong>{{ energy.balance_kcal_avg != null ? format(energy.balance_kcal_avg) : '—' }}</strong>
           <em>{{ (energy.balance_kcal_avg ?? 0) < 0 ? 'thâm hụt mỗi ngày' : 'dư mỗi ngày' }}</em></div>
         <div class="kpi"><span>Cân nặng trong kỳ</span><strong>{{ energy.weight_change_kg != null ? `${energy.weight_change_kg > 0 ? '+' : ''}${fmt(energy.weight_change_kg, 2)}` : '—' }}<small>kg</small></strong></div>
@@ -47,7 +47,7 @@ const format = (value: number) => `${value > 0 ? '+' : ''}${fmt(value)} kcal`
       </div>
       <p class="note">{{ energy.note }}</p>
     </template>
-    <div v-else class="empty">Chưa đủ ngày để so sánh.<small>Cần ngày đã qua có ít nhất 2 bữa ăn ghi đủ calo và calo tiêu hao từ thiết bị.</small></div>
+    <div v-else class="empty">Chưa đủ ngày để so sánh.<small>Cần ngày đã qua có ít nhất 2 bữa ăn ghi đủ calo và tổng calo tiêu hao từ Google Health.</small></div>
   </section>
 </template>
 

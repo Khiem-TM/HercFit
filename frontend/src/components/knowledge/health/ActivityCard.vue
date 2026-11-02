@@ -61,7 +61,7 @@ const workouts = computed(() => props.data.workouts.length)
       <div class="kpi"><span>Tiêu hao TB (ước tính)</span><strong>{{ fmt(activity.total_kcal_avg) }}<small>kcal</small></strong>
         <em v-if="activity.active_kcal_avg != null">vận động {{ fmt(activity.active_kcal_avg) }} kcal</em></div>
       <div class="kpi"><span>Mức vận động thực tế</span><strong class="text">{{ activity.observed_level ? ACTIVITY_LABELS[activity.observed_level] : '—' }}</strong>
-        <em>{{ activity.days_with_data }} ngày có đeo thiết bị · {{ workouts }} buổi ghi bởi thiết bị</em></div>
+        <em>{{ activity.days_with_data }} ngày có đeo thiết bị · {{ workouts }} buổi trên Google Health</em></div>
     </div>
     <template v-if="metric">
       <div class="picker" role="group" aria-label="Chỉ số hiển thị">
@@ -69,7 +69,7 @@ const workouts = computed(() => props.data.workouts.length)
       </div>
       <ColumnChart class="chart" :label="`${metric.label} theo ngày`" :days="data.days" :format="format" :reference="reference"
                    :series="[{ key: metric.key, label: metric.label, color: SERIES, values }]" />
-      <p class="note">Ngày dưới 500 bước thường là chưa đeo thiết bị nên không tính vào trung bình. Calo tiêu hao do thiết bị ước tính.</p>
+      <p class="note">Ngày dưới 500 bước thường là chưa đeo thiết bị nên không tính vào trung bình. Calo tiêu hao là tổng của Google Health cộng các buổi ghi tay.</p>
     </template>
     <div v-else class="empty">Chưa có dữ liệu vận động trong khoảng này.<small>Dữ liệu xuất hiện sau lần đồng bộ Google Health đầu tiên.</small></div>
   </section>

@@ -6,7 +6,7 @@ import { ACTION_NOTES, fieldRows } from '@/features/chat/confirmation'
 /** Thẻ chuẩn cho lệnh ghi không có chạy thử (số đo cơ thể, mục tiêu, hồ sơ, sửa, xoá): các trường có nhãn, không bao giờ là JSON thô. */
 const props = defineProps<{ tool: string; payload: Record<string, unknown> }>()
 
-const rows = computed(() => fieldRows(props.payload))
+const rows = computed(() => fieldRows(props.payload, props.tool))
 const note = computed(() => ACTION_NOTES[props.tool] ?? '')
 // Xoá và đổi trạng thái chỉ mang id của bản ghi: một mã tham chiếu ngắn để phân biệt hai bản ghi.
 const reference = computed(() => {

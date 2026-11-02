@@ -37,18 +37,6 @@ export interface BodyMetricRead {
 
 export type HealthConnectionStatus = 'ACTIVE' | 'NEEDS_REAUTH' | 'REVOKED' | 'ERROR'
 
-export interface HealthSyncRun {
-  id: string
-  trigger: 'INITIAL' | 'SCHEDULED' | 'MANUAL'
-  status: 'RUNNING' | 'SUCCEEDED' | 'PARTIAL' | 'FAILED'
-  created_at: string
-  finished_at: string | null
-  window_start: string | null
-  window_end: string | null
-  counts: Record<string, unknown>
-  error_code: string | null
-}
-
 /** Cột thập phân được tuần tự hoá thành chuỗi JSON để giữ độ chính xác. */
 export type Numeric = number | string | null
 
@@ -130,7 +118,8 @@ export interface SleepSession {
   rem_minutes: number | null
   awake_minutes: number | null
   efficiency_pct: Numeric
-  data_source: Record<string, string>
+  /** Reconcile không trả thiết bị ghi; chỉ biết điểm có phải do HercFit ghi hay không. */
+  data_source: { written_by_hercfit?: boolean }
 }
 
 export interface DeviceWorkout {
@@ -150,7 +139,8 @@ export interface DeviceWorkout {
   elevation_gain_m: Numeric
   avg_speed_mps: Numeric
   run_vo2_max: Numeric
-  data_source: Record<string, string>
+  /** Reconcile không trả thiết bị ghi; chỉ biết điểm có phải do HercFit ghi hay không. */
+  data_source: { written_by_hercfit?: boolean }
 }
 
 export interface HealthSample {
@@ -215,10 +205,17 @@ export interface HealthConnection {
   provider_profile: Record<string, string | number>
   last_sync_at: string | null
   last_success_at: string | null
-  next_sync_at: string | null
   last_error_code: string | null
+  /** Số điểm đang lưu theo loại dữ liệu Google (steps, sleep, exercise...). */
   records: Record<string, number>
-  last_run: HealthSyncRun | null
+  /** Trạng thái đọc từng loại: khoảng ngày đã đọc trọn và lỗi của lần đọc gần nhất. */
+  types: Record<string, HealthTypeStatus>
+}
+
+export interface HealthTypeStatus {
+  from?: string | null
+  through?: string | null
+  error?: string | null
 }
 
 export interface BodyMetricCreatePayload {
@@ -423,91 +420,19 @@ export interface NutritionTargets {
   method: Record<string, string>
 }
 
-// ---- Nền tảng sức khoẻ (/api/v2) ----------------------------------------------------------
-export interface ScopeBundle {
-  key: string
-  label: string
-  sensitive: boolean
-  granted: boolean
-  scopes: string[]
-}
+// ---- Google Health: ghi xuyên qua (/api/v2/health/records) -----------------------------------
+/** Loại Google sở hữu mà HercFit ghi thẳng lên Google (buổi thể thao, số đo cơ thể, nước uống). */
+export type HealthRecordKind = 'exercise' | 'weight' | 'height' | 'body-fat' | 'hydration'
 
-/** GET/PUT /api/v2/integrations/google-health/export: công tắc duy nhất để đồng bộ HercFit lên Google. */
-export interface ExportSwitch {
-  available: boolean
-  enabled: boolean
-  partial: boolean
-  groups: { group: string; label: string; enabled: boolean; write_scope_granted: boolean }[]
-  missing_bundles: string[]
-  sent: number
-  pending: number
-  attention: number
-  last_sent_at: string | null
-  authorization_url?: string | null
-  operation_id?: string | null
-}
-
-export type OperationState = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'PARTIAL' | 'FAILED' | 'UNCERTAIN' | 'CANCELLED'
-
-export interface OperationRead {
-  id: string
-  kind: string
-  state: OperationState
-  created_at: string
-  jobs: { total: number; by_state: Record<string, number> }
-  steps: { kind: string; data_type: string | null; state: string; error: string | null }[]
-  exports: Record<string, number>
-}
-
-export interface Capability {
+/** Một điểm Google do HercFit vừa ghi; `pending` khi Google chưa trả điểm (lần đồng bộ sau mang về). */
+export interface HealthRecordRead {
+  id: string | null
   data_type: string
-  kind: string
-  scope_group: string
-  family: string
-  read: string[]
-  write: string[]
-  webhook: boolean
-  sensitive: boolean
-  verification: string
-  api_version: string | null
-  beta: boolean
-  granted: boolean
-  enabled: boolean
-  cursor: { complete_through: string | null; status: string; error_code: string | null; updated_at: string } | null
+  local_date: string | null
+  start_at: string | null
+  end_at: string | null
+  value: Record<string, unknown>
+  written_by_hercfit: boolean
+  pending: boolean
+  derived: Record<string, unknown>
 }
-
-export interface ExportConflict {
-  id: string
-  data_type: string
-  aggregate_type: string
-  aggregate_id: string
-  local_payload: Record<string, unknown>
-  remote_payload: Record<string, unknown> | null
-  detected_at: string
-}
-
-export interface PairedDevice {
-  device_type: string | null
-  device_version: string | null
-  battery_level: number | null
-  battery_status: string | null
-  last_sync_at: string | null
-}
-
-export interface DataSource {
-  source_key: string
-  platform: string | null
-  recording_method: string | null
-  device: string | null
-  application: string | null
-  data_types: string[]
-  records: number
-  last_measured_at: string | null
-}
-
-export interface DevicesRead {
-  devices: PairedDevice[]
-  sources: DataSource[]
-}
-
-export type HealthLogKind = 'hydration' | 'nutrition' | 'symptoms' | 'mood' | 'menstrual-period' | 'ovulation-test'

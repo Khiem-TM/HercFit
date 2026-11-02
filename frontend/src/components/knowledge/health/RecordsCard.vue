@@ -27,7 +27,7 @@ const details = (record: Record<string, string>) => Object.entries(record).map((
 <template>
   <section class="card" aria-labelledby="records-title">
     <header class="card-head">
-      <div><p class="eyeline"><Activity :size="13" /> BẢN GHI TỪ THIẾT BỊ</p><h3 id="records-title">Buổi vận động, số đo cơ thể và chỉ số sinh tồn</h3></div>
+      <div><p class="eyeline"><Activity :size="13" /> BẢN GHI TỪ GOOGLE HEALTH</p><h3 id="records-title">Buổi vận động, số đo cơ thể và chỉ số sinh tồn</h3></div>
     </header>
 
     <h4><Activity :size="12" /> Buổi vận động <small>{{ workouts.length }}</small></h4>
@@ -35,7 +35,7 @@ const details = (record: Record<string, string>) => Object.entries(record).map((
     <div v-if="workouts.length" class="table-wrap">
       <table>
         <thead><tr><th>Thời điểm</th><th>Hoạt động</th><th class="num">Thời lượng</th><th class="num">Quãng đường</th><th class="num">Năng lượng</th>
-          <th class="num">Nhịp tim TB</th><th class="num">Phút vùng tim</th><th class="num">Pace/tốc độ</th><th class="num">Độ cao</th><th>Vùng tim</th><th>Thiết bị</th></tr></thead>
+          <th class="num">Nhịp tim TB</th><th class="num">Phút vùng tim</th><th class="num">Pace/tốc độ</th><th class="num">Độ cao</th><th>Vùng tim</th><th>Nguồn</th></tr></thead>
         <tbody><tr v-for="workout in workouts" :key="workout.id">
           <td>{{ moment(workout.started_at) }}</td><td>{{ workout.display_name || exerciseLabel(workout.exercise_type) }}</td>
           <td class="num">{{ workout.active_seconds != null ? duration(workout.active_seconds / 60) : '—' }}</td>
@@ -44,11 +44,11 @@ const details = (record: Record<string, string>) => Object.entries(record).map((
           <td class="num">{{ workout.avg_hr_bpm ?? '—' }}</td><td class="num">{{ workout.active_zone_minutes ?? '—' }}</td>
           <td class="num">{{ pace(workout.avg_speed_mps, workout.exercise_type) }}</td>
           <td class="num">{{ num(workout.elevation_gain_m) != null ? `${fmt(workout.elevation_gain_m)} m` : '—' }}</td>
-          <td>{{ zones(workout.hr_zone_seconds) || '—' }}</td><td>{{ workout.data_source?.device ?? '—' }}</td>
+          <td>{{ zones(workout.hr_zone_seconds) || '—' }}</td><td>{{ workout.data_source?.written_by_hercfit ? 'HercFit' : 'Thiết bị / Google' }}</td>
         </tr></tbody>
       </table>
     </div>
-    <p v-else class="none">Chưa có buổi vận động nào được thiết bị ghi lại trong khoảng này.</p>
+    <p v-else class="none">Chưa có buổi vận động nào trên Google Health trong khoảng này.</p>
 
     <h4><Ruler :size="12" /> Số đo cơ thể từ thiết bị <small>{{ measurements.length }}</small></h4>
     <div v-if="measurements.length" class="table-wrap">

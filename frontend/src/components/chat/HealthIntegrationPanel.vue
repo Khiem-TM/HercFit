@@ -3,11 +3,11 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { HeartPulse, Link2, Loader2, Unlink } from 'lucide-vue-next'
 import { CONNECT_RESULT_TEXT, useHealthIntegration } from '@/composables/useHealthIntegration'
 import { useAuth } from '@/composables/useAuth'
+import type { HealthConnection } from '@/types/api'
 import { createHealthApi } from '@/features/health-integration/api'
-import DevicesCard from '@/features/health-integration/DevicesCard.vue'
-import HealthLogsCard from '@/features/health-integration/HealthLogsCard.vue'
-import PermissionsExportCard from '@/features/health-integration/PermissionsExportCard.vue'
+import HydrationCard from '@/features/health-integration/HydrationCard.vue'
 import SyncStatusCard from '@/features/health-integration/SyncStatusCard.vue'
+import { recordGroups, scopeLabel } from '@/components/knowledge/health/healthFormat'
 
 const props = defineProps<{ result?: string | null }>()
 
@@ -22,18 +22,14 @@ const confirmDisconnect = ref(false)
 const timers: number[] = []
 
 const resultNotice = computed(() => (props.result ? CONNECT_RESULT_TEXT[props.result] ?? CONNECT_RESULT_TEXT.error : null))
-const RECORD_LABELS: Record<string, string> = {
-  daily_days: 'Ngày tổng hợp', sleep_sessions: 'Phiên ngủ', device_workouts: 'Buổi vận động',
-  body_metrics: 'Số đo cơ thể', health_samples: 'Chỉ số sinh tồn',
+const NUTRITION_WRITE = 'https://www.googleapis.com/auth/googlehealth.nutrition.writeonly'
+const missing = computed(() => (connection.value?.missing_scopes ?? []).map(scopeLabel))
+const records = computed(() => recordGroups(connection.value?.records).filter(group => group.count))
+const canWriteWater = computed(() => (connection.value?.granted_scopes ?? []).includes(NUTRITION_WRITE))
+
+function onSynced(value: HealthConnection): void {
+  connection.value = value
 }
-const RUN_STATUS: Record<string, string> = { RUNNING: 'Đang chạy', SUCCEEDED: 'Thành công', PARTIAL: 'Một phần', FAILED: 'Lỗi' }
-const SCOPE_LABELS: Record<string, string> = {
-  activity_and_fitness: 'vận động', health_metrics_and_measurements: 'chỉ số cơ thể và tim mạch', sleep: 'giấc ngủ',
-  profile: 'hồ sơ', settings: 'cài đặt', nutrition: 'dinh dưỡng (nước uống)',
-}
-const missing = computed(() => (connection.value?.missing_scopes ?? [])
-  .map(scope => SCOPE_LABELS[scope.split('googlehealth.')[1]?.replace('.readonly', '') ?? ''] ?? scope))
-const records = computed(() => Object.entries(connection.value?.records ?? {}).filter(([key]) => key in RECORD_LABELS))
 
 function when(value: string | null | undefined): string {
   return value ? new Date(value).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : '—'
@@ -89,8 +85,9 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
             </span>
           </div>
           <p class="mt-0.5 text-xs text-outline">
-            Đồng bộ bước chân, vận động, giấc ngủ, nhịp tim nghỉ, HRV và số đo cơ thể từ thiết bị qua chính Gmail bạn dùng
-            để đăng nhập. Google Health API thay thế Google Fit (ngừng hoạt động cuối 2026); cần app Google Health hoặc Fitbit.
+            Google Health là nguồn dữ liệu sức khoẻ của HercFit: giấc ngủ, nhịp tim, HRV, bước chân và calo được đọc từ thiết bị;
+            buổi thể thao, cân nặng và nước uống được ghi thẳng lên Google; buổi gym và bữa ăn được HercFit lưu rồi đẩy lên.
+            Dùng chính Gmail bạn đăng nhập; cần app Google Health hoặc Fitbit.
           </p>
         </div>
       </div>
@@ -107,15 +104,15 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
         <div v-if="isConnected" class="grid gap-1.5 text-xs">
           <div class="flex justify-between gap-3"><span class="text-outline">Tài khoản</span><span class="truncate text-primary">{{ connection.account_email }}</span></div>
           <div class="flex justify-between gap-3"><span class="text-outline">Lần đồng bộ gần nhất</span>
-            <span class="text-primary">{{ when(connection.last_sync_at) }}<template v-if="connection.last_run"> · {{ RUN_STATUS[connection.last_run.status] }}</template></span></div>
-          <div class="flex justify-between gap-3"><span class="text-outline">Lần kế tiếp</span><span class="text-primary">{{ when(connection.next_sync_at) }}</span></div>
+            <span class="text-primary">{{ when(connection.last_sync_at) }}<template v-if="connection.last_error_code"> · chưa trọn</template></span></div>
+          <div class="flex justify-between gap-3"><span class="text-outline">Lần thành công gần nhất</span><span class="text-primary">{{ when(connection.last_success_at) }}</span></div>
           <div v-if="records.length" class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            <div v-for="[key, count] in records" :key="key" class="rounded-xl border border-ink/[0.06] bg-ink/[0.03] px-3 py-2">
-              <div class="font-label-code text-sm text-primary">{{ count }}</div>
-              <div class="text-[11px] text-outline">{{ RECORD_LABELS[key] }}</div>
+            <div v-for="group in records" :key="group.label" class="rounded-xl border border-ink/[0.06] bg-ink/[0.03] px-3 py-2">
+              <div class="font-label-code text-sm text-primary">{{ group.count }}</div>
+              <div class="text-[11px] text-outline">{{ group.label }}</div>
             </div>
           </div>
-          <p v-if="missing.length" class="mt-1 text-[11px] text-amber-300">Chưa cấp quyền: {{ missing.join(', ') }}. Kết nối lại để bổ sung.</p>
+          <p v-if="missing.length" class="mt-1 text-[11px] text-amber-300">Chưa cấp quyền: {{ missing.join(', ') }}. Bấm “Cấp thêm quyền” để bổ sung.</p>
           <p v-if="needsReauth" class="mt-1 text-[11px] text-amber-300">
             Quyền truy cập đã hết hạn (ở chế độ thử nghiệm, Google giới hạn 7 ngày). Hãy kết nối lại để tiếp tục đồng bộ.
           </p>
@@ -136,7 +133,7 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
         <label v-if="isConnected" class="flex items-start gap-2 text-xs text-on-surface-variant">
           <input v-model="shareSensitive" type="checkbox" class="mt-0.5 accent-ink" :disabled="busy"
             @change="saveConsent" />
-          <span>Cho phép trợ lý AI đọc dữ liệu nhạy cảm: đường huyết, ECG, triệu chứng, tâm trạng và sức khoẻ sinh sản.</span>
+          <span>Cho phép trợ lý AI đọc dữ liệu nhạy cảm: đường huyết, ECG và cảnh báo nhịp tim bất thường.</span>
         </label>
 
         <div class="flex flex-wrap gap-2">
@@ -162,7 +159,7 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
             <span>Ngắt kết nối</span>
           </button>
         </div>
-        <p class="text-[11px] text-outline">Dữ liệu tự cập nhật khi bạn mở Tri thức. Những thay đổi ở HercFit được tự gửi khi bật đồng bộ lên Google.</p>
+        <p class="text-[11px] text-outline">Dữ liệu tự cập nhật khi bạn mở Tri thức. Buổi gym và bữa ăn bạn lưu ở HercFit được gửi lên Google ngay sau khi lưu.</p>
 
         <div v-if="confirmDisconnect" class="space-y-2 rounded-xl border border-error/25 bg-error/[0.06] p-3 text-xs">
           <p class="text-on-surface-variant">HercFit sẽ thu hồi quyền tại Google và xoá token đã lưu.</p>
@@ -179,10 +176,8 @@ onUnmounted(() => timers.forEach(window.clearTimeout))
     </div>
 
     <template v-if="connection?.configured && isConnected">
-      <SyncStatusCard :api="api" />
-      <PermissionsExportCard :api="api" />
-      <DevicesCard :api="api" />
+      <SyncStatusCard :api="api" :connection="connection" @synced="onSynced" />
+      <HydrationCard :api="api" :can-write="canWriteWater && !needsReauth" />
     </template>
-    <HealthLogsCard :api="api" />
   </div>
 </template>

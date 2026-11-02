@@ -71,7 +71,6 @@ const format = (hours: number) => duration(hours * 60)
           <template v-if="last.minutes_to_fall_asleep != null"> · chờ ngủ {{ last.minutes_to_fall_asleep }} phút</template>
           <template v-if="last.minutes_awake != null"> · thức {{ last.minutes_awake }} phút</template>
           <template v-if="num(last.efficiency_pct) != null"> · hiệu quả {{ fmt(last.efficiency_pct, 1) }}%</template></p>
-        <p v-if="last.data_source?.device" class="device">Thiết bị: {{ last.data_source.device }}</p>
       </div>
       <p v-if="naps.length" class="note">{{ naps.length }} giấc ngủ ngắn (không tính vào thời lượng ngủ đêm).</p>
     </template>
@@ -85,5 +84,4 @@ const format = (hours: number) => duration(hours * 60)
 .last-night > span { font-size: 10px; color: light-dark(#60676e, #8d949c); }
 .last-night p { margin: 4px 0 0; line-height: 1.6; }
 .last-night strong { color: light-dark(#24231f, #f1f0eb); font-weight: 600; }
-.last-night .device { font-size: 10px; color: light-dark(#60676e, #8d949c); }
 </style>

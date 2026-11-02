@@ -1,12 +1,7 @@
-import type {
-  Capability, DataSource, DevicesRead, ExportConflict, ExportSwitch, HealthLogKind, OperationRead, OperationState,
-  ScopeBundle,
-  HealthConnection,
-} from '@/types/api'
+import type { HealthConnection, HealthRecordKind, HealthRecordRead } from '@/types/api'
 
-export const V2 = '/api/v2'
-const GH = `${V2}/integrations/google-health`
-export const FINAL_STATES: OperationState[] = ['SUCCEEDED', 'PARTIAL', 'FAILED', 'UNCERTAIN', 'CANCELLED']
+const GH = '/api/integrations/google-health'
+const RECORDS = '/api/v2/health/records'
 
 export type Fetcher = (input: string, init?: RequestInit) => Promise<Response>
 
@@ -29,96 +24,83 @@ async function failure(response: Response, fallback: string): Promise<HealthApiE
   return new HealthApiError(fallback, response.status)
 }
 
-function json(body: unknown): RequestInit {
-  return { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-}
-
-/** Client mỏng cho API nền tảng sức khoẻ; mọi lời gọi ném HealthApiError khi lỗi. */
+/**
+ * Client mỏng cho Google Health; mọi lời gọi ném HealthApiError khi lỗi.
+ *
+ * Đồng bộ là một lượt đọc reconcile rồi đẩy gym và bữa ăn; không có job để theo dõi, nên tiến độ
+ * được đọc qua `last_sync_at` của kết nối. Buổi thể thao, số đo và nước uống được ghi thẳng lên Google.
+ */
 export function createHealthApi(fetcher: Fetcher) {
   async function call<T>(url: string, init: RequestInit | undefined, fallback: string): Promise<T> {
     const response = await fetcher(url, init)
     if (!response.ok) throw await failure(response, fallback)
     return (response.status === 204 ? undefined : await response.json()) as T
   }
+  const write = (method: string, body: unknown, key: string): RequestInit => ({
+    method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+  })
 
   return {
-    connection: () => call<HealthConnection>('/api/integrations/google-health', undefined,
-      'Không đọc được trạng thái kết nối Google Health.'),
-    scopes: () => call<{ granted: string[]; bundles: ScopeBundle[] }>(`${GH}/scopes`, undefined,
-      'Không đọc được quyền đã cấp.'),
-    capabilities: () => call<{ ingest_mode: string; capabilities: Capability[] }>(`${GH}/capabilities`, undefined,
-      'Không đọc được khả năng đồng bộ.'),
-    devices: () => call<DevicesRead>(`${GH}/devices`, undefined, 'Không đọc được thiết bị và nguồn dữ liệu.'),
-    startSync: (key: string = crypto.randomUUID()) => call<{ operation_id: string; detail: string }>(`${GH}/sync-jobs`,
-      { method: 'POST', headers: { 'Idempotency-Key': key } },
+    connection: () => call<HealthConnection>(GH, undefined, 'Không đọc được trạng thái kết nối Google Health.'),
+    sync: () => call<{ status: string; detail: string }>(`${GH}/sync`, { method: 'POST' },
       'Không bắt đầu được đồng bộ.'),
-    operation: (id: string) => call<OperationRead>(`${V2}/operations/${id}`, undefined,
-      'Không đọc được tiến độ.'),
-    exportSwitch: () => call<ExportSwitch>(`${GH}/export`, undefined, 'Không đọc được trạng thái đồng bộ lên Google.'),
-    /**
-     * Một công tắc để đồng bộ lên Google. Bật có thể trả về URL đồng ý của Google (một màn hình cho mọi
-     * quyền còn thiếu); sau đó callback bật nốt.
-     */
-    setExportSwitch: (enabled: boolean) => call<ExportSwitch>(`${GH}/export`, { method: 'PUT', ...json({ enabled }) },
-      'Không cập nhật được đồng bộ lên Google.'),
-    setExportGroup: (group: string, enabled: boolean) => call<unknown>(`${GH}/export-settings`,
-      { method: 'PUT', ...json({ group, enabled }) }, 'Không cập nhật được nhóm đồng bộ.'),
-    conflicts: () => call<ExportConflict[]>(`${GH}/conflicts`, undefined, 'Không đọc được xung đột.'),
-    resolveConflict: (id: string, resolution: 'KEEP_LOCAL' | 'ACCEPT_REMOTE') =>
-      call<ExportConflict>(`${GH}/conflicts/${id}:resolve`, { method: 'POST', ...json({ resolution }) },
-        'Không xử lý được xung đột.'),
-    createLog: (kind: HealthLogKind, payload: Record<string, unknown>, key: string = crypto.randomUUID()) =>
-      call<Record<string, unknown>>(`${V2}/health/logs/${kind}`, { method: 'POST', ...json(payload),
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key } },
-        'Không lưu được nhật ký.'),
-    logs: (kind: HealthLogKind, limit = 5) =>
-      call<{ items: Record<string, unknown>[]; next_cursor: string | null }>(
-        `${V2}/health/logs/${kind}?limit=${limit}`, undefined, 'Không đọc được nhật ký.'),
+    createRecord: (kind: HealthRecordKind, payload: Record<string, unknown>, key: string = crypto.randomUUID()) =>
+      call<HealthRecordRead>(`${RECORDS}/${kind}`, write('POST', payload, key), 'Không ghi được lên Google Health.'),
+    updateRecord: (kind: HealthRecordKind, id: string, payload: Record<string, unknown>,
+                   key: string = crypto.randomUUID()) =>
+      call<HealthRecordRead>(`${RECORDS}/${kind}/${id}`, write('PATCH', payload, key), 'Không sửa được bản ghi.'),
+    deleteRecord: (kind: HealthRecordKind, id: string, key: string = crypto.randomUUID()) =>
+      call<void>(`${RECORDS}/${kind}/${id}`, { method: 'DELETE', headers: { 'Idempotency-Key': key } },
+        'Không xoá được bản ghi.'),
   }
 }
 
 export type HealthApi = ReturnType<typeof createHealthApi>
 
-/** Hỏi định kỳ một operation cho đến khi đạt trạng thái cuối (hoặc hết `attempts`). */
-export async function waitForOperation(api: HealthApi, id: string, onUpdate: (op: OperationRead) => void, {
-  attempts = 40, delayMs = 3000, sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
-  signal = undefined as AbortSignal | undefined,
-} = {}): Promise<OperationRead | null> {
-  let latest: OperationRead | null = null
+type Sleep = (ms: number) => Promise<void>
+const wait: Sleep = ms => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+/**
+ * Yêu cầu một lượt đồng bộ rồi chờ `last_sync_at` đổi (lượt đó xong, kể cả khi có loại lỗi) hoặc
+ * kết nối rời trạng thái ACTIVE. Trả về kết nối mới, hoặc null khi chưa kết nối, bị huỷ hay hết lượt chờ.
+ */
+export async function syncAndWait(api: HealthApi, {
+  attempts = 40, delayMs = 3000, sleep = wait, signal = undefined as AbortSignal | undefined,
+} = {}): Promise<HealthConnection | null> {
+  const before = await api.connection()
+  if (signal?.aborted || before.status !== 'ACTIVE') return null
+  await api.sync()
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (signal?.aborted) return latest
-    latest = await api.operation(id)
-    if (signal?.aborted) return latest
-    onUpdate(latest)
-    if (FINAL_STATES.includes(latest.state)) return latest
     await sleep(delayMs)
+    if (signal?.aborted) return null
+    const current = await api.connection()
+    if (signal?.aborted) return null
+    // Token hết hạn: backend chuyển NEEDS_REAUTH mà không ghi last_sync_at.
+    if (current.status !== 'ACTIVE' || (current.last_sync_at && current.last_sync_at !== before.last_sync_at)) {
+      return current
+    }
   }
-  return latest
+  return null
 }
 
-export const OPERATION_TEXT: Record<OperationState, string> = {
-  PENDING: 'Đang xếp hàng', RUNNING: 'Đang chạy', SUCCEEDED: 'Hoàn tất', PARTIAL: 'Hoàn tất một phần',
-  FAILED: 'Thất bại', UNCERTAIN: 'Chưa xác minh được kết quả', CANCELLED: 'Đã huỷ',
+/** Nhãn tiếng Việt của các loại dữ liệu Google Health mà HercFit đọc. */
+export const TYPE_LABELS: Record<string, string> = {
+  steps: 'Bước chân', distance: 'Quãng đường', floors: 'Số tầng', 'active-minutes': 'Phút vận động',
+  'active-zone-minutes': 'Phút vùng tim', 'active-energy-burned': 'Năng lượng vận động',
+  'total-calories': 'Tổng năng lượng tiêu hao', 'heart-rate': 'Nhịp tim', 'sedentary-period': 'Thời gian ít vận động',
+  'daily-resting-heart-rate': 'Nhịp tim nghỉ', 'daily-heart-rate-variability': 'HRV',
+  'daily-oxygen-saturation': 'SpO₂', 'daily-respiratory-rate': 'Nhịp thở',
+  'daily-sleep-temperature-derivations': 'Nhiệt độ da ban đêm', 'daily-vo2-max': 'VO₂ max theo ngày',
+  weight: 'Cân nặng', height: 'Chiều cao', 'body-fat': '% mỡ', 'vo2-max': 'VO₂ max', 'run-vo2-max': 'VO₂ max khi chạy',
+  'respiratory-rate-sleep-summary': 'Nhịp thở khi ngủ', 'blood-glucose': 'Đường huyết',
+  'core-body-temperature': 'Nhiệt độ cơ thể', exercise: 'Buổi tập', sleep: 'Giấc ngủ', 'hydration-log': 'Nước uống',
+  electrocardiogram: 'ECG', 'irregular-rhythm-notification': 'Cảnh báo nhịp bất thường',
 }
+export const typeLabel = (type: string) => TYPE_LABELS[type] ?? type
 
-export const CURSOR_TEXT: Record<string, string> = {
-  COMPLETE: 'Đã đồng bộ', UNCLEAN: 'Có dữ liệu bị loại', INCOMPLETE: 'Chưa đọc hết', NOT_GRANTED: 'Chưa cấp quyền',
-  UNSUPPORTED: 'Chưa hỗ trợ', PENDING: 'Chờ đồng bộ',
-}
-
-const PLATFORM_TEXT: Record<string, string> = {
-  FITBIT: 'Fitbit', HEALTH_CONNECT: 'Health Connect', HEALTH_KIT: 'Apple Health', FIT: 'Google Fit',
-  FITBIT_WEB_API: 'Fitbit (web)', NEST: 'Nest', GOOGLE_WEB_API: 'Google (web)',
-  GOOGLE_PARTNER_INTEGRATION: 'Ứng dụng đối tác',
-}
-const METHOD_TEXT: Record<string, string> = {
-  MANUAL: 'nhập tay', PASSIVELY_MEASURED: 'đo tự động', ACTIVELY_MEASURED: 'đo khi tập', DERIVED: 'tính toán',
-}
-
-/** Nhãn dễ đọc cho một nguồn ghi: thiết bị trước, rồi ứng dụng, rồi nền tảng. */
-export function sourceLabel(source: DataSource): string {
-  const name = source.device || source.application || PLATFORM_TEXT[source.platform ?? ''] || 'Nguồn không rõ'
-  const via = source.device || source.application ? PLATFORM_TEXT[source.platform ?? ''] : undefined
-  const method = METHOD_TEXT[source.recording_method ?? '']
-  return [name, via && via !== name ? `qua ${via}` : null, method].filter(Boolean).join(' · ')
-}
+/** Ai giữ bản gốc của từng nhóm dữ liệu: cách HercFit và Google chia việc. */
+export const OWNERSHIP: { title: string; detail: string }[] = [
+  { title: 'Chỉ đọc từ Google', detail: 'giấc ngủ, nhịp tim, HRV, SpO₂, nhịp thở, nhiệt độ da, bước chân, calo, ECG' },
+  { title: 'Ghi thẳng lên Google', detail: 'buổi thể thao (chạy, bóng đá, cầu lông...), cân nặng, chiều cao, % mỡ, nước uống' },
+  { title: 'HercFit lưu rồi đẩy lên Google', detail: 'buổi gym (một buổi STRENGTH_TRAINING) và bữa ăn (mỗi món một mục dinh dưỡng)' },
+]

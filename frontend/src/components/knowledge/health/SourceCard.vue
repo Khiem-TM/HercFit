@@ -2,15 +2,11 @@
 import { computed } from 'vue'
 import { Link2 } from 'lucide-vue-next'
 import type { HealthConnection } from '@/types/api'
-import { SCOPE_LABELS, UNIT_LABELS, fmt, moment, scopeKey } from './healthFormat'
+import { typeLabel } from '@/features/health-integration/api'
+import { UNIT_LABELS, fmt, moment, recordGroups, scopeLabel } from './healthFormat'
 
 const props = defineProps<{ connection: HealthConnection | null }>()
 const emit = defineEmits<{ manage: [] }>()
-const RECORDS: Record<string, string> = {
-  daily_days: 'Ngày tổng hợp', sleep_sessions: 'Phiên ngủ', device_workouts: 'Buổi vận động',
-  body_metrics: 'Số đo cơ thể', health_samples: 'Chỉ số sinh tồn',
-}
-const RUN: Record<string, string> = { RUNNING: 'đang chạy', SUCCEEDED: 'thành công', PARTIAL: 'một phần', FAILED: 'lỗi' }
 const provider = computed(() => {
   const p = props.connection?.provider_profile ?? {}
   return [
@@ -24,9 +20,11 @@ const provider = computed(() => {
     p.language_locale ? ['Ngôn ngữ', String(p.language_locale)] : null,
   ].filter((row): row is string[] => row !== null)
 })
-const scopes = computed(() => (props.connection?.granted_scopes ?? []).map(scope => SCOPE_LABELS[scopeKey(scope)] ?? scopeKey(scope)))
-const missing = computed(() => (props.connection?.missing_scopes ?? []).map(scope => SCOPE_LABELS[scopeKey(scope)] ?? scopeKey(scope)))
-const errors = computed(() => Object.keys((props.connection?.last_run?.counts?.errors as Record<string, string> | undefined) ?? {}))
+const scopes = computed(() => (props.connection?.granted_scopes ?? []).map(scopeLabel))
+const missing = computed(() => (props.connection?.missing_scopes ?? []).map(scopeLabel))
+const records = computed(() => recordGroups(props.connection?.records))
+const errors = computed(() => Object.entries(props.connection?.types ?? {}).filter(([, entry]) => entry?.error)
+  .map(([type]) => typeLabel(type)))
 </script>
 
 <template>
@@ -37,14 +35,14 @@ const errors = computed(() => Object.keys((props.connection?.last_run?.counts?.e
     </header>
     <dl v-if="connection?.connected">
       <div><dt>Tài khoản</dt><dd>{{ connection.account_email }}</dd></div>
-      <div><dt>Lần đồng bộ gần nhất</dt><dd>{{ moment(connection.last_sync_at) }}<template v-if="connection.last_run"> · {{ RUN[connection.last_run.status] }}</template></dd></div>
-      <div><dt>Lần kế tiếp</dt><dd>{{ moment(connection.next_sync_at) }}</dd></div>
+      <div><dt>Lần đồng bộ gần nhất</dt><dd>{{ moment(connection.last_sync_at) }}<template v-if="connection.last_error_code"> · chưa trọn</template></dd></div>
+      <div><dt>Lần thành công gần nhất</dt><dd>{{ moment(connection.last_success_at) }}</dd></div>
       <div><dt>Múi giờ</dt><dd>{{ connection.timezone ?? 'Asia/Ho_Chi_Minh (mặc định)' }}</dd></div>
       <div><dt>Trợ lý được dùng dữ liệu</dt><dd>{{ connection.share_with_assistant ? 'Có (tổng hợp theo ngày)' : 'Không' }}</dd></div>
       <div v-for="[label, value] in provider" :key="label"><dt>{{ label }}</dt><dd>{{ value }}</dd></div>
     </dl>
     <div v-if="connection?.connected" class="records">
-      <span v-for="(label, key) in RECORDS" :key="key"><strong>{{ connection.records[key] ?? 0 }}</strong>{{ label }}</span>
+      <span v-for="group in records" :key="group.label"><strong>{{ group.count }}</strong>{{ group.label }}</span>
     </div>
     <p v-if="scopes.length" class="note">Quyền đã cấp: {{ scopes.join(', ') }}.<template v-if="missing.length"> Chưa cấp: {{ missing.join(', ') }}.</template></p>
     <p v-if="errors.length" class="note">Lần đồng bộ gần nhất chưa đọc được: {{ errors.join(', ') }}.</p>
