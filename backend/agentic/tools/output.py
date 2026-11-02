@@ -45,6 +45,40 @@ def compact_output(tool: str, data):
     return _project(data, fields) if isinstance(data, dict) and 'name_vi' in data else data
 
 
+# Trường chỉ để hiển thị (thẻ chọn món, ảnh minh hoạ): giữ trong state, không gửi cho model. Một lần tra 17 món
+# "xôi ..." từng tốn ~12,5k ký tự, phần lớn là URL ảnh và mô tả nguồn, đẩy lời gọi tool kế tiếp quá 30 s
+# (lượt chạy f6924adb và b5a60b71 timeout trước khi kịp xem trước bữa ăn).
+MODEL_HIDDEN = frozenset({'image_url', 'category_vi', 'item_type'})
+
+
+def _decimal(value):
+    """"409.000000" -> "409", "11.400000" -> "11.4": cùng giá trị, ít token hơn."""
+    if isinstance(value, str) and '.' in value and value.replace('.', '', 1).lstrip('-').isdigit():
+        return value.rstrip('0').rstrip('.')
+    return value
+
+
+def _lean(record):
+    if not isinstance(record, dict):
+        return record
+    lean = {key: _decimal(value) for key, value in record.items() if key not in MODEL_HIDDEN}
+    if isinstance(lean.get('portions'), list):
+        lean['portions'] = [{key: _decimal(value) for key, value in portion.items() if key != 'source'}
+                            if isinstance(portion, dict) else portion for portion in lean['portions']]
+    return lean
+
+
+def model_view(tool: str, data):
+    """Bản kết quả catalog mà model đọc: như compact_output nhưng bỏ các trường chỉ để hiển thị."""
+    if not tool.endswith(('_foods', '_exercises')):
+        return data
+    if isinstance(data, list):
+        return [_lean(record) for record in data]
+    if isinstance(data, dict) and isinstance(data.get('record'), dict):
+        return {**data, 'record': _lean(data['record'])}
+    return _lean(data) if isinstance(data, dict) and 'name_vi' in data else data
+
+
 def clamp_catalog_query(tool: str, args: dict) -> dict:
     if tool in {'list_foods', 'list_exercises'} and (args.get('limit') or CATALOG_LIMIT) > CATALOG_LIMIT:
         return {**args, 'limit': CATALOG_LIMIT}
@@ -55,7 +89,9 @@ def carry_over(outputs: list[dict]) -> str | None:
     """Bản tóm tắt có giới hạn của kết quả tool lượt trước cho lượt sau."""
     parts, used = [], 0
     for output in reversed(outputs):
-        text = json.dumps({**output, 'output': compact_output(output.get('tool', ''), output.get('output'))}, ensure_ascii=False, default=str)
+        tool = output.get('tool', '')
+        text = json.dumps({**output, 'output': model_view(tool, compact_output(tool, output.get('output')))},
+                          ensure_ascii=False, default=str)
         if len(text) > CARRY_ITEM_CHARS:
             text = text[:CARRY_ITEM_CHARS] + '…(rút gọn)'
         if used + len(text) > CARRY_TOTAL_CHARS:

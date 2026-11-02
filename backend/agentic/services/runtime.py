@@ -9,6 +9,7 @@ from agentic.core.providers.fpt import ToolMarkupFilter, strip_tool_markup
 from agentic.services import catalog_choice
 from agentic.tools.output import carry_over
 from agentic.services.clarification import catalog_groups, fallback_clarification, logs_training
+from agentic.services.failure_reply import NODE_ERROR, failure_reply
 from agentic.services.memory.transcript import visible
 from agentic.core.app.schemas.response import ChatResponse, Clarification
 
@@ -17,6 +18,18 @@ from time import monotonic
 
 logger=logging.getLogger(__name__)
 MEMORY_PURGE_SECONDS=300
+
+
+RECOVER_APPROVED = 'Lượt xử lý chưa hoàn tất. Có thể thử xác nhận lại cùng action_id để khôi phục thao tác đã duyệt.'
+
+
+def interrupted_reply(state, exc) -> str:
+    """Câu trả lời cho lượt bị ngắt (timeout, lỗi model). Chỉ lượt đang thực thi một thao tác đã duyệt mới
+    khôi phục được bằng cách xác nhận lại; lượt khác (chưa có gì để xác nhận) được nói rõ cái gì chưa lưu.
+    Lượt f6924adb (ghi 2 bữa ăn, model quá 30 s) từng nhận câu "xác nhận lại cùng action_id" dù không có action nào."""
+    if state.get('approved'):
+        return RECOVER_APPROVED
+    return failure_reply({**state, 'error': f'{NODE_ERROR}{type(exc).__name__}).'})
 
 class Runtime:
     def __init__(self,graph,store,saver,settings,memory=None):
@@ -129,7 +142,7 @@ class Runtime:
             logger.warning('agent_run_failed',extra={'thread_id':thread_id,'error_type':type(exc).__name__})
             snapshot=await self.state(thread_id)
             state=dict(snapshot.values) if snapshot else {}
-            state.update(status='failed',reply='Lượt xử lý chưa hoàn tất. Thử lại cùng action_id nếu đã xác nhận.')
+            state.update(status='failed',reply=interrupted_reply(state,exc))
             return self.response(state)
 
     async def _run_stream(self,input,thread_id,config,emit):
@@ -178,7 +191,7 @@ class Runtime:
             await self.remember(snapshot)
             await self.record_session(snapshot)
             state=dict(snapshot.values) if snapshot else {}
-            state.update(status='failed',reply='Lượt xử lý chưa hoàn tất. Có thể thử xác nhận lại cùng action_id để khôi phục thao tác đã duyệt.')
+            state.update(status='failed',reply=interrupted_reply(state,exc))
             return self.response(state)
         snapshot=await self.state(thread_id)
         await self.journal_snapshot(snapshot)

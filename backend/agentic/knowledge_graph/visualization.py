@@ -17,7 +17,7 @@ from datetime import datetime, time, timedelta, timezone
 
 from .driver import create_driver, value
 from .intents import hub as intent_hub, label as intent_label
-from .model import DISCIPLINES, FOCUS, LEVELS, LOCAL, SEX, parse_time
+from .model import DISCIPLINES, FOCUS, LEVELS, LOCAL, SEX, number, parse_time
 from domains.health_records.schemas.health import ACTIVITY_LABELS, BMI_LABELS
 
 log = logging.getLogger(__name__)
@@ -219,7 +219,7 @@ def _goal(builder, records, model):
 def _body(builder, records):
     for record in records:
         data = record['data']
-        weight, height = data.get('weight_kg'), data.get('height_cm')
+        weight, height = number(data.get('weight_kg')), number(data.get('height_cm'))
         at = _local(data.get('recorded_at'), '%d/%m/%Y')
         node = builder.node(record['key'], 'BodyMetric', f"{_n(weight, 'kg') or 'Số đo'} · {at}", 'hub:body', 'body',
                             at=data.get('recorded_at'))
@@ -243,14 +243,14 @@ def _device(builder, days, sleeps, workouts):
         day = data.get('local_date')
         node = builder.node(record['key'], 'DailyHealth', f"{_date(day)} · {_n(data.get('steps'), 'bước') or 'Ngày'}",
                             'grp:days', 'body', at=day)
-        node['details'] = _details(('Số bước', _n(data.get('steps'))), ('Quãng đường', _n((data.get('distance_m') or 0) / 1000 or None, 'km')),
+        node['details'] = _details(('Số bước', _n(data.get('steps'))), ('Quãng đường', _n((number(data.get('distance_m')) or 0) / 1000 or None, 'km')),
                                    ('Phút vận động', _n(data.get('active_minutes'))), ('Phút vùng tim', _n(data.get('active_zone_minutes'))),
                                    ('Tiêu hao (ước tính)', _n(data.get('total_kcal'), 'kcal')), ('Nhịp tim nghỉ', _n(data.get('resting_hr_bpm'), 'bpm')),
                                    ('HRV', _n(data.get('hrv_ms'), 'ms')), ('SpO2', _n(data.get('spo2_avg_pct'), '%')),
                                    ('Ngủ', _n(data.get('sleep_minutes'), 'phút')), ('Nước', _n(data.get('hydration_ml'), 'ml')))
     for record in sleeps:
         data = record['data']
-        minutes = data.get('minutes_asleep')
+        minutes = number(data.get('minutes_asleep'))
         node = builder.node(record['key'], 'SleepSession', f"{'Ngủ ngắn' if data.get('is_nap') else 'Ngủ'} · {_date(data.get('local_date'))}",
                             'grp:sleep', 'body', at=data.get('end_at'))
         node['summary'] = f"{int(minutes) // 60}g{int(minutes) % 60:02d}" if minutes else None
@@ -260,12 +260,13 @@ def _device(builder, days, sleeps, workouts):
         builder.event(record['key'], 'body', data.get('end_at'), 'Giấc ngủ', node['summary'], record['key'])
     for record in workouts:
         data = record['data']
-        minutes = round(data['active_seconds'] / 60) if data.get('active_seconds') else None
+        seconds = number(data.get('active_seconds'))
+        minutes = round(seconds / 60) if seconds else None
         node = builder.node(record['key'], 'DeviceWorkout',
                             f"{data.get('display_name') or data.get('exercise_type') or 'Vận động'} · {_local(data.get('started_at'))}",
                             'grp:workouts', 'body', at=data.get('started_at'))
         node['details'] = _details(('Loại', data.get('exercise_type')), ('Thời lượng', f'{minutes} phút' if minutes else None),
-                                   ('Quãng đường', _n((data.get('distance_m') or 0) / 1000 or None, 'km')),
+                                   ('Quãng đường', _n((number(data.get('distance_m')) or 0) / 1000 or None, 'km')),
                                    ('Năng lượng', _n(data.get('energy_kcal'), 'kcal')), ('Nhịp tim TB', _n(data.get('avg_hr_bpm'), 'bpm')),
                                    ('Phút vùng tim', _n(data.get('active_zone_minutes'))))
         builder.event(record['key'], 'body', data.get('started_at'), data.get('display_name') or 'Buổi vận động (thiết bị)',
@@ -330,7 +331,8 @@ def _training(builder, records, model):
     for record in records:
         data = record['data']
         items = data.get('items') or []
-        minutes = round(data['duration_seconds'] / 60) if data.get('duration_seconds') else None
+        seconds = number(data.get('duration_seconds'))
+        minutes = round(seconds / 60) if seconds else None
         node = builder.node(record['key'], 'Training', f"{data.get('name') or 'Buổi tập'} · {_local(data.get('started_at'))}",
                             'grp:sessions', 'training', at=data.get('started_at'), count=len(items))
         node['summary'] = DISCIPLINES.get(data.get('discipline'), data.get('discipline'))
@@ -340,12 +342,13 @@ def _training(builder, records, model):
                                    ('Tải (sRPE)', _n(data.get('training_load'))), ('Năng lượng', _n(data.get('energy_kcal'), 'kcal')))
         for index, item in enumerate(items):
             exercise = item.get('exercise') or {}
+            distance, duration = number(item.get('distance_meters')), number(item.get('duration_seconds'))
             entry = builder.node(f"{record['key']}:item:{index}", 'TrainingItem', exercise.get('name_vi') or 'Bài tập',
                                  record['key'], 'training')
             entry['details'] = _details(('Số hiệp nặng', item.get('hard_sets')), ('Volume', _n(item.get('volume_kg'), 'kg')),
                                         ('e1RM', _n(item.get('best_e1rm_kg'), 'kg')),
-                                        ('Quãng đường', _n(item['distance_meters'] / 1000, 'km') if item.get('distance_meters') else None),
-                                        ('Thời lượng', f"{round(item['duration_seconds'] / 60)} phút" if item.get('duration_seconds') else None))
+                                        ('Quãng đường', _n(distance / 1000, 'km') if distance else None),
+                                        ('Thời lượng', f"{round(duration / 60)} phút" if duration else None))
             if item.get('exercise_id'):
                 builder.link(entry['id'], 'backend:Exercise:' + str(item['exercise_id']), 'bài tập')
         builder.event(record['key'], 'training', data.get('started_at'), data.get('name') or 'Buổi tập',

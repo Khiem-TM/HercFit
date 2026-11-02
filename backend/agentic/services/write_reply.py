@@ -25,7 +25,12 @@ DONE = {
     'complete_goal': 'Đã đánh dấu hoàn thành mục tiêu', 'cancel_goal': 'Đã huỷ mục tiêu',
     'update_profile': 'Đã cập nhật hồ sơ', 'merge_personal_info': 'Đã cập nhật thông tin cá nhân',
     'onboard': 'Đã lưu hồ sơ ban đầu', 'update_training_profile': 'Đã cập nhật hồ sơ vận động viên',
+    'update_sport_session': 'Đã cập nhật buổi thể thao trên Google Health',
+    'delete_sport_session': 'Đã xoá buổi thể thao khỏi Google Health',
+    'delete_water': 'Đã xoá lần uống nước khỏi Google Health',
 }
+# Google chưa trả điểm vừa ghi (Operation chưa xong): lần đồng bộ sau mang nó về.
+ARRIVES_LATER = ' (Google đã nhận; số liệu hiện sau lần đồng bộ tới)'
 # Câu trả lời vẫn gọi lệnh ghi đã lưu là bản xem trước đang chờ xác nhận (đã bỏ dấu).
 PENDING_CLAIM = re.compile(r'cho (?:ban )?xac nhan|xac nhan qua api|api rieng|ban xem truoc|chua (?:duoc )?luu|'
                            r'trang thai cho|chua chinh thuc')
@@ -153,6 +158,25 @@ def metric_lines(record: dict) -> list[str]:
     return ['✅ Đã lưu số đo' + (f' lúc {moment}' if moment else '') + (': ' + ' · '.join(parts) if parts else '')]
 
 
+def sport_lines(record: dict) -> list[str]:
+    derived, value = record.get('derived') or {}, record.get('value') or {}
+    name = value.get('displayName') or 'buổi thể thao'
+    moment = when(record.get('start_at'))
+    facts = [f'{vn(_number(derived.get("duration_seconds")) / 60, 0)} phút' if _number(derived.get('duration_seconds')) else '',
+             f'{vn(_number(derived.get("distance_m")) / 1000, 2)} km' if _number(derived.get('distance_m')) else '',
+             f'~{vn(derived.get("energy_kcal"), 0)} kcal' if _number(derived.get('energy_kcal')) is not None else '']
+    facts = [fact for fact in facts if fact]
+    return [f'✅ Đã ghi buổi **{name}** lên Google Health' + (f' lúc {moment}' if moment else '')
+            + (': ' + ' · '.join(facts) if facts else '') + (ARRIVES_LATER if record.get('pending') else '')]
+
+
+def water_lines(record: dict) -> list[str]:
+    amount = _number((record.get('derived') or {}).get('amount_ml'))
+    moment = when(record.get('start_at'))
+    return ['✅ Đã ghi' + (f' {vn(amount, 0)} ml' if amount is not None else '') + ' nước uống lên Google Health'
+            + (f' lúc {moment}' if moment else '') + (ARRIVES_LATER if record.get('pending') else '')]
+
+
 def goal_lines(record: dict) -> list[str]:
     span = ' → '.join(filter(None, (day(record.get('start_date')) if record.get('start_date') else '',
                                     day(record.get('target_date')) if record.get('target_date') else '')))
@@ -190,6 +214,10 @@ def lines_for(output: dict) -> list[str]:
         return metric_lines(record)
     if tool == 'create_goals':
         return goal_lines(record)
+    if tool == 'log_sport_session':
+        return sport_lines(record)
+    if tool == 'log_water':
+        return water_lines(record)
     if tool in {'create_foods', 'finalize_foods', 'create_exercises', 'finalize_exercises'}:
         return catalog_lines(tool, record)
     if tool in {'create_plan', 'create_training_plans', 'update_training_plans', 'end_training_plan'}:

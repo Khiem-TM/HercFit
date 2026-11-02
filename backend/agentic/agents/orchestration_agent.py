@@ -19,6 +19,7 @@ from agentic.services.routing import latest_request
 from agentic.services.clarification import build_clarification
 from agentic.core.app.schemas.response import Clarification
 from agentic.services.failure_reply import failure_reply
+from agentic.services import meal_logging
 from agentic.services.write_reply import claims_pending, reads_after_writes, write_reply
 from agentic.tools.output import bounded_json
 from agentic.security.content_filter import assess
@@ -120,6 +121,12 @@ class OrchestrationAgent:
             return {'research_handoff':None,'status':'running','decision':{
                 'intent':'catalog_research','action':'research','next_agent':'research','domain':research['domain'],
                 'research_query':research['query'],'instruction':'Catalog chưa có "'+research['query']+'": nghiên cứu nguồn công khai để đề xuất bản ghi CUSTOM, sau đó tiếp tục yêu cầu gốc.'}}
+        if meal_logging.continues(state):
+            # Bữa trước của bản nháp vừa được lưu: dựng bữa kế tiếp bằng code, không gọi lại model định tuyến.
+            decision = {**state['decision'], 'action': 'tool', 'next_agent': 'tool', 'domain': 'meals'}
+            trace = {'stage': 'rule', 'rule': 'meal_log_next', 'action': 'tool', 'domain': 'meals'}
+            return {'decision': decision, 'status': 'running',
+                    'route_trace': [*(state.get('route_trace') or []), trace], **safety_update}
         first = (state.get('turn') or {}).get('run_id') != state.get('run_id')
         # Chỉ là quyết định đầu tiên của lượt: sau bước tool, router tiếp tục với kết quả của nó.
         choice = gym_logging.parse_choice(latest_request(state)) if first and state.get('replying_to_form') else None

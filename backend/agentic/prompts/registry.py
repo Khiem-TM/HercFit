@@ -21,6 +21,8 @@ from agentic.prompts.v2.personal import PERSONAL_ROUTING, PERSONALIZED_ANSWER
 from agentic.prompts.v3.domains import COACH_GUIDANCE as COACH_GUIDANCE_V3
 from agentic.prompts.v3.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V3
 from agentic.prompts.v3.clarification import PROMPT as CLARIFICATION_PROMPT_V3
+from agentic.prompts.v4.domains import COACH_GUIDANCE as COACH_GUIDANCE_V4
+from agentic.prompts.v4.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V4
 
 
 TEMPLATES = MappingProxyType({
@@ -48,6 +50,9 @@ TEMPLATES = MappingProxyType({
     ('health.guidance', 'v3'): HEALTH_GUIDANCE_V3,
     # v3: chỉ dùng khung trên thẻ (lựa chọn, số kèm đơn vị, chọn catalog); không có câu trả lời văn bản tự do.
     ('clarification.form', 'v3'): CLARIFICATION_PROMPT_V3,
+    # v4: Google Health là nguồn sự thật cho thể thao/số đo/nước; nhật ký tập chỉ còn gym.
+    ('training.coach', 'v4'): COACH_GUIDANCE_V4,
+    ('health.guidance', 'v4'): HEALTH_GUIDANCE_V4,
 })
 
 _QUESTIONS = {

@@ -115,7 +115,16 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
                 current.update(update)
         result=await tool.invoke_fast(current)
         if result is None:
-            result=await tool.invoke(current)
+            meal=await tool.invoke_meal(current)
+            if meal is not None and (meal.get('pending_action') or meal.get('prepared_reply')):
+                result=meal
+            elif meal is not None:
+                # Có món chưa khớp chắc chắn: model dựng create_meals từ kết quả tra cứu vừa có (không tra lại).
+                looked={**current,**meal,'messages':[*current.get('messages',[]),*meal['messages']]}
+                result=await tool.invoke(looked)
+                result={**meal,**result,'messages':[*meal['messages'],*result.get('messages',[])]}
+            else:
+                result=await tool.invoke(current)
         if result.get('fast_read_complete') and not result.get('pending_action') and result.get('status')=='running':
             plan=FastReadPlan.model_validate(current['fast_read_plan'])
             result['decision']={**state['decision'],'action':'answer','next_agent':'orchestrator',

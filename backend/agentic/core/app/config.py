@@ -30,7 +30,9 @@ class AgentSettings(BaseSettings):
     ROUTING_TIMEOUT_SECONDS: float = Field(default=12, gt=0)
     # Lần gọi tool ghi cả payload (các món của bữa ăn, dinh dưỡng của thực phẩm): p95 là 13,6 s trên 500 bước tool đã lưu,
     # nên 12 s làm hỏng ~5% số đó, mỗi lần ba lượt thử (lượt chạy 195ff084 bị timeout sau một lệnh ghi đã xác nhận).
-    TOOL_TIMEOUT_SECONDS: float = Field(default=30, gt=0)
+    # Ngày 02/11, lượt f6924adb và b5a60b71 (ghi 2 bữa ăn sau khi tra 17 món "xôi ...") có lời gọi tool mất 29–45 s:
+    # 30 s cắt một lời gọi vẫn đúng rồi thử lại từ đầu, hai lần thử lại đốt hết ngân sách 120 s của lượt.
+    TOOL_TIMEOUT_SECONDS: float = Field(default=60, gt=0)
     RESPONSE_TIMEOUT_SECONDS: float = Field(default=30, gt=0)
     RESEARCH_TIMEOUT_SECONDS: float = Field(default=45, gt=0)
     MODEL_MAX_RETRIES: int = Field(default=1, ge=0, le=3)
@@ -50,12 +52,18 @@ class AgentSettings(BaseSettings):
     AGENT_DATABASE_URL: SecretStr = SecretStr('postgresql://hercfit:hercfit_secret@localhost:5432/hercfit_db')
     MAX_TOOL_CALLS: int = Field(default=12, ge=1, le=50)
     MAX_GRAPH_STEPS: int = Field(default=60, ge=10)
-    RUN_TIMEOUT_SECONDS: float = Field(default=120, gt=0)
+    # Một lượt ghi bữa ăn = định tuyến + 2–3 vòng tool + trả lời. Tốc độ sinh của FPT dao động 12–40 token/s
+    # (cùng ~700 token: 17–60 s, đo ngày 02/11), nên 120 s từng hết hạn giữa chừng khi provider chậm.
+    RUN_TIMEOUT_SECONDS: float = Field(default=180, gt=0)
     CONFIRMATION_TTL_SECONDS: int = Field(default=1800, gt=0)
     RESEARCH_SOURCE_DOMAINS: list[str] = []
     # DeepSeek trên FPT suy nghĩ ~9k token cho mỗi lần trích xuất ở mức mặc định (25-70 s); "low" giữ
     # nguyên các khẳng định trong 5-12 s. Chỉ áp dụng cho client tra cứu FPT (None để tắt).
     RESEARCH_REASONING_EFFORT: Literal['low', 'medium', 'high'] | None = 'low'
+    # Mức suy luận của lời gọi tool. 'low' nhanh (3–17 s) nhưng 2/3 lần viết "Xem trước bữa ăn… bạn xác nhận nhé"
+    # bằng văn bản thay vì gọi create_meals, nên frontend không có thẻ xác nhận (lượt 955777c0, 02/11). 'medium' gọi
+    # đúng tool 4/4 lần trong 10–24 s; mức mặc định của model 3/3 lần nhưng 14–45 s. None để dùng mặc định.
+    TOOL_REASONING_EFFORT: Literal['low', 'medium', 'high'] | None = 'medium'
     # Dùng chung với backend (backend/.env): ký các lệnh finalize tra cứu đã kiểm chứng.
     RESEARCH_ATTESTATION_SECRET: SecretStr | None = None
     # Dùng chung với backend (backend/.env): chứng minh service này khi đổi token người dùng
@@ -63,9 +71,6 @@ class AgentSettings(BaseSettings):
     AGENT_SERVICE_SECRET: SecretStr | None = None
     # Quên output của tool sức khoẻ, thẻ ngữ cảnh và bộ nhớ phiên khi người dùng thu hồi consent.
     CONSENT_PURGE_ENABLED: bool = True
-    # Cùng công tắc với backend (backend/.env, core/flags.py). "agent": dữ liệu sức khoẻ được đọc qua
-    # context API; các tool thô có route v1 đã được thay thế thì không được cung cấp.
-    READER_V2_DOMAINS: list[str] = []
     JEV_MODE: Literal['off', 'shadow', 'enforce'] = 'off'
     JEV_BASE_URL: str = Field(default='https://litellm.otanicloud.link/v1',
                               validation_alias=AliasChoices('JEV_BASE_URL', 'JEV_GATEWAY_URL'))

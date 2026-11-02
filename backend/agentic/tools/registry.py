@@ -151,7 +151,7 @@ from typing import Any as _Any, Literal as _Literal
 from pydantic import Field as _Field
 from agentic.tools.schemas.common import InputSchema as _InputSchema
 
-_Topic = _Literal['overview', 'activity', 'sleep', 'recovery', 'body', 'nutrition', 'vitals', 'wellbeing']
+_Topic = _Literal['overview', 'activity', 'sleep', 'recovery', 'body', 'nutrition', 'vitals']
 _Period = _Literal['7d', '28d', '90d']
 
 
@@ -171,7 +171,26 @@ add('get_health_context','health','GET','/v2/assistant/context',HealthContextQue
     'Precomputed health context with provenance (value, unit, source, measured_at, freshness, coverage, method). '
     'Prefer this over raw lists; use the numbers as given, never recompute them, and treat missing coverage as unknown.')
 add('query_health_context','health','GET','/v2/assistant/context:query',HealthContextDeepQuery,dict[str,_Any],
-    'Deeper context for several topics within a token budget (default 4000). vitals/wellbeing need separate consent; '
+    'Deeper context for several topics within a token budget (default 4000). vitals needs separate consent; '
     'ECG is the device classification only: report it, never diagnose.')
 HEALTH_TOOL_KINDS = {'list_daily_health': 'DailyHealth', 'list_sleep_sessions': 'SleepSession',
                      'list_device_workouts': 'DeviceWorkout'}
+
+# Ghi xuyên qua lên Google Health (Google là nguồn sự thật, HercFit không giữ bản riêng):
+# buổi thể thao (mọi môn không phải gym) và nước uống. Gym vẫn là create_trainings.
+from integrations.google_health.records import HydrationInput, SportInput
+from integrations.google_health.schemas import HealthRecordRead
+
+add('log_sport_session','trainings','POST','/v2/health/records/exercise',SportInput,HealthRecordRead,
+    'Propose logging a NON-gym sport or cardio session (running, football, badminton, swimming...) to Google Health. '
+    'exercise_id is a SPORT/ENDURANCE catalog exercise and performance has the same shape as a training item; '
+    'kcal is estimated by the backend. Gym sessions use create_trainings. Must await human confirmation.',True)
+add('update_sport_session','trainings','PATCH','/v2/health/records/exercise/{resource_id}',with_id(SportInput),
+    HealthRecordRead,'Replace a sport session HercFit wrote to Google (ids from list_device_workouts). '
+    'Sessions recorded by a device cannot be edited.',True)
+add('delete_sport_session','trainings','DELETE','/v2/health/records/exercise/{resource_id}',Resource,None,
+    'Delete a sport session HercFit wrote to Google after confirmation.')
+add('log_water','meals','POST','/v2/health/records/hydration',HydrationInput,HealthRecordRead,
+    'Propose logging water intake in ml to Google Health. Must await human confirmation.',True)
+add('delete_water','meals','DELETE','/v2/health/records/hydration/{resource_id}',Resource,None,
+    'Delete a water log HercFit wrote to Google after confirmation.')

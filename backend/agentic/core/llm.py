@@ -42,7 +42,8 @@ class Models:
         streaming_role = role == 'response' and getattr(settings, 'STREAM_RESPONSE_TOKENS', True)
         timeout = getattr(settings, ROLE_TIMEOUTS.get(role, ''), None) or settings.MODEL_TIMEOUT_SECONDS
         model_class = FPTChatOpenAI if provider == 'fpt' else ChatOpenAI
-        effort = getattr(settings, 'RESEARCH_REASONING_EFFORT', None) if role == 'research' and provider == 'fpt' else None
+        effort = getattr(settings, {'research': 'RESEARCH_REASONING_EFFORT', 'tool': 'TOOL_REASONING_EFFORT'}.get(role, ''), None) \
+            if provider == 'fpt' else None
         return model_class(
             model=name, api_key=api_key, base_url=base_url, timeout=timeout,
             temperature=0.0, max_retries=getattr(settings, 'MODEL_MAX_RETRIES', 1),

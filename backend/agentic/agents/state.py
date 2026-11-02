@@ -7,6 +7,24 @@ from langgraph.graph.message import add_messages
 
 Domain = Literal['profile', 'metrics', 'goals', 'meals', 'trainings', 'foods', 'exercises', 'progress', 'training_plans', 'coaching', 'health']
 
+class MealLogItem(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    food: str = Field(max_length=80, description='Food name exactly as the user said it, without quantity words')
+    quantity: float | None = Field(default=None, gt=0, le=5000,
+                                   description='Amount the user stated; null when they did not say how much')
+    unit: Literal['SERVING', 'G', 'ML'] | None = Field(
+        default=None, description='SERVING for counted portions (cái, bát, tô, đĩa, suất, ly, cốc, phần, quả); '
+                                  'G or ML only when the user gave grams/millilitres; null when unknown')
+
+
+class MealLog(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str | None = Field(default=None, max_length=120, description='Short meal name, e.g. Bữa sáng, Bữa trưa')
+    consumed_at: str | None = Field(default=None, description='ISO 8601 time with offset, resolved from the current time '
+                                                              '(sáng nay, trưa nay, vừa xong); null when unknown')
+    items: list[MealLogItem] = Field(default_factory=list, max_length=5)
+
+
 # Điều phối response model trả về --> Hỗ trợ orschestration
 class RouteDecision(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -23,6 +41,9 @@ class RouteDecision(BaseModel):
     personalize: bool = Field(default=False, description="Advice or analysis about this user's own body/training/nutrition: read their stored data first")
     topic: Literal['running', 'strength', 'training', 'nutrition', 'body', 'recovery', 'general'] | None = Field(
         default=None, description='Subject of a personalized request; selects which stored analytics are read')
+    meal_log: list[MealLog] = Field(default_factory=list, max_length=4, description=(
+        'Only for LOG_FOOD: one entry per meal the user reports (separate meals for different times), each with '
+        'its foods. Leave empty for any other intent.'))
     create_distinct: SkipJsonSchema[bool] = False
     read_only: SkipJsonSchema[bool] = False
 

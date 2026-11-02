@@ -80,7 +80,8 @@ def parse_choice(request: str) -> dict | None:
 
 
 def instruction(choice: dict) -> str:
-    rest = ' Các hoạt động khác trong yêu cầu gốc (môn thể thao, chạy...) ghi như bình thường, hỏi thêm nếu thiếu.'
+    rest = (' Các hoạt động khác trong yêu cầu gốc (môn thể thao, chạy...) ghi bằng log_sport_session (lưu trên '
+            'Google Health), hỏi thêm nếu thiếu.')
     if choice['mode'] == 'detailed':
         return ('Người dùng chọn nhập chi tiết buổi gym trong yêu cầu gốc. Tra catalog (list_exercises) các bài theo nhóm cơ '
                 'hoặc tên bài đã nêu, liệt kê các bài khớp rồi hỏi: bài nào đã tập (chọn trong danh sách) và số hiệp × reps × '
