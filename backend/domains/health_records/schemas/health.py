@@ -17,10 +17,6 @@ MeasurementSource = Literal["MANUAL", "GOOGLE_HEALTH"]
 
 ConnectionStatus = Literal["ACTIVE", "NEEDS_REAUTH", "REVOKED", "ERROR"]
 
-SyncTrigger = Literal["INITIAL", "SCHEDULED", "MANUAL"]
-
-SyncStatus = Literal["RUNNING", "SUCCEEDED", "PARTIAL", "FAILED"]
-
 SampleType = Literal["BLOOD_GLUCOSE", "CORE_BODY_TEMPERATURE"]
 
 ValueSource = Literal["DECLARED", "MEASURED", "PROVIDER", "DERIVED"]
@@ -108,6 +104,7 @@ class DailyHealthRead(EntityRead):
     hydration_ml: Decimal | None
     sleep_minutes: int | None
     skin_temp_delta_c: Decimal | None
+    sedentary_minutes: int | None = None
 
 class SleepSessionRead(EntityRead):
     source: str

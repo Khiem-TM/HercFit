@@ -28,16 +28,24 @@ class ProviderStatus:
 
 @dataclass(frozen=True)
 class TypeAvailability:
-    """Theo từng loại dữ liệu: người dùng đã cấp, HercFit đã bật, và đã đồng bộ đến ngày nào."""
+    """Theo từng loại dữ liệu: người dùng đã cấp, HercFit đọc loại này, và đã đồng bộ khoảng ngày nào."""
     granted: bool
     enabled: bool
     complete_through: Any = None
+    complete_from: Any = None
 
 
 class ProviderDirectory(Protocol):
     async def status(self, session: AsyncSession, user_id: UUID) -> ProviderStatus | None: ...
 
     async def availability(self, session: AsyncSession, user_id: UUID) -> dict[str, TypeAvailability]: ...
+
+    async def linked_trainings(self, session: AsyncSession, user_id: UUID) -> set[UUID]:
+        """Buổi gym đã gắn vào một phiên mà đồng hồ ghi (kcal của nó tính theo phiên đó)."""
+
+    async def write(self, session: AsyncSession, user_id: UUID, kind: str, payload: dict[str, Any] | None = None,
+                    point_id: UUID | None = None, delete: bool = False) -> dict[str, Any] | None:
+        """Ghi xuyên qua lên nhà cung cấp (cân nặng, chiều cao, mỡ...); None khi chưa kết nối."""
 
     async def before_account_erasure(self, session: AsyncSession, user_id: UUID) -> None:
         """Thu hồi quyền tại nhà cung cấp (cố gắng hết mức) trước khi xoá dòng tài khoản."""
@@ -69,3 +77,19 @@ async def availability(session: AsyncSession, user_id: UUID) -> dict[str, TypeAv
     for directory in _directories:
         merged.update(await directory.availability(session, user_id))
     return merged
+
+
+async def linked_trainings(session: AsyncSession, user_id: UUID) -> set[UUID]:
+    linked: set[UUID] = set()
+    for directory in _directories:
+        linked |= await directory.linked_trainings(session, user_id)
+    return linked
+
+
+async def write(session: AsyncSession, user_id: UUID, kind: str, payload: dict[str, Any] | None = None,
+                point_id: UUID | None = None, delete: bool = False) -> dict[str, Any] | None:
+    for directory in _directories:
+        result = await directory.write(session, user_id, kind, payload, point_id, delete)
+        if result is not None:
+            return result
+    return None

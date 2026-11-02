@@ -9,7 +9,7 @@ from domains.analytics.services import context_api
 from domains.shared.schemas.tracking import TimeZoneName
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
-Topic = Literal["overview", "activity", "sleep", "recovery", "body", "nutrition", "vitals", "wellbeing"]
+Topic = Literal["overview", "activity", "sleep", "recovery", "body", "nutrition", "vitals"]
 Period = Literal["7d", "28d", "90d"]
 
 

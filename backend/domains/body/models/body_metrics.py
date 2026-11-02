@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID as PyUUID
 
 from sqlalchemy import (
-    CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, func, text,
+    CheckConstraint, DateTime, ForeignKey, Index, Numeric, String, func, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,10 +35,7 @@ class BodyMetric(BaseModel):
         CheckConstraint("weight_kg IS NOT NULL OR height_cm IS NOT NULL OR body_fat_pct IS NOT NULL "
                         "OR muscle_mass_kg IS NOT NULL", name="ck_body_metrics_any_measurement"),
         CheckConstraint("source IN ('MANUAL', 'GOOGLE_HEALTH')", name="ck_body_metrics_source"),
-        CheckConstraint("jsonb_typeof(data_source) = 'object'", name="ck_body_metrics_data_source"),
         Index("ix_body_metrics_user_recorded", "user_id", "recorded_at", "id"),
-        Index("uq_body_metrics_external", "user_id", "source", "external_id", unique=True,
-              postgresql_where=text("external_id IS NOT NULL AND is_active")),
     )
 
     user_id: Mapped[PyUUID] = mapped_column(
@@ -54,16 +51,9 @@ class BodyMetric(BaseModel):
     additional_metrics: Mapped[dict[str, Any]] = mapped_column(
         JSONB(none_as_null=True), default=dict, server_default=text("'{}'::jsonb"), nullable=False,
     )
-    # Mục MANUAL đến từ người dùng hoặc trợ lý; dòng GOOGLE_HEALTH được
-    # khoá theo tên data point của nhà cung cấp để đồng bộ lặp lại không bao giờ nhân đôi.
+    # Dòng ở đây do người dùng hoặc trợ lý nhập (MANUAL). Cân nặng, chiều cao, mỡ cơ thể trên Google
+    # nằm ở health_points và được gộp vào lúc đọc (domains/body/services/readings.py).
     source: Mapped[str] = mapped_column(String(20), default="MANUAL", server_default="MANUAL", nullable=False)
-    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    data_source: Mapped[dict[str, Any]] = mapped_column(
-        JSONB(none_as_null=True), default=dict, server_default=text("'{}'::jsonb"), nullable=False,
-    )
-    utc_offset_s: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    source_record_id: Mapped[PyUUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("health_source_records.id", ondelete="SET NULL"), nullable=True)
     user: Mapped[User] = relationship("User", back_populates="body_metrics")
 
     @classmethod
@@ -75,95 +65,55 @@ class BodyMetric(BaseModel):
         return await cls.create(session, {**values, "user_id": user_id})
 
     @classmethod
-    async def _visible(cls, session: AsyncSession, user_id: PyUUID, respect_consent: bool):
-        """Dòng đo bởi thiết bị bị ẩn với trợ lý khi người dùng chưa đồng ý."""
-        query = cls._user_query(user_id)
-        if respect_consent:
-            from domains.identity.consent import device_access
-
-            if not await device_access(session, user_id):
-                query = query.where(cls.source == "MANUAL")
-        return query
-
-    @classmethod
     async def list_for_user(
         cls, session: AsyncSession, *, user_id: PyUUID,
         recorded_from: datetime | None = None, recorded_to: datetime | None = None,
         offset: int = 0, limit: int = 50, include_inactive: bool = False, respect_consent: bool = True,
-    ) -> list[BodyMetric]:
+    ) -> list[Any]:
+        """Số đo nhập tay cùng mẫu cân nặng / chiều cao / mỡ từ Google, mới nhất trước.
+
+        Mẫu Google chỉ hiện với trợ lý khi người dùng cho phép dùng dữ liệu thiết bị.
+        """
+        from domains.body.services import readings
+
         options = BodyMetricQuery(
             recorded_from=recorded_from, recorded_to=recorded_to,
             offset=offset, limit=limit, include_inactive=include_inactive,
         )
         query = cls._user_query(user_id, include_inactive=options.include_inactive)
-        if respect_consent:
-            from domains.identity.consent import device_access
-
-            if not await device_access(session, user_id):
-                query = query.where(cls.source == "MANUAL")
         if options.recorded_from is not None:
             query = query.where(cls.recorded_at >= options.recorded_from)
         if options.recorded_to is not None:
             query = query.where(cls.recorded_at <= options.recorded_to)
-        result = await session.execute(
-            query.order_by(cls.recorded_at.desc(), cls.id.desc()).offset(options.offset).limit(options.limit)
-        )
-        return list(result.scalars().all())
+        wanted = options.offset + options.limit
+        local = list((await session.execute(
+            query.order_by(cls.recorded_at.desc(), cls.id.desc()).limit(wanted))).scalars())
+        google = await readings.google(session, user_id, options.recorded_from, options.recorded_to,
+                                       limit=wanted, respect_consent=respect_consent)
+        merged = sorted([*local, *google], key=lambda item: (item.recorded_at, str(item.id)), reverse=True)
+        return merged[options.offset:wanted]
 
     @classmethod
     async def get_latest_for_user(cls, session: AsyncSession, *, user_id: PyUUID,
-                                  respect_consent: bool = True) -> BodyMetric | None:
-        """Lần cân gần nhất: dòng thiết bị chỉ có chiều cao hoặc mỡ cơ thể không phải là cân nặng.
+                                  respect_consent: bool = True) -> Any | None:
+        """Lần cân gần nhất (nhập tay hoặc Google); mẫu chỉ có chiều cao hay mỡ không phải lần cân.
 
         `respect_consent=False` dành cho tính toán bên trong một lệnh ghi đã xác nhận (ví dụ
         cân nặng dùng cho ước tính calo của buổi tập), không bao giờ cho lần đọc hiển thị với ai.
         """
-        result = await session.execute(
-            (await cls._visible(session, user_id, respect_consent)).where(cls.weight_kg.is_not(None))
-            .order_by(cls.recorded_at.desc(), cls.id.desc()).limit(1)
-        )
-        return result.scalar_one_or_none()
+        return await cls.latest(session, user_id, "weight_kg", respect_consent=respect_consent)
 
     @classmethod
-    async def sync_device_samples(
-        cls, session: AsyncSession, *, user_id: PyUUID, source: str, rows: list[dict[str, Any]],
-        window: tuple[datetime, datetime] | None = None,
-    ) -> dict[str, int]:
-        """Phản chiếu mẫu của nhà cung cấp. Ảnh chụp vẫn bất biến: mẫu thay đổi thì thay
-        dòng cũ, và các mẫu nhà cung cấp không còn trả về trong cửa sổ đã đồng bộ
-        bị vô hiệu hoá. Trả về số dòng thêm/thay/xoá."""
-        fields = ("recorded_at", "weight_kg", "height_cm", "body_fat_pct", "muscle_mass_kg")
-        incoming = {row["external_id"]: row for row in rows}
-        query = cls._user_query(user_id).where(cls.source == source, cls.external_id.is_not(None))
-        if window is not None:
-            query = query.where(cls.recorded_at >= window[0], cls.recorded_at < window[1])
-        if incoming and window is None:
-            query = query.where(cls.external_id.in_(incoming))
-        existing = {row.external_id: row for row in (await session.execute(query)).scalars()}
-        if window is not None and incoming:
-            outside = set(incoming) - set(existing)
-            if outside:
-                existing.update({row.external_id: row for row in (await session.execute(
-                    cls._user_query(user_id).where(cls.source == source, cls.external_id.in_(outside))
-                )).scalars()})
-        counts = {"inserted": 0, "replaced": 0, "removed": 0}
-        for external_id, row in incoming.items():
-            current = existing.get(external_id)
-            if current is not None and all(_same(getattr(current, f), row.get(f)) for f in fields):
-                continue
-            if current is not None:
-                current.is_active = False
-                await session.flush()
-                counts["replaced"] += 1
-            else:
-                counts["inserted"] += 1
-            session.add(cls(user_id=user_id, source=source, **row))
-        for external_id, current in existing.items():
-            if external_id not in incoming and window is not None and window[0] <= current.recorded_at < window[1]:
-                current.is_active = False
-                counts["removed"] += 1
-        await session.flush()
-        return counts
+    async def latest(cls, session: AsyncSession, user_id: PyUUID, field: str, *,
+                     respect_consent: bool = True) -> Any | None:
+        """Số đo mới nhất có `field` (weight_kg, height_cm, body_fat_pct) từ cả hai nguồn."""
+        from domains.body.services import readings
+
+        local = (await session.execute(cls._user_query(user_id).where(getattr(cls, field).is_not(None))
+                                       .order_by(cls.recorded_at.desc(), cls.id.desc()).limit(1))).scalar_one_or_none()
+        google = await readings.google(session, user_id, limit=1, field=field, respect_consent=respect_consent)
+        found = [item for item in (local, *google) if item is not None]
+        return max(found, key=lambda item: item.recorded_at) if found else None
 
     @classmethod
     async def replace_for_user(
@@ -189,13 +139,6 @@ class BodyMetric(BaseModel):
             await session.refresh(original)
         return replacement
 
-
-def _same(stored: Any, incoming: Any) -> bool:
-    if stored is None or incoming is None:
-        return stored is None and incoming is None
-    if isinstance(stored, datetime):
-        return stored == incoming
-    return Decimal(str(stored)) == Decimal(str(incoming))
 
 
 guard_immutable(BodyMetric)

@@ -27,8 +27,7 @@ BUCKETS_MS = (25, 50, 100, 250, 500, 1000, 2000, 5000)
 FLUSH_SECONDS = 60
 UNMATCHED = "<unmatched>"
 # Các route không đưa vào tài liệu OpenAPI vẫn cần nhãn.
-HIDDEN_TEMPLATES = ("/api/v2/integrations/google-health/webhooks/{subscriber}",
-                    "/api/integrations/google-health/callback", "/api/login", "/api/logout")
+HIDDEN_TEMPLATES = ("/api/integrations/google-health/callback", "/api/login", "/api/logout")
 
 UPSERT = text("""
     INSERT INTO api_route_usage (day, api, method, route, client, requests, errors, latency_ms_sum, latency_buckets)

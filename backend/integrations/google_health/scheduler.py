@@ -1,32 +1,22 @@
-"""Đồng bộ Google Health định kỳ bên trong mỗi worker API.
+"""Đồng bộ Google Health định kỳ bên trong tiến trình API (lifespan trong app.py).
 
-Mọi worker đều có thể chạy vòng lặp: lease với SKIP LOCKED giao mỗi kết nối đến hạn
-cho đúng một worker. Chạy một lần từ shell bằng `python -m integrations.google_health`.
+Mỗi GOOGLE_HEALTH_SYNC_INTERVAL_MINUTES phút chạy một lượt cho mọi kết nối đang hoạt động.
+Nhiều worker cùng chạy vòng lặp vẫn an toàn: advisory lock trong sync.run cho mỗi kết nối
+đúng một lượt tại một thời điểm.
 """
 import asyncio
 import logging
 
-from integrations.google_health.sync import sync_connection
+from core.settings import settings
+from integrations.google_health.sync import sync_all
 
 logger = logging.getLogger(__name__)
-POLL_SECONDS = 60
-MAX_PER_TICK = 20
-
-
-async def sync_due(limit: int = MAX_PER_TICK) -> int:
-    synced = 0
-    for _ in range(limit):
-        result = await sync_connection()
-        if result.get("status") == "idle":
-            break
-        synced += 1
-    return synced
 
 
 async def health_sync_loop() -> None:
     while True:
         try:
-            await sync_due()
+            await sync_all()
         except Exception as exc:
             logger.warning("google_health_sync_loop_error error=%s", type(exc).__name__)
-        await asyncio.sleep(POLL_SECONDS)
+        await asyncio.sleep(settings.GOOGLE_HEALTH_SYNC_INTERVAL_MINUTES * 60)

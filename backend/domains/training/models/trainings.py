@@ -4,6 +4,7 @@ Tách ra từ models.journals trong đợt tổ chức lại theo miền."""
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID as PyUUID
+from fastapi import HTTPException
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -16,7 +17,8 @@ from domains.shared.models.activity import (
 from domains.shared.models.basemodel import BaseModel
 from domains.shared.models.domain import guard_immutable
 from domains.shared.schemas.activity import NutritionTotals
-from domains.training.schemas.trainings import TrainingCreate
+from domains.catalog.schemas.exercises import ExerciseKind
+from domains.training.schemas.trainings import GYM_GENERAL_CODE, TrainingCreate
 from domains.training.services.training_metrics import allocate_session_time, session_load
 from domains.shared.models.journal import Journal, journal_constraints
 
@@ -58,6 +60,10 @@ class Training(Journal):
         latest = await BodyMetric.get_latest_for_user(session, user_id=user_id, respect_consent=False)
         bodyweight = float(latest.weight_kg) if latest is not None and latest.weight_kg is not None else None
         items = [await build_exercise_item(session, user_id, item, bodyweight_kg=bodyweight) for item in data.items]
+        if any(item["kind"] != ExerciseKind.STRENGTH and item["exercise_snapshot"].get("code") != GYM_GENERAL_CODE
+               for item in items):
+            raise HTTPException(422, "Nhật ký tập chỉ gồm buổi gym; buổi thể thao ghi bằng log_sport_session "
+                                     "(lưu trên Google Health).")
         allocate_session_time(items, float(data.duration_seconds) if data.duration_seconds else None)
         for item in items:
             kcal = item["calorie_estimate"].get("kcal")

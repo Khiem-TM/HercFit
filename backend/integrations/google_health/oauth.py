@@ -1,7 +1,7 @@
 """OAuth 2.0 cho Google Health API: URL đồng ý, state có chữ ký và các lời gọi token.
 
 Luồng kết nối tách khỏi đăng nhập. Đăng nhập chỉ lấy danh tính; luồng này
-xin truy cập offline vào các scope sức khoẻ chỉ đọc, và callback chỉ chấp nhận
+xin truy cập offline vào các scope sức khoẻ (đọc, và ghi cho dữ liệu HercFit ghi), và callback chỉ chấp nhận
 tài khoản Google mà người dùng đã đăng nhập.
 
 Tham số state là JWT HS256 với audience và loại token riêng, nên nó
@@ -19,21 +19,14 @@ import jwt
 
 from core.settings import settings
 from domains.identity.services.auth_service import GOOGLE_AUTHORIZE_URL, GOOGLE_TOKEN_URL, GOOGLE_USERINFO_URL
+from domains.health_records.types import CONNECT_SCOPES
 from integrations.google_health.client import GoogleHealthError, ReauthRequired
 
 logger = logging.getLogger(__name__)
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 SCOPE_PREFIX = "https://www.googleapis.com/auth/googlehealth."
-# Luồng kết nối mặc định xin các scope đọc này; scope ghi chỉ được xin
-# khi người dùng bật một nhóm xuất (các gói trong contract/scopes.py).
-SCOPES = {
-    "activity": SCOPE_PREFIX + "activity_and_fitness.readonly",
-    "health_metrics": SCOPE_PREFIX + "health_metrics_and_measurements.readonly",
-    "sleep": SCOPE_PREFIX + "sleep.readonly",
-    "profile": SCOPE_PREFIX + "profile.readonly",
-    "settings": SCOPE_PREFIX + "settings.readonly",
-    "nutrition": SCOPE_PREFIX + "nutrition.readonly",
-}
+# Một lần đồng ý: đọc các nhóm cốt lõi và ghi những gì HercFit ghi (domains/health_records/types.py).
+SCOPES = CONNECT_SCOPES
 IDENTITY_SCOPES = ("openid", "email")
 STATE_AUDIENCE = "hercfit-google-health-connect"
 STATE_TOKEN_TYPE = "oauth_state"
@@ -43,15 +36,13 @@ PKCE_COOKIE = "health_oauth_pkce"
 TIMEOUT = 15.0
 
 
-def authorization_url(*, state: str, code_challenge: str, login_hint: str | None,
-                      scopes: list[str] | None = None) -> str:
-    """URL đồng ý. `scopes` xin thêm các gói tính năng (uỷ quyền tăng dần);
-    include_granted_scopes giữ những gì người dùng đã cấp."""
+def authorization_url(*, state: str, code_challenge: str, login_hint: str | None) -> str:
+    """URL đồng ý; include_granted_scopes giữ những gì người dùng đã cấp (ví dụ ECG)."""
     params = {
         "client_id": settings.GOOGLE_OAUTH_CLIENT_ID or "",
         "redirect_uri": settings.google_health_redirect_uri,
         "response_type": "code",
-        "scope": " ".join((*IDENTITY_SCOPES, *(scopes or SCOPES.values()))),
+        "scope": " ".join((*IDENTITY_SCOPES, *SCOPES)),
         "access_type": "offline",
         # Luôn hiển thị màn hình đồng ý để Google trả về refresh token và cho người dùng
         # xem lại từng scope sức khoẻ (đồng ý chi tiết).
@@ -66,15 +57,12 @@ def authorization_url(*, state: str, code_challenge: str, login_hint: str | None
     return f"{GOOGLE_AUTHORIZE_URL}?{urlencode(params)}"
 
 
-def create_state(user_id: UUID, nonce: str, share_with_assistant: bool | None, then: str | None = None) -> str:
-    """`share` là None (uỷ quyền tăng dần) thì giữ nguyên consent của trợ lý.
-    `then` gọi tên việc callback làm nốt khi scope đã được cấp (export/switch.py)."""
+def create_state(user_id: UUID, nonce: str, share_with_assistant: bool | None) -> str:
+    """`share` là None (uỷ quyền lại) thì giữ nguyên consent của trợ lý."""
     now = datetime.now(timezone.utc)
     claims = {"sub": str(user_id), "nonce": nonce, "share": share_with_assistant,
               "iat": int(now.timestamp()), "exp": int((now + timedelta(seconds=STATE_SECONDS)).timestamp()),
               "iss": settings.JWT_ISSUER, "aud": STATE_AUDIENCE, "token_type": STATE_TOKEN_TYPE}
-    if then:
-        claims["then"] = then
     return jwt.encode(claims, settings.jwt_secret_value, algorithm="HS256")
 
 
@@ -99,7 +87,7 @@ def granted_scopes(token_data: dict[str, Any]) -> list[str]:
 
 
 def missing_scopes(granted: list[str]) -> list[str]:
-    return sorted(set(SCOPES.values()) - set(granted))
+    return sorted(set(SCOPES) - set(granted))
 
 
 async def _token_call(http: httpx.AsyncClient, data: dict[str, str]) -> dict[str, Any]:

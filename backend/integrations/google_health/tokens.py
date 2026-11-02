@@ -1,13 +1,10 @@
 """Access token cho một kết nối: chỉ làm mới một lần, dưới advisory lock theo từng kết nối.
 
-Ai chờ khoá sẽ đọc lại dòng và dùng lại token mà bên gọi đầu tiên
-đã lưu. `check(session)` chạy trong cùng transaction trước khi ghi
-bất cứ thứ gì, nên lượt chạy hay job đã mất lease hoặc thế hệ không bao giờ lưu token.
-invalid_grant ném ReauthRequired; thiếu scope ghi không bao giờ ảnh hưởng lệnh đọc.
+Ai chờ khoá sẽ đọc lại dòng và dùng lại token mà bên gọi đầu tiên đã lưu. invalid_grant ném
+ReauthRequired (refresh token ở chế độ Testing của Google hết hạn sau 7 ngày).
 """
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -28,18 +25,15 @@ def _fresh(connection: HealthConnection) -> bool:
                 and connection.token_expires_at - SKEW > datetime.now(timezone.utc))
 
 
-async def access_token(connection_id: UUID, http: httpx.AsyncClient, *,
-                       check: Callable[[object], Awaitable[None]] | None = None) -> tuple[str, list[str]]:
+async def access_token(connection_id: UUID, http: httpx.AsyncClient) -> tuple[str, list[str]]:
     """(access token, các scope đã cấp) cho kết nối."""
     async with get_db_session() as session:
         connection = await session.get(HealthConnection, connection_id)
-        if connection is not None and _fresh(connection):
+        if connection is not None and connection.status == "ACTIVE" and _fresh(connection):
             return decrypt_secret(connection.access_token_enc), list(connection.granted_scopes or [])
     async with get_db_session() as session:
         await session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
                               {"key": f"gh-refresh:{connection_id}"})
-        if check is not None:
-            await check(session)
         connection = await session.get(HealthConnection, connection_id, populate_existing=True)
         if connection is None or connection.status != "ACTIVE":
             raise ReauthRequired()
@@ -57,10 +51,8 @@ async def access_token(connection_id: UUID, http: httpx.AsyncClient, *,
         return data["access_token"], list(connection.granted_scopes or [])
 
 
-async def mark_reauth(connection_id: UUID, generation: int | None = None) -> None:
+async def mark_reauth(connection_id: UUID) -> None:
     async with get_db_session() as session:
         await session.execute(text("""
-            UPDATE health_connections SET status = 'NEEDS_REAUTH', next_sync_at = NULL,
-                   last_error_code = 'reauth_required', updated_at = now()
-            WHERE id = :id AND status = 'ACTIVE' AND (CAST(:generation AS bigint) IS NULL OR generation = :generation)"""),
-            {"id": connection_id, "generation": generation})
+            UPDATE health_connections SET status = 'NEEDS_REAUTH', last_error_code = 'reauth_required', updated_at = now()
+            WHERE id = :id AND status = 'ACTIVE'"""), {"id": connection_id})

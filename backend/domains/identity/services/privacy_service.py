@@ -46,12 +46,8 @@ EXPORT_QUERIES: tuple[tuple[str, str], ...] = (
     ("health_connections", "SELECT provider, account_email, granted_scopes, status, share_with_assistant, consented_at, "
                            "timezone, provider_profile, last_sync_at, last_success_at, created_at "
                            "FROM health_connections WHERE user_id = :uid"),
-    ("health_sync_runs", "SELECT trigger, status, window_start, window_end, counts, error_code, created_at, finished_at "
-                         "FROM health_sync_runs WHERE user_id = :uid ORDER BY created_at"),
-    ("daily_health_summaries", "SELECT * FROM daily_health_summaries WHERE user_id = :uid ORDER BY local_date"),
-    ("sleep_sessions", "SELECT * FROM sleep_sessions WHERE user_id = :uid ORDER BY start_at"),
-    ("device_workouts", "SELECT * FROM device_workouts WHERE user_id = :uid ORDER BY started_at"),
-    ("health_samples", "SELECT * FROM health_samples WHERE user_id = :uid ORDER BY measured_at"),
+    ("health_points", "SELECT data_type, kind, start_at, end_at, local_date, value, written_by_hercfit "
+                      "FROM health_points WHERE user_id = :uid ORDER BY data_type, local_date, start_at"),
 )
 IMAGE_TABLES = (("meals", "user_id"), ("trainings", "user_id"), ("foods", "owner_user_id"), ("exercises", "owner_user_id"))
 
@@ -83,8 +79,7 @@ async def erase_user(session, user_id) -> dict:
             ), {"uid": user_id, "cloud": settings.CLOUDINARY_CLOUD_NAME})
             images += result.rowcount or 0
     counts = {}
-    for name in ("meals", "trainings", "body_metrics", "goals", "daily_health_summaries", "sleep_sessions",
-                 "device_workouts", "health_samples"):
+    for name in ("meals", "trainings", "body_metrics", "goals", "health_points", "google_pushes"):
         counts[name] = (await session.execute(text(f"SELECT count(*) FROM {name} WHERE user_id = :uid"),
                                               {"uid": user_id})).scalar_one()
     deleted = (await session.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})).rowcount

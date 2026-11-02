@@ -3,8 +3,11 @@
 Model sở hữu luật lưu trữ; transaction của request sở hữu commit/rollback.
 """
 
-from uuid import UUID
+from datetime import datetime, timezone
+from typing import Any
+from uuid import UUID, uuid4
 
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from domains.body.models.body_metrics import BodyMetric
@@ -38,46 +41,90 @@ class UserDataService(UserService):
     async def delete_profile(self) -> None:
         require_found(await User.deactivate_profile(self.session, self.user_id), "User")
 
-    async def create_metric(self, payload: BodyMetricCreate) -> BodyMetric:
-        from domains.shared import write_hooks
+    # Số đo Google có (ghi xuyên qua khi đã kết nối): cột HercFit → loại bản ghi Google.
+    GOOGLE_FIELDS = (("weight_kg", "weight"), ("height_cm", "height"), ("body_fat_pct", "body-fat"))
 
-        metric = await BodyMetric.create_snapshot(self.session, user_id=self.user_id, payload=payload)
-        await write_hooks.emit(self.session, self.user_id, "BodyMetric", metric, "CREATE")
-        return metric
+    async def create_metric(self, payload: BodyMetricCreate) -> Any:
+        """Đã kết nối Google: cân nặng / chiều cao / mỡ được ghi thẳng lên Google (nguồn sự thật);
+        khối cơ và chỉ số khác Google không có vẫn lưu trong HercFit. Chưa kết nối: lưu như trước."""
+        from domains.body.services.readings import Reading
+        from domains.health_records import ports
 
-    async def list_metrics(self, options: BodyMetricQuery) -> list[BodyMetric]:
+        data = BodyMetricCreate.model_validate(payload)
+        written: dict[str, Any] = {}
+        for column, kind in self.GOOGLE_FIELDS:
+            value = getattr(data, column)
+            if value is None:
+                continue
+            result = await ports.write(self.session, self.user_id, kind, {
+                "value": float(value), "measured_at": data.recorded_at.isoformat()})
+            if result is None:  # chưa kết nối Google
+                return await BodyMetric.create_snapshot(self.session, user_id=self.user_id, payload=data)
+            written[column] = result
+        if data.muscle_mass_kg is not None:  # Google không có khối cơ: giữ trong HercFit
+            await BodyMetric.create(self.session, {"user_id": self.user_id, "recorded_at": data.recorded_at,
+                                                   "muscle_mass_kg": data.muscle_mass_kg,
+                                                   "additional_metrics": data.additional_metrics})
+        now = datetime.now(timezone.utc)
+        return Reading(id=(written.get("weight_kg") or {}).get("id") or uuid4(), user_id=self.user_id,
+                       recorded_at=data.recorded_at, created_at=now, updated_at=now, source="MANUAL",
+                       weight_kg=data.weight_kg, height_cm=data.height_cm, body_fat_pct=data.body_fat_pct,
+                       muscle_mass_kg=data.muscle_mass_kg, additional_metrics=data.additional_metrics,
+                       written_by_hercfit=True)
+
+    async def list_metrics(self, options: BodyMetricQuery) -> list[Any]:
         return await BodyMetric.list_for_user(
             self.session, user_id=self.user_id, **options.model_dump(),
         )
 
-    async def latest_metric(self) -> BodyMetric:
+    async def latest_metric(self) -> Any:
         return require_found(
             await BodyMetric.get_latest_for_user(self.session, user_id=self.user_id), "Body metric",
         )
 
-    async def get_metric(self, metric_id: UUID) -> BodyMetric:
-        from domains.identity.consent import device_access
+    async def _google_reading(self, metric_id: UUID):
+        """Số đo trên Google có id này (bản sao trong health_points), nếu có."""
+        from domains.body.services import readings
 
-        metric = require_found(
-            await BodyMetric.get_for_user(self.session, metric_id, user_id=self.user_id), "Body metric",
-        )
-        if metric.source != "MANUAL" and not await device_access(self.session, self.user_id):
-            require_found(None, "Body metric")
-        return metric
+        found = [item for item in await readings.google(self.session, self.user_id, limit=10_000)
+                 if item.id == metric_id]
+        return found[0] if found else None
 
-    async def replace_metric(self, metric_id: UUID, payload: BodyMetricCreate) -> BodyMetric:
-        from domains.shared import write_hooks
+    async def get_metric(self, metric_id: UUID) -> Any:
+        metric = await BodyMetric.get_for_user(self.session, metric_id, user_id=self.user_id)
+        return require_found(metric or await self._google_reading(metric_id), "Body metric")
 
-        metric = require_found(await BodyMetric.replace_for_user(
-            self.session, metric_id, user_id=self.user_id, payload=payload,
-        ), "Body metric")
-        await write_hooks.emit(self.session, self.user_id, "BodyMetric", metric, "UPDATE", replaces_id=metric_id)
-        return metric
+    async def replace_metric(self, metric_id: UUID, payload: BodyMetricCreate) -> Any:
+        from domains.health_records import ports
+
+        reading = await self._google_reading(metric_id)
+        if reading is None:
+            return require_found(await BodyMetric.replace_for_user(
+                self.session, metric_id, user_id=self.user_id, payload=payload,
+            ), "Body metric")
+        data = BodyMetricCreate.model_validate(payload)
+        column, kind = next((column, kind) for column, kind in self.GOOGLE_FIELDS
+                            if getattr(reading, column) is not None)
+        if getattr(data, column) is None:
+            raise HTTPException(422, f"{column} is required to edit this measurement")
+        result = await ports.write(self.session, self.user_id, kind, {
+            "value": float(getattr(data, column)), "measured_at": data.recorded_at.isoformat()}, point_id=metric_id)
+        if result is None:
+            raise HTTPException(409, "Google Health is not connected")
+        return require_found(await self._google_reading(metric_id), "Body metric")
 
     async def delete_metric(self, metric_id: UUID) -> None:
-        require_found(await BodyMetric.soft_delete_for_user(
-            self.session, metric_id, user_id=self.user_id,
-        ), "Body metric")
+        from domains.health_records import ports
+
+        reading = await self._google_reading(metric_id)
+        if reading is None:
+            require_found(await BodyMetric.soft_delete_for_user(
+                self.session, metric_id, user_id=self.user_id,
+            ), "Body metric")
+            return
+        kind = next(kind for column, kind in self.GOOGLE_FIELDS if getattr(reading, column) is not None)
+        if await ports.write(self.session, self.user_id, kind, point_id=metric_id, delete=True) is None:
+            raise HTTPException(409, "Google Health is not connected")
 
     async def confirm_goal(self, payload: GoalCreate) -> Goal:
         # Mục tiêu đã xác nhận chuyển sang IN_PROGRESS; bản nháp vẫn ở phía client.

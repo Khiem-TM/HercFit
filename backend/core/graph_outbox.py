@@ -73,10 +73,9 @@ SOURCE_TABLES = {
     "Food": "foods", "Meal": "meals", "Training": "trainings",
 }
 CHILD_TABLES = {"MealItem": "meal_items", "TrainingItem": "training_items"}
-# Được tạo bởi migration 0014. Các migration cũ hơn cài lại DDL hiện tại của module này,
-# nên trigger trên các bảng này chỉ được tạo khi bảng đã tồn tại.
-HEALTH_TABLES = {"DailyHealth": "daily_health_summaries", "SleepSession": "sleep_sessions",
-                 "DeviceWorkout": "device_workouts"}
+# Dữ kiện thiết bị (DailyHealth, SleepSession, DeviceWorkout) được dựng từ bảng health_points
+# bởi domains/health_records/views.publish_kg và phát qua kg_publish_backend sau mỗi lần đồng bộ;
+# chúng không có bảng nguồn riêng để gắn trigger.
 
 # Giữ phong bì này tương thích với migration database của agent. Nó cố ý
 # không có FK tới users/sessions: outbox phải sống sót khi nguồn của nó bị xoá.
@@ -317,8 +316,8 @@ END $$;
 """
 
 
-def _snapshot_function_sql(health: bool = True) -> str:
-    tables = {**SOURCE_TABLES, **(HEALTH_TABLES if health else {})}
+def _snapshot_function_sql() -> str:
+    tables = SOURCE_TABLES
     scans = "\n".join(
         f"""FOR item IN SELECT * FROM {table} ORDER BY id FOR SHARE LOOP
             PERFORM kg_publish_backend('{kind}', to_jsonb(item));
@@ -354,16 +353,17 @@ CREATE OR REPLACE FUNCTION kg_republish_health(owner uuid) RETURNS bigint
 LANGUAGE plpgsql AS $$
 DECLARE item record; total bigint := 0;
 BEGIN
-    -- Consent changed: every active device record becomes an upsert or a tombstone.
-    FOR item IN SELECT * FROM daily_health_summaries WHERE user_id = owner AND is_active ORDER BY id FOR SHARE LOOP
-        PERFORM kg_publish_backend('DailyHealth', to_jsonb(item)); total := total + 1;
-    END LOOP;
-    FOR item IN SELECT * FROM sleep_sessions WHERE user_id = owner AND is_active ORDER BY id FOR SHARE LOOP
-        PERFORM kg_publish_backend('SleepSession', to_jsonb(item)); total := total + 1;
-    END LOOP;
-    FOR item IN SELECT * FROM device_workouts WHERE user_id = owner AND is_active ORDER BY id FOR SHARE LOOP
-        PERFORM kg_publish_backend('DeviceWorkout', to_jsonb(item)); total := total + 1;
-    END LOOP;
+    -- Consent changed. Withdrawn: every device fact the graph holds becomes a tombstone.
+    -- Granted: the backend republishes current facts from health_points (views.publish_kg).
+    IF NOT kg_device_consent(owner) THEN
+        FOR item IN SELECT aggregate_type, aggregate_id FROM kg_source_versions
+                    WHERE source = 'backend' AND owner_id = owner::text AND operation = 'upsert'
+                      AND aggregate_type IN ('DailyHealth', 'SleepSession', 'DeviceWorkout') LOOP
+            PERFORM kg_publish_backend(item.aggregate_type, jsonb_build_object(
+                'id', item.aggregate_id, 'user_id', owner, 'version_id', 1), true);
+            total := total + 1;
+        END LOOP;
+    END IF;
     FOR item IN SELECT * FROM body_metrics WHERE user_id = owner AND is_active AND source <> 'MANUAL'
                 ORDER BY id FOR SHARE LOOP
         PERFORM kg_publish_backend('BodyMetric', to_jsonb(item)); total := total + 1;
@@ -404,12 +404,6 @@ def _guarded(table: str, statement: str) -> str:
 
 
 def _health_trigger_statements() -> tuple[str, ...]:
-    captures = tuple(
-        _guarded(table, f"DROP TRIGGER IF EXISTS kg_capture ON {table}; "
-                        f"CREATE TRIGGER kg_capture AFTER INSERT OR UPDATE OR DELETE ON {table} "
-                        f"FOR EACH ROW EXECUTE FUNCTION kg_capture_backend('{kind}');")
-        for kind, table in HEALTH_TABLES.items()
-    )
     consent = _guarded("health_connections",
                        "DROP TRIGGER IF EXISTS kg_health_consent ON health_connections; "
                        "CREATE TRIGGER kg_health_consent AFTER INSERT OR UPDATE ON health_connections "
@@ -418,7 +412,7 @@ def _health_trigger_statements() -> tuple[str, ...]:
                             "DROP TRIGGER IF EXISTS kg_user_consent ON user_consents; "
                             "CREATE TRIGGER kg_user_consent AFTER INSERT OR UPDATE ON user_consents "
                             "FOR EACH ROW EXECUTE FUNCTION kg_capture_user_consent();")
-    return (*captures, consent, user_consent)
+    return consent, user_consent
 
 
 def _publish_sql(profile: bool = True) -> str:
@@ -436,7 +430,7 @@ def installation_statements(profile: bool = True, health: bool = True) -> tuple[
     )
     health_ddl = (HEALTH_DDL, *_health_trigger_statements()) if health else ()
     return (OUTBOX_DDL, TRAINING_PROFILE_DDL, _payload_function_sql(profile), _publish_sql(profile),
-            _snapshot_function_sql(health), *triggers, *health_ddl)
+            _snapshot_function_sql(), *triggers, *health_ddl)
 
 
 def install_backend_outbox(connection) -> None:

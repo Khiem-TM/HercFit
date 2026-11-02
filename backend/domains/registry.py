@@ -22,20 +22,14 @@ from domains.goals_plans.models.plans import (
 from domains.nutrition.models.meals import Meal, MealItem
 from domains.training.models.trainings import Training, TrainingItem
 from domains.media.models.media import ImageCleanup
-from domains.health_records.models.sources import HealthRecordLink, HealthSeriesChunk, HealthSourceRecord
-from domains.health_records.models.device_records import DailyHealthSummary, DeviceWorkout, HealthSample, SleepSession
-from domains.health_records.models.clinical import EcgRecording, IrnAlert, PairedDevice, WorkoutRoute
-from domains.nutrition.models.logs import HydrationLog, NutritionLog
-from domains.wellbeing.models.logs import MenstrualPeriodLog, MoodLog, OvulationTestLog, SymptomLog
-from integrations.google_health.models import HealthConnection, HealthSyncRun
+from domains.health_records.models.health_points import HealthPoint
+from integrations.google_health.models import GooglePush, HealthConnection
 from core.graph_outbox import register_metadata_hooks
 
 register_metadata_hooks(Base.metadata)
 
 __all__ = [
-    "HealthSourceRecord", "HealthSeriesChunk", "HealthRecordLink",
-    "EcgRecording", "IrnAlert", "PairedDevice", "WorkoutRoute", "HydrationLog", "NutritionLog",
-    "MenstrualPeriodLog", "MoodLog", "OvulationTestLog", "SymptomLog",
+    "HealthPoint", "GooglePush",
     "UserConsent", "ConsentEvent",
     "Base",
     "BaseModel",
@@ -52,5 +46,5 @@ __all__ = [
     "Exercise", "Plan", "MealPlan", "MealPlanEntry", "MealPlanItem",
     "TrainingPlan", "TrainingPlanEntry", "TrainingPlanItem",
     "Meal", "MealItem", "Training", "TrainingItem",
-    "HealthConnection", "HealthSyncRun", "DailyHealthSummary", "SleepSession", "DeviceWorkout", "HealthSample",
+    "HealthConnection",
 ]

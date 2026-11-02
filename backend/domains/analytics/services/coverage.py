@@ -10,8 +10,9 @@
 Ít bước không bao giờ có nghĩa là "không đeo": việc đeo không suy ra từ mức hoạt động, chỉ từ
 dữ liệu quan sát được, và được báo là chưa biết khi không có gì hỗ trợ.
 
-Đường nền là trung vị trên một cửa sổ, kèm cỡ mẫu và
-`algorithm_version`, để đổi phương pháp không bao giờ âm thầm đổi câu trả lời cũ.
+Đường nền là trung vị trên các ngày đã trọn trước `as_of`, kèm cỡ mẫu và `algorithm_version`,
+để đổi phương pháp không bao giờ âm thầm đổi câu trả lời cũ. Mọi thứ được tính lúc đọc từ
+health_points (không có bảng cache).
 """
 from __future__ import annotations
 
@@ -21,11 +22,7 @@ from datetime import date, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, text
-
-from domains.health_records import ports
-from domains.health_records.models.device_records import DailyHealthSummary
-from domains.health_records.schemas.health import HEALTH_PROVIDER
+from domains.health_records import ports, views
 
 ALGORITHM_VERSION = "baseline-median-v1"
 # Các cột theo ngày được theo dõi độ phủ, kèm loại dữ liệu nuôi chúng.
@@ -57,17 +54,14 @@ def day_state(value: Any, column: str, availability: ports.TypeAvailability | No
         return "NOT_GRANTED"
     if value is not None:
         return "ZERO" if column in COUNTED and float(value) == 0 else "OBSERVED"
-    if availability.complete_through is None or day > availability.complete_through:
+    if (availability.complete_through is None or day > availability.complete_through
+            or (availability.complete_from is not None and day < availability.complete_from)):
         return "NOT_SYNCED"
     return "NO_DATA"
 
 
-async def daily_rows(session, user_id: UUID, start: date, end: date) -> dict[date, DailyHealthSummary]:
-    rows = (await session.execute(select(DailyHealthSummary).where(
-        DailyHealthSummary.user_id == user_id, DailyHealthSummary.source == HEALTH_PROVIDER,
-        DailyHealthSummary.is_active.is_(True), DailyHealthSummary.local_date >= start,
-        DailyHealthSummary.local_date <= end))).scalars()
-    return {row.local_date: row for row in rows}
+async def daily_rows(session, user_id: UUID, start: date, end: date) -> dict[date, Any]:
+    return {row.local_date: row for row in await views.daily(session, user_id, start, end)}
 
 
 async def coverage(session, user_id: UUID, start: date, end: date) -> dict[str, dict[str, Any]]:
@@ -89,20 +83,6 @@ async def coverage(session, user_id: UUID, start: date, end: date) -> dict[str, 
     return result
 
 
-async def store_coverage(session, user_id: UUID, report: dict[str, dict[str, Any]]) -> int:
-    written = 0
-    for column, entry in report.items():
-        for day, state in entry["by_day"].items():
-            await session.execute(text("""
-                INSERT INTO health_coverage (user_id, data_type, local_date, state, updated_at)
-                VALUES (:user, :data_type, :day, :state, now())
-                ON CONFLICT (user_id, data_type, local_date) DO UPDATE SET state = EXCLUDED.state, updated_at = now()
-                WHERE health_coverage.state IS DISTINCT FROM EXCLUDED.state"""),
-                {"user": user_id, "data_type": entry["data_type"], "day": date.fromisoformat(day), "state": state})
-            written += 1
-    return written
-
-
 async def baselines(session, user_id: UUID, as_of: date, window_days: int = 28) -> dict[str, Baseline]:
     rows = await daily_rows(session, user_id, as_of - timedelta(days=window_days), as_of - timedelta(days=1))
     result = {}
@@ -115,44 +95,10 @@ async def baselines(session, user_id: UUID, as_of: date, window_days: int = 28) 
     return result
 
 
-async def stored_baselines(session, user_id: UUID, as_of: date, window_days: int) -> dict[str, Baseline]:
-    rows = (await session.execute(text("""
-        SELECT metric, value, spread, n FROM health_baselines
-        WHERE user_id = :user AND as_of = :as_of AND window_days = :window AND algorithm_version = :version"""),
-        {"user": user_id, "as_of": as_of, "window": window_days, "version": ALGORITHM_VERSION})).all()
-    return {row.metric: Baseline(metric=row.metric, value=row.value, spread=row.spread, n=row.n,
-                                 window_days=window_days, as_of=as_of) for row in rows if row.metric in BASELINE_METRICS}
-
-
 async def baselines_for(session, user_id: UUID, end: date, window_days: int,
-                        today: date | None = None) -> tuple[dict[str, Baseline], str]:
-    """Đường nền cho một báo cáo kết thúc ở `end`, và cách có được chúng ("live" hay "stored").
-
-    v1: cửa sổ kết thúc ở chính `end`, nên báo cáo cho hôm nay có một ngày chưa trọn.
-    Bộ đọc v2 `analytics`: chỉ các ngày đã trọn (trước hôm nay), đọc từ những gì
-    ANALYTICS_RECOMPUTE đã lưu cho ngày đó nếu có, ngược lại tính trực tiếp bằng
-    cùng thuật toán, nên hai đường cho cùng con số.
-    """
-    from core.flags import reader_v2
-
-    if not reader_v2("analytics"):
-        return await baselines(session, user_id, end + timedelta(days=1), window_days), "live"
+                        today: date | None = None) -> dict[str, Baseline]:
+    """Đường nền cho một báo cáo kết thúc ở `end`: chỉ các ngày đã trọn (trước hôm nay)."""
     from datetime import datetime, timezone
 
     today = today or datetime.now(timezone.utc).date()
-    as_of = min(end + timedelta(days=1), today)
-    stored = await stored_baselines(session, user_id, as_of, window_days)
-    if len(stored) == len(BASELINE_METRICS):
-        return stored, "stored"
-    return await baselines(session, user_id, as_of, window_days), "live"
-
-
-async def store_baselines(session, user_id: UUID, values: dict[str, Baseline]) -> None:
-    for item in values.values():
-        await session.execute(text("""
-            INSERT INTO health_baselines (user_id, metric, window_days, as_of, algorithm_version, value, spread, n)
-            VALUES (:user, :metric, :window, :as_of, :version, :value, :spread, :n)
-            ON CONFLICT (user_id, metric, window_days, as_of, algorithm_version)
-            DO UPDATE SET value = EXCLUDED.value, spread = EXCLUDED.spread, n = EXCLUDED.n, computed_at = now()"""),
-            {"user": user_id, "metric": item.metric, "window": item.window_days, "as_of": item.as_of,
-             "version": item.algorithm_version, "value": item.value, "spread": item.spread, "n": item.n})
+    return await baselines(session, user_id, min(end + timedelta(days=1), today), window_days)

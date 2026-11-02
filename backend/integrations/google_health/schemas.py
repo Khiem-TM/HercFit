@@ -1,37 +1,24 @@
-"""Dữ liệu sức khoẻ từ thiết bị đeo (Google Health API) và hồ sơ sức khoẻ hợp nhất.
-
-Tách ra từ schemas.health trong đợt tổ chức lại theo miền."""
-from datetime import date
+"""Schema của kết nối Google Health và các lệnh ghi xuyên qua."""
 from typing import Any, Literal
-from uuid import UUID
+
 from pydantic import AwareDatetime, BaseModel
-from domains.shared.schemas.common import InputSchema, ReadSchema
-from domains.health_records.schemas.health import ConnectionStatus, HEALTH_PROVIDER, SyncStatus, SyncTrigger
+
+from domains.health_records.schemas.health import HEALTH_PROVIDER, ConnectionStatus
+from domains.shared.schemas.common import InputSchema
 
 
-# ---------------------------------------------------------------------------
-# Kết nối và đồng bộ
-# ---------------------------------------------------------------------------
 class HealthConnectRequest(InputSchema):
     share_with_assistant: bool = True
 
+
 class HealthConnectResponse(BaseModel):
     authorization_url: str
+
 
 class HealthConsentUpdate(InputSchema):
     share_with_assistant: bool
     share_sensitive_with_assistant: bool | None = None
 
-class HealthSyncRunRead(ReadSchema):
-    id: UUID
-    trigger: SyncTrigger
-    status: SyncStatus
-    created_at: AwareDatetime
-    finished_at: AwareDatetime | None
-    window_start: date | None
-    window_end: date | None
-    counts: dict[str, Any]
-    error_code: str | None
 
 class HealthConnectionRead(BaseModel):
     provider: str = HEALTH_PROVIDER
@@ -45,15 +32,29 @@ class HealthConnectionRead(BaseModel):
     share_sensitive_with_assistant: bool = False
     consented_at: AwareDatetime | None = None
     timezone: str | None = None
-    # Do nhà cung cấp báo: tuổi, membership_start_date, chiều dài sải chân và cài đặt đơn vị.
+    # Do Google báo: tuổi, chiều dài sải chân và cài đặt đơn vị.
     provider_profile: dict[str, Any] = {}
     last_sync_at: AwareDatetime | None = None
     last_success_at: AwareDatetime | None = None
-    next_sync_at: AwareDatetime | None = None
     last_error_code: str | None = None
+    # Số điểm đang lưu theo loại, và trạng thái đọc từng loại {from, through, error}.
     records: dict[str, int] = {}
-    last_run: HealthSyncRunRead | None = None
+    types: dict[str, Any] = {}
+
 
 class HealthSyncAccepted(BaseModel):
-    status: Literal["accepted"] = "accepted"
+    status: Literal["accepted", "running"] = "accepted"
     detail: str
+
+
+class HealthRecordRead(BaseModel):
+    """Một điểm Google do HercFit ghi xuyên qua (buổi thể thao, cân nặng, nước...)."""
+    id: Any = None
+    data_type: str
+    local_date: Any = None
+    start_at: AwareDatetime | None = None
+    end_at: AwareDatetime | None = None
+    value: dict[str, Any] = {}
+    written_by_hercfit: bool = True
+    pending: bool = False
+    derived: dict[str, Any] = {}

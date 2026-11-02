@@ -19,8 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 TOPICS = frozenset({
     "consent.changed",          # {purpose, data_group, granted, version}
-    "health.connection.changed",  # {status, generation}
-    "health.records.changed",   # {data_types, start, end}
 })
 
 

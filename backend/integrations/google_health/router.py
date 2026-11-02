@@ -1,28 +1,33 @@
-"""Kết nối Google Health: đồng ý OAuth, trạng thái, consent của trợ lý, đồng bộ và ngắt kết nối."""
-from typing import Annotated
+"""Google Health: kết nối (đồng ý OAuth, trạng thái, consent, đồng bộ, ngắt kết nối) và ghi xuyên qua.
+
+* /api/integrations/google-health ...: kết nối của người dùng.
+* /api/v2/health/records/{kind}: buổi thể thao, cân nặng, chiều cao, % mỡ, nước uống được ghi thẳng
+  lên Google (Google là nguồn sự thật) rồi lưu ngay bản sao vào health_points.
+"""
+from typing import Annotated, Any
+from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Cookie, Query, Response, status
 from fastapi.responses import RedirectResponse
 
+from api.dependencies import SessionDep, UserContextDep, service_dependency
+from core.idempotency import IdempotentRoute
 from core.rate_limit import SlidingWindowLimiter, enforce
 from core.settings import settings
 from core.transaction import transaction
-from api.dependencies import SessionDep, service_dependency
+from integrations.google_health import oauth, records
+from integrations.google_health.connection import HealthConnectionService, complete_connect, frontend_result
 from integrations.google_health.schemas import (
-    HealthConnectRequest,
-    HealthConnectResponse,
-    HealthConnectionRead,
-    HealthConsentUpdate,
+    HealthConnectionRead, HealthConnectRequest, HealthConnectResponse, HealthConsentUpdate, HealthRecordRead,
     HealthSyncAccepted,
 )
-from integrations.google_health import oauth
-from integrations.google_health.connection import HealthConnectionService, complete_connect, frontend_result
-from integrations.google_health.sync import sync_connection
+from integrations.google_health.sync import BACKFILL_DAYS, run
 
 router = APIRouter(prefix="/integrations/google-health", tags=["integrations"])
+records_router = APIRouter(prefix="/health/records", tags=["health-data"], route_class=IdempotentRoute)
 HealthConnectionServiceDep = Annotated[HealthConnectionService, service_dependency(HealthConnectionService)]
 COOKIE_PATH = "/api/integrations/google-health"
-# Theo người dùng: bắt đầu đồng ý và sync thủ công đều gọi Google, nên các đợt dồn dập bị từ chối.
+# Theo người dùng: bắt đầu đồng ý và đồng bộ thủ công đều gọi Google, nên các đợt dồn dập bị từ chối.
 _limiter = SlidingWindowLimiter(6)
 
 
@@ -37,8 +42,8 @@ async def get_connection(service: HealthConnectionServiceDep):
 
 
 @router.post("/connect", response_model=HealthConnectResponse, summary="Bắt đầu kết nối Google Health",
-             description="Trả URL đồng ý của Google (offline, chỉ đọc). Callback chỉ chấp nhận đúng tài khoản Google "
-                         "đang dùng để đăng nhập HercFit.")
+             description="Trả URL đồng ý của Google (offline; đọc dữ liệu sức khoẻ và ghi những gì HercFit ghi). "
+                         "Callback chỉ chấp nhận đúng tài khoản Google đang dùng để đăng nhập HercFit.")
 async def connect(payload: HealthConnectRequest, service: HealthConnectionServiceDep, response: Response):
     enforce(_limiter, f"connect:{service.user_id}")
     url, nonce, verifier = service.start(payload.share_with_assistant)
@@ -57,12 +62,12 @@ async def callback(
 ):
     result, connection_id = await complete_connect(session, code=code, state=state, error=error,
                                                    nonce_cookie=nonce, verifier=verifier)
-    if connection_id is not None and settings.GH_WORKER_EXTERNAL:
-        # Worker sở hữu mọi lời gọi Google: callback chỉ ghi lại công việc, trong transaction này.
-        await _enqueue_initial(session, connection_id)
     await session.commit()
-    if connection_id is not None and not settings.GH_WORKER_EXTERNAL:
-        background.add_task(sync_connection, connection_id, trigger="INITIAL")
+    if connection_id is not None:
+        from integrations.google_health.models import HealthConnection
+
+        connection = await session.get(HealthConnection, connection_id)
+        background.add_task(run, connection.user_id, days=BACKFILL_DAYS)
     response = RedirectResponse(frontend_result(result), status_code=status.HTTP_302_FOUND)
     for cookie in (oauth.NONCE_COOKIE, oauth.PKCE_COOKIE):
         response.delete_cookie(cookie, path=COOKIE_PATH)
@@ -76,43 +81,47 @@ async def update_consent(payload: HealthConsentUpdate, service: HealthConnection
 
 
 @router.post("/sync", status_code=status.HTTP_202_ACCEPTED, response_model=HealthSyncAccepted,
-             summary="Đồng bộ ngay")
+             summary="Đồng bộ ngay", description="Đọc lại 7 ngày gần nhất bằng reconcile rồi đẩy gym và bữa ăn. "
+                                                 "Theo dõi kết quả qua GET (last_sync_at, types).")
 async def sync_now(service: HealthConnectionServiceDep, background: BackgroundTasks):
     enforce(_limiter, f"sync:{service.user_id}")
-    connection_id = await service.request_sync()
-    if settings.GH_WORKER_EXTERNAL:
-        from core.jobs import queue
-        from integrations.google_health.models import HealthConnection
-
-        connection = await service.session.get(HealthConnection, connection_id)
-        kind = "GH_LEGACY_SYNC" if settings.GH_INGEST_V2 == "off" else "GH_RECONCILE"
-        await queue.enqueue(service.session, kind, user_id=service.user_id, connection_id=connection_id,
-                            connection_generation=connection.generation, priority=90,
-                            dedupe_key=f"manual:{connection_id}", payload={"reason": "manual"})
-        await service.session.commit()
-    else:
-        background.add_task(sync_connection, connection_id, trigger="MANUAL")
+    await service.require_active()
+    background.add_task(run, service.user_id)
     return HealthSyncAccepted(detail="Đang đồng bộ dữ liệu Google Health.")
 
 
-async def _enqueue_initial(session, connection_id) -> None:
-    from core.jobs import queue
-    from integrations.google_health.models import HealthConnection
-
-    connection = await session.get(HealthConnection, connection_id)
-    base = {"user_id": connection.user_id, "connection_id": connection.id,
-            "connection_generation": connection.generation}
-    if settings.GH_INGEST_V2 == "off":
-        await queue.enqueue(session, "GH_LEGACY_SYNC", priority=95, dedupe_key=f"initial:{connection.id}", **base)
-        return
-    await queue.enqueue(session, "GH_IDENTITY_REFRESH", priority=95,
-                        dedupe_key=f"identity:{connection.id}:{connection.generation}", **base)
-    await queue.enqueue(session, "GH_ONBOARD", priority=90,
-                        dedupe_key=f"onboard:{connection.id}:{connection.generation}", **base)
-
-
 @router.delete("", response_model=HealthConnectionRead, summary="Ngắt kết nối Google Health",
-               description="Thu hồi quyền tại Google và xoá token. purge_data=true xoá luôn dữ liệu đã đồng bộ.")
+               description="Thu hồi quyền tại Google và xoá token. purge_data=true xoá luôn bản sao dữ liệu trong HercFit.")
 @transaction
 async def disconnect(service: HealthConnectionServiceDep, purge_data: bool = False):
     return await service.disconnect(purge_data)
+
+
+# ------------------------------------------------------------------------------ ghi xuyên qua
+@records_router.post("/{kind}:preview", summary="Xem trước data point sẽ ghi lên Google (không gọi Google)")
+async def preview_record(kind: records.Kind, payload: dict[str, Any], service: UserContextDep):
+    return await records.preview(service.session, service.user_id, kind, payload)
+
+
+@records_router.post("/{kind}", status_code=status.HTTP_201_CREATED, response_model=HealthRecordRead,
+                     summary="Ghi lên Google Health",
+                     description="exercise (buổi thể thao: exercise_id + performance như một mục buổi tập), weight (kg), "
+                                 "height (cm), body-fat (%), hydration (ml).")
+@transaction
+async def create_record(kind: records.Kind, payload: dict[str, Any], service: UserContextDep):
+    return await records.create(service.session, service.user_id, kind, payload)
+
+
+@records_router.patch("/{kind}/{record_id}", response_model=HealthRecordRead,
+                      summary="Sửa một bản ghi HercFit đã ghi lên Google")
+@transaction
+async def update_record(kind: records.Kind, record_id: UUID, payload: dict[str, Any], service: UserContextDep):
+    return await records.update(service.session, service.user_id, kind, record_id, payload)
+
+
+@records_router.delete("/{kind}/{record_id}", status_code=status.HTTP_204_NO_CONTENT,
+                       summary="Xoá một bản ghi HercFit đã ghi lên Google")
+@transaction
+async def delete_record(kind: records.Kind, record_id: UUID, service: UserContextDep):
+    await records.delete(service.session, service.user_id, kind, record_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

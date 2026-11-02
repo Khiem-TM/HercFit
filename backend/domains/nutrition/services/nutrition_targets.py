@@ -2,7 +2,6 @@
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
 
 from domains.body.models.body_metrics import BodyMetric
 from domains.body.services import readings
@@ -45,12 +44,8 @@ class NutritionTargetService(UserService):
         weights = [(m.recorded_at.astimezone(tz).date(), float(m.weight_kg)) for m in readings.distinct_weighins(metrics)]
         height = next((float(m.height_cm) for m in metrics if m.height_cm is not None), None)
         if height is None:
-            row = (await self.session.execute(
-                select(BodyMetric.height_cm).where(BodyMetric.user_id == self.user_id, BodyMetric.is_active.is_(True),
-                                                   BodyMetric.height_cm.is_not(None))
-                .order_by(BodyMetric.recorded_at.desc()).limit(1)
-            )).scalar_one_or_none()
-            height = float(row) if row is not None else None
+            row = await BodyMetric.latest(self.session, self.user_id, "height_cm")
+            height = float(row.height_cm) if row is not None else None
         latest_weight = weights[0][1] if weights else None
         if latest_weight is None:
             latest = await BodyMetric.get_latest_for_user(self.session, user_id=self.user_id)

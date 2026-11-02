@@ -67,8 +67,11 @@ async def _set(session: AsyncSession, user_id: UUID, data_group: str, granted: b
     session.add(ConsentEvent(user_id=user_id, purpose=PURPOSE, data_group=data_group, granted=granted,
                              version=version, policy_version=POLICY_VERSION, actor=actor))
     await session.flush()
-    # Ngữ cảnh dựng theo quyết định trước đó không bao giờ được phục vụ lại.
-    await session.execute(text("DELETE FROM context_snapshots WHERE user_id = :u"), {"u": user_id})
+    if data_group == "device" and granted:
+        # Thu hồi: trigger kg_user_consent đổi dữ kiện thiết bị trong graph thành tombstone.
+        # Cấp: dữ kiện hiện tại được dựng lại từ health_points và phát lên graph.
+        from domains.health_records import views
+        await views.publish_all_kg(session, user_id)
     from domains.shared.events import publish
     await publish(session, "consent.changed", user_id,
                   {"purpose": PURPOSE, "data_group": data_group, "granted": granted, "version": version})

@@ -1,7 +1,6 @@
 # Đọc biến môi trường từ .env
 
 from enum import StrEnum
-from typing import Literal
 
 from dotenv import find_dotenv
 from pydantic import Field, SecretStr, computed_field
@@ -29,8 +28,6 @@ class LogLevel(StrEnum):
         return mapping[self]
 
 
-READER_V2_CHOICES = ("training", "nutrition", "body", "wellbeing", "analytics", "agent")
-ReaderDomain = Literal["training", "nutrition", "body", "wellbeing", "analytics", "agent"]
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -84,44 +81,13 @@ class Settings(BaseSettings):
     GOOGLE_HEALTH_REDIRECT_URI: str | None = None
     GOOGLE_HEALTH_SYNC_LOOP: bool = True
     GOOGLE_HEALTH_SYNC_INTERVAL_MINUTES: int = Field(default=360, ge=15, le=7 * 24 * 60)
-    GOOGLE_HEALTH_BACKFILL_DAYS: int = Field(default=30, ge=1, le=90)
     # Gốc Google Health API. Chỉ ghi đè cho test hoặc emulator: https, hoặc http thường
     # trên localhost (access token của người dùng không bao giờ gửi qua http thường tới host khác).
     GOOGLE_HEALTH_API_ROOT: str = Field(
         default="https://health.googleapis.com",
         pattern=r"^(https://[A-Za-z0-9.-]+(:[0-9]+)?|http://(localhost|127\.0\.0\.1)(:[0-9]+)?)/?$")
-    # Nền tảng sức khoẻ (docs/google_health/). Các khả năng đã xác nhận bằng tài khoản Google
-    # thử nghiệm thật, dạng "data-type:op" (ví dụ "weight:create"); nếu không thì lệnh ghi luôn tắt.
-    GOOGLE_HEALTH_VERIFIED_CAPABILITIES: list[str] = []
-    # v4beta được dùng theo từng loại dữ liệu, chỉ cho các loại liệt kê ở đây (M7).
-    GH_V4BETA_TYPES: list[str] = []
-    # off: chỉ dùng sync cũ trong tiến trình; shadow: pipeline job ghi thêm lớp nguồn
-    # để so sánh; primary: pipeline job sở hữu các bảng nghiệp vụ (M4).
-    GH_INGEST_V2: Literal["off", "shadow", "primary"] = "off"
-    # true: API không bao giờ gọi Google trong tiến trình (callback/sync xếp job cho worker).
-    GH_WORKER_EXTERNAL: bool = False
-    GH_WEBHOOK_ENABLED: bool = False
-    # (Các) secret của endpoint webhook, cấu hình làm endpointAuthorization của subscriber.
-    GH_WEBHOOK_SECRET: SecretStr | None = None
-    GH_WEBHOOK_PREVIOUS_SECRETS: list[SecretStr] = []
-    GH_WEBHOOK_VERIFY_SIGNATURE: bool = True
-    GH_WEBHOOK_KEYSET_URL: str = "https://www.gstatic.com/googlehealthapi/webhooks/webhooks_public_keyset.json"
-    # Tạo subscriber webhook (python -m integrations.google_health.subscriptions). Thông tin xác thực
-    # quản trị là Cloud access token truyền vào lúc chạy (GH_ADMIN_ACCESS_TOKEN), không bao giờ được lưu.
-    GH_PROJECT_NUMBER: str | None = None
-    GH_SUBSCRIBER_ID: str = Field(default="hercfit-main", pattern=r"^[a-z]([a-z0-9-]{2,34}[a-z0-9])$")
-    GH_WEBHOOK_PUBLIC_URL: str | None = None
-    # Công tắc ngắt khẩn cấp và các nhóm được phép cho lệnh ghi HercFit -> Google (M6).
-    GH_EXPORT_DISPATCH: bool = False
-    GH_EXPORT_GROUPS: list[str] = []
-    HEALTH_RETENTION_ENFORCE: bool = False
-    # Số request mỗi phút tới Google theo người dùng và cho cả project (chốt quota).
-    GH_USER_RPM: int = Field(default=300, ge=1, le=10_000)
-    GH_PROJECT_RPM: int = Field(default=3_000, ge=1, le=1_000_000)
     # Số request và độ trễ theo route (api_route_usage), ghi xuống mỗi phút một lần.
     API_ROUTE_METRICS: bool = True
-    # Công tắc bộ đọc theo miền trong khi các bên dùng chuyển sang bản ghi sức khoẻ mới (core/flags.py).
-    READER_V2_DOMAINS: list[ReaderDomain] = []
     # Danh tính uỷ quyền cho service agent: nó chứng minh danh tính bằng HMAC trên mỗi
     # request uỷ quyền; sau đó backend cấp một token uỷ quyền ngắn hạn.
     AGENT_SERVICE_SECRET: SecretStr | None = None
@@ -191,15 +157,6 @@ class Settings(BaseSettings):
     def agent_service_secrets(self) -> list[str]:
         secrets = [self.AGENT_SERVICE_SECRET, *self.AGENT_SERVICE_PREVIOUS_SECRETS]
         return [secret.get_secret_value() for secret in secrets if secret and secret.get_secret_value()]
-
-    @property
-    def webhook_secrets(self) -> list[str]:
-        secrets = [self.GH_WEBHOOK_SECRET, *self.GH_WEBHOOK_PREVIOUS_SECRETS]
-        return [secret.get_secret_value() for secret in secrets if secret and secret.get_secret_value()]
-
-    @property
-    def verified_capabilities(self) -> frozenset[str]:
-        return frozenset(self.GOOGLE_HEALTH_VERIFIED_CAPABILITIES)
 
     @property
     def google_health_configured(self) -> bool:

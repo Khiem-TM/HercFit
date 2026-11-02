@@ -47,8 +47,7 @@ async def lifespan(app: FastAPI):
         from domains.media.services.image_cleanup import cleanup_loop
         cleanup_task = asyncio.create_task(cleanup_loop())
     health_task = None
-    # Khi có worker riêng (python -m workers run), API không bao giờ gọi Google trong tiến trình.
-    if settings.google_health_configured and settings.GOOGLE_HEALTH_SYNC_LOOP and not settings.GH_WORKER_EXTERNAL:
+    if settings.google_health_configured and settings.GOOGLE_HEALTH_SYNC_LOOP:
         from integrations.google_health.scheduler import health_sync_loop
         health_task = asyncio.create_task(health_sync_loop())
     metrics_stop, metrics_task = asyncio.Event(), None

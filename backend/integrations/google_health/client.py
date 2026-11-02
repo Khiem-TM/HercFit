@@ -1,13 +1,14 @@
-"""Client bất đồng bộ cho health.googleapis.com (mặc định v4, v4beta theo từng loại dữ liệu).
+"""Client bất đồng bộ cho health.googleapis.com v4.
 
-* Phân trang không bao giờ âm thầm cắt bớt: các hàm `*_all` trả về `Fetch(points, complete,
-  next_token)`. Hết ngân sách thì để `complete=False` cùng token để
-  đọc tiếp; bên gọi không được coi một lần đọc dở là trọn cửa sổ.
+* Đọc: `list`, `reconcile` (luồng gộp mọi nguồn, đã khử trùng lặp; `family` chọn họ nguồn,
+  ví dụ self-sources = chỉ điểm do OAuth client này ghi) và `dailyRollUp`.
+  Phân trang không bao giờ âm thầm cắt bớt: các hàm `*_all` trả về `Fetch(points, complete,
+  next_token)`; hết ngân sách trang thì `complete=False`, bên gọi không được coi là đủ cửa sổ.
+* Ghi: create / patch / batchDelete, mỗi lệnh trả về một google.longrunning Operation.
+  Google tự cấp id nên create không bao giờ được thử lại.
 * Lỗi mang `error_class` quyết định bước tiếp theo:
-  TRANSIENT (thử lại sau), RATE_LIMIT (thử lại sau Retry-After), PERMISSION (thiếu
-  hoặc bị thu hồi scope: dừng loại này, không bao giờ tombstone), REAUTH (refresh token
-  đã chết), SCHEMA (request bị từ chối, ví dụ một filter: cần sửa code), UNSUPPORTED
-  (loại hoặc tài nguyên không có), PROVIDER (các 4xx khác).
+  TRANSIENT (thử lại sau), RATE_LIMIT, PERMISSION (thiếu hoặc bị thu hồi scope), REAUTH (refresh
+  token đã chết), SCHEMA (request bị từ chối: cần sửa code), UNSUPPORTED, PROVIDER (các 4xx khác).
 * Thử lại áp dụng cho 429/5xx/lỗi mạng với backoff mũ full-jitter.
 
 Body phản hồi của nhà cung cấp có thể lặp lại chi tiết request, nên chỉ ghi log
@@ -121,8 +122,7 @@ def _retry_after(response: httpx.Response) -> float | None:
 class GoogleHealthClient:
     def __init__(self, access_token: str, http: httpx.AsyncClient, *,
                  sleep: Callable[[float], Any] = asyncio.sleep, base_url: str | None = None,
-                 jitter: Callable[[float, float], float] = random.uniform,
-                 on_request: Callable[[], Any] | None = None):
+                 jitter: Callable[[float, float], float] = random.uniform):
         from core.settings import settings
 
         self._headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
@@ -132,26 +132,16 @@ class GoogleHealthClient:
         self._root = settings.GOOGLE_HEALTH_API_ROOT.rstrip("/")
         self._base = (base_url or f"{self._root}/v4").rstrip("/")
         self._jitter = jitter
-        self._on_request = on_request  # hook quota (token bucket) được chờ trước mỗi lần thử
-
-    def for_version(self, api_version: str) -> GoogleHealthClient:
-        clone = GoogleHealthClient.__new__(GoogleHealthClient)
-        clone.__dict__.update(self.__dict__)
-        clone._base = f"{self._root}/{api_version}"
-        return clone
 
     def _backoff(self, attempt: int) -> float:
         return self._jitter(0, min(BACKOFF_CAP, BACKOFF_BASE * 2 ** (attempt - 1)))
 
     async def _request(self, method: str, path: str, *, params: dict | None = None,
-                       body: dict | None = None, retry: bool = True, raw: bool = False) -> Any:
-        """`retry=False` cho lệnh ghi không idempotent: kết quả chưa rõ được báo lên, không bao giờ gửi lại.
-        `raw=True` trả về byte của phản hồi (tải file media như TCX)."""
+                       body: dict | None = None, retry: bool = True) -> Any:
+        """`retry=False` cho lệnh ghi không idempotent: kết quả chưa rõ được báo lên, không bao giờ gửi lại."""
         label = path.split("/")[-1].split(":")[-1]
         attempts = MAX_ATTEMPTS if retry else 1
         for attempt in range(1, attempts + 1):
-            if self._on_request is not None:
-                await self._on_request()
             try:
                 response = await self._http.request(method, f"{self._base}/{path}", params=params, json=body,
                                                      headers=self._headers, timeout=TIMEOUT)
@@ -162,8 +152,6 @@ class GoogleHealthClient:
                 await self._sleep(self._backoff(attempt))
                 continue
             if response.status_code == 200:
-                if raw:
-                    return response.content
                 return response.json() if response.content else {}
             if response.status_code in RETRY_STATUSES and attempt < attempts:
                 wait = _retry_after(response)
@@ -179,36 +167,22 @@ class GoogleHealthClient:
         raise GoogleHealthError("provider_error", None, TRANSIENT)
 
     # -- tài nguyên người dùng ------------------------------------------------------------------
-    async def get_identity(self) -> dict[str, Any]:
-        return await self._request("GET", "users/me/identity")
-
     async def get_profile(self) -> dict[str, Any]:
         return await self._request("GET", "users/me/profile")
 
     async def get_settings(self) -> dict[str, Any]:
         return await self._request("GET", "users/me/settings")
 
-    async def list_paired_devices(self) -> list[dict[str, Any]]:
-        return (await self._request("GET", "users/me/pairedDevices")).get("pairedDevices") or []
-
-    async def export_exercise_tcx(self, name: str, *, partial: bool = False) -> bytes:
-        """Lộ trình của một buổi tập dạng TCX (cần một scope vận động VÀ một scope location).
-
-        `name` là tên tài nguyên data point của buổi tập; `alt=media` tải file thô.
-        """
-        if not name.startswith("users/") or "/dataTypes/exercise/dataPoints/" not in name:
-            raise ValueError("not an exercise data point name")
-        params = {"alt": "media", **({"partialData": "true"} if partial else {})}
-        return await self._request("GET", f"{name}:exportExerciseTcx", params=params, raw=True)
-
     # -- data point -------------------------------------------------------------------------------
     async def list_page(self, data_type: str, *, filter: str | None = None, page_size: int = 1000,
-                        page_token: str | None = None, reconcile: bool = False) -> Page:
+                        page_token: str | None = None, reconcile: bool = False, family: str | None = None) -> Page:
         params: dict[str, Any] = {"pageSize": page_size}
         if filter:
             params["filter"] = filter
         if page_token:
             params["pageToken"] = page_token
+        if family:
+            params["dataSourceFamily"] = f"users/me/dataSourceFamilies/{family}"
         suffix = ":reconcile" if reconcile else ""
         page = await self._request("GET", f"users/me/dataTypes/{data_type}/dataPoints{suffix}", params=params)
         return Page(page.get("dataPoints") or [], page.get("nextPageToken") or None)
@@ -223,10 +197,12 @@ class GoogleHealthClient:
         return Page(page.get("rollupDataPoints") or [], page.get("nextPageToken") or None)
 
     async def list_all(self, data_type: str, *, filter: str | None = None, page_size: int = 1000,
-                       max_pages: int = 50, page_token: str | None = None) -> Fetch:
+                       max_pages: int = 50, page_token: str | None = None, reconcile: bool = False,
+                       family: str | None = None) -> Fetch:
         result = Fetch(next_token=page_token)
         while result.pages < max_pages:
-            page = await self.list_page(data_type, filter=filter, page_size=page_size, page_token=result.next_token)
+            page = await self.list_page(data_type, filter=filter, page_size=page_size, page_token=result.next_token,
+                                        reconcile=reconcile, family=family)
             result.points.extend(page.points)
             result.pages += 1
             result.next_token = page.next_token
@@ -255,10 +231,9 @@ class GoogleHealthClient:
     async def get_point(self, name: str) -> dict[str, Any]:
         return await self._request("GET", name)
 
-    async def create_point(self, data_type: str, point: dict[str, Any], *, idempotent: bool = False) -> dict[str, Any]:
-        """Client chỉ thử lại khi bên gọi đánh dấu idempotent (Google tự cấp id, nên lệnh tạo mặc định không được thử lại)."""
-        return await self._request("POST", f"users/me/dataTypes/{data_type}/dataPoints", body=point,
-                                   retry=idempotent)
+    async def create_point(self, data_type: str, point: dict[str, Any]) -> dict[str, Any]:
+        """Không bao giờ thử lại: Google tự cấp id, POST lần hai có thể thành data point thứ hai."""
+        return await self._request("POST", f"users/me/dataTypes/{data_type}/dataPoints", body=point, retry=False)
 
     async def patch_point(self, name: str, point: dict[str, Any]) -> dict[str, Any]:
         return await self._request("PATCH", name, body={**point, "name": name})

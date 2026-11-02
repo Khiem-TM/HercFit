@@ -13,6 +13,10 @@ from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName, Vers
 from domains.shared.schemas.journal import JournalRead
 
 
+# Nhật ký tập của HercFit chỉ gồm buổi gym: bài STRENGTH và bài ghi nhanh "Tập gym (tổng quát)"
+# (migration 0016). Buổi thể thao được ghi thẳng lên Google Health (Google là nguồn sự thật).
+GYM_GENERAL_CODE = "gym_general"
+
 DurationSeconds = Annotated[Decimal, Field(gt=0, lt=1000000000, max_digits=12, decimal_places=3, allow_inf_nan=False)]
 
 class TrainingCreate(InputSchema):

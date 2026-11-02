@@ -218,9 +218,10 @@ def _recovery(daily, end: date) -> RecoveryOverview:
     )
 
 
-def _energy(daily, intake: dict[date, float], weights: list[tuple[date, float]], end: date) -> EnergyOverview:
-    paired = [(d.local_date, intake[d.local_date], float(d.total_kcal)) for d in daily
-              if d.total_kcal is not None and d.local_date in intake and d.local_date < end]
+def _energy(out: dict[date, float], intake: dict[date, float], weights: list[tuple[date, float]],
+            end: date) -> EnergyOverview:
+    """out: tổng năng lượng tiêu hao theo ngày (views.energy_out: total-calories của Google cộng buổi ghi tay)."""
+    paired = [(day, intake[day], kcal) for day, kcal in sorted(out.items()) if day in intake and day < end]
     change = round(weights[-1][1] - weights[0][1], 2) if len(weights) >= 2 else None
     intake_avg = _avg((p[1] for p in paired), 0)
     out_avg = _avg((p[2] for p in paired), 0)
@@ -234,7 +235,8 @@ def _energy(daily, intake: dict[date, float], weights: list[tuple[date, float]],
 
 
 def build_overview(*, start: date, end: date, zone: str, connected: bool, age: int | None, daily, sleep, workouts,
-                   intake: dict[date, float], weights: list[tuple[date, float]]) -> HealthOverviewRead:
+                   intake: dict[date, float], weights: list[tuple[date, float]],
+                   energy_out: dict[date, float] | None = None) -> HealthOverviewRead:
     """intake: năng lượng bữa ăn của các ngày trọn theo ngày; weights: (ngày, kg) cũ nhất trước."""
     notes = []
     if not connected:
@@ -246,7 +248,10 @@ def build_overview(*, start: date, end: date, zone: str, connected: bool, age: i
     return HealthOverviewRead(
         start_date=start, end_date=end, timezone=zone, connected=connected,
         activity=_activity(daily, workouts, end), sleep=_sleep(sleep, end, age, zone),
-        recovery=_recovery(daily, end), energy=_energy(daily, intake, weights, end), notes=notes,
+        recovery=_recovery(daily, end), notes=notes,
+        energy=_energy(energy_out if energy_out is not None else
+                       {d.local_date: float(d.total_kcal) for d in daily if d.total_kcal is not None},
+                       intake, weights, end),
     )
 
 

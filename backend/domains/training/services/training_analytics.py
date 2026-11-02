@@ -109,63 +109,40 @@ async def _rows(session, user_id, start: date, end: date, zone: str, *, exercise
     return [Row(*(row[:7]), row[7].value if row[7] is not None else None, *row[8:]) for row in (await session.execute(query)).all()]
 
 
-# Bộ đọc v2 (training): buổi chạy từ thiết bị được đưa vào phân tích chạy bộ trừ khi có buổi nhập tay trùng.
+# Buổi chạy chỉ đến từ Google Health (Google là nguồn sự thật cho thể thao): đồng hồ, ghi qua chat
+# hoặc ứng dụng khác. Chúng chỉ có những gì đã đo (quãng đường, thời gian, kcal); cường độ là chưa biết.
 RUN_EXERCISE_TYPES = frozenset({"RUNNING", "TRAIL_RUN", "INCLINE_RUN", "TREADMILL"})
-SAME_SESSION_START_SECONDS = 15 * 60
-SAME_SESSION_OVERLAP = 0.5
-
-
-def _same_session(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime) -> bool:
-    """Bắt đầu cách nhau trong 15 phút, hoặc chồng lên nhau một nửa thời lượng của buổi ngắn hơn."""
-    if abs((a_start - b_start).total_seconds()) <= SAME_SESSION_START_SECONDS:
-        return True
-    overlap = (min(a_end, b_end) - max(a_start, b_start)).total_seconds()
-    shorter = min((a_end - a_start).total_seconds(), (b_end - b_start).total_seconds())
-    return shorter > 0 and overlap / shorter >= SAME_SESSION_OVERLAP
 
 
 def is_device(row: Row) -> bool:
     return row.performance.get("source") == "device"
 
 
-async def _device_runs(session, user_id, start: date, end: date, manual: list[Row]) -> list[Row]:
-    """Các buổi chạy thiết bị ghi lại mà không có trong nhật ký HercFit (bộ đọc v2 `training`, consent thiết bị).
-
-    Buổi nhập tay thắng khi trùng: nó mang RPE, loại bài và các vòng. Buổi từ thiết bị chỉ
-    có những gì thiết bị đo (quãng đường, thời gian di chuyển, kcal); cường độ vẫn là chưa biết.
-    """
-    from core.flags import reader_v2
-    from domains.health_records.models.device_records import DeviceWorkout
+async def _google_runs(session, user_id, start: date, end: date) -> list[Row]:
+    from domains.health_records import views
     from domains.identity import consent
 
-    if not reader_v2("training") or not await consent.device_access(session, user_id):
+    if not await consent.device_access(session, user_id):
         return []
-    workouts = (await session.execute(select(DeviceWorkout).where(
-        DeviceWorkout.user_id == user_id, DeviceWorkout.is_active.is_(True),
-        DeviceWorkout.exercise_type.in_(RUN_EXERCISE_TYPES), DeviceWorkout.local_date >= start,
-        DeviceWorkout.local_date <= end, DeviceWorkout.distance_m > 0,
-    ).order_by(DeviceWorkout.started_at))).scalars().all()
-    manual_ids = {row.training_id for row in manual}
-    spans = [(started, started + timedelta(seconds=float(seconds or 0))) for started, seconds in (await session.execute(
-        select(Training.started_at, Training.duration_seconds).where(Training.id.in_(manual_ids)))).all()] if manual_ids else []
     rows = []
-    for workout in workouts:
-        seconds = workout.active_seconds or workout.elapsed_seconds
-        if not seconds or any(_same_session(workout.started_at, workout.ended_at, a, b) for a, b in spans):
+    for workout in await views.workout_rows(session, user_id, start, end, types=RUN_EXERCISE_TYPES):
+        seconds = workout["active_seconds"] or workout["elapsed_seconds"]
+        if not seconds or not workout["distance_m"]:
             continue
         rows.append(Row(
-            training_id=workout.id, day=workout.local_date, discipline="ENDURANCE", session_seconds=Decimal(seconds),
-            training_load=None, session_rpe=None, source_entry_id=None, kind="ENDURANCE", exercise_id=None,
-            snapshot={"name_vi": workout.display_name or "Chạy (thiết bị)", "configuration": {"activity": "RUN"}},
+            training_id=workout["id"], day=workout["local_date"], discipline="ENDURANCE",
+            session_seconds=Decimal(seconds), training_load=None, session_rpe=None, source_entry_id=None,
+            kind="ENDURANCE", exercise_id=None,
+            snapshot={"name_vi": workout["display_name"] or "Chạy", "configuration": {"activity": "RUN"}},
             performance={"source": "device", "duration_seconds": seconds, "moving_seconds": seconds},
-            duration_seconds=Decimal(seconds), distance_meters=workout.distance_m, volume_kg=None, best_e1rm_kg=None,
-            hard_sets=None, energy_kcal=workout.energy_kcal))
+            duration_seconds=Decimal(seconds), distance_meters=Decimal(str(workout["distance_m"])), volume_kg=None,
+            best_e1rm_kg=None, hard_sets=None, energy_kcal=workout["energy_kcal"]))
     return rows
 
 
 async def _run_rows(session, user_id, start: date, end: date, zone: str) -> tuple[list[Row], list[Row]]:
-    manual = [row for row in await _rows(session, user_id, start, end, zone) if row.is_run]
-    return manual, await _device_runs(session, user_id, start, end, manual)
+    """(buổi chạy nhập trong HercFit, buổi chạy trên Google); nhật ký HercFit giờ chỉ gồm gym."""
+    return [], await _google_runs(session, user_id, start, end)
 
 
 def _sessions(rows: list[Row]) -> dict[Any, Row]:

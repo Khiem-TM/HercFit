@@ -60,46 +60,6 @@ services:
     networks:
       - hercfit-network
 
-  # Google Health jobs: ingestion, webhook routing, exports and maintenance (workers/).
-  # The API only enqueues work when GH_WORKER_EXTERNAL=true; this service runs it.
-  health-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: backend
-    container_name: hercfit-health-worker
-    restart: unless-stopped
-    command: ["python", "-m", "workers", "run", "--queues", "ingest,export,maint", "--concurrency", "4"]
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      MODE: ${MODE:-dev}
-      DATABASE_TYPE: postgres
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER:-hercfit}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hercfit_secret}
-      POSTGRES_DB: ${POSTGRES_DB:-hercfit_db}
-      POSTGRES_APPLICATION_NAME: hercfit-health-worker
-    volumes:
-      - .:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-    # No HTTP here (the image default curls the API port): healthy while a worker slot has
-    # reached the database within the last minute (workers/runner.py ALIVE_FILE).
-    healthcheck:
-      test: ["CMD", "python", "-c", "import os, sys, time; sys.exit(time.time() - os.path.getmtime('/tmp/hercfit-worker.alive') > 60)"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-    networks:
-      - hercfit-network
-
   agentic:
     build:
       context: .

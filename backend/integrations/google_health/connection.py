@@ -12,22 +12,18 @@ from sqlalchemy import func, select, text
 from core.crypto import TokenCipherUnavailable, decrypt_secret, encrypt_secret
 from core.security import generate_secure_token, pkce_pair
 from core.settings import settings
-from domains.body.models.body_metrics import BodyMetric
-from domains.health_records.models.device_records import DailyHealthSummary, DeviceWorkout, HealthSample, SleepSession
-from integrations.google_health.models import HealthConnection, HealthSyncRun
+from domains.health_records.models.health_points import HealthPoint
+from domains.health_records.schemas.health import HEALTH_PROVIDER
+from domains.identity import consent
 from domains.identity.models.oauth_account import OAuthAccount
 from domains.identity.models.user import User
-from domains.health_records.schemas.health import HEALTH_PROVIDER
-from integrations.google_health.schemas import HealthConnectionRead, HealthSyncRunRead
-from domains.identity import consent
-from domains.shared.events import publish
 from domains.shared.services.common import UserService
 from integrations.google_health import oauth
 from integrations.google_health.client import GoogleHealthError
+from integrations.google_health.models import HealthConnection
+from integrations.google_health.schemas import HealthConnectionRead
 
 logger = logging.getLogger(__name__)
-DEVICE_TABLES = (("daily_days", DailyHealthSummary), ("sleep_sessions", SleepSession),
-                 ("device_workouts", DeviceWorkout), ("health_samples", HealthSample))
 
 
 def require_configured() -> None:
@@ -48,15 +44,9 @@ class HealthConnectionService(UserService):
         configured = settings.google_health_configured
         if connection is None:
             return HealthConnectionRead(configured=configured, connected=False)
-        records = {}
-        for name, model in DEVICE_TABLES:
-            records[name] = (await self.session.execute(select(func.count()).select_from(model).where(
-                model.user_id == self.user_id, model.is_active.is_(True)))).scalar_one()
-        records["body_metrics"] = (await self.session.execute(select(func.count()).select_from(BodyMetric).where(
-            BodyMetric.user_id == self.user_id, BodyMetric.is_active.is_(True),
-            BodyMetric.source == HEALTH_PROVIDER))).scalar_one()
-        run = (await self.session.execute(select(HealthSyncRun).where(HealthSyncRun.connection_id == connection.id)
-                                          .order_by(HealthSyncRun.created_at.desc()).limit(1))).scalar_one_or_none()
+        records = dict((await self.session.execute(
+            select(HealthPoint.data_type, func.count()).where(HealthPoint.user_id == self.user_id)
+            .group_by(HealthPoint.data_type))).all())
         granted = list(connection.granted_scopes or [])
         decision = await consent.load(self.session, self.user_id)
         return HealthConnectionRead(
@@ -66,20 +56,17 @@ class HealthConnectionService(UserService):
             share_sensitive_with_assistant=decision.sensitive,
             consented_at=connection.consented_at if decision.device else None, timezone=connection.timezone,
             provider_profile=connection.provider_profile or {}, last_sync_at=connection.last_sync_at,
-            last_success_at=connection.last_success_at, next_sync_at=connection.next_sync_at,
-            last_error_code=connection.last_error_code, records=records,
-            last_run=HealthSyncRunRead.model_validate(run) if run else None,
+            last_success_at=connection.last_success_at, last_error_code=connection.last_error_code,
+            records=records, types=connection.sync_cursor or {},
         )
 
-    def start(self, share_with_assistant: bool | None, scopes: list[str] | None = None,
-              then: str | None = None) -> tuple[str, str, str]:
+    def start(self, share_with_assistant: bool | None) -> tuple[str, str, str]:
         """URL đồng ý cùng nonce và PKCE verifier mà router lưu trong cookie HttpOnly."""
         require_configured()
         nonce = generate_secure_token(24)
         verifier, challenge = pkce_pair()
-        state = oauth.create_state(self.user_id, nonce, share_with_assistant, then)
-        return oauth.authorization_url(state=state, code_challenge=challenge, login_hint=self.user.email,
-                                       scopes=scopes), nonce, verifier
+        state = oauth.create_state(self.user_id, nonce, share_with_assistant)
+        return oauth.authorization_url(state=state, code_challenge=challenge, login_hint=self.user.email), nonce, verifier
 
     async def update_consent(self, share_with_assistant: bool, *, sensitive: bool | None = None) -> HealthConnectionRead:
         from core import principal
@@ -99,13 +86,11 @@ class HealthConnectionService(UserService):
         await self.session.flush()
         return await self.status()
 
-    async def request_sync(self) -> UUID:
+    async def require_active(self) -> HealthConnection:
         connection = await self.connection()
         if connection is None or connection.status != "ACTIVE":
             raise HTTPException(409, "Kết nối Google Health không ở trạng thái hoạt động; hãy kết nối lại.")
-        if connection.lease_until and connection.lease_until > datetime.now(timezone.utc):
-            raise HTTPException(409, "Đang đồng bộ, vui lòng chờ trong giây lát.")
-        return connection.id
+        return connection
 
     async def disconnect(self, purge_data: bool) -> HealthConnectionRead:
         connection = await HealthConnection.for_user(self.session, self.user_id, for_update=True)
@@ -113,15 +98,8 @@ class HealthConnectionService(UserService):
             await revoke_connection(connection)
             connection.status = "REVOKED"
             connection.access_token_enc = connection.refresh_token_enc = None
-            connection.token_expires_at = connection.next_sync_at = None
-            connection.lease_token = connection.lease_until = None
-            # Lần sync hay job bắt đầu trước thời điểm này bị thế hệ mới fence lại.
-            connection.generation += 1
+            connection.token_expires_at = None
             await self.session.flush()
-            from core.jobs.queue import cancel_for_connection
-            await cancel_for_connection(self.session, connection.id, "disconnected")
-            await publish(self.session, "health.connection.changed", self.user_id,
-                          {"status": "REVOKED", "generation": connection.generation})
         if purge_data:
             await purge_device_data(self.session, self.user_id)
         return await self.status()
@@ -145,28 +123,17 @@ async def revoke_connection(connection: HealthConnection, http: httpx.AsyncClien
 
 
 async def purge_device_data(session, user_id: UUID) -> dict[str, int]:
-    counts = {}
-    for name, model in DEVICE_TABLES:
-        counts[name] = (await session.execute(text(f"DELETE FROM {model.__tablename__} WHERE user_id = :uid"),
-                                              {"uid": user_id})).rowcount or 0
-    counts["body_metrics"] = (await session.execute(text(
-        "DELETE FROM body_metrics WHERE user_id = :uid AND source = :source"),
-        {"uid": user_id, "source": HEALTH_PROVIDER})).rowcount or 0
-    # Delete imported records before their source layer; preserve manually written logs.
-    for table in ("hydration_logs", "nutrition_logs", "ecg_recordings", "irn_alerts"):
-        counts[table] = (await session.execute(text(f"DELETE FROM {table} WHERE user_id = :u AND source = :s"),
-                            {"u": user_id, "s": HEALTH_PROVIDER})).rowcount or 0
-    for table in ("health_source_records", "health_series_chunks", "paired_devices", "health_coverage",
-                  "health_baselines", "derived_metrics", "context_snapshots"):
-        counts[table] = (await session.execute(text(f"DELETE FROM {table} WHERE user_id = :u"),
-                                               {"u": user_id})).rowcount or 0
-    for table in ("sync_cursors", "shadow_diffs", "health_sync_runs"):
-        await session.execute(text(f"DELETE FROM {table} WHERE connection_id IN "
-            "(SELECT id FROM health_connections WHERE user_id = :u)"), {"u": user_id})
-    await session.execute(text("DELETE FROM webhook_inbox WHERE health_user_id IN "
-        "(SELECT health_user_id FROM health_connections WHERE user_id = :u)"), {"u": user_id})
+    """Xoá bản sao dữ liệu Google trong HercFit (dữ liệu trên Google giữ nguyên) và thu hồi consent."""
+    counts = {
+        "health_points": (await session.execute(text("DELETE FROM health_points WHERE user_id = :u"),
+                                                {"u": user_id})).rowcount or 0,
+        "google_pushes": (await session.execute(text("DELETE FROM google_pushes WHERE user_id = :u"),
+                                                {"u": user_id})).rowcount or 0,
+    }
     await session.execute(text("UPDATE health_connections SET provider_profile = '{}'::jsonb, "
-        "sync_cursor = '{}'::jsonb, last_sync_at = NULL, last_success_at = NULL WHERE user_id = :u"), {"u": user_id})
+                               "sync_cursor = '{}'::jsonb, last_sync_at = NULL, last_success_at = NULL "
+                               "WHERE user_id = :u"), {"u": user_id})
+    # Thu hồi consent đổi mọi dữ kiện thiết bị trong graph thành tombstone (kg_republish_health).
     await consent.set_device(session, user_id, False)
     await consent.revoke(session, user_id, "sensitive")
     return counts
@@ -239,17 +206,8 @@ async def _link(session, user: User, claims: dict[str, Any], code: str, verifier
         connection.consented_at = None
     connection.share_with_assistant = share
     connection.last_error_code = None
-    connection.next_sync_at = now
-    if connection.id is not None:
-        connection.generation += 1
     await session.flush()
     await consent.set_device(session, user.id, share)
-    await publish(session, "health.connection.changed", user.id,
-                  {"status": "ACTIVE", "generation": connection.generation})
-    if claims.get("then") == "export_all":
-        # Công tắc đồng bộ đã xin các scope này: bật nốt với những gì đã được cấp.
-        from integrations.google_health.export import switch
-        await switch.enable_all(session, connection, user.id)
     return "connected", connection.id
 
 

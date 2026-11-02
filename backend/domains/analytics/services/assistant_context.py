@@ -29,13 +29,9 @@ def _float(value) -> float | None:
 
 
 async def _height(session, user_id, device_allowed: bool) -> float | None:
-    """Chiều cao hiếm khi được đo; lấy dòng mới nhất có chiều cao, không phải dòng mới nhất."""
-    statement = select(BodyMetric.height_cm).where(
-        BodyMetric.user_id == user_id, BodyMetric.is_active.is_(True), BodyMetric.height_cm.is_not(None))
-    if not device_allowed:
-        statement = statement.where(BodyMetric.source == "MANUAL")
-    value = (await session.execute(statement.order_by(BodyMetric.recorded_at.desc()).limit(1))).scalar_one_or_none()
-    return _float(value)
+    """Chiều cao hiếm khi được đo; lấy số đo mới nhất có chiều cao, không phải số đo mới nhất."""
+    latest = await BodyMetric.latest(session, user_id, "height_cm", respect_consent=not device_allowed)
+    return _float(latest.height_cm) if latest is not None else None
 
 
 async def _count(session, model, user_id, column, since: datetime) -> int:
