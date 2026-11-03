@@ -182,13 +182,13 @@ services:
       dockerfile: Dockerfile
       target: ingestion
     restart: unless-stopped
-    command: [python, -m, knowledge_ingestion.cli, worker]
+    command: [python, -m, agentic.embedding.ingestion.cli, worker]
     env_file:
       - path: .env
         required: false
       - path: agentic/.env
         required: false
-      - path: knowledge_ingestion/.env
+      - path: agentic/embedding/ingestion/.env
         required: false
     environment:
       POSTGRES_HOST: postgres
@@ -198,8 +198,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-hercfit_db}
     volumes:
       # Prepared bundles and tokenizer cache stay on the host (git-ignored).
-      - ./knowledge_ingestion/data/input:/app/knowledge_ingestion/data/input:ro
-      - ./knowledge_ingestion/data/.cache:/app/knowledge_ingestion/data/.cache:ro
+      - ./agentic/embedding/ingestion/data/input:/app/agentic/embedding/ingestion/data/input:ro
+      - ./agentic/embedding/ingestion/data/.cache:/app/agentic/embedding/ingestion/data/.cache:ro
     depends_on:
       backend:
         condition: service_healthy

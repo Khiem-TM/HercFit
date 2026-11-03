@@ -1,4 +1,5 @@
 """Tokenizer E5 chính xác; chỉ tải tokenizer.json, không bao giờ tải trọng số model."""
+import re
 from pathlib import Path
 
 import httpx
@@ -62,7 +63,6 @@ class E5Tokenizer:
                 raise ValueError('Cannot fit a token span into embedding budget')
             # Ưu tiên ranh giới đoạn/câu trong một phần tư cuối của cửa sổ.
             if end < len(offsets):
-                import re
                 boundaries = list(re.finditer(r'\n\n|[.!?][\"\u201d\u2019]?\s+', piece))
                 late = [m for m in boundaries if m.end() > len(piece) * 0.75]
                 if late:

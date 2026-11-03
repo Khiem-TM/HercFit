@@ -5,17 +5,16 @@ from pathlib import Path
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import SettingsConfigDict
 
-from embedding.config import EmbeddingSettings
+from agentic.embedding.core.config import BACKEND_ROOT, EmbeddingSettings
 
-LOCAL_ROOT = Path(__file__).resolve().parent
-BACKEND_ROOT = LOCAL_ROOT.parent
+INGESTION_ROOT = Path(__file__).resolve().parent
 # Sách nguồn, gói đã chuẩn bị và cache tokenizer không bao giờ được đưa vào quản lý phiên bản.
-DATA_ROOT = LOCAL_ROOT / 'data'
+DATA_ROOT = INGESTION_ROOT / 'data'
 
 
 class IngestionSettings(EmbeddingSettings):
     model_config = SettingsConfigDict(
-        env_file=(str(BACKEND_ROOT / '.env'), str(BACKEND_ROOT / 'agentic/.env'), str(LOCAL_ROOT / '.env')),
+        env_file=(str(BACKEND_ROOT / '.env'), str(BACKEND_ROOT / 'agentic/.env'), str(INGESTION_ROOT / '.env')),
         extra='ignore', env_ignore_empty=True,
     )
     FPT_API_KEY: SecretStr | None = None

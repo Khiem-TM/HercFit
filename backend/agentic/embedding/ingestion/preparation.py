@@ -7,9 +7,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from knowledge_ingestion.cleaning import clean_pages
-from knowledge_ingestion.parsing import extract_text
-from knowledge_ingestion.tokenization import E5Tokenizer, MODEL, REVISION
+from agentic.embedding.ingestion.cleaning import clean_pages
+from agentic.embedding.ingestion.parsing import extract_text
+from agentic.embedding.ingestion.tokenization import MODEL, REVISION, E5Tokenizer
 
 
 class Chapter(BaseModel):

@@ -45,4 +45,4 @@ tests
 **/traces
 
 # Source books, prepared bundles and tokenizer cache; mounted into the ingestion worker.
-knowledge_ingestion/data
+agentic/embedding/ingestion/data

@@ -36,6 +36,7 @@ Canonical module ownership:
 | `tools` | Tool registry, definitions, policies, schemas and integrations |
 | `security` | Input, content and output checks |
 | `knowledge_graph` | Always-on Neo4j projection, user model, graph retrieval and outbox worker |
+| `embedding` | Approved-document RAG: `ingestion` (operator CLI and embedding worker), `retrieval` (`POST /api/knowledge/search`, served by the backend) and shared `core` (settings, embedding/rerank clients, text normalization) |
 | `research` | Research contracts, evidence audit, source registry and finalization attestation |
 | `observability` | Shared runtime adapter (request/trace IDs, middleware, propagation), execution guards and telemetry |
 | `evaluation` | Evaluation runners and golden datasets |

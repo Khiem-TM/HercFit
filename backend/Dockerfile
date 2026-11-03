@@ -59,6 +59,6 @@ CMD ["python", "-m", "uvicorn", "agentic.core.app.main:app", "--host", "0.0.0.0"
 FROM base AS ingestion
 USER root
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system -r /app/knowledge_ingestion/requirements.txt
+    uv pip install --system -r /app/agentic/embedding/ingestion/requirements.txt
 USER app
-CMD ["python", "-m", "knowledge_ingestion.cli", "worker"]
+CMD ["python", "-m", "agentic.embedding.ingestion.cli", "worker"]

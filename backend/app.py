@@ -31,9 +31,9 @@ async def lifespan(app: FastAPI):
     settings.jwt_secret_value  # Xác thực phải được cấu hình kể cả khi không có nhà cung cấp AI.
     get_async_engine()
     observer()
-    from embedding.config import settings as embedding_settings
-    from embedding.client import EmbeddingClient
-    from embedding.rerank import RerankClient
+    from agentic.embedding.core.config import settings as embedding_settings
+    from agentic.embedding.core.client import EmbeddingClient
+    from agentic.embedding.core.rerank import RerankClient
     app.state.embedding_client = app.state.rerank_client = None
     if embedding_settings().RAG_ENABLED:
         try:
@@ -88,7 +88,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RouteMetricsMiddleware)
     app.include_router(api_v2_router, prefix="/api/v2")
     app.include_router(api_router, prefix="/api")
-    from embedding.router import router as embedding_router
+    from agentic.embedding.retrieval.router import router as embedding_router
     app.include_router(embedding_router, prefix="/api")
 
     @app.exception_handler(ValidationError)
