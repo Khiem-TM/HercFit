@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,3 +15,5 @@ class ConfirmationRequest(BaseModel):
     action_id: str
     revision: int = Field(ge=1)
     decision: Literal['approve', 'reject']
+    # Lịch tập người dùng đã sửa trên thẻ; server kiểm tra lại bằng schema và bản xem trước trước khi duyệt.
+    payload: dict[str, Any] | None = None

@@ -16,7 +16,7 @@ from agentic.core.context import request_context
 from agentic.tools.integrations.backend_client import BackendError
 from agentic.core.providers.fpt import strip_tool_markup
 from agentic.tools.integrations.tavily import public_url
-from agentic.tools.registry import HEALTH_TOOL_KINDS, REGISTRY
+from agentic.tools.registry import HEALTH_TOOL_KINDS, PREVIEW_PATHS, REGISTRY
 from agentic.tools.policy import allowed_tools, CATALOG_DEPENDENCIES, needs_catalog_handoff, CAPABILITY_GUIDANCE, COACH_GUIDANCE, HEALTH_DOMAINS, HEALTH_GUIDANCE, TRAINING_DOMAINS
 from agentic.components.context_filter import model_graph_context
 from agentic.services.routing import verified_fast_plan, terminal_result, fast_reads_enabled
@@ -33,15 +33,6 @@ NO_TEXT_PREVIEW = ('Lần trả lời trước chỉ có văn bản. Không vi�
                    'chỉ trả văn bản khi thiếu thông tin bắt buộc hoặc nhiều bản ghi gần giống cần người dùng chọn.')
 
 
-# Các lệnh ghi mà thẻ xác nhận cần tổng do server tính, ảnh chụp dữ liệu và hình ảnh.
-PREVIEW_PATHS = {
-    'create_meals': '/api/meals/preview',
-    'create_trainings': '/api/trainings/preview',
-    'create_training_plans': '/api/plans/{resource_id}/training-plans/preview',
-    'log_sport_session': '/api/v2/health/records/exercise:preview',
-    'log_water': '/api/v2/health/records/hydration:preview',
-}
-
 def research_handoff(state, domain):
     """Ưu tiên database: tìm catalog rỗng cho món của lượt này thì chuyển sang tra cứu (một lần)."""
     if domain not in {'foods','exercises'} or state.get('research_count') or state.get('candidate'):
@@ -51,7 +42,7 @@ def research_handoff(state, domain):
     return {'domain':domain,'query':query} if query else None
 
 # Các lệnh đọc mà 404 nghĩa là "chưa có" (trạng thái model xử lý được), không phải lỗi backend.
-NOT_FOUND_IS_EMPTY = {'current_goal', 'latest_metrics', 'current_plan', 'current_training_plan'}
+NOT_FOUND_IS_EMPTY = {'current_goal', 'latest_metrics', 'current_training_plan'}
 
 CATALOG_WRITES = {'create_foods': 'foods', 'finalize_foods': 'foods', 'create_exercises': 'exercises', 'finalize_exercises': 'exercises'}
 

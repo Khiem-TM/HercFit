@@ -99,7 +99,9 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
     async def await_confirmation(state):
         decision=interrupt(state['pending_action'])
         if decision.get('decision')=='approve':
-            return {'approved':True}
+            # Bản người dùng sửa trên thẻ đã được runtime kiểm tra và lưu vào hành động đang chờ.
+            edited=decision.get('action')
+            return {'approved':True,**({'pending_action':{**state['pending_action'],**edited}} if edited else {})}
         from langchain_core.messages import AIMessage
         reply='Đã từ chối thao tác; không ghi dữ liệu.'
         return {'approved':False,'pending_action':None,'status':'completed','reply':reply,'messages':[AIMessage(content=reply,name='orchestration_agent')]}

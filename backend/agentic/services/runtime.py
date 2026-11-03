@@ -263,6 +263,7 @@ class Runtime:
             if not row or str(row['user_id'])!=user_id or row['session_id']!=payload.session_id:
                 raise HTTPException(404,'Action not found')
             action=row['data']
+            edited=None
             origin = row.get('trace_context') or {}
             if origin.get('trace_id'):
                 annotate(linked_trace_id=origin['trace_id'])
@@ -282,6 +283,13 @@ class Runtime:
                 if datetime.fromisoformat(action['expires_at'])<=datetime.now(timezone.utc):
                     await self.store.set_action(payload.action_id,'expired')
                     raise HTTPException(409,'Confirmation expired; request a new preview')
+                if payload.payload is not None:
+                    if payload.decision!='approve':
+                        raise HTTPException(422,'Only an approval can carry an edited payload')
+                    from agentic.services.action_edits import revise
+                    changes,display=await revise(action,payload.payload)
+                    await self.store.revise_action(payload.action_id,changes)
+                    edited={**changes,'display':display}
                 await self.store.set_action(payload.action_id,'approved' if payload.decision=='approve' else 'rejected')
             snapshot=await self.state(session['thread_id'])
             if not snapshot or snapshot.values.get('pending_action',{}).get('action_id')!=payload.action_id:
@@ -299,8 +307,12 @@ class Runtime:
             if not snapshot.next:
                 # Kết quả ghi chưa rõ đã kết thúc bằng một lỗi thân thiện; thử lại
                 # node thực thi đã duyệt, không bao giờ sinh lại hành động.
-                await self.graph.aupdate_state(self.config(session['thread_id']),{'approved':True,'status':'running','error':None},as_node='confirmation')
-            result=await self.run(Command(resume={'decision':payload.decision}) if interrupted else None,session['thread_id'],emit)
+                update={'approved':True,'status':'running','error':None}
+                if edited:
+                    update['pending_action']={**snapshot.values['pending_action'],**edited}
+                await self.graph.aupdate_state(self.config(session['thread_id']),update,as_node='confirmation')
+            resume={'decision':payload.decision,**({'action':edited} if edited else {})}
+            result=await self.run(Command(resume=resume) if interrupted else None,session['thread_id'],emit)
             latest=await self.store.action(payload.action_id)
             if latest['status'] in {'executed','rejected','failed'}:
                 await self.store.set_action(payload.action_id,latest['status'],result.model_dump(mode='json'))

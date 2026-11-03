@@ -3,7 +3,7 @@ import re
 from domains.catalog.models.foods import normalize_food_text
 from agentic.tools.registry import REGISTRY
 
-COACH_GUIDANCE = get_prompt('training.coach', 'v4')
+COACH_GUIDANCE = get_prompt('training.coach', 'v5')
 CAPABILITY_GUIDANCE = get_prompt('nutrition.capabilities')
 HEALTH_GUIDANCE = get_prompt('health.guidance', 'v4')
 
@@ -12,7 +12,7 @@ CATALOG_DEPENDENCIES = {'meals': 'foods', 'trainings': 'exercises', 'training_pl
 READ_DEPENDENCIES = {
     'coaching': ('trainings', 'progress', 'metrics', 'exercises', 'health'),
     'trainings': ('training_plans',),
-    # Lịch tập treo dưới kế hoạch cha, kế hoạch cha cần id của mục tiêu đang hoạt động.
+    # Lịch tập gắn với mục tiêu đang hoạt động; huấn luyện đọc nhật ký để điều chỉnh lịch.
     'training_plans': ('coaching', 'goals'),
     'meals': ('progress',),
     'goals': ('progress', 'metrics', 'health'),

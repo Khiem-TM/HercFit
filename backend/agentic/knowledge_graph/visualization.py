@@ -76,7 +76,7 @@ DOMAINS = {'meals': 'Bữa ăn', 'foods': 'Thực phẩm', 'metrics': 'Số đo'
            'trainings': 'Buổi tập', 'exercises': 'Bài tập', 'coaching': 'Huấn luyện', 'training_plans': 'Kế hoạch tập',
            'profile': 'Hồ sơ', 'health': 'Sức khoẻ'}
 EMPTY = {'status': 'unavailable', 'lag_ms': None, 'profile': None, 'insights': [], 'intents': [],
-         'nodes': [], 'edges': [], 'timeline': []}
+         'nodes': [], 'edges': []}
 
 
 def _n(number, unit=''):
@@ -101,7 +101,7 @@ def _details(*pairs):
 
 class MapBuilder:
     def __init__(self):
-        self.nodes, self.edges, self.timeline = {}, [], []
+        self.nodes, self.edges = {}, []
 
     def node(self, id, kind, label, parent=None, hub=None, **extra):
         if id in self.nodes:
@@ -116,10 +116,6 @@ class MapBuilder:
     def link(self, source, target, label):
         if source in self.nodes and target in self.nodes and source != target:
             self.edges.append({'source': source, 'target': target, 'kind': 'link', 'label': label})
-
-    def event(self, id, hub, at, title, subtitle, node):
-        if at:
-            self.timeline.append({'id': id, 'hub': hub, 'at': at, 'title': title, 'subtitle': subtitle, 'node_id': node})
 
 
 def _profile(model):
@@ -212,8 +208,6 @@ def _goal(builder, records, model):
             ('Nhịp cần', _n(derived.get('required_kg_per_week'), 'kg/tuần') if same else None),
             ('Nhịp thực tế', _n(derived.get('actual_kg_per_week'), 'kg/tuần') if same else None),
             ('Đánh giá', ('Đúng tiến độ' if derived['on_track'] else 'Chậm hơn kế hoạch') if same and derived.get('on_track') is not None else None))
-        builder.event(record['key'], 'goal', data.get('start_date'), f"Bắt đầu mục tiêu: {data.get('title')}",
-                      f"Hạn {_date(data.get('target_date'))}" if data.get('target_date') else None, record['key'])
 
 
 def _body(builder, records):
@@ -228,8 +222,6 @@ def _body(builder, records):
                                    ('Mỡ cơ thể', _n(data.get('body_fat_pct'), '%')), ('Khối cơ', _n(data.get('muscle_mass_kg'), 'kg')),
                                    ('Thời điểm', _local(data.get('recorded_at'), '%d/%m/%Y %H:%M')),
                                    ('Nguồn', 'Google Health' if (data.get('source') or 'MANUAL') != 'MANUAL' else None))
-        builder.event(record['key'], 'body', data.get('recorded_at'), f"Cân nặng {_n(weight, 'kg')}" if weight else 'Số đo cơ thể',
-                      f"Chiều cao {_n(height, 'cm')}" if height else None, record['key'])
 
 
 def _device(builder, days, sleeps, workouts):
@@ -257,7 +249,6 @@ def _device(builder, days, sleeps, workouts):
         node['details'] = _details(('Bắt đầu', _local(data.get('start_at'))), ('Thức dậy', _local(data.get('end_at'))),
                                    ('Thời gian ngủ', _n(minutes, 'phút')), ('Ngủ sâu', _n(data.get('deep_minutes'), 'phút')),
                                    ('REM', _n(data.get('rem_minutes'), 'phút')), ('Hiệu quả', _n(data.get('efficiency_pct'), '%')))
-        builder.event(record['key'], 'body', data.get('end_at'), 'Giấc ngủ', node['summary'], record['key'])
     for record in workouts:
         data = record['data']
         seconds = number(data.get('active_seconds'))
@@ -269,8 +260,6 @@ def _device(builder, days, sleeps, workouts):
                                    ('Quãng đường', _n((number(data.get('distance_m')) or 0) / 1000 or None, 'km')),
                                    ('Năng lượng', _n(data.get('energy_kcal'), 'kcal')), ('Nhịp tim TB', _n(data.get('avg_hr_bpm'), 'bpm')),
                                    ('Phút vùng tim', _n(data.get('active_zone_minutes'))))
-        builder.event(record['key'], 'body', data.get('started_at'), data.get('display_name') or 'Buổi vận động (thiết bị)',
-                      f'{minutes} phút' if minutes else None, record['key'])
 
 
 def _nutrition(builder, records, model, habits):
@@ -307,8 +296,6 @@ def _nutrition(builder, records, model, habits):
                                           ('Carb', _n(item.get('carbohydrate_g'), 'g')), ('Chất béo', _n(item.get('fat_g'), 'g')))
             if item.get('food_id'):
                 builder.link(portion['id'], 'backend:Food:' + str(item['food_id']), 'là món')
-        builder.event(record['key'], 'nutrition', data.get('consumed_at'), data.get('name') or 'Bữa ăn',
-                      ' · '.join(filter(None, [names, _n(data.get('energy_kcal'), 'kcal')])), record['key'])
 
 
 def _training(builder, records, model):
@@ -351,11 +338,6 @@ def _training(builder, records, model):
                                         ('Thời lượng', f"{round(duration / 60)} phút" if duration else None))
             if item.get('exercise_id'):
                 builder.link(entry['id'], 'backend:Exercise:' + str(item['exercise_id']), 'bài tập')
-        builder.event(record['key'], 'training', data.get('started_at'), data.get('name') or 'Buổi tập',
-                      ' · '.join(filter(None, [DISCIPLINES.get(data.get('discipline'), data.get('discipline')),
-                                               f'{minutes} phút' if minutes else None,
-                                               ', '.join((item.get('exercise') or {}).get('name_vi') or '' for item in items[:3])])),
-                      record['key'])
 
 
 def _conversation(builder, runs):
@@ -381,8 +363,6 @@ def _conversation(builder, runs):
         node['details'] = _details(('Thời điểm', _local(data.get('occurred_at'), '%d/%m/%Y %H:%M')),
                                    ('Ý định', intent_label(intent)), ('Lĩnh vực', DOMAINS.get(data.get('domain'), data.get('domain'))),
                                    ('Trạng thái', status), ('Công cụ', ', '.join(data.get('tools') or [])))
-        builder.event(run['key'], 'conversation', data.get('occurred_at'), intent_label(intent),
-                      ' · '.join(filter(None, [status, DOMAINS.get(data.get('domain'))])), run['key'])
     return intents
 
 
@@ -462,9 +442,8 @@ def build_map(model, records, runs, habits):
         summary = {'goal': item.get('detail'), 'body': item.get('value'), 'nutrition': f"TB {item.get('value')}/ngày",
                    'training': f"{item.get('value')} {item.get('caption')}", 'conversation': item.get('detail')}[hub]
         builder.nodes['hub:' + hub]['summary'] = summary
-    timeline = sorted(builder.timeline, key=lambda event: str(parse_time(event['at']) or event['at']), reverse=True)[:80]
     return {'profile': profile, 'insights': insights, 'intents': intents,
-            'nodes': list(builder.nodes.values()), 'edges': builder.edges, 'timeline': timeline}
+            'nodes': list(builder.nodes.values()), 'edges': builder.edges}
 
 
 async def personal_graph(service, user_id, start=None, end=None):

@@ -218,6 +218,12 @@ class OrchestrationAgent:
             # Câu trả lời về tập luyện lấy từ phân tích của backend: đọc trước khi hỏi hoặc tìm trên web.
             decision.action, decision.next_agent = 'tool', 'tool'
             rule('training_read_first')
+        if decision.intent == 'TRAINING_PLAN' and decision.domain == 'exercises':
+            # Lịch tập chỉ dùng bài có sẵn trong catalog: miền lịch tập đọc catalog, không tạo bài mới hay tra web.
+            decision.domain = 'training_plans'
+            if decision.action == 'research':
+                decision.action, decision.next_agent = 'tool', 'tool'
+            rule('plan_catalog_only')
         if decision.action == 'tool' and decision.domain and decision.next_agent != 'tool':
             decision.next_agent = 'tool'  # hành động quyết định; nhãn next_agent không khớp sẽ được chuẩn hoá
             rule('tool_next_agent')

@@ -225,13 +225,13 @@ def catalog_lines(tool: str, record: dict) -> list[str]:
 def plan_lines(tool: str, record: dict) -> list[str]:
     name = record.get('name') or 'lịch tập'
     span = ' → '.join(day(record.get(key)) for key in ('start_date', 'end_date') if record.get(key))
-    if tool == 'create_plan':
-        return [f'✅ Đã tạo kế hoạch **{name}**' + (f' ({span})' if span else '')]
     if tool == 'end_training_plan':
-        return [f'✅ Đã kết thúc lịch tập **{name}**']
+        return [f'✅ Đã kết thúc lịch tập **{name}**',
+                'Các buổi đã tập và nhật ký được giữ nguyên. Bạn có thể nhờ mình lập lịch mới bất cứ lúc nào.']
     entries = [entry for entry in record.get('entries') or [] if not entry.get('is_rest')]
     detail = ', '.join(filter(None, (f'{len(entries)} buổi tập' if entries else '', span)))
-    return [f'✅ Đã lưu lịch tập **{name}**' + (f': {detail}' if detail else '')]
+    return [f'✅ Đã lưu lịch tập **{name}**' + (f': {detail}' if detail else ''),
+            'Theo dõi và tick từng buổi đã tập ở thanh bên **Kế hoạch**.']
 
 
 def lines_for(output: dict) -> list[str]:
@@ -250,7 +250,7 @@ def lines_for(output: dict) -> list[str]:
         return water_lines(record)
     if tool in {'create_foods', 'finalize_foods', 'create_exercises', 'finalize_exercises'}:
         return catalog_lines(tool, record)
-    if tool in {'create_plan', 'create_training_plans', 'update_training_plans', 'end_training_plan'}:
+    if tool in {'create_training_plans', 'update_training_plans', 'end_training_plan'}:
         return plan_lines(tool, record)
     return ['✅ ' + DONE.get(tool, 'Đã lưu thay đổi')]
 
@@ -300,8 +300,8 @@ def repeats_write(state, name: str, payload: dict) -> bool:
         if name == 'create_metrics' and _number(payload.get('weight_kg')) == _number(record.get('weight_kg')) and (
                 not payload.get('recorded_at') or _minute(payload['recorded_at']) == _minute(record.get('recorded_at'))):
             return True
-        if name in {'create_foods', 'create_exercises', 'create_goals', 'create_plan'}:
-            key = 'title' if name == 'create_goals' else 'name' if name == 'create_plan' else 'name_vi'
+        if name in {'create_foods', 'create_exercises', 'create_goals'}:
+            key = 'title' if name == 'create_goals' else 'name_vi'
             if normalize_food_text(str(payload.get(key) or '')) == normalize_food_text(str(record.get(key) or '')):
                 return True
     return False

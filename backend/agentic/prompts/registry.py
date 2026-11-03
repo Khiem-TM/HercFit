@@ -23,6 +23,7 @@ from agentic.prompts.v3.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V3
 from agentic.prompts.v3.clarification import PROMPT as CLARIFICATION_PROMPT_V3
 from agentic.prompts.v4.domains import COACH_GUIDANCE as COACH_GUIDANCE_V4
 from agentic.prompts.v4.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V4
+from agentic.prompts.v5.domains import COACH_GUIDANCE as COACH_GUIDANCE_V5
 
 
 TEMPLATES = MappingProxyType({
@@ -53,6 +54,8 @@ TEMPLATES = MappingProxyType({
     # v4: Google Health là nguồn sự thật cho thể thao/số đo/nước; nhật ký tập chỉ còn gym.
     ('training.coach', 'v4'): COACH_GUIDANCE_V4,
     ('health.guidance', 'v4'): HEALTH_GUIDANCE_V4,
+    # v5: lịch tập lưu bằng một lệnh, sửa trên thẻ xác nhận; không còn lịch bữa ăn.
+    ('training.coach', 'v5'): COACH_GUIDANCE_V5,
 })
 
 _QUESTIONS = {

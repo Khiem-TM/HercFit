@@ -59,8 +59,6 @@ for domain, schema in [('foods', FoodFinalization), ('exercises', ExerciseFinali
 
 # Kế hoạch tập (chỉ định) và phân tích huấn luyện tất định.
 from domains.goals_plans.schemas.plans import (
-    PlanInput,
-    PlanRead,
     PlanEnd,
     TrainingPlanCreate,
     TrainingPlanRead,
@@ -84,18 +82,17 @@ from domains.training.schemas.training import (
 )
 
 
-add('current_plan','training_plans','GET','/plans/current',Empty,PlanRead,'Read the active parent plan; its id is required to create a training schedule. 404 means none.')
-add('create_plan','training_plans','POST','/plans',PlanInput,PlanRead,
-    'Propose the parent plan when current_plan is 404: goal_id from current_goal, name, start_date, end_date covering the schedule. Must await confirmation.',True)
-add('current_training_plan','training_plans','GET','/plans/{resource_id}/training-plans/current',Resource,TrainingPlanRead,'Read the active training schedule of a parent plan (resource_id = plan id).')
+add('current_training_plan','training_plans','GET','/training-plans/current',Empty,TrainingPlanRead,
+    'Read the active training schedule with its sessions; completed_at marks sessions the user ticked as done. 404 means none.')
 add('get_training_plans','training_plans','GET','/training-plans/{resource_id}',Resource,TrainingPlanRead,'Read one training schedule.')
 add('list_training_plan_entries','training_plans','GET','/training-plans/{resource_id}/entries',with_id(ScheduleEntryQuery),list[TrainingPlanEntryRead],
     'List scheduled sessions (optionally on_date or start/end date) of a training schedule.')
 add('list_training_templates','training_plans','GET','/training/templates',Empty,list[TemplateSummary],'List program templates (Gym/Running/Hybrid) and single running workouts.')
 add('preview_training_template','training_plans','GET','/training/templates/{resource_id}/schedule',TemplatePreview,TrainingPlanCreate,
     'Build a schedule preview from a program template. Read-only; pass the returned payload unchanged to create_training_plans.')
-add('create_training_plans','training_plans','POST','/plans/{resource_id}/training-plans',with_id(TrainingPlanCreate),TrainingPlanRead,
-    'Propose a training schedule for parent plan resource_id. Items use prescription (targets), not performance. Must await confirmation.',True)
+add('create_training_plans','training_plans','POST','/training-plans',TrainingPlanCreate,TrainingPlanRead,
+    'Propose the training schedule when current_training_plan is 404; the backend attaches it to the plan of the current goal. '
+    'Items use prescription (targets), not performance. Must await confirmation.',True)
 add('update_training_plans','training_plans','PUT','/training-plans/{resource_id}',with_id(TrainingPlanReplace),TrainingPlanRead,
     'Replace a training schedule as a complete new version. Read it first. Must await confirmation.',True)
 add('end_training_plan','training_plans','POST','/training-plans/{resource_id}/end',with_id(PlanEnd),TrainingPlanRead,'End a training schedule after confirmation.',True)
@@ -194,3 +191,14 @@ add('log_water','meals','POST','/v2/health/records/hydration',HydrationInput,Hea
     'Propose logging water intake in ml to Google Health. Must await human confirmation.',True)
 add('delete_water','meals','DELETE','/v2/health/records/hydration/{resource_id}',Resource,None,
     'Delete a water log HercFit wrote to Google after confirmation.')
+
+
+# Các lệnh ghi mà thẻ xác nhận cần tổng do server tính, ảnh chụp dữ liệu và hình ảnh.
+PREVIEW_PATHS = {
+    'create_meals': '/api/meals/preview',
+    'create_trainings': '/api/trainings/preview',
+    'create_training_plans': '/api/training-plans/preview',
+    'update_training_plans': '/api/training-plans/{resource_id}/preview',
+    'log_sport_session': '/api/v2/health/records/exercise:preview',
+    'log_water': '/api/v2/health/records/hydration:preview',
+}

@@ -185,6 +185,16 @@ class Store:
                                    (action['action_id'], session_id,user_id,'pending',Jsonb(action),Jsonb(durable_context())))
                 return action
 
+    async def revise_action(self, action_id, changes):
+        """Thay payload của hành động còn chờ (người dùng sửa trên thẻ); hành động đã quyết định không đổi."""
+        async with self.pool.connection() as conn:
+            row = await (await conn.execute(
+                "UPDATE agent_actions SET data=data||%s WHERE action_id=%s AND status='pending' RETURNING data",
+                (Jsonb(changes), action_id))).fetchone()
+        if row is None:
+            raise HTTPException(409, 'Action is no longer pending')
+        return row['data']
+
     async def action(self, action_id):
         async with self.pool.connection() as conn:
             return await (await conn.execute('SELECT * FROM agent_actions WHERE action_id=%s', (action_id,))).fetchone()

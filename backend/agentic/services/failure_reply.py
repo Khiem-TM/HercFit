@@ -14,7 +14,7 @@ WRITES = {
     'create_trainings': 'Buổi tập trong nhật ký', 'update_trainings': 'Buổi tập đã sửa', 'delete_trainings': 'Đã xoá buổi tập',
     'create_metrics': 'Số đo cơ thể', 'update_metrics': 'Số đo đã sửa', 'delete_metrics': 'Đã xoá số đo',
     'create_goals': 'Mục tiêu', 'update_goals': 'Mục tiêu đã sửa', 'complete_goal': 'Hoàn thành mục tiêu',
-    'cancel_goal': 'Huỷ mục tiêu', 'create_plan': 'Kế hoạch', 'create_training_plans': 'Lịch tập',
+    'cancel_goal': 'Huỷ mục tiêu', 'create_training_plans': 'Lịch tập',
     'update_training_plans': 'Lịch tập đã sửa', 'end_training_plan': 'Kết thúc lịch tập',
 }
 # Lệnh ghi nhật ký mà một yêu cầu ghi hướng tới; câu trả lời nói rõ khi nó không xảy ra.
