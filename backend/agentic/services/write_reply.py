@@ -42,6 +42,36 @@ def executed_writes(state) -> list[dict]:
             if output.get('ok') and output.get('action_id') and getattr(REGISTRY.get(output.get('tool') or ''), 'write', False)]
 
 
+# Lệnh ghi catalog (món/bài tập mới) thường mở đường cho một lệnh ghi nhật ký: sau nó router vẫn quyết định bước tiếp.
+CATALOG_WRITES = frozenset({'create_foods', 'finalize_foods', 'create_exercises', 'finalize_exercises'})
+# Mục tiêu (đã bỏ dấu) của router: bước ghi, bước chỉ chuẩn bị cho lệnh ghi, và bước cần đọc thêm sau khi ghi.
+WRITE_OBJECTIVE = re.compile(r'\b(?:ghi|tao|luu|ket thuc|cap nhat|sua|xoa|them|dat|thay|create|log|record|save|end|update|delete|add)\b')
+PREPARE_OBJECTIVE = re.compile(r'^(?:tra|tim|xem truoc|preview|xac nhan|chuan bi|kiem tra|lookup|search|find|resolve)\b')
+READ_OBJECTIVE = re.compile(r'con lai|tien do|so sanh|phan tich|goi y|tu van|\bdoc\b|get_|targets|progress|remaining')
+
+
+def finishes_turn(state) -> bool:
+    """Lệnh ghi vừa thực thi đã hoàn tất yêu cầu: kết thúc lượt bằng biên nhận do code viết, không gọi lại router.
+
+    Sau mỗi lần xác nhận, router và thường cả model tool từng được gọi lại chỉ để kết luận "đã xong", tốn 2–22 s
+    (19 lượt duyệt: p50 5,2 s, max 110 s; phần ghi chỉ ~0,1 s). Chỉ áp dụng khi chắc chắn: lệnh ghi cuối không phải
+    lệnh catalog, không mục tiêu nào cần đọc thêm, và số lệnh ghi đã thực thi kể từ quyết định của router đủ cho các
+    mục tiêu ghi của nó. Mọi trường hợp khác (nhiều buổi tập, ghi xong rồi hỏi calo còn lại...) vẫn đi qua router.
+    """
+    outputs = (state or {}).get('tool_outputs') or []
+    decision = (state or {}).get('decision') or {}
+    writes = executed_writes(state)
+    if not outputs or not writes or outputs[-1] is not writes[-1] or outputs[-1]['tool'] in CATALOG_WRITES:
+        return False
+    if not isinstance(decision.get('writes_before'), int):
+        return False  # quyết định không phải của router (hoặc checkpoint cũ): giữ đường cũ
+    objectives = [normalize_food_text(str(item)) for item in decision.get('objectives') or []]
+    if any(READ_OBJECTIVE.search(item) for item in objectives):
+        return False
+    needed = sum(1 for item in objectives if WRITE_OBJECTIVE.search(item) and not PREPARE_OBJECTIVE.match(item))
+    return len(writes) - decision['writes_before'] >= max(1, needed)
+
+
 def reads_after_writes(state) -> bool:
     """Lượt đã đọc thêm dữ liệu sau lệnh ghi cuối, ví dụ lượng calo còn lại hôm nay sau khi ghi một bữa ăn."""
     outputs = (state or {}).get('tool_outputs') or []

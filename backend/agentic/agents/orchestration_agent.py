@@ -20,7 +20,7 @@ from agentic.services.clarification import build_clarification
 from agentic.core.app.schemas.response import Clarification
 from agentic.services.failure_reply import failure_reply
 from agentic.services import meal_logging
-from agentic.services.write_reply import claims_pending, reads_after_writes, write_reply
+from agentic.services.write_reply import claims_pending, executed_writes, finishes_turn, reads_after_writes, write_reply
 from agentic.tools.output import bounded_json
 from agentic.security.content_filter import assess
 from agentic.security.input_guard import safe_query
@@ -127,6 +127,13 @@ class OrchestrationAgent:
             trace = {'stage': 'rule', 'rule': 'meal_log_next', 'action': 'tool', 'domain': 'meals'}
             return {'decision': decision, 'status': 'running',
                     'route_trace': [*(state.get('route_trace') or []), trace], **safety_update}
+        if finishes_turn(state):
+            # Lệnh ghi vừa xác nhận đã hoàn tất yêu cầu: trả biên nhận do code viết, không gọi lại router hay model tool.
+            decision = {**state['decision'], 'action': 'answer', 'next_agent': 'orchestrator',
+                        'instruction': 'Báo lại đúng các bản ghi vừa lưu.'}
+            trace = {'stage': 'rule', 'rule': 'write_done', 'action': 'answer', 'domain': decision.get('domain')}
+            return {'decision': decision, 'status': 'running',
+                    'route_trace': [*(state.get('route_trace') or []), trace], **safety_update}
         first = (state.get('turn') or {}).get('run_id') != state.get('run_id')
         # Chỉ là quyết định đầu tiên của lượt: sau bước tool, router tiếp tục với kết quả của nó.
         choice = gym_logging.parse_choice(latest_request(state)) if first and state.get('replying_to_form') else None
@@ -137,7 +144,7 @@ class OrchestrationAgent:
             trace = [{'stage': 'rule', 'rule': 'gym_mode_' + choice['mode'], 'action': 'tool', 'domain': 'trainings'},
                      {'stage': 'final', 'intent': decision.intent, 'action': decision.action, 'domain': decision.domain,
                       'personalize': False, 'topic': None}]
-            return {'decision': decision.model_dump(), 'status': 'running',
+            return {'decision': {**decision.model_dump(), 'writes_before': len(executed_writes(state))}, 'status': 'running',
                     'route_trace': [*(state.get('route_trace') or []), *trace], **safety_update}
         jev_events = list(state.get('jev_events') or [])
         projection = jev_routing_projection(state) if self.jev is not None else None
@@ -251,7 +258,9 @@ class OrchestrationAgent:
             rule('gym_mode_guard')
         trace.append({'stage': 'final', 'intent': decision.intent, 'action': decision.action, 'domain': decision.domain,
                       'personalize': decision.personalize, 'topic': decision.topic})
-        result = {'decision':decision.model_dump(), 'status':'needs_input' if decision.action=='clarify' else 'running',
+        # Số lệnh ghi đã thực thi lúc router quyết định: finishes_turn so các lệnh ghi sau đó với mục tiêu của quyết định này.
+        result = {'decision':{**decision.model_dump(), 'writes_before': len(executed_writes(state))},
+                  'status':'needs_input' if decision.action=='clarify' else 'running',
                   'route_trace': [*(state.get('route_trace') or []), *trace], **safety_update}
         if form:
             result.update(clarification=form, prepared_reply=gym_logging.REPLY)
