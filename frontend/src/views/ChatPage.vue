@@ -8,6 +8,8 @@ import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import UserSettingsModal from '@/components/chat/UserSettingsModal.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useChat } from '@/composables/useChat'
+import type { ConfirmExtras } from '@/components/chat/cards/ConfirmationCard.vue'
+import type { KnowledgeTab } from '@/types/knowledge'
 
 const { user } = useAuth()
 const {
@@ -33,10 +35,29 @@ const KnowledgePanel = defineAsyncComponent(() => import('@/components/knowledge
 const ImageLibraryModal = defineAsyncComponent(() => import('@/components/media/ImageLibraryModal.vue'))
 const isImageLibraryOpen = ref(false)
 const isKnowledgeOpen = ref(false)
+const knowledgeTab = ref<KnowledgeTab>('overview')
 const isUserModalOpen = ref(false)
 // Màn hình đồng ý của Google Health quay về /chat?integration=google-health&result=...
 const userModalTab = ref<'profile' | 'integrations'>('profile')
 const integrationResult = ref<string | null>(null)
+
+function openPlan(): void {
+  knowledgeTab.value = 'plan'
+  isKnowledgeOpen.value = true
+}
+
+/** Lịch tập vừa được xác nhận hiện ngay dưới dạng checklist ở thanh bên. */
+async function handleConfirm(decision: 'approve' | 'reject', extras: ConfirmExtras = {}): Promise<void> {
+  const tool = pendingAction.value?.tool
+  await confirmAction(decision, extras)
+  if (decision === 'approve' && !error.value && (tool === 'create_training_plans' || tool === 'update_training_plans')) openPlan()
+}
+
+/** Nút "Lập lịch mới" ở thanh bên: nhờ trợ lý đề xuất lịch, người dùng sửa và xác nhận trên thẻ. */
+function createPlan(): void {
+  if (isStreaming.value || isConfirming.value) return
+  sendMessage('Lập giúp mình một lịch tập mới theo mục tiêu hiện tại.')
+}
 
 function openUserModal(): void {
   userModalTab.value = 'profile'
@@ -145,6 +166,7 @@ function handleSelectPrompt(prompt: string): void {
         </div>
 
         <button type="button" class="ml-auto mr-2 shrink-0 whitespace-nowrap rounded-full border border-ink/10 px-3 py-1.5 text-xs text-on-surface-variant hover:bg-ink/10" aria-haspopup="dialog" @click="isImageLibraryOpen = true">Ảnh</button>
+        <button type="button" class="mr-2 shrink-0 whitespace-nowrap rounded-full border border-ink/10 px-3 py-1.5 text-xs text-on-surface-variant hover:bg-ink/10" :aria-pressed="isKnowledgeOpen && knowledgeTab === 'plan'" @click="openPlan">Kế hoạch</button>
         <button type="button" class="mr-3 shrink-0 whitespace-nowrap rounded-full border border-gold/25 px-3 py-1.5 text-xs text-gold hover:bg-gold/10" :aria-expanded="isKnowledgeOpen" @click="isKnowledgeOpen = !isKnowledgeOpen">✧ Tri thức của tôi</button>
         <button
           v-if="hasMessages"
@@ -198,7 +220,7 @@ function handleSelectPrompt(prompt: string): void {
           :is-confirming="isConfirming"
           :active-node-label="activeNodeLabel"
           :pending-action="pendingAction"
-          @confirm="confirmAction"
+          @confirm="handleConfirm"
           @send="sendMessage"
         />
 
@@ -216,7 +238,7 @@ function handleSelectPrompt(prompt: string): void {
       </template>
     </main>
 
-    <KnowledgePanel v-if="isKnowledgeOpen" :busy="isStreaming || isConfirming" :activity="activeNodeLabel" :revision="messages.length + Number(isStreaming) + Number(isConfirming) + sessions.length" @close="isKnowledgeOpen = false" @open-settings="openSettings" />
+    <KnowledgePanel v-if="isKnowledgeOpen" v-model:tab="knowledgeTab" :busy="isStreaming || isConfirming" :activity="activeNodeLabel" :revision="messages.length + Number(isStreaming) + Number(isConfirming) + sessions.length" @close="isKnowledgeOpen = false" @open-settings="openSettings" @create-plan="createPlan" />
     <ImageLibraryModal v-if="isImageLibraryOpen" @close="isImageLibraryOpen = false" />
 
     <!-- Hộp thoại Hồ sơ, Số đo & Cài đặt -->

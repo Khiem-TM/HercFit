@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, useTemplateRef, watch } from 'vue'
-import { ChevronsDown, ChevronsDownUp, ChevronsUp, History, LayoutGrid, Maximize2, Minus, Orbit, Plus, RefreshCw, X } from 'lucide-vue-next'
+import { ChevronsDown, ChevronsDownUp, ChevronsUp, LayoutGrid, ListChecks, Maximize2, Minus, Orbit, Plus, RefreshCw, X } from 'lucide-vue-next'
 import ConstellationCanvas from './ConstellationCanvas.vue'
 import KnowledgeDashboard from './KnowledgeDashboard.vue'
 import KnowledgeInspector from './KnowledgeInspector.vue'
-import KnowledgeTimeline from './KnowledgeTimeline.vue'
+import PlanChecklist from './PlanChecklist.vue'
 import TimeWindow from './TimeWindow.vue'
 import { localDay, shiftDay } from './dashboard/dashboardData'
 import { ancestors, collapse, indexTree, visibleIds } from './knowledgeTree'
@@ -12,19 +12,18 @@ import { centreOn, clampDay, dayDiff, rangeLength, recentRange, sameRange } from
 import { useKnowledgeGraph, type DayRange } from '@/composables/useKnowledgeGraph'
 import { useResizable } from '@/composables/useResizable'
 import { useKnowledgeHealthSync } from '@/features/health-integration/useKnowledgeHealthSync'
-import { hubColor, hubTheme, type KnowledgeHub } from '@/types/knowledge'
+import { hubColor, hubTheme, type KnowledgeHub, type KnowledgeTab } from '@/types/knowledge'
 
 const props = defineProps<{ busy: boolean; activity: string; revision: number }>()
 const { message: healthSyncMessage, revision: healthRevision } = useKnowledgeHealthSync(() => schedule(0, 5000))
-const emit = defineEmits<{ close: []; 'open-settings': [tab: 'profile' | 'integrations'] }>()
-type Tab = 'overview' | 'map' | 'timeline'
-const tabs: { id: Tab; label: string; icon: typeof Orbit }[] = [
+const emit = defineEmits<{ close: []; 'open-settings': [tab: 'profile' | 'integrations']; 'create-plan': [] }>()
+const tabs: { id: KnowledgeTab; label: string; icon: typeof Orbit }[] = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutGrid },
   { id: 'map', label: 'Bản đồ', icon: Orbit },
-  { id: 'timeline', label: 'Dòng thời gian', icon: History },
+  { id: 'plan', label: 'Kế hoạch', icon: ListChecks },
 ]
 const hubs = Object.keys(hubTheme) as KnowledgeHub[]
-// Tổng quan và dòng thời gian đọc các bản ghi gần đây; bản đồ chỉ vẽ các ngày đã chọn.
+// Tổng quan đọc các bản ghi gần đây; bản đồ chỉ vẽ các ngày đã chọn.
 const { graph, loading, refresh } = useKnowledgeGraph()
 const today = localDay(new Date())
 // Cho đến khi server báo lịch sử còn lưu, giả định mặc định là 90 ngày.
@@ -32,7 +31,9 @@ const fallbackMin = shiftDay(today, -90)
 const NO_DENSITY = {}
 const range = shallowRef<DayRange>(recentRange(fallbackMin, today))
 const { graph: atlas, loading: atlasLoading, failed: atlasFailed, refresh: refreshAtlas } = useKnowledgeGraph(() => range.value)
-const tab = ref<Tab>('overview')
+const tab = defineModel<KnowledgeTab>('tab', { default: 'overview' })
+// Checklist đọc lại lịch tập mỗi lần bảng làm mới (sau một lượt chat có thể vừa lưu lịch mới).
+const planRevision = ref(0)
 // Chỉ là trạng thái trình bày; id là khoá graph ổn định, nên nhánh đang mở vẫn giữ qua các lần làm mới.
 const expanded = shallowRef<Set<string>>(new Set())
 const selectedId = ref<string>()
@@ -95,6 +96,7 @@ function requestAtlas() {
 }
 function refreshAll() {
   refresh()
+  planRevision.value++
   if (atlasOpened) requestAtlas()
 }
 watch(tab, value => { if (value === 'map' && !atlasOpened) { atlasOpened = true; requestAtlas() } })
@@ -181,7 +183,7 @@ function settle() {
   if (target) show(target)
 }
 
-/** Hiển thị một bản ghi được chọn từ tổng quan hoặc dòng thời gian, dời cửa sổ tới ngày của nó nếu cần. */
+/** Hiển thị một bản ghi được chọn từ tổng quan, dời cửa sổ tới ngày của nó nếu cần. */
 function reveal(id: string) {
   tab.value = 'map'
   const day = dayOf(id)
@@ -394,7 +396,7 @@ onUnmounted(() => {
                                 :roomy="roomy" @select="show" @toggle="toggle" @expand="expandDock" />
           </section>
         </div>
-        <KnowledgeTimeline v-else key="timeline" class="scroll" :events="graph.timeline" @explore="reveal" />
+        <PlanChecklist v-else key="plan" class="scroll" :revision="planRevision" @create-plan="emit('create-plan')" />
       </Transition>
     </div>
 

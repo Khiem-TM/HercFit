@@ -16,6 +16,8 @@ export interface ConfirmExtras {
   photo?: File | null
   /** Ảnh từ tra cứu cho thực phẩm/bài tập tuỳ chỉnh, nhập lên Cloudinary sau khi lưu. */
   imageSource?: string | null
+  /** Lịch tập người dùng đã sửa trên thẻ; server kiểm tra lại trước khi lưu. */
+  payload?: Record<string, any> | null
 }
 
 const props = defineProps<{ action: PendingAction; busy: boolean }>()
@@ -25,10 +27,12 @@ const display = computed(() => (props.action.display || null) as Record<string, 
 const kind = computed(() => cardKind(props.action.tool, display.value))
 const photo = shallowRef<File | null>(null)
 const imageSource = shallowRef<string | null>(null)
+const edited = shallowRef<Record<string, any> | null>(null)
 
 // Hành động (hoặc bản sửa đổi) mới bắt đầu với lựa chọn mới; thẻ tra cứu chọn sẵn ảnh đầu tiên.
 watch(() => `${props.action.action_id}:${props.action.revision}`, () => {
   photo.value = null
+  edited.value = null
   imageSource.value = kind.value === 'catalog' ? (display.value?.image_candidates?.[0]?.url ?? null) : null
 }, { immediate: true })
 
@@ -43,7 +47,7 @@ const subtitle = computed(() => {
   const value = display.value || {}
   if (kind.value === 'meal') return `${when(value.consumed_at, value.timezone)} · ${(value.items || []).length} món`
   if (kind.value === 'training') return `${when(value.started_at, value.timezone)} · ${DISCIPLINE[value.discipline] || ''}${value.session_rpe ? ` · RPE buổi ${fmt(value.session_rpe, 1)}` : ''}`
-  if (kind.value === 'plan') return 'Lịch là chỉ định, chưa phải buổi tập đã làm'
+  if (kind.value === 'plan') return edited.value ? 'Đã sửa trên thẻ · lưu bản đã sửa' : 'Bấm “Sửa lịch” để chỉnh trước khi lưu'
   if (kind.value === 'sport') return 'Ghi lên Google Health'
   if (kind.value === 'catalog') return value.resolution === 'reuse' ? 'Không tạo bản ghi mới; lưu liên kết nguồn nghiên cứu' : 'Bản ghi CUSTOM chỉ bạn nhìn thấy'
   return ''
@@ -66,7 +70,7 @@ const expires = computed(() => new Intl.DateTimeFormat('vi-VN', { hour: '2-digit
 const photoLabel = computed(() => kind.value === 'meal' ? 'Ảnh bữa ăn của bạn' : 'Ảnh buổi tập của bạn')
 
 function decide(decision: 'approve' | 'reject') {
-  emit('confirm', decision, decision === 'approve' ? { photo: photo.value, imageSource: imageSource.value } : {})
+  emit('confirm', decision, decision === 'approve' ? { photo: photo.value, imageSource: imageSource.value, payload: edited.value } : {})
 }
 </script>
 
@@ -89,7 +93,7 @@ function decide(decision: 'approve' | 'reject') {
 
     <MealCardBody v-if="kind === 'meal'" :meal="display!" />
     <TrainingCardBody v-else-if="kind === 'training'" :training="display!" />
-    <PlanCardBody v-else-if="kind === 'plan'" :plan="display!" />
+    <PlanCardBody v-else-if="kind === 'plan'" :plan="display!" :payload="action.payload || {}" :disabled="busy" @change="edited = $event" />
     <CatalogCardBody v-else-if="kind === 'catalog'" v-model="imageSource" :candidate="display!" :disabled="busy" />
     <SportCardBody v-else-if="kind === 'sport'" :preview="display!" :timezone="(action.payload?.timezone as string | undefined)" />
     <FieldsCardBody v-else :tool="action.tool" :payload="action.payload || {}" />
@@ -117,7 +121,7 @@ function decide(decision: 'approve' | 'reject') {
         >
           <Loader2 v-if="busy" class="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
           <Check v-else class="h-3.5 w-3.5" aria-hidden="true" />
-          {{ busy ? 'Đang lưu…' : photo || imageSource ? 'Xác nhận & lưu ảnh' : 'Xác nhận lưu' }}
+          {{ busy ? 'Đang lưu…' : edited ? 'Lưu bản đã sửa' : photo || imageSource ? 'Xác nhận & lưu ảnh' : 'Xác nhận lưu' }}
         </button>
       </div>
     </footer>

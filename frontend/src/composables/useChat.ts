@@ -355,6 +355,7 @@ export function useChat() {
           action_id: action.action_id,
           revision: action.revision,
           decision,
+          ...(decision === 'approve' && extras.payload ? { payload: extras.payload } : {}),
         }),
       })
 

@@ -48,14 +48,8 @@ export interface KnowledgeIntent {
   node_id: string
 }
 
-export interface KnowledgeEvent {
-  id: string
-  hub: KnowledgeHub
-  at: string
-  title: string
-  subtitle: string | null
-  node_id: string
-}
+/** Các tab của thanh bên tri thức; "Kế hoạch" là checklist lịch tập đang chạy. */
+export type KnowledgeTab = 'overview' | 'map' | 'plan'
 
 export interface KnowledgeProfile {
   age: number | null
@@ -94,12 +88,11 @@ export interface KnowledgeGraph {
   intents: KnowledgeIntent[]
   nodes: KnowledgeNode[]
   edges: KnowledgeEdge[]
-  timeline: KnowledgeEvent[]
   window?: KnowledgeWindow
 }
 
 export const emptyKnowledgeGraph = (status = 'loading'): KnowledgeGraph => ({
-  status, lag_ms: null, profile: null, insights: [], intents: [], nodes: [], edges: [], timeline: [],
+  status, lag_ms: null, profile: null, insights: [], intents: [], nodes: [], edges: [],
 })
 
 /** `color` vẽ trên nền tối (và trên bản đồ sao, vốn luôn là bầu trời đêm); `light` đọc được trên nền giấy. */
