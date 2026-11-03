@@ -27,14 +27,13 @@ class BodyMetricBase(InputSchema):
 
 
 class BodyMetricCreate(BodyMetricBase):
-    """New measurements must be physiologically plausible (typos like 700 kg are rejected)."""
     weight_kg: WeightKg
     height_cm: HeightCm | None = None
     body_fat_pct: BodyFatPercentage | None = None
     muscle_mass_kg: MuscleMassKg | None = None
 
 
-# Lần sửa là ảnh chụp mới đầy đủ, không phải cập nhật số đo đã lưu.
+# Lần sửa là snapshot mới đầy đủ, không phải cập nhật số đo đã lưu.
 BodyMetricReplace = BodyMetricCreate
 
 

@@ -8,7 +8,7 @@ contracts, database migrations and existing graph behavior remain compatible.
 - [Audit and prioritized refactoring plan](docs/refactoring-plan.md)
 - [Exact old-to-new module map](docs/module-map.json)
 - [Deployment and verification](docs/deployment.md)
-- [Coding rules](docs/coding-rules.md) and [AI development instructions](AGENTS.md)
+- [Coding rules](docs/coding-rules.md)
 - [Session memory design](services/memory/README.md)
 
 From the repository root, using the existing virtual environment:

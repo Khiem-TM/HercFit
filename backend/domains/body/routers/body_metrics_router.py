@@ -36,7 +36,7 @@ async def get_body_metric(metric_id: UUID, service: UserDataServiceDep):
 @router.put("/{metric_id}", response_model=BodyMetricRead)
 @transaction
 async def replace_body_metric(metric_id: UUID, payload: BodyMetricReplace, service: UserDataServiceDep):
-    """Trả về ID ảnh chụp mới, giữ recorded_at khi không truyền."""
+    """Trả về ID snapshot mới, giữ recorded_at khi không truyền."""
     return await service.replace_metric(metric_id, payload)
 
 
