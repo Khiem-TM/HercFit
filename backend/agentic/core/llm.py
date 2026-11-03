@@ -49,7 +49,7 @@ class Models:
             temperature=0.0, max_retries=getattr(settings, 'MODEL_MAX_RETRIES', 1),
             stream_usage=bool(streaming_role and getattr(settings, 'MODEL_STREAM_USAGE', False)),
             disable_streaming=not streaming_role,
-            metadata={'hercfit_provider': provider, 'ls_model_name': name, 'model_role': role},
+            metadata={'hercfit_provider': provider, 'hercfit_model': name, 'model_role': role},
             **({'reasoning_effort': effort} if effort else {}),
         )
 

@@ -135,7 +135,7 @@ class Runtime:
         config=self.config(thread_id) # Lấy cấu hình
         try:
             from agentic.observability.node_span import span
-            with span(getattr(self.settings,'LANGSMITH_ENABLED',False),'agent_run',thread_id):
+            with span('agent_run',thread_id):
                 return await self._run_stream(input,thread_id,config,emit)
         except Exception as exc:
             outcome('timeout' if isinstance(exc, TimeoutError) else 'failed', error_code=type(exc).__name__)

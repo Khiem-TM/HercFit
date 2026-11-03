@@ -14,7 +14,7 @@ async def run_node(fn, state, node, settings):
     marker=active_metrics.set(metrics)
     try:
         from agentic.observability.node_span import span
-        with span(getattr(settings,'LANGSMITH_ENABLED',False),node,state.get('run_id')):
+        with span(node,state.get('run_id')):
             result=await fn(state)
     except Exception as exc:
         # Exception có thể chứa body request phía trên. Chỉ lộ ra tên lớp;

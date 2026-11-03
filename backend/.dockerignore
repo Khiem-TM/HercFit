@@ -43,7 +43,6 @@ tests
 **/eval_results
 **/reports
 **/traces
-agentic/observability/_dev
 
 # Source books, prepared bundles and tokenizer cache; mounted into the ingestion worker.
 knowledge_ingestion/data

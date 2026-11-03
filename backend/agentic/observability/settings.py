@@ -6,45 +6,43 @@ from typing import Literal
 from pydantic import Field, PrivateAttr, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+BACKEND = Path(__file__).parents[2]
+
 
 class ObservabilitySettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=(str(Path(__file__).parents[1] / 'agentic/.env'), str(Path(__file__).parents[1] / '.env')), extra='ignore', env_ignore_empty=True)
-    MODE: str | None = None
-    LANGSMITH_TRACING: bool | None = None
-    LANGSMITH_ENABLED: bool = False
-    LANGSMITH_API_KEY: SecretStr | None = None
-    LANGSMITH_ENDPOINT: str = 'https://api.smith.langchain.com'
-    LANGSMITH_WORKSPACE_ID: str | None = None
-    LANGSMITH_PROJECT: str | None = None
-    LANGSMITH_ENVIRONMENT: str = 'dev'
-    LANGSMITH_REVISION: str = 'unknown'
-    LANGSMITH_CAPTURE_MODE: Literal['redacted', 'metadata_only'] = 'redacted'
-    LANGSMITH_TRACING_SAMPLING_RATE: float = Field(default=1, ge=0, le=1)
-    LANGSMITH_PSEUDONYM_SECRET: SecretStr | None = None
-    LANGSMITH_PROPAGATION_SECRET: SecretStr | None = None
-    LANGSMITH_BUFFER_SIZE: int = Field(default=1000, ge=10, le=100000)
-    LANGSMITH_FLUSH_SECONDS: float = Field(default=3, gt=0, le=30)
+    # Thứ tự ưu tiên: biến môi trường tiến trình → backend/.env → backend/agentic/.env.
+    model_config = SettingsConfigDict(env_file=(str(BACKEND / 'agentic/.env'), str(BACKEND / '.env')), extra='ignore', env_ignore_empty=True)
+    LANGFUSE_TRACING: bool = False
+    LANGFUSE_PUBLIC_KEY: str | None = None
+    LANGFUSE_SECRET_KEY: SecretStr | None = None
+    LANGFUSE_BASE_URL: str = 'https://cloud.langfuse.com'
+    LANGFUSE_TRACING_ENVIRONMENT: str = 'dev'
+    LANGFUSE_RELEASE: str = 'unknown'
+    LANGFUSE_CAPTURE_MODE: Literal['redacted', 'metadata_only'] = 'redacted'
+    LANGFUSE_SAMPLE_RATE: float = Field(default=1, ge=0, le=1)
+    LANGFUSE_PSEUDONYM_SECRET: SecretStr | None = None
+    LANGFUSE_PROPAGATION_SECRET: SecretStr | None = None
+    LANGFUSE_FLUSH_SECONDS: float = Field(default=3, gt=0, le=30)
+    # Giá đã kiểm chứng cho đo chi phí cục bộ, ví dụ
     # {"fpt/DeepSeek-V4-Flash": {"input_per_million": 0.0, "output_per_million": 0.0}}
-    LANGSMITH_MODEL_PRICES: dict[str, dict[str, float]] = Field(default_factory=dict)
-    LANGSMITH_ALERT_WEBHOOK_URL: SecretStr | None = None
-    LANGSMITH_COST_ALERT_USD: float | None = Field(default=None, gt=0)
+    MODEL_PRICES: dict[str, dict[str, float]] = Field(default_factory=dict)
 
-    # 'explicit' khi đặt trong biến môi trường, 'derived' khi tính từ API key.
+    # 'explicit' khi đặt trong biến môi trường, 'derived' khi tính từ secret key.
     _secret_sources: dict = PrivateAttr(default_factory=dict)
 
     @model_validator(mode='after')
     def derive_missing_secrets(self):
         """Secret bí danh và lan truyền là tuỳ chọn.
 
-        Khi chưa đặt, chúng được suy ra từ LANGSMITH_API_KEY bằng HMAC-SHA256 với một
+        Khi chưa đặt, chúng được suy ra từ LANGFUSE_SECRET_KEY bằng HMAC-SHA256 với một
         nhãn riêng cho từng mục đích, nên ID người dùng/phiên vẫn được đặt bí danh và header trace
-        service-tới-service vẫn được ký. Mọi service đọc cùng API key đều suy ra cùng
-        giá trị. Xoay API key sẽ đổi bí danh; đặt biến tường minh để tránh điều đó.
+        service-tới-service vẫn được ký. Mọi service đọc cùng secret key đều suy ra cùng
+        giá trị. Xoay key sẽ đổi bí danh; đặt biến tường minh để tránh điều đó.
         """
-        key = self.LANGSMITH_API_KEY.get_secret_value() if self.LANGSMITH_API_KEY else ''
+        key = self.LANGFUSE_SECRET_KEY.get_secret_value() if self.LANGFUSE_SECRET_KEY else ''
         sources = {}
-        for name, label in (('LANGSMITH_PSEUDONYM_SECRET', b'hercfit/langsmith/pseudonym/v1'),
-                            ('LANGSMITH_PROPAGATION_SECRET', b'hercfit/langsmith/propagation/v1')):
+        for name, label in (('LANGFUSE_PSEUDONYM_SECRET', b'hercfit/langfuse/pseudonym/v1'),
+                            ('LANGFUSE_PROPAGATION_SECRET', b'hercfit/langfuse/propagation/v1')):
             if getattr(self, name):
                 sources[name] = 'explicit'
             elif key:
@@ -59,12 +57,8 @@ class ObservabilitySettings(BaseSettings):
 
     @property
     def enabled(self):
-        return self.MODE == 'dev' and (self.LANGSMITH_TRACING if self.LANGSMITH_TRACING is not None else self.LANGSMITH_ENABLED)
-
-    @property
-    def project(self):
-        return self.LANGSMITH_PROJECT or ('hercfit-agentic-prod' if self.LANGSMITH_ENVIRONMENT == 'prod' else 'hercfit-agentic')
+        return self.LANGFUSE_TRACING
 
     @property
     def configured(self):
-        return bool(self.LANGSMITH_API_KEY and self.LANGSMITH_PSEUDONYM_SECRET)
+        return bool(self.LANGFUSE_PUBLIC_KEY and self.LANGFUSE_SECRET_KEY and self.LANGFUSE_PSEUDONYM_SECRET)

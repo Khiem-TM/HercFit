@@ -53,10 +53,10 @@ files; a fresh checkout does not include them.
 
 Offline evaluation (`evaluation/`), test suites, architecture notes under `docs/`,
 trace output and analysis reports are local assets excluded from Git and Docker.
-The optional LangSmith exporter lives at `backend/agentic/observability/_dev/`; it is
-loaded only when `MODE=dev` and enabled by the existing LangSmith configuration.
-A clean checkout or deployment image uses `agentic/observability/runtime.py`, which
-keeps request correlation and disables trace export even with inherited SDK flags.
-Run local setup with `python -m agentic.observability._dev.bootstrap` from `backend/`.
+Tracing exports to Langfuse through `backend/agentic/observability/langfuse_adapter.py`
+when `LANGFUSE_TRACING=true` and both Langfuse keys are set (dev or prod). Otherwise
+`agentic/observability/runtime.py` keeps request correlation and exports nothing.
+Check the setup with `python -m agentic.observability.bootstrap --check` (or `--smoke`)
+from `backend/`; see `docs/observability/README.md`.
 Node guards, token/cost accounting and JEV runtime decisions remain versioned.
 The local evaluation commands above require the developer's evaluation files.

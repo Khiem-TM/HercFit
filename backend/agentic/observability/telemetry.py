@@ -147,10 +147,10 @@ class MeasuredModels:
     def __init__(self, models):
         self.models = models
         from agentic.observability.settings import ObservabilitySettings
-        self.prices = ObservabilitySettings().LANGSMITH_MODEL_PRICES
+        self.prices = ObservabilitySettings().MODEL_PRICES
 
     def get(self, role):
         model = self.models.get(role)
         metadata = getattr(model, 'metadata', None) or {}
-        price = self.prices.get(f"{metadata.get('hercfit_provider')}/{metadata.get('ls_model_name')}")
+        price = self.prices.get(f"{metadata.get('hercfit_provider')}/{metadata.get('hercfit_model')}")
         return _MeasuredModel(model, price)

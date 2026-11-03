@@ -82,7 +82,6 @@ class AgentSettings(BaseSettings):
     JEV_INPUT_PRICE_PER_MILLION: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     JEV_OUTPUT_PRICE_PER_MILLION: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     RAG_ENABLED: bool = False
-    LANGSMITH_ENABLED: bool = False
     # Knowledge graph luôn là một phần ngữ cảnh của agent; Neo4j không truy cập được
     # chỉ hạ lượt chạy xuống dùng tool backend (KG_RETRIEVAL_TIMEOUT_MS, fail-open).
     # Mẫu toàn tin nhắn chặt chẽ cho các lệnh đọc phổ biến (tiến độ, mục tiêu hiện tại, số đo

@@ -1,7 +1,7 @@
 """Liên kết request mà không xuất trace hay lưu nội dung request.
 
-Giữ interface này có sẵn trong bản checkout sạch và image triển khai. Việc tính
-token/chi phí nghiệp vụ thuộc về agentic.observability.telemetry một cách độc lập.
+Dùng khi tracing tắt hoặc thiếu SDK Langfuse. Việc tính token/chi phí nghiệp vụ thuộc về
+agentic.observability.telemetry một cách độc lập.
 """
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -9,8 +9,6 @@ from dataclasses import dataclass, field
 from functools import lru_cache, wraps
 from time import monotonic
 from uuid import uuid4
-
-from langsmith import tracing_context
 
 from agentic.observability.settings import ObservabilitySettings
 
@@ -21,7 +19,8 @@ current = ContextVar('hercfit_observation', default=None)
 class Observation:
     manager: object
     request_id: str = field(default_factory=lambda: str(uuid4()))
-    trace_id: str = field(default_factory=lambda: str(uuid4()))
+    # 32 ký tự hex: định dạng trace ID của W3C/Langfuse.
+    trace_id: str = field(default_factory=lambda: uuid4().hex)
     metadata: dict = field(default_factory=dict)
     started: float = field(default_factory=monotonic)
     root: object = None
@@ -44,8 +43,8 @@ class Observer:
         return {
             'enabled': False, 'configured': self.config.configured,
             'propagation_configured': False,
-            'capture_mode': self.config.LANGSMITH_CAPTURE_MODE,
-            'dropped_operations': 0, 'last_export_error': None,
+            'capture_mode': self.config.LANGFUSE_CAPTURE_MODE,
+            'last_export_error': None,
         }
 
     @contextmanager
@@ -53,10 +52,7 @@ class Observer:
         state = state or Observation(self)
         mark = current.set(state)
         try:
-            # Cũng tắt tự động tracing của SDK khi cờ môi trường kế thừa
-            # đang bật. Production không bao giờ kích hoạt exporter cục bộ.
-            with tracing_context(enabled=False):
-                yield state
+            yield state
         finally:
             current.reset(mark)
 
@@ -81,8 +77,7 @@ def outcome(status, **metadata):
 
 @contextmanager
 def span(name, run_type='chain', *, inputs=None, **metadata):
-    with tracing_context(enabled=False):
-        yield None
+    yield None
 
 
 def observed(name, run_type='chain', *, capture=(), output=True):
@@ -92,8 +87,7 @@ def observed(name, run_type='chain', *, capture=(), output=True):
             if current.get() is None:
                 with observer().request(name, 'worker' if 'worker' in name else 'agentic'):
                     return await fn(*args, **kwargs)
-            with tracing_context(enabled=False):
-                return await fn(*args, **kwargs)
+            return await fn(*args, **kwargs)
         return wrapped
     return decorate
 

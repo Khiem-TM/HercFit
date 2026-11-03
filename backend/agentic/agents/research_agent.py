@@ -111,7 +111,7 @@ class ResearchV2:
         def observed(fn,name):
             async def call(state):
                 from agentic.observability.node_span import span
-                with span(getattr(settings,'LANGSMITH_ENABLED',False),name,state['run_id']):
+                with span(name,state['run_id']):
                     return await fn(state)
             return call
         graph=StateGraph(AgentState)
