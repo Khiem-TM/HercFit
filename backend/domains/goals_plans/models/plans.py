@@ -1,4 +1,4 @@
-"""Phiên bản kế hoạch bất biến và lịch bữa ăn/lịch tập theo ngày.
+"""Phiên bản kế hoạch bất biến và lịch tập theo ngày (checklist hoàn thành từng buổi).
 
 Các phương thức có phạm vi chỉ flush, không bao giờ commit: bên gọi giữ quyền sở hữu transaction.
 Mọi lệnh ghi vòng đời đều tuần tự hoá trên cùng dòng User như bước xác nhận Goal.
@@ -19,18 +19,11 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 
-from domains.shared.models.activity import (
-    ExercisePlanMixin,
-    FoodPortionMixin,
-    build_food_item,
-    build_prescription_item,
-    food_item_constraints,
-    prescription_item_constraints,
-)
+from domains.shared.models.activity import ExercisePlanMixin, build_prescription_item, prescription_item_constraints
 from domains.shared.models.basemodel import BaseModel, utc_now
 from domains.shared.models.domain import guard_immutable, lock_user, require_version
 from domains.shared.schemas.enums import GoalStatus
-from domains.goals_plans.schemas.plans import MealPlanCreate, PlanCreate, PlanQuery, TrainingPlanCreate
+from domains.goals_plans.schemas.plans import PlanCreate, PlanQuery, TrainingPlanCreate
 
 
 def _lifecycle_constraints(table: str, slot: str):
@@ -109,13 +102,12 @@ class PlanLifecycleMixin:
     async def _end(self, session: AsyncSession, reason: str, *, now: datetime | None = None):
         if self.status == "ACTIVE":
             if isinstance(self, Plan):
-                for model in (MealPlan, TrainingPlan):
-                    result = await session.execute(
-                        model._user_query(self.user_id).where(model.plan_id == self.id, model.status == "ACTIVE")
-                        .with_for_update().execution_options(populate_existing=True)
-                    )
-                    for child in result.scalars():
-                        await child._end(session, reason, now=now)
+                result = await session.execute(
+                    TrainingPlan._user_query(self.user_id).where(TrainingPlan.plan_id == self.id, TrainingPlan.status == "ACTIVE")
+                    .with_for_update().execution_options(populate_existing=True)
+                )
+                for child in result.scalars():
+                    await child._end(session, reason, now=now)
             self.status = "ENDED"
             self.ended_at = now or utc_now()
             self.end_reason = reason
@@ -235,7 +227,7 @@ class Plan(PlanLifecycleMixin, BaseModel):
     async def _expire_locked(cls, session: AsyncSession, *, user_id: PyUUID, now: datetime | None = None):
         now = now or utc_now()
         count = 0
-        for model in (cls, MealPlan, TrainingPlan):
+        for model in (cls, TrainingPlan):
             result = await session.execute(
                 model._user_query(user_id).where(model.status == "ACTIVE")
                 .with_for_update().execution_options(populate_existing=True)
@@ -262,12 +254,13 @@ class Plan(PlanLifecycleMixin, BaseModel):
             await session.flush()
 
 
-class DetailedPlanMixin(PlanLifecycleMixin):
+class TrainingPlan(PlanLifecycleMixin, BaseModel):
+    __tablename__ = "training_plans"
+    __table_args__ = _lifecycle_constraints("training_plans", "plan_id")
     plan_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("plans.id", ondelete="CASCADE"), nullable=False)
-    _create_schema: ClassVar[type]
+    replaces_id: Mapped[PyUUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("training_plans.id", ondelete="SET NULL"), nullable=True)
+    entries: Mapped[list[TrainingPlanEntry]] = relationship("TrainingPlanEntry", cascade="all, delete-orphan", passive_deletes=True, order_by="TrainingPlanEntry.position")
     _entry_model: ClassVar[type]
-    _item_model: ClassVar[type]
-    _item_builder: ClassVar[Any]
 
     @classmethod
     async def list_entries_for_user(cls, session, schedule_id, *, user_id, options):
@@ -280,15 +273,15 @@ class DetailedPlanMixin(PlanLifecycleMixin):
         )
         if await session.scalar(header) is None:
             raise HTTPException(404, "Schedule not found")
-        entry = cls._entry_model
-        parent_key = getattr(entry, f"{cls.__tablename__[:-1]}_id")
-        query = select(entry).where(parent_key == schedule_id).options(selectinload(entry.items))
+        query = (select(TrainingPlanEntry).where(TrainingPlanEntry.training_plan_id == schedule_id)
+                 .options(selectinload(TrainingPlanEntry.items)))
         lower, upper = options.on_date or options.start_date, options.on_date or options.end_date
         if lower is not None:
-            query = query.where(entry.scheduled_date >= lower)
+            query = query.where(TrainingPlanEntry.scheduled_date >= lower)
         if upper is not None:
-            query = query.where(entry.scheduled_date <= upper)
-        query = query.order_by(entry.scheduled_date, entry.scheduled_time.nulls_last(), entry.position, entry.id)
+            query = query.where(TrainingPlanEntry.scheduled_date <= upper)
+        query = query.order_by(TrainingPlanEntry.scheduled_date, TrainingPlanEntry.scheduled_time.nulls_last(),
+                               TrainingPlanEntry.position, TrainingPlanEntry.id)
         return list((await session.scalars(query.offset(options.offset).limit(options.limit))).all())
 
     @classmethod
@@ -305,14 +298,16 @@ class DetailedPlanMixin(PlanLifecycleMixin):
         return parent
 
     @classmethod
-    async def _build(cls, session: AsyncSession, *, user_id: PyUUID, parent: Plan, payload, replaces_id: PyUUID | None = None):
+    async def _build(cls, session: AsyncSession, *, user_id: PyUUID, parent: Plan, payload, replaces_id: PyUUID | None = None,
+                     completed: Mapping[tuple[date, str], datetime] | None = None):
         entries = []
         for position, entry_input in enumerate(payload.entries):
-            items = []
-            for item_position, item_input in enumerate(entry_input.items):
-                values = await cls._item_builder(session, user_id, item_input)
-                items.append(cls._item_model(**values, position=item_position))
-            entries.append(cls._entry_model(**entry_input.model_dump(mode="python", exclude={"items"}), position=position, items=items))
+            items = [TrainingPlanItem(**await build_prescription_item(session, user_id, item), position=item_position)
+                     for item_position, item in enumerate(entry_input.items)]
+            values = entry_input.model_dump(mode="python", exclude={"items"})
+            # Bản thay thế giữ dấu hoàn thành của buổi cùng ngày, cùng tên.
+            done = None if entry_input.is_rest else (completed or {}).get((entry_input.scheduled_date, entry_input.label))
+            entries.append(TrainingPlanEntry(**values, position=position, items=items, completed_at=done))
         entity = cls(
             **payload.model_dump(mode="python", exclude={"entries"}), user_id=user_id, plan_id=parent.id,
             timezone=parent.timezone, replaces_id=replaces_id, entries=entries,
@@ -323,19 +318,54 @@ class DetailedPlanMixin(PlanLifecycleMixin):
 
     @classmethod
     async def create_for_user(cls, session: AsyncSession, *, user_id: PyUUID, plan_id: PyUUID, payload):
-        payload = cls._create_schema.model_validate(payload)
+        payload = TrainingPlanCreate.model_validate(payload)
         async with session.begin_nested():
             await lock_user(session, user_id)
             await Plan._expire_locked(session, user_id=user_id)
             parent = await cls._parent(session, user_id=user_id, plan_id=plan_id, payload=payload)
-            current = await session.scalar(select(cls.id).where(cls.user_id == user_id, cls.plan_id == plan_id, cls.is_active.is_(True), cls.status == "ACTIVE"))
-            if current is not None:
-                raise HTTPException(status_code=409, detail="Plan already has an active schedule of this type")
+            await cls._require_no_current(session, user_id=user_id, plan_id=plan_id)
             return await cls._build(session, user_id=user_id, parent=parent, payload=payload)
 
     @classmethod
+    async def create_with_parent(cls, session: AsyncSession, *, user_id: PyUUID, payload):
+        """Một lệnh xác nhận: dùng kế hoạch cha đang hoạt động, hoặc tạo/nới nó theo mục tiêu hiện tại."""
+        from domains.goals_plans.models.goal import Goal
+
+        payload = TrainingPlanCreate.model_validate(payload)
+        async with session.begin_nested():
+            await lock_user(session, user_id)
+            await Plan._expire_locked(session, user_id=user_id)
+            parent = (await session.execute(Plan._user_query(user_id).where(Plan.status == "ACTIVE")
+                                            .with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
+            if parent is not None:
+                await cls._require_no_current(session, user_id=user_id, plan_id=parent.id)
+                if parent.start_date <= payload.start_date and payload.end_date <= parent.end_date:
+                    return await cls._build(session, user_id=user_id, parent=parent, payload=payload)
+            goal = await Goal.get_current_for_user(session, user_id=user_id)
+            if goal is None:
+                raise HTTPException(409, "Cần đặt một mục tiêu đang thực hiện trước khi lưu lịch tập")
+            span = PlanCreate(
+                goal_id=goal.id, name=payload.name, note=payload.note, source={"type": "TRAINING_PLAN"},
+                start_date=min(payload.start_date, parent.start_date) if parent else payload.start_date,
+                end_date=max(payload.end_date, parent.end_date) if parent else payload.end_date,
+                **({"timezone": parent.timezone} if parent else {}),
+            )
+            if parent is not None:
+                # Kế hoạch cha bất biến: nới khoảng ngày bằng một phiên bản mới (chưa có lịch tập nào đang chạy).
+                await parent._end(session, "REPLACED")
+                await session.flush()
+            parent = await Plan._build(session, user_id=user_id, payload=span, replaces_id=parent.id if parent else None)
+            return await cls._build(session, user_id=user_id, parent=parent, payload=payload)
+
+    @classmethod
+    async def _require_no_current(cls, session: AsyncSession, *, user_id: PyUUID, plan_id: PyUUID):
+        current = await session.scalar(select(cls.id).where(cls.user_id == user_id, cls.plan_id == plan_id, cls.is_active.is_(True), cls.status == "ACTIVE"))
+        if current is not None:
+            raise HTTPException(status_code=409, detail="Plan already has an active training schedule; replace it instead")
+
+    @classmethod
     async def replace_for_user(cls, session: AsyncSession, schedule_id: PyUUID, *, user_id: PyUUID, payload, expected_version_id: int):
-        payload = cls._create_schema.model_validate(payload.to_payload() if hasattr(payload, "to_payload") else payload)
+        payload = TrainingPlanCreate.model_validate(payload.to_payload() if hasattr(payload, "to_payload") else payload)
         async with session.begin_nested():
             await lock_user(session, user_id)
             await Plan._expire_locked(session, user_id=user_id)
@@ -346,62 +376,62 @@ class DetailedPlanMixin(PlanLifecycleMixin):
             if original.status != "ACTIVE":
                 raise HTTPException(status_code=409, detail="Schedule has already ended")
             parent = await cls._parent(session, user_id=user_id, plan_id=original.plan_id, payload=payload)
+            completed = {(entry.scheduled_date, entry.label): entry.completed_at for entry in original.entries if entry.completed_at}
             await original._end(session, "REPLACED")
             await session.flush()
-            return await cls._build(session, user_id=user_id, parent=parent, payload=payload, replaces_id=original.id)
+            return await cls._build(session, user_id=user_id, parent=parent, payload=payload,
+                                    replaces_id=original.id, completed=completed)
+
+    @classmethod
+    async def previous_for_user(cls, session: AsyncSession, *, user_id: PyUUID):
+        """Lịch đã kết thúc gần nhất (kết thúc sớm, hết hạn, theo mục tiêu); phiên bản bị thay thế không tính."""
+        query = (cls._user_query(user_id).where(cls.status == "ENDED", cls.end_reason != "REPLACED")
+                 .order_by(cls.ended_at.desc(), cls.id.desc()).limit(1))
+        return (await session.execute(query)).scalar_one_or_none()
+
+    @classmethod
+    async def lock_entry_for_completion(cls, session: AsyncSession, schedule_id: PyUUID, entry_id: PyUUID, *, user_id: PyUUID):
+        """Khoá buổi cần tick. Chỉ buổi tập của HÔM NAY được tick; buổi đã qua bị khoá, buổi đã tick không hoàn tác.
+
+        Bên gọi giữ khoá User tới hết transaction (ghi buổi tập thật rồi đặt completed_at)."""
+        await lock_user(session, user_id)
+        schedule = await cls._locked(session, schedule_id, user_id=user_id)
+        if schedule is None:
+            return None, None
+        entry = next((item for item in schedule.entries if item.id == entry_id), None)
+        if entry is None:
+            return schedule, None
+        if entry.completed_at is not None:
+            return schedule, entry
+        if schedule.status != "ACTIVE":
+            raise HTTPException(409, "Lịch tập đã kết thúc")
+        if entry.is_rest:
+            raise HTTPException(422, "Buổi nghỉ không cần đánh dấu hoàn thành")
+        today = utc_now().astimezone(ZoneInfo(schedule.timezone)).date()
+        if entry.scheduled_date < today:
+            raise HTTPException(409, "Buổi tập đã quá hạn, không thể đánh dấu hoàn thành")
+        if entry.scheduled_date > today:
+            raise HTTPException(422, "Chưa tới ngày của buổi tập này")
+        return schedule, entry
 
 
-class MealPlan(DetailedPlanMixin, BaseModel):
-    __tablename__ = "meal_plans"
-    __table_args__ = _lifecycle_constraints("meal_plans", "plan_id")
-    replaces_id: Mapped[PyUUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("meal_plans.id", ondelete="SET NULL"), nullable=True)
-    entries: Mapped[list[MealPlanEntry]] = relationship("MealPlanEntry", cascade="all, delete-orphan", passive_deletes=True, order_by="MealPlanEntry.position")
-
-
-class TrainingPlan(DetailedPlanMixin, BaseModel):
-    __tablename__ = "training_plans"
-    __table_args__ = _lifecycle_constraints("training_plans", "plan_id")
-    replaces_id: Mapped[PyUUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("training_plans.id", ondelete="SET NULL"), nullable=True)
-    entries: Mapped[list[TrainingPlanEntry]] = relationship("TrainingPlanEntry", cascade="all, delete-orphan", passive_deletes=True, order_by="TrainingPlanEntry.position")
-
-
-class ScheduleEntryMixin:
+class TrainingPlanEntry(BaseModel):
+    __tablename__ = "training_plan_entries"
+    __table_args__ = (
+        CheckConstraint("position >= 0", name="ck_training_plan_entries_position"),
+        CheckConstraint("label ~ '[^[:space:]]'", name="ck_training_plan_entries_label"),
+        Index("uq_training_plan_entries_position", "training_plan_id", "position", unique=True),
+        Index("ix_training_plan_entries_date", "training_plan_id", "scheduled_date"),
+    )
+    training_plan_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("training_plans.id", ondelete="CASCADE"), nullable=False)
     scheduled_date: Mapped[date] = mapped_column(Date, nullable=False)
     scheduled_time: Mapped[time | None] = mapped_column(Time(timezone=False), nullable=True)
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
-
-
-def _entry_constraints(table: str, parent_id: str):
-    return (
-        CheckConstraint("position >= 0", name=f"ck_{table}_position"),
-        CheckConstraint("label ~ '[^[:space:]]'", name=f"ck_{table}_label"),
-        Index(f"uq_{table}_position", parent_id, "position", unique=True),
-        Index(f"ix_{table}_date", parent_id, "scheduled_date"),
-    )
-
-
-class MealPlanEntry(ScheduleEntryMixin, BaseModel):
-    __tablename__ = "meal_plan_entries"
-    __table_args__ = _entry_constraints("meal_plan_entries", "meal_plan_id")
-    meal_plan_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("meal_plans.id", ondelete="CASCADE"), nullable=False)
-    meal_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    items: Mapped[list[MealPlanItem]] = relationship("MealPlanItem", cascade="all, delete-orphan", passive_deletes=True, order_by="MealPlanItem.position")
-
-
-class TrainingPlanEntry(ScheduleEntryMixin, BaseModel):
-    __tablename__ = "training_plan_entries"
-    __table_args__ = _entry_constraints("training_plan_entries", "training_plan_id")
-    training_plan_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("training_plans.id", ondelete="CASCADE"), nullable=False)
     is_rest: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     items: Mapped[list[TrainingPlanItem]] = relationship("TrainingPlanItem", cascade="all, delete-orphan", passive_deletes=True, order_by="TrainingPlanItem.position")
-
-
-class MealPlanItem(FoodPortionMixin, BaseModel):
-    __tablename__ = "meal_plan_items"
-    __table_args__ = (*food_item_constraints("meal_plan_items"), Index("uq_meal_plan_items_position", "entry_id", "position", unique=True))
-    entry_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("meal_plan_entries.id", ondelete="CASCADE"), nullable=False)
 
 
 class TrainingPlanItem(ExercisePlanMixin, BaseModel):
@@ -410,11 +440,8 @@ class TrainingPlanItem(ExercisePlanMixin, BaseModel):
     entry_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("training_plan_entries.id", ondelete="CASCADE"), nullable=False)
 
 
-MealPlan._create_schema, MealPlan._entry_model, MealPlan._item_model = MealPlanCreate, MealPlanEntry, MealPlanItem
-TrainingPlan._create_schema, TrainingPlan._entry_model, TrainingPlan._item_model = TrainingPlanCreate, TrainingPlanEntry, TrainingPlanItem
-MealPlan._item_builder = staticmethod(build_food_item)
-TrainingPlan._item_builder = staticmethod(build_prescription_item)
-for _model in (Plan, MealPlan, TrainingPlan):
+TrainingPlan._entry_model = TrainingPlanEntry
+for _model in (Plan, TrainingPlan):
     guard_immutable(_model, allowed={"status", "ended_at", "end_reason"})
-for _model in (MealPlanEntry, TrainingPlanEntry, MealPlanItem, TrainingPlanItem):
-    guard_immutable(_model)
+guard_immutable(TrainingPlanEntry, allowed={"completed_at"})
+guard_immutable(TrainingPlanItem)

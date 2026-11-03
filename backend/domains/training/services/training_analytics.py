@@ -16,7 +16,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
-from sqlalchemy import Date, func, select
+from sqlalchemy import Date, cast, func, or_, select
 
 from domains.training.models.trainings import Training, TrainingItem
 from domains.goals_plans.models.plans import TrainingPlan, TrainingPlanEntry
@@ -153,21 +153,30 @@ def _sessions(rows: list[Row]) -> dict[Any, Row]:
     return first
 
 
-async def _planned(session, user_id, start: date, end: date) -> tuple[dict[date, int], set]:
-    """Các mục không phải nghỉ của lịch chưa xoá đến hạn trong khoảng, và id của chúng."""
+async def _planned(session, user_id, start: date, end: date) -> tuple[dict[date, int], set, dict[Any, date]]:
+    """Các buổi không phải nghỉ đến hạn trong khoảng, id của chúng và các buổi đã được tick hoàn thành.
+
+    Phiên bản lịch đã bị thay thế không được tính, để một buổi không xuất hiện hai lần. Lịch kết thúc trước hạn
+    (người dùng kết thúc sớm, mục tiêu kết thúc) chỉ tính các buổi trước ngày kết thúc, hoặc đã tick."""
+    ended_day = cast(func.timezone(TrainingPlan.timezone, TrainingPlan.ended_at), Date)
     query = (
-        select(TrainingPlanEntry.id, TrainingPlanEntry.scheduled_date)
+        select(TrainingPlanEntry.id, TrainingPlanEntry.scheduled_date, TrainingPlanEntry.completed_at)
         .join(TrainingPlan, TrainingPlan.id == TrainingPlanEntry.training_plan_id)
         .where(TrainingPlan.user_id == user_id, TrainingPlan.is_active.is_(True),
+               TrainingPlan.end_reason.is_distinct_from("REPLACED"),
+               or_(TrainingPlan.ended_at.is_(None), TrainingPlan.end_reason == "EXPIRED",
+                   TrainingPlanEntry.scheduled_date < ended_day, TrainingPlanEntry.completed_at.is_not(None)),
                TrainingPlanEntry.is_rest.is_(False),
                TrainingPlanEntry.scheduled_date >= start, TrainingPlanEntry.scheduled_date <= end)
     )
     per_week: dict[date, int] = defaultdict(int)
-    ids = set()
-    for entry_id, day in (await session.execute(query)).all():
+    ids, checked = set(), {}
+    for entry_id, day, completed_at in (await session.execute(query)).all():
         per_week[week_start(day)] += 1
         ids.add(entry_id)
-    return per_week, ids
+        if completed_at is not None:
+            checked[entry_id] = day
+    return per_week, ids, checked
 
 
 # ----------------------------------------------------------------- tóm tắt
@@ -176,7 +185,7 @@ async def summary(session, user_id, options) -> dict[str, Any]:
     rows = await _rows(session, user_id, options.start_date, options.end_date, options.timezone)
     # Buổi theo kế hoạch chỉ được tính khi đã đến hạn (không tính tương lai).
     due_end = min(options.end_date, today_in(options.timezone))
-    planned, planned_ids = await _planned(session, user_id, options.start_date, due_end)
+    planned, planned_ids, checked = await _planned(session, user_id, options.start_date, due_end)
     weeks: dict[date, dict[str, Any]] = {}
     current = week_start(options.start_date)
     while current <= options.end_date:
@@ -185,6 +194,9 @@ async def summary(session, user_id, options) -> dict[str, Any]:
                           "run_distance_meters": ZERO, "run_duration_seconds": ZERO, "strength_volume_kg": ZERO,
                           "hard_sets_by_muscle": defaultdict(int), "completed": set()}
         current += timedelta(days=7)
+    # Một buổi hoàn thành khi người dùng tick nó, hoặc khi có buổi tập ghi nguồn từ nó.
+    for entry_id, day in checked.items():
+        weeks[week_start(day)]["completed"].add(entry_id)
     for row in _sessions(rows).values():
         week = weeks[week_start(row.day)]
         week["sessions"] += 1
@@ -563,11 +575,11 @@ async def insights(session, user_id, options, *, profile: TrainingProfile, bodyw
                                   exercise=record["exercise_name"], best_e1rm_kg=record["best_e1rm_kg"], date=record["best_e1rm_date"].isoformat()))
 
     # Mức tuân thủ kế hoạch trong 14 ngày gần nhất.
-    planned, planned_ids = await _planned(session, user_id, end - timedelta(days=13), end)
+    planned, planned_ids, checked = await _planned(session, user_id, end - timedelta(days=13), end)
     planned_total = sum(planned.values())
     if planned_total >= 3:
         recent_sessions = await _rows(session, user_id, end - timedelta(days=20), end, zone)
-        done = {r.source_entry_id for r in recent_sessions if r.source_entry_id in planned_ids}
+        done = set(checked) | {r.source_entry_id for r in recent_sessions if r.source_entry_id in planned_ids}
         adherence = 100 * len(done) / planned_total
         if adherence < ADHERENCE_MIN:
             found.append(_insight("LOW_ADHERENCE", "NOTICE", "GENERAL", f"Hoàn thành {len(done)}/{planned_total} buổi theo lịch 2 tuần qua ({adherence:.0f}%). Cân nhắc giảm số buổi/tuần cho vừa lịch.",

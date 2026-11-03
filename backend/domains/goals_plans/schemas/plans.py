@@ -1,4 +1,4 @@
-"""Hợp đồng có kiểu, thay thế toàn bộ, cho kế hoạch và lịch theo ngày."""
+"""Hợp đồng có kiểu, thay thế toàn bộ, cho kế hoạch và lịch tập theo ngày."""
 
 from datetime import date, time
 from decimal import Decimal
@@ -7,9 +7,8 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
 
-from domains.shared.schemas.activity import FoodPortionInput, FoodPortionRead
 from domains.catalog.schemas.exercises import ExercisePrescriptionInput, ExercisePrescriptionRead
-from domains.shared.schemas.common import EntityRead, InputSchema, JsonObject, Name, NonBlank, Pagination, Version
+from domains.shared.schemas.common import EntityRead, InputSchema, JsonObject, Name, NonBlank, Pagination, ReadSchema, Version
 from domains.shared.schemas.tracking import TimeZoneName, VersionedRequest
 
 PlanStatus = Literal["ACTIVE", "ENDED"]
@@ -96,11 +95,6 @@ class ScheduleEntryCreate(InputSchema):
         return self
 
 
-class MealPlanEntryCreate(ScheduleEntryCreate):
-    meal_type: Annotated[NonBlank, Field(max_length=100)] | None = None
-    items: Annotated[list[FoodPortionInput], Field(min_length=1)]
-
-
 class TrainingPlanEntryCreate(ScheduleEntryCreate):
     is_rest: bool = False
     items: list[ExercisePrescriptionInput] = Field(default_factory=list)
@@ -123,25 +117,12 @@ class ScheduleCreate(DateSpan):
         return self
 
 
-class MealPlanCreate(ScheduleCreate):
-    entries: Annotated[list[MealPlanEntryCreate], Field(min_length=1)]
-
-
 class TrainingPlanCreate(ScheduleCreate):
     entries: Annotated[list[TrainingPlanEntryCreate], Field(min_length=1)]
 
 
-class MealPlanReplace(VersionedRequest, MealPlanCreate):
-    pass
-
-
 class TrainingPlanReplace(VersionedRequest, TrainingPlanCreate):
     pass
-
-
-class MealPlanItemRead(FoodPortionRead):
-    entry_id: UUID
-    position: int
 
 
 class TrainingPlanItemRead(EntityRead):
@@ -153,18 +134,21 @@ class TrainingPlanItemRead(EntityRead):
     note: str | None
 
 
-class MealPlanEntryRead(ScheduleEntryCreate, EntityRead):
-    meal_plan_id: UUID
-    meal_type: str | None
-    position: int
-    items: list[MealPlanItemRead]
-
-
 class TrainingPlanEntryRead(ScheduleEntryCreate, EntityRead):
     training_plan_id: UUID
     is_rest: bool
     position: int
+    completed_at: AwareDatetime | None
     items: list[TrainingPlanItemRead]
+
+
+class EntryCompletionRead(ReadSchema):
+    """Kết quả tick: buổi kế hoạch, buổi tập đã ghi vào nhật ký, calo và số buổi thể thao đã ghi lên Google."""
+    entry: TrainingPlanEntryRead
+    training_id: UUID | None
+    energy_kcal: float | None
+    google_sessions: int
+    notices: list[str]
 
 
 class ScheduleRead(DateSpan, EntityRead):
@@ -175,10 +159,6 @@ class ScheduleRead(DateSpan, EntityRead):
     ended_at: AwareDatetime | None
     end_reason: str | None
     replaces_id: UUID | None
-
-
-class MealPlanRead(ScheduleRead):
-    entries: list[MealPlanEntryRead]
 
 
 class TrainingPlanRead(ScheduleRead):

@@ -29,7 +29,7 @@ PAYLOAD_FIELDS = {
     "Food": FOOD_FIELDS,
     "Meal": COMMON_FIELDS + (
         "user_id", "name", "consumed_at", "timezone", "source", "detail_status",
-        "replaces_id", "source_entry_id", "nutrition_incomplete",
+        "replaces_id", "nutrition_incomplete",
     ) + NUTRIENT_FIELDS,
     "MealItem": COMMON_FIELDS + (
         "position", "food_id", "quantity", "unit", "nutrition_incomplete",

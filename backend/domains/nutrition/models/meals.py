@@ -33,13 +33,11 @@ class Meal(NutrientColumns, Journal):
 
     consumed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     replaces_id: Mapped[PyUUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("meals.id", ondelete="RESTRICT"), nullable=True)
-    source_entry_id: Mapped[PyUUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("meal_plan_entries.id", ondelete="SET NULL"), nullable=True)
     nutrition_incomplete: Mapped[bool] = mapped_column(Boolean, nullable=False)
     items: Mapped[list["MealItem"]] = relationship(back_populates="meal", cascade="all, delete-orphan", passive_deletes=True, lazy="selectin", order_by="MealItem.position")
 
     @classmethod
     async def _insert_snapshot(cls, session, *, user_id, data, replaces_id=None):
-        await cls._check_entry(session, user_id, data.source_entry_id)
         items = [await build_food_item(session, user_id, item) for item in data.items]
         totals = NutritionTotals.model_validate(sum_known(items)).model_dump()
         entity = cls(

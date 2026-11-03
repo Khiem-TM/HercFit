@@ -63,6 +63,7 @@ class TrainingItemRead(ExerciseActivityRead):
     working_sets: int | None
 
 class TrainingRead(JournalRead):
+    source_entry_id: UUID | None
     started_at: AwareDatetime
     ended_at: AwareDatetime | None
     duration_seconds: DurationSeconds | None

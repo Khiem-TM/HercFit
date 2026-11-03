@@ -16,7 +16,6 @@ class MealCreate(InputSchema):
     consumed_at: AwareDatetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     timezone: TimeZoneName = DEFAULT_TIMEZONE
     note: str | None = None
-    source_entry_id: UUID | None = None
     items: Annotated[list[FoodPortionInput], Field(min_length=1)]
 
 class MealReplace(VersionedRequest, MealCreate):

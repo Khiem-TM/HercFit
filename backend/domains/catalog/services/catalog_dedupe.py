@@ -194,17 +194,13 @@ async def referenced_meal_items(session, plan: MergePlan) -> int:
 
 async def apply_plan(session, plan: MergePlan) -> dict[str, Any]:
     batch = str(uuid.uuid4())
-    repointed_total = aliases_total = 0
+    aliases_total = 0
     by_canonical: dict[str, dict[str, Any]] = {}
     for group in plan.groups:
         entry = by_canonical.setdefault(group.canonical.id, {"merged_from": [], "aliases": [], "range": None})
         if group.reason in ("portion", "typical"):
             entry["range"] = group.energy_range
         for row in group.merged:
-            repointed = (await session.execute(text(
-                "UPDATE meal_plan_items SET food_id = CAST(:canonical AS uuid), updated_at = now() "
-                "WHERE food_id = CAST(:merged AS uuid) RETURNING id::text"),
-                {"canonical": group.canonical.id, "merged": row.id})).scalars().all()
             aliases = (await session.execute(text(
                 "INSERT INTO foods_aliases (entity_id, normalized_alias) SELECT CAST(:canonical AS uuid), normalized_alias "
                 "FROM foods_aliases WHERE entity_id = CAST(:merged AS uuid) ON CONFLICT DO NOTHING RETURNING normalized_alias"),
@@ -212,13 +208,10 @@ async def apply_plan(session, plan: MergePlan) -> dict[str, Any]:
             await session.execute(text(
                 "UPDATE foods SET is_active = false, updated_at = now(), version_id = version_id + 1, "
                 "data_quality = COALESCE(data_quality, '{}'::jsonb) || jsonb_build_object('merged_into', CAST(:canonical AS text), "
-                "'merge_reason', CAST(:reason AS text), 'merge_batch', CAST(:batch AS text), "
-                "'repointed_plan_items', CAST(:repointed AS jsonb)) WHERE id = CAST(:merged AS uuid)"),
-                {"canonical": group.canonical.id, "reason": group.reason, "batch": batch, "merged": row.id,
-                 "repointed": json.dumps(repointed)})
+                "'merge_reason', CAST(:reason AS text), 'merge_batch', CAST(:batch AS text)) WHERE id = CAST(:merged AS uuid)"),
+                {"canonical": group.canonical.id, "reason": group.reason, "batch": batch, "merged": row.id})
             entry["merged_from"].append({"id": row.id, "code": row.code, "reason": group.reason, **row.nutrients})
             entry["aliases"].extend(aliases)
-            repointed_total += len(repointed)
             aliases_total += len(aliases)
     for canonical, entry in by_canonical.items():
         await session.execute(text(
@@ -229,22 +222,13 @@ async def apply_plan(session, plan: MergePlan) -> dict[str, Any]:
             {"batch": batch, "id": canonical, "merged": json.dumps(entry["merged_from"], ensure_ascii=False),
              "aliases": json.dumps(entry["aliases"], ensure_ascii=False), "range": json.dumps(entry["range"])})
     return {"batch": batch, "rows_deactivated": sum(len(g.merged) for g in plan.groups),
-            "plan_items_repointed": repointed_total, "aliases_copied": aliases_total}
+            "aliases_copied": aliases_total}
 
 
 async def revert(session, batch: str | None = None) -> dict[str, Any]:
     """Hoàn tác một lô gộp (hoặc mọi lô khi ``batch`` là None)."""
     scope = "data_quality->>'merge_batch' = :batch" if batch else "data_quality ? 'merge_batch'"
     params = {"batch": batch} if batch else {}
-    merged = (await session.execute(text(
-        f"SELECT id::text, data_quality->'repointed_plan_items' AS items FROM foods WHERE {scope} AND data_quality ? 'merged_into'"),
-        params)).mappings().all()
-    for row in merged:
-        items = row["items"] or []
-        if items:
-            await session.execute(text(
-                "UPDATE meal_plan_items SET food_id = CAST(:id AS uuid), updated_at = now() WHERE id::text = ANY(:items)"),
-                {"id": row["id"], "items": items})
     restored = await session.execute(text(
         f"UPDATE foods SET is_active = true, updated_at = now(), version_id = version_id + 1, "
         f"data_quality = data_quality - 'merged_into' - 'merge_reason' - 'merge_batch' - 'repointed_plan_items' "

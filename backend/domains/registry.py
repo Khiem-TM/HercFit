@@ -12,9 +12,6 @@ from domains.identity.models.consent import ConsentEvent, UserConsent
 from domains.catalog.models.exercises import Exercise
 from domains.goals_plans.models.plans import (
     Plan,
-    MealPlan,
-    MealPlanEntry,
-    MealPlanItem,
     TrainingPlan,
     TrainingPlanEntry,
     TrainingPlanItem,
@@ -43,7 +40,7 @@ __all__ = [
     "FoodItemType",
     "FoodServingUnit",
     "FoodSourceType",
-    "Exercise", "Plan", "MealPlan", "MealPlanEntry", "MealPlanItem",
+    "Exercise", "Plan",
     "TrainingPlan", "TrainingPlanEntry", "TrainingPlanItem",
     "Meal", "MealItem", "Training", "TrainingItem",
     "HealthConnection",

@@ -9,7 +9,6 @@ from domains.identity.routers.profile_router import router as profile_router
 from domains.catalog.routers.food_router import router as food_router
 from domains.catalog.routers.exercise_router import router as exercise_router
 from domains.goals_plans.routers.plan_router import router as plan_router
-from domains.goals_plans.routers.meal_plan_router import router as meal_plan_router
 from domains.goals_plans.routers.training_plan_router import router as training_plan_router
 from domains.nutrition.routers.meal_router import router as meal_router
 from domains.training.routers.training_router import router as training_router
@@ -32,7 +31,7 @@ api_router.include_router(profile_router)
 api_router.include_router(body_metrics_router)
 api_router.include_router(goal_router)
 api_router.include_router(media_router)
-for domain_router in (preview_router, food_router, exercise_router, plan_router, meal_plan_router,
+for domain_router in (preview_router, food_router, exercise_router, plan_router,
                       training_plan_router, meal_router, training_router, progress_router,
                       training_analytics_router, nutrition_router, integration_router, health_router, assistant_router):
     api_router.include_router(domain_router)

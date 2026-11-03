@@ -105,7 +105,7 @@ async def running_workout(code: str):
 @router.get("/templates/{code}/schedule", response_model=TrainingPlanCreate)
 async def preview_template_schedule(code: str, service: UserContextDep, start_date: date | None = None,
                                     weeks: int | None = None, name: str | None = None):
-    """Chỉ xem trước: gửi payload trả về tới POST /plans/{plan_id}/training-plans."""
+    """Chỉ xem trước: gửi payload trả về tới POST /training-plans (create_training_plans)."""
     options = validated_query(TemplateScheduleQuery, start_date=start_date or date.today() + timedelta(days=1), weeks=weeks, name=name)
     payload = await build_schedule(service.session, user_id=service.user_id, code=code, start_date=options.start_date,
                                    weeks=options.weeks, name=options.name)

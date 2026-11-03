@@ -29,11 +29,6 @@ EXPORT_QUERIES: tuple[tuple[str, str], ...] = (
     ("training_items", "SELECT i.* FROM training_items i JOIN trainings t ON t.id = i.training_id "
                        "WHERE t.user_id = :uid ORDER BY t.started_at, i.position"),
     ("plans", "SELECT * FROM plans WHERE user_id = :uid ORDER BY created_at"),
-    ("meal_plans", "SELECT * FROM meal_plans WHERE user_id = :uid ORDER BY created_at"),
-    ("meal_plan_entries", "SELECT e.* FROM meal_plan_entries e JOIN meal_plans p ON p.id = e.meal_plan_id "
-                          "WHERE p.user_id = :uid ORDER BY e.scheduled_date, e.position"),
-    ("meal_plan_items", "SELECT i.* FROM meal_plan_items i JOIN meal_plan_entries e ON e.id = i.entry_id "
-                        "JOIN meal_plans p ON p.id = e.meal_plan_id WHERE p.user_id = :uid ORDER BY e.scheduled_date, i.position"),
     ("training_plans", "SELECT * FROM training_plans WHERE user_id = :uid ORDER BY created_at"),
     ("training_plan_entries", "SELECT e.* FROM training_plan_entries e JOIN training_plans p ON p.id = e.training_plan_id "
                               "WHERE p.user_id = :uid ORDER BY e.scheduled_date, e.position"),

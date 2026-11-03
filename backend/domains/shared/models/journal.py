@@ -78,14 +78,14 @@ class Journal(BaseModel):
     async def _check_entry(cls, session, user_id, entry_id):
         if entry_id is None:
             return
-        from domains.goals_plans.models.plans import MealPlan, MealPlanEntry, TrainingPlan, TrainingPlanEntry
+        from domains.goals_plans.models.plans import TrainingPlan, TrainingPlanEntry
 
-        header, entry = (MealPlan, MealPlanEntry) if cls.TIME_FIELD == "consumed_at" else (TrainingPlan, TrainingPlanEntry)
-        # Một lịch trong quá khứ vẫn có thể là nguồn cho một mục nhật ký ghi muộn.
-        found = await session.scalar(select(entry.id).join(header).where(entry.id == entry_id, header.user_id == user_id))
-        if found is None:
+        # Một lịch trong quá khứ vẫn có thể là nguồn cho một buổi tập ghi muộn.
+        is_rest = await session.scalar(select(TrainingPlanEntry.is_rest).join(TrainingPlan)
+                                       .where(TrainingPlanEntry.id == entry_id, TrainingPlan.user_id == user_id))
+        if is_rest is None:
             raise HTTPException(404, "Scheduled activity not found")
-        if cls.TIME_FIELD == "started_at" and await session.scalar(select(entry.is_rest).where(entry.id == entry_id)):
+        if is_rest:
             raise HTTPException(422, "A rest entry cannot be the source of a training")
 
 def journal_constraints(prefix):

@@ -13,7 +13,6 @@ class JournalRead(EntityRead):
     name: str
     timezone: str
     note: str | None
-    source_entry_id: UUID | None
     replaces_id: UUID | None
     source: Literal["USER", "LEGACY_IMPORT"]
     detail_status: Literal["DETAILED", "AGGREGATE_ONLY"]

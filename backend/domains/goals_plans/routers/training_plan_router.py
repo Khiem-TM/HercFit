@@ -9,12 +9,39 @@ from domains.goals_plans.schemas.plans import (
     TrainingPlanReplace,
     TrainingPlanRead,
     TrainingPlanEntryRead,
+    EntryCompletionRead,
     PlanEnd,
 )
 from api.dependencies import PlanServiceDep, ScheduleQueryDep, ScheduleEntryQueryDep, VersionQuery
 from api.responses import created, current_or_not_found
 
 router = APIRouter(tags=["training-plans"])
+
+
+@router.post("/training-plans", response_model=TrainingPlanRead, status_code=201)
+@transaction
+async def create_current_training_plan(payload: TrainingPlanCreate, service: PlanServiceDep, response: Response):
+    """Lịch tập của kế hoạch đang hoạt động; kế hoạch cha được tạo/nới theo mục tiêu hiện tại khi cần."""
+    return created(response, "training-plans", await service.create_training_plan(payload))
+
+
+@router.get("/training-plans/current", response_model=TrainingPlanRead, responses={404: {"description": "No current schedule"}})
+@transaction
+async def current_schedule(service: PlanServiceDep):
+    return current_or_not_found(await service.current(TrainingPlan), "TrainingPlan")
+
+
+@router.get("/training-plans/previous", response_model=TrainingPlanRead, responses={404: {"description": "No ended schedule"}})
+async def previous_schedule(service: PlanServiceDep):
+    """Lịch đã kết thúc gần nhất, kèm các buổi đã tick (không bao giờ bị xoá khi kết thúc sớm)."""
+    return current_or_not_found(await service.previous_training_plan(), "TrainingPlan")
+
+
+@router.post("/training-plans/{training_plan_id}/entries/{entry_id}/complete", response_model=EntryCompletionRead)
+@transaction
+async def complete_training_plan_entry(training_plan_id: UUID, entry_id: UUID, service: PlanServiceDep):
+    """Chỉ buổi của hôm nay; ghi buổi tập thật (calo, Google Health) và không hoàn tác."""
+    return await service.complete_entry(training_plan_id, entry_id)
 
 
 @router.post("/plans/{plan_id}/training-plans", response_model=TrainingPlanRead, status_code=201)

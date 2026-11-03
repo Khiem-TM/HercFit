@@ -7,9 +7,10 @@ from domains.nutrition.models.meals import Meal
 from domains.training.models.trainings import Training
 from domains.goals_plans.models.plans import TrainingPlan
 from api.dependencies import JournalServiceDep, PlanServiceDep
+from domains.shared.services.common import require_found
 from domains.nutrition.schemas.meals import MealCreate, MealRead
 from domains.training.schemas.trainings import TrainingCreate, TrainingRead
-from domains.goals_plans.schemas.plans import TrainingPlanCreate, TrainingPlanRead
+from domains.goals_plans.schemas.plans import TrainingPlanCreate, TrainingPlanRead, TrainingPlanReplace
 
 router = APIRouter(tags=["previews"])
 
@@ -35,7 +36,16 @@ async def preview_training(payload: TrainingCreate, service: JournalServiceDep):
     return await _dry_run(service.session, lambda: Training.create_snapshot(service.session, user_id=service.user_id, payload=payload), TrainingRead)
 
 
-@router.post("/plans/{plan_id}/training-plans/preview")
-async def preview_training_plan(plan_id: UUID, payload: TrainingPlanCreate, service: PlanServiceDep):
-    return await _dry_run(service.session, lambda: TrainingPlan.create_for_user(service.session, user_id=service.user_id, plan_id=plan_id, payload=payload),
+@router.post("/training-plans/preview")
+async def preview_current_training_plan(payload: TrainingPlanCreate, service: PlanServiceDep):
+    return await _dry_run(service.session, lambda: TrainingPlan.create_with_parent(service.session, user_id=service.user_id, payload=payload),
                           TrainingPlanRead)
+
+
+@router.post("/training-plans/{training_plan_id}/preview")
+async def preview_training_plan_replacement(training_plan_id: UUID, payload: TrainingPlanReplace, service: PlanServiceDep):
+    async def build():
+        return require_found(await TrainingPlan.replace_for_user(
+            service.session, training_plan_id, user_id=service.user_id, payload=payload,
+            expected_version_id=payload.expected_version_id), "TrainingPlan")
+    return await _dry_run(service.session, build, TrainingPlanRead)
