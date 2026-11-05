@@ -5,7 +5,7 @@ from pathlib import Path
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import SettingsConfigDict
 
-from agentic.embedding.core.config import BACKEND_ROOT, EmbeddingSettings
+from agentic.embedding.core import BACKEND_ROOT, EmbeddingSettings
 
 INGESTION_ROOT = Path(__file__).resolve().parent
 # Sách nguồn, gói đã chuẩn bị và cache tokenizer không bao giờ được đưa vào quản lý phiên bản.

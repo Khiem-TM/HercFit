@@ -31,9 +31,7 @@ async def lifespan(app: FastAPI):
     settings.jwt_secret_value  # Xác thực phải được cấu hình kể cả khi không có nhà cung cấp AI.
     get_async_engine()
     observer()
-    from agentic.embedding.core.config import settings as embedding_settings
-    from agentic.embedding.core.client import EmbeddingClient
-    from agentic.embedding.core.rerank import RerankClient
+    from agentic.embedding.core import EmbeddingClient, RerankClient, settings as embedding_settings
     app.state.embedding_client = app.state.rerank_client = None
     if embedding_settings().RAG_ENABLED:
         try:

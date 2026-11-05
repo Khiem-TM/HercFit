@@ -4,14 +4,14 @@ Hai luồng dùng chung một lõi:
 
 ```
 embedding/
-  core/        cấu hình + profile, client embedding/rerank, chuẩn hoá văn bản (dùng chung)
+  core.py      cấu hình + profile, client embedding/rerank, chuẩn hoá văn bản (dùng chung)
   ingestion/   offline, người vận hành chạy CLI: prepare → enqueue → worker → review → activate
   retrieval/   online trong backend: POST /api/knowledge/search (dense + full-text, RRF, rerank)
 ```
 
 `retrieval/` chạy trong tiến trình backend (`app.py` đăng ký router); agent chỉ gọi HTTP
 qua `agentic/components/hybrid_retriever.py`. Schema PostgreSQL nằm ở `alembic/`
-(`0006_knowledge`, `0015_knowledge_retrieval`). `core/text.normalize_text` là hợp đồng giữa
+(`0006_knowledge`, `0015_knowledge_retrieval`). `core.normalize_text` là hợp đồng giữa
 `search_vector` đã lưu và câu truy vấn: đổi nó thì phải nạp lại mọi revision.
 
 Git theo dõi code, spec trong `ingestion/manifests/` và SQL kiểm tra trong `ingestion/sql/`.

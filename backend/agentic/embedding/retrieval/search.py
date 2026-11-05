@@ -6,7 +6,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 
-from agentic.embedding.core.text import normalize_text
+from agentic.embedding.core import normalize_text
 from agentic.observability import annotate, observed, span
 
 # Ngân sách ký tự cho toàn bộ nội dung trả về trong một lần tìm kiếm.

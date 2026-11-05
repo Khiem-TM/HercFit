@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
 
-from agentic.embedding.core.config import settings
+from agentic.embedding.core import settings
 from agentic.embedding.retrieval.search import RetrievalUnavailable, SearchRequest, search
 from api.dependencies import CurrentUserDep, SessionDep
 

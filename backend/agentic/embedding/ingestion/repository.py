@@ -6,7 +6,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 
-from agentic.embedding.core.text import normalize_text
+from agentic.embedding.core import normalize_text
 from agentic.embedding.ingestion.preparation import load_prepared
 from agentic.observability import durable_context, observed
 

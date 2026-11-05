@@ -46,7 +46,7 @@ async def main(args):
 
 async def preflight(cfg):
     """Gọi thật embedding (query và passage) và rerank; chỉ in model, số chiều, endpoint và profile."""
-    from agentic.embedding.core.rerank import RerankClient
+    from agentic.embedding.core import RerankClient
     from agentic.embedding.ingestion.client import FPTEmbeddingClient
     client, reranker = FPTEmbeddingClient(cfg), RerankClient(cfg)
     try:

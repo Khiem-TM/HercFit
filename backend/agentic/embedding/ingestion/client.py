@@ -4,7 +4,7 @@ import math
 
 import httpx
 
-from agentic.embedding.core.client import EmbeddingClient
+from agentic.embedding.core import EmbeddingClient
 
 RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}
 
