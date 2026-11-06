@@ -1,5 +1,6 @@
 """Phần dùng chung cho nạp và truy hồi RAG: cấu hình + profile, client embedding/rerank, chuẩn hoá văn bản."""
 import math
+import re
 import unicodedata
 from collections import OrderedDict
 from functools import lru_cache
@@ -69,6 +70,20 @@ def normalize_text(value):
     """
     value = unicodedata.normalize('NFD', value.lower().replace('đ', 'd'))
     return ' '.join(''.join(char for char in value if not unicodedata.combining(char)).split())
+
+
+# Từ tiếng Việt viết không dấu thường gặp trong câu hỏi; chỉ giữ từ không trùng với từ tiếng Anh hay gặp
+# ("the", "an", "can", "de" bị loại vì "the de Castella", "how can I"...).
+VIETNAMESE_WORDS = frozenset('khong nhu nao cua voi nguoi gi bao nhieu nen sao lam duoc khi chay uong truoc trong '
+                             'moi ngay tuan hon nhanh toi minh cho va co la tap sau giam'.split())
+
+
+def is_english(text):
+    """Truy vấn tiếng Anh cho kho sách tiếng Anh: chỉ ký tự ASCII và không có từ tiếng Việt không dấu nào.
+
+    isascii() thôi chưa đủ: "lam sao chay 5k nhanh hon" cũng là ASCII.
+    """
+    return text.isascii() and VIETNAMESE_WORDS.isdisjoint(re.findall(r'[a-z]+', text.lower()))
 
 
 def record_usage(model, provider, tokens):

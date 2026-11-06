@@ -122,6 +122,16 @@ def rate(source_id, url='', product=None):
     return Rating('unknown', frozenset(), host or None)
 
 
+# Câu hỏi tri thức chỉ được tra web ở nhà xuất bản chính thống: cơ quan y tế, cơ sở dữ liệu quốc gia, hiệp hội
+# chuyên môn, bệnh viện, đại học (hạng primary/professional) và host .gov/.edu. Báo chí, wiki, mạng xã hội bị loại.
+AUTHORITATIVE_TIERS = frozenset({'primary', 'professional'})
+AUTHORITATIVE_DOMAINS = tuple(sorted(d for d, (tier, _) in REGISTRY.items() if tier in AUTHORITATIVE_TIERS))
+
+
+def authoritative(url):
+    return '://' in (url or '') and rate(url, url).tier in AUTHORITATIVE_TIERS
+
+
 def social(url):
     host = (urlparse(url or '').hostname or '').lower().removeprefix('www.')
     return any(host == domain or host.endswith('.' + domain) for domain in SOCIAL)

@@ -9,7 +9,8 @@ from uuid import uuid5, NAMESPACE_URL
 from time import perf_counter
 from pydantic import ValidationError
 from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
-from agentic.services import catalog_choice, meal_logging
+from agentic.services import catalog_choice, meal_logging, mode
+from agentic.services.routing import latest_request
 from domains.shared.models.catalog import normalize_food_text
 from agentic.services.write_reply import executed_writes, repeats_write, write_reply
 from agentic.core.context import request_context
@@ -17,7 +18,7 @@ from agentic.tools.integrations.backend_client import BackendError
 from agentic.core.providers.fpt import strip_tool_markup
 from agentic.tools.integrations.tavily import public_url
 from agentic.tools.registry import HEALTH_TOOL_KINDS, PREVIEW_PATHS, REGISTRY
-from agentic.tools.policy import allowed_tools, CATALOG_DEPENDENCIES, needs_catalog_handoff, CAPABILITY_GUIDANCE, COACH_GUIDANCE, HEALTH_DOMAINS, HEALTH_GUIDANCE, TRAINING_DOMAINS
+from agentic.tools.policy import allowed_tools, logging_tools, CATALOG_DEPENDENCIES, needs_catalog_handoff, CAPABILITY_GUIDANCE, COACH_GUIDANCE, HEALTH_DOMAINS, HEALTH_GUIDANCE, TRAINING_DOMAINS
 from agentic.components.context_filter import model_graph_context
 from agentic.services.routing import verified_fast_plan, terminal_result, fast_reads_enabled
 from agentic.tools.output import CATALOG_LIMIT, clamp_catalog_query, compact_output, model_view
@@ -70,8 +71,11 @@ class ToolAgent:
         allowed=allowed_tools(decision['domain'])
         if decision.get('read_only'):
             allowed={name:spec for name,spec in allowed.items() if not spec.write}
+        policy=mode.policy(state)
+        if policy.lean_tools:
+            allowed=logging_tools(allowed,decision['domain'],latest_request(state))
         prompt = PROMPT+'\n'+CAPABILITY_GUIDANCE+('\n'+COACH_GUIDANCE if decision['domain'] in TRAINING_DOMAINS else '')
-        if decision['domain'] in HEALTH_DOMAINS:
+        if decision['domain'] in HEALTH_DOMAINS and policy.guidance:
             prompt += '\n'+HEALTH_GUIDANCE
         if decision.get('read_only'):
             prompt += '\nNhiệm vụ chỉ đọc: không ghi dữ liệu, không tạo candidate và không chuyển research. Catalog trống thì báo chưa có kết quả.'

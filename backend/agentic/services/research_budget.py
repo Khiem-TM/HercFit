@@ -1,4 +1,5 @@
 from agentic.observability import annotate
+from agentic.services import mode
 from contextlib import asynccontextmanager
 
 class BudgetExceeded(Exception): pass
@@ -22,7 +23,8 @@ async def research_lease(store,state):
             await conn.execute('UPDATE agent_research_budgets SET lease_until=NULL WHERE run_id=%s',(state['run_id'],))
 
 async def reserve(store,run_id,kind):
-    limits={'web':8,'search':3,'llm':3,'rounds':2}
+    # Chế độ Plan cho thêm lượt tra cứu, lượt trích xuất và vòng tra cứu (services/mode.py).
+    limits=mode.policy().research_limits
     if kind not in limits: raise ValueError('Unknown budget')
     async with store.pool.connection() as conn:
         row=await (await conn.execute(f'''UPDATE agent_research_budgets SET {kind}={kind}+1
@@ -31,15 +33,27 @@ async def reserve(store,run_id,kind):
             annotate(budget_exceeded=True, budget_kind=kind)
             raise BudgetExceeded(kind)
 
+def admit(documents,identifiers):
+    """Các id được nhận (id đã có luôn được nhận lại); thêm id mới vào documents khi loại của nó còn chỗ.
+
+    Mỗi lượt tối đa mode.ModePolicy.documents đoạn trích cơ sở tri thức (id 'kb:') và chừng ấy nguồn web, tính
+    riêng: các đoạn trích nội bộ không bao giờ chiếm chỗ của lần tra cứu web bổ sung."""
+    limit=mode.policy().documents
+    accepted=[]
+    for ident in identifiers:
+        local=ident.startswith('kb:')
+        if ident in documents: accepted.append(ident)
+        elif sum(d.startswith('kb:')==local for d in documents)<limit:
+            documents.append(ident); accepted.append(ident)
+    return accepted
+
 async def reserve_documents(store,run_id,identifiers):
     async with store.pool.connection() as conn:
         async with conn.transaction():
             row=await (await conn.execute('SELECT documents FROM agent_research_budgets WHERE run_id=%s FOR UPDATE',(run_id,))).fetchone()
             if not row: raise BudgetExceeded('Missing research budget')
-            documents=list(row['documents']); accepted=[]
-            for ident in identifiers:
-                if ident in documents: accepted.append(ident)
-                elif len(documents)<6: documents.append(ident); accepted.append(ident)
+            documents=list(row['documents'])
+            accepted=admit(documents,identifiers)
             from psycopg.types.json import Jsonb
             await conn.execute('UPDATE agent_research_budgets SET documents=%s WHERE run_id=%s',(Jsonb(documents),run_id))
             return accepted

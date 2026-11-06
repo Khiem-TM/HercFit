@@ -2,7 +2,9 @@
 from agentic.components.hybrid_retriever import retrieve_knowledge
 from agentic.components.context_filter import bounded_documents
 from agentic.security.output_validation import parse_draft, check_claims, verify_claims, verified_claims, related_claims
-from agentic.security.input_guard import ClinicalQuestion, clinical_topic, injury_prevention, safe_query
+from agentic.security.input_guard import ClinicalQuestion, clinical_topic, injury_prevention, public_queries
+from agentic.embedding.core import is_english
+from agentic.services.routing import latest_request
 from agentic.components.reranker import NUTRITION_FIELDS, relevance, target_words, topical, rank_sources
 from agentic.prompts.registry import get_questions
 from agentic.prompts.registry import get_prompt
@@ -11,35 +13,55 @@ import asyncio
 import hashlib
 import json
 import re
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import SystemMessage, HumanMessage
 from agentic.services import catalog_choice
 from agentic.services.illustrations import find_illustrations
 from agentic.services import personal_context
+from agentic.services import mode
 from agentic.core.context import request_context
 from agentic.agents.state import AgentState
 from agentic.tools.integrations.tavily import TavilyUnavailable, public_url
 from agentic.services.research_budget import research_lease, reserve, reserve_documents, BudgetExceeded
 from agentic.research.contracts import ResearchPlan, ResearchDraft, ResearchResult, ResearchStatus, QA_INTENTS
 from agentic.research.evidence import audit
-from agentic.research.sources import quality_gate, rate, social
+from agentic.research.sources import AUTHORITATIVE_DOMAINS, authoritative, quality_gate, rate, social
 from domains.catalog.schemas.foods import FoodCreate
 from domains.catalog.schemas.exercises import ExerciseCreate
 from domains.catalog.models.foods import normalize_food_text
 
 PROMPT = get_prompt('research.extract')
 
+# Hạn chót của cả subgraph tra cứu (timeout bao ngoài của runtime cũng huỷ nó) theo chế độ trò chuyện:
+# mode.ModePolicy.research_seconds, 60 s ở chế độ thường và 120 s ở chế độ Plan.
+# Tra cứu web bổ sung (tìm kiếm + một lần trích xuất nữa) chỉ bắt đầu khi còn ít nhất chừng này giây,
+# và phải xong trước hạn chót trừ phần để dành cho validate (Jev final, ảnh minh hoạ).
+SUPPLEMENT_MIN_SECONDS = 15
+VALIDATE_RESERVE_SECONDS = 8
+_deadline = ContextVar('research_deadline', default=None)
 
-def findings(claims,documents,heading):
-    """Các khẳng định dạng gạch đầu dòng với tài liệu tham khảo đánh số, mỗi nguồn một số."""
+
+def seconds_left():
+    deadline = _deadline.get()
+    return None if deadline is None else deadline - asyncio.get_running_loop().time()
+
+
+def reference(source_id,source,outside=True):
+    """Một dòng tài liệu tham khảo: đoạn sách của thư viện HercFit theo chương/trang, nguồn web kèm nhãn ngoài thư viện."""
+    text=f"{source.get('title') or 'Tài liệu'} — {source.get('url') or book_location(source)}"
+    return text+' (nguồn ngoài thư viện HercFit)' if outside and not source_id.startswith('kb:') else text
+
+
+def findings(claims,documents,heading,outside=False):
+    """Các khẳng định dạng gạch đầu dòng với tài liệu tham khảo đánh số, mỗi nguồn một số. outside gắn nhãn cho
+    nguồn web khi câu trả lời tri thức có thể trộn đoạn sách của thư viện với web."""
     references={}; lines=[]
     for claim in claims[:8]:
         source=documents[claim.source_id]
         if claim.source_id not in references:
-            label=source.get('title') or 'Tài liệu'
-            where=source.get('url') or book_location(source)
-            references[claim.source_id]=(len(references)+1,f'{label} — {where}')
+            references[claim.source_id]=(len(references)+1,reference(claim.source_id,source,outside))
         note=(' (các nguồn chưa thống nhất)' if claim.conflict else
               '' if claim.applicable else ' (không khớp hoàn toàn với yêu cầu)')
         lines.append(f'- {claim.claim}{note} [{references[claim.source_id][0]}]')
@@ -60,8 +82,7 @@ def research_evidence(claims,documents,status):
         source=documents[claim.source_id]
         if claim.source_id not in numbers:
             numbers[claim.source_id]=len(numbers)+1
-            references.append({'n':numbers[claim.source_id],
-                               'text':f"{source.get('title') or 'Tài liệu'} — {source.get('url') or book_location(source)}"})
+            references.append({'n':numbers[claim.source_id],'text':reference(claim.source_id,source)})
         note='các nguồn chưa thống nhất' if claim.conflict else None if claim.applicable else 'không khớp hoàn toàn với yêu cầu'
         items.append({'n':numbers[claim.source_id],'claim':claim.claim,'quote':claim.quote[:300],**({'note':note} if note else {})})
     return {'status':status if items else 'insufficient','claims':items,'references':references}
@@ -72,15 +93,23 @@ def consulted(documents,limit=4):
     return ['Đã xem:',*[f'- {d.get("title") or d["url"]} — {d["url"]}' for d in rows]] if rows else []
 
 
+def searched(documents):
+    """Những gì lượt tra cứu đã đọc, tách thư viện HercFit với web: "2 đoạn trong thư viện HercFit và 3 nguồn web"."""
+    local=sum(1 for key in documents if key.startswith('kb:'))
+    parts=[f'{local} đoạn trong thư viện HercFit' if local else '',
+           f'{len(documents)-local} nguồn web chính thống' if len(documents)>local else '']
+    return ' và '.join(p for p in parts if p) or 'các nguồn hiện có'
+
+
 def partial_answer(target,claims,documents,weak=False):
     """Những gì các nguồn nói khi chúng không giải quyết được câu hỏi tri thức; không bao giờ là phỏng đoán của chính ta."""
     if not claims:
-        return '\n'.join([f'Mình đã xem {len(documents)} nguồn trên web nhưng không thấy thông tin đủ tin cậy về "{target}".',
+        return '\n'.join([f'Mình đã xem {searched(documents)} nhưng không thấy thông tin đủ tin cậy về "{target}".',
                           '',*consulted(documents)]).strip()
     caveat=('Các nguồn này chưa đủ tin cậy hoặc chưa đủ căn cứ, nên đây chỉ là thông tin tham khảo.' if weak else
             'Đây là thông tin tham khảo, chưa đủ căn cứ để trả lời chắc chắn.')
     return '\n'.join([f'Mình chưa tìm được câu trả lời chắc chắn cho "{target}". {caveat}','',
-                      *findings(claims,documents,'Các nguồn trên web có nói:')])
+                      *findings(claims,documents,'Các nguồn có nói:',outside=True)])
 
 
 def catalog_followup(domain,target,claims,documents,product):
@@ -133,9 +162,13 @@ class ResearchV2:
                 raise BudgetExceeded('Tool limit')
             async with research_lease(self.store,state):
                 await reserve(self.store,state['run_id'],'rounds')
-                timeout=60  # Timeout bao ngoài của runtime cũng huỷ subgraph này.
-                async with asyncio.timeout(timeout):
-                    result=await self.graph.ainvoke(state)
+                seconds=mode.policy(state).research_seconds
+                deadline=_deadline.set(asyncio.get_running_loop().time()+seconds)
+                try:
+                    async with asyncio.timeout(seconds):
+                        result=await self.graph.ainvoke(state)
+                finally:
+                    _deadline.reset(deadline)
                 async with self.store.pool.connection() as conn:
                     usage=await (await conn.execute('SELECT web,search,llm,rounds FROM agent_research_budgets WHERE run_id=%s',(state['run_id'],))).fetchone()
                 result['research_usage']=dict(usage)
@@ -190,13 +223,16 @@ class ResearchV2:
 
     async def plan(self,state):
         ctx=request_context.get(); d=state['decision']
-        query=safe_query(d.get('research_query') or '',ctx.private_values)
+        query,queries,dropped=public_queries(d.get('research_query'),d.get('research_queries'),ctx.private_values)
         qa=d.get('intent') in QA_INTENTS
-        if qa and clinical_topic(query):
+        # Router có thể viết lại "tôi đang đau gối" thành một câu trung tính: kiểm tra cả tin nhắn gốc của người dùng.
+        if qa and any(clinical_topic(q) for q in [query,*queries,latest_request(state)]):
             raise ClinicalQuestion('Clinical question requires professional evaluation')
         domain=d.get('domain')
         if not qa and domain not in {'foods','exercises'}: raise ValueError('Invalid research domain')
-        queries=[safe_query(q,ctx.private_values) for q in (d.get('research_queries') or [query])][:3]
+        # Kho sách chủ yếu bằng tiếng Anh; router được dặn luôn có một bản tiếng Anh nhưng code không tự dịch được.
+        english=any(is_english(q) for q in [query,*queries])
+        annotate(research_queries=len(queries),dropped_queries=dropped,english_query=english)
         distinct=bool(d.get('create_distinct')) and not qa
         lookup=None
         if not qa:
@@ -206,7 +242,8 @@ class ResearchV2:
                           preferred_sources=['approved_knowledge','professional_organizations'] if qa or domain=='exercises' else ['manufacturer_label','nutrition_database'],
                           required_fields=[] if qa else [k for k,v in (FoodCreate if domain=='foods' else ExerciseCreate).model_fields.items() if v.is_required()],
                           distinct_from=[m['name_vi'] for m in lookup['matches'][:5]] if distinct else [])
-        work={'plan':plan.model_dump(),'qa':qa,'documents':{},'lookup':lookup,'distinct':distinct}
+        work={'plan':plan.model_dump(),'qa':qa,'documents':{},'lookup':lookup,'distinct':distinct,
+              'english_query':english,'dropped_queries':dropped}
         update={'research_work':work,'research_answer':None}
         if lookup and lookup['status']!='MISSING' and not distinct:
             # Ưu tiên database: người dùng chọn một bản ghi có sẵn hoặc xác nhận biến thể mới trước mọi lần gọi web.
@@ -228,16 +265,21 @@ class ResearchV2:
             decision=state['decision']
             descriptor=personal_context.retrieval_descriptor(state.get('user_context'),decision.get('topic') or 'general') \
                 if decision.get('personalize') else None
-            if descriptor:
-                # Chỉ cơ sở tri thức nội bộ (không bao giờ web): các đoạn trích phù hợp trình độ của người dùng này.
-                english=next((q for q in queries if q.isascii()),query)
-                queries=[(descriptor+'. '+english)[:300],*queries][:3]
-            try:
-                # Các cách diễn đạt lại của router (một bản tiếng Anh cho kho tiếng Anh) mở rộng độ phủ khi truy hồi.
-                docs, work['retrieval_status'] = await retrieve_knowledge(ctx.backend, ctx.token, query, queries=queries,
-                                                                          limit=6 if descriptor else 4)
-            except Exception:
-                work['retrieval_status']='unavailable'
+            policy=mode.policy(state)
+            if policy.deep:
+                # Chế độ Plan: mỗi câu hỏi con của router một lần truy hồi, để mọi khía cạnh đều có đoạn trích.
+                docs,work['retrieval_status']=await self.aspects(ctx,query,queries,descriptor,policy.documents)
+            else:
+                if descriptor:
+                    # Chỉ cơ sở tri thức nội bộ (không bao giờ web): các đoạn trích phù hợp trình độ của người dùng này.
+                    english=next((q for q in queries if is_english(q)),query)
+                    queries=[(descriptor+'. '+english)[:300],*queries][:3]
+                try:
+                    # Các cách diễn đạt lại của router (một bản tiếng Anh cho kho tiếng Anh) mở rộng độ phủ khi truy hồi.
+                    docs, work['retrieval_status'] = await retrieve_knowledge(ctx.backend, ctx.token, query, queries=queries,
+                                                                              limit=6 if descriptor else 4)
+                except Exception:
+                    work['retrieval_status']='unavailable'
         # Bằng chứng nội bộ được chấm điểm trước. Web chỉ được dùng lúc này nếu truy hồi nội bộ rỗng.
         if docs:
             allowed=await reserve_documents(self.store,state['run_id'],list(docs))
@@ -253,20 +295,73 @@ class ResearchV2:
             work['jev_local_enforced']=bool(evaluation.get('enforced'))
             probability=self.probability(evaluation,'local_insufficient')
             if evaluation.get('enforced') and probability is not None and probability>=.90:
-                # Đặt chỗ tài liệu một cách bền vững trước khi thêm nguồn web, giữ lại các đoạn trích KB hữu ích.
-                web=await self.web(state,work['plan']['queries'])
-                work['documents']={**docs,**web}
+                # Thêm nguồn web, giữ lại các đoạn trích KB hữu ích.
+                added=await self.supplement(state,work,redraft=False)
+                if added: work=added[0]
                 work['web_fallback_done']=True
         return {'research_work':work,'jev_events':events}
 
+    @staticmethod
+    async def aspects(ctx,query,queries,descriptor,limit):
+        """(tài liệu, trạng thái) khi truy hồi riêng từng câu hỏi con (song song), gộp xen kẽ theo thứ hạng và khử trùng.
+        Không có câu hỏi con thì câu hỏi chính được truy hồi."""
+        async def one(aspect):
+            extra=[(descriptor+'. '+aspect)[:300]] if descriptor else []
+            try:
+                return await retrieve_knowledge(ctx.backend,ctx.token,aspect,queries=extra,limit=4)
+            except Exception:
+                return {},'unavailable'
+        results=await asyncio.gather(*(one(a) for a in ([q for q in queries if q!=query] or [query])[:3]))
+        merged={}
+        for rank in range(4):
+            for found,_ in results:
+                rows=list(found.values())
+                if rank<len(rows) and rows[rank]['source_id'] not in merged:
+                    merged[rows[rank]['source_id']]=rows[rank]
+        statuses=[status for _,status in results]
+        status='ok' if merged else next((s for s in statuses if s!='unavailable'),'unavailable')
+        annotate(research_aspects=len(results),aspect_documents=len(merged))
+        return dict(list(merged.items())[:limit]),status
+
+    async def supplement(self,state,work,*,redraft):
+        """(work mới, bản nháp mới hoặc None) với nguồn web gộp sau bằng chứng đã có; None khi không thêm được gì.
+
+        Đây là bước bổ sung: lỗi nhà cung cấp, hết ngân sách hay sắp hết giờ chỉ có nghĩa là không có thêm nguồn,
+        không bao giờ làm mất các đoạn trích (và bản nháp) từ cơ sở tri thức."""
+        left=seconds_left()
+        if left is not None and left<SUPPLEMENT_MIN_SECONDS:
+            annotate(web_supplement='skipped_deadline')
+            return None
+        trial={**work}
+        try:
+            async with asyncio.timeout(None if left is None else left-VALIDATE_RESERVE_SECONDS):
+                web=await self.web(state,work['plan']['queries'])
+                if not web:
+                    annotate(web_supplement='empty')
+                    return None
+                trial['documents']={**work['documents'],**web}
+                # draft() thu gọn trial['documents'] về đúng các đoạn đã gửi cho model.
+                draft=await self.draft(state,trial) if redraft else None
+        except Exception as exc:
+            annotate(web_supplement='failed',web_supplement_error=type(exc).__name__)
+            return None
+        annotate(web_supplement='added',web_documents=len(web))
+        return trial,draft
+
     async def web(self,state,queries):
         async def budget(kind): await reserve(self.store,state['run_id'],kind)
+        decision=state['decision']
+        qa=decision.get('intent') in QA_INTENTS
+        # Câu hỏi tri thức: chỉ nhà xuất bản chính thống. Tra cứu catalog (nhãn sản phẩm, bảng dinh dưỡng) giữ cấu hình cũ.
+        domains=list(AUTHORITATIVE_DOMAINS) if qa else getattr(self.settings,'RESEARCH_SOURCE_DOMAINS',[])
         rows=[]
         for query in queries:
             kwargs={'reserve':budget}
-            if getattr(self.settings,'RESEARCH_SOURCE_DOMAINS',[]): kwargs['domains']=self.settings.RESEARCH_SOURCE_DOMAINS
+            if domains: kwargs['domains']=domains
             rows.extend(await self.tavily.search(query,**kwargs))
-        decision=state['decision']
+        if qa:
+            # Tavily đã lọc theo domain; code vẫn kiểm lại từng URL (kết quả cache, chuyển hướng, kết quả lọt lưới).
+            rows=[r for r in rows if authoritative(r['url'])]
         target=((state.get('research_work') or {}).get('plan') or {}).get('target') or queries[0]
         product=target if decision.get('domain')=='foods' and decision.get('intent') not in QA_INTENTS else None
         catalog=decision.get('intent') not in QA_INTENTS and decision.get('domain')
@@ -308,13 +403,14 @@ class ResearchV2:
         draft=await self.draft(state,work)
         # Yêu cầu cá nhân hoá cần nguyên tắc, không cần câu trả lời đầy đủ cho mục tiêu riêng của người dùng: các
         # khẳng định đã kiểm chứng từ cơ sở tri thức được giữ, và chỉ tìm trên web khi sách không có gì.
-        personal_evidence=state['decision'].get('personalize') and draft.claims
+        # Chế độ Plan luôn tra thêm web chính thống khi bản nháp chưa đủ, kể cả đã có nguyên tắc cho câu trả lời cá nhân.
+        personal_evidence=state['decision'].get('personalize') and draft.claims and not mode.policy(state).deep
         if (work['qa'] and not draft.sufficient and not work.get('web_fallback_done') and not personal_evidence
                 and any(k.startswith('kb:') for k in work['documents'])):
-            # Một phương án dự phòng thích ứng, với cùng ngân sách bền vững và hạn chót.
-            web=await self.web(state,work['plan']['queries'])
-            work['documents']={**work['documents'],**web} if work.get('jev_local_enforced') else web
-            if work['documents']: draft=await self.draft(state,work)
+            # Một phương án dự phòng thích ứng, với cùng ngân sách bền vững và hạn chót. Nguồn web được gộp sau
+            # các đoạn trích KB (không thay thế chúng); thất bại thì giữ nguyên bản nháp từ KB.
+            added=await self.supplement(state,work,redraft=True)
+            if added: work,draft=added
         work['draft']=draft.model_dump()
         return {'research_work':work}
 
@@ -407,7 +503,7 @@ class ResearchV2:
             source=work['documents'][claim.source_id]
             if public_url(source.get('url','')):
                 sources.append({'title':source.get('title',''),'url':source['url'],'content':claim.quote})
-        answer=findings(checked,work['documents'],'Theo các nguồn đã kiểm chứng:') if checked else []
+        answer=findings(checked,work['documents'],'Theo các nguồn đã kiểm chứng:',outside=work['qa']) if checked else []
         if work['plan']['intent']=='TRAINING_PLAN' and answer:
             answer.insert(0,'Đề xuất tham khảo dựa trên nguồn bên dưới. Để cá nhân hóa, cần mục tiêu, số buổi mỗi tuần và kinh nghiệm tập hiện tại.')
         if work['qa'] and answer and injury_prevention(work['plan']['target']):
@@ -432,6 +528,7 @@ class ResearchV2:
             update.update(status='running',error=None,research_answer=None,research_evidence=evidence,
                           route_trace=[*(state.get('route_trace') or []),{
                               'stage':'research','status':evidence['status'],'retrieval':work.get('retrieval_status'),
+                              'english_query':work.get('english_query'),
                               'documents':len(work['documents']),'claims':len(draft.claims),'verified':len(checked)}])
             return update
         if work['qa'] and not complete:

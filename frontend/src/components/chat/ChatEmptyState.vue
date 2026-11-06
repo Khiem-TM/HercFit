@@ -1,14 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Activity, Dumbbell, Flame } from 'lucide-vue-next'
 import type { UserProfile } from '@/types/api'
 
 const props = defineProps<{
   user: UserProfile | null
-}>()
-
-const emit = defineEmits<{
-  (e: 'select-prompt', prompt: string): void
 }>()
 
 const displayName = computed(() => {
@@ -16,33 +11,6 @@ const displayName = computed(() => {
   if (props.user?.fullname) return props.user.fullname
   return 'Bạn'
 })
-
-const suggestionCards = [
-  {
-    icon: Flame,
-    title: 'Phân tích bữa ăn & Macro',
-    description:
-      'Ghi lại thực đơn vừa ăn và tính toán tự động lượng Calo, Protein, Carb và Fat theo mục tiêu.',
-    prompt:
-      'Sáng nay mình ăn 1 bát bún bò Huế và uống 1 ly cà phê sữa ít đường. Tính giúp mình lượng calo và macro của bữa này nhé.',
-  },
-  {
-    icon: Dumbbell,
-    title: 'Kiến tạo giáo án tập luyện',
-    description:
-      'Tối ưu hóa khối lượng vận động, số hiệp và chu kỳ phục hồi cơ bắp dựa trên thể trạng hiện tại.',
-    prompt:
-      'Hãy lập cho mình giáo án tập luyện 4 buổi/tuần tập trung vào phát triển cơ ngực, lưng xô và cải thiện sức bền.',
-  },
-  {
-    icon: Activity,
-    title: 'Đánh giá chỉ số & Mục tiêu',
-    description:
-      'Kiểm tra tiến độ cân nặng, tỷ lệ mỡ cơ thể và điều chỉnh lộ trình dinh dưỡng hàng tuần.',
-    prompt:
-      'Kiểm tra giúp mình hồ sơ chỉ số cơ thể hiện tại và tư vấn mức thâm hụt calo an toàn để giảm mỡ giữ cơ.',
-  },
-]
 </script>
 
 <template>
@@ -122,33 +90,6 @@ const suggestionCards = [
     <!-- Ô soạn tin (căn giữa khi trống) -->
     <div class="w-full">
       <slot name="composer" />
-    </div>
-
-    <!-- 3 thẻ gợi ý thao tác nhanh -->
-    <!-- Kích thước theo cột chat, cột này hẹp lại khi bảng tri thức được kéo rộng ra. -->
-    <div class="mt-4 grid w-full grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3.5">
-      <button
-        v-for="card in suggestionCards"
-        :key="card.title"
-        type="button"
-        class="group flex flex-col items-start justify-between rounded-2xl border border-ink/[0.08] bg-panel-raised/90 p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-ink/20 hover:bg-panel-hover hover:shadow-[0_16px_40px_rgb(var(--c-shadow)/calc(0.5*var(--shadow-k)))]"
-        @click="emit('select-prompt', card.prompt)"
-      >
-        <div
-          class="mb-4 flex h-9 w-9 items-center justify-center rounded-xl border border-ink/[0.09] bg-sunken text-on-surface-variant transition-colors group-hover:border-ink/25 group-hover:text-primary"
-        >
-          <component :is="card.icon" class="h-4 w-4" />
-        </div>
-
-        <div>
-          <h3 class="text-sm font-semibold text-primary group-hover:text-ink">
-            {{ card.title }}
-          </h3>
-          <p class="mt-1.5 line-clamp-3 text-xs leading-relaxed text-outline">
-            {{ card.description }}
-          </p>
-        </div>
-      </button>
     </div>
   </div>
 </template>

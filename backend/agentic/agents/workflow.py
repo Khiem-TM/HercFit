@@ -16,6 +16,7 @@ from agentic.observability.telemetry import MeasuredModels
 from agentic.observability.execution import run_node
 from agentic.core.context import request_context
 from agentic.services import personal_context
+from agentic.services import mode
 
 
 def build_workflow(models, store, saver, tavily, settings, graph_context=None, jev=None):
@@ -33,7 +34,10 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         hinted=domains_for(latest_request(state))
         update=await retrieve_graph_context(state,hinted, settings=settings, graph_context=graph_context)
         current={**state,**update}
-        routed=fast_route(current) if fast_reads_enabled(settings) and assess(latest_request(current)) is None else None
+        policy=mode.policy(state)
+        # Chế độ Plan không có lối tắt đọc theo mẫu: người dùng đã chọn tư vấn chuyên sâu.
+        shortcuts=policy.shortcuts and assess(latest_request(current)) is None
+        routed=fast_route(current) if fast_reads_enabled(settings) and shortcuts else None
         if routed:
             # Lệnh đọc độc lập khớp một mẫu chặt chẽ: không gọi model định tuyến hay chọn tool.
             decision,plan=routed
@@ -41,7 +45,7 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
             return {**update,'decision':decision,'status':'running','fast_read_plan':plan.model_dump(mode='json'),
                     'fast_read_complete':False,'turn':{'run_id':state.get('run_id'),'intent':decision['intent'],
                                                        'domain':decision['domain'],'action':decision['action']}}
-        if (assess(latest_request(current)) is None and food_suggestion.is_food_suggestion(latest_request(current))
+        if (shortcuts and food_suggestion.is_food_suggestion(latest_request(current))
                 and not current.get('tool_outputs') and not current.get('pending_action')
                 and (state.get('turn') or {}).get('run_id') != state.get('run_id')):
             # Gợi ý bữa ăn độc lập: một lần tra catalog chỉ đọc, không gọi model định tuyến.
@@ -50,7 +54,7 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
             return {**update,'decision':decision,'status':'running','fast_read_plan':None,'fast_read_complete':False,
                     'turn':{'run_id':state.get('run_id'),'intent':decision['intent'],'domain':decision['domain'],
                             'action':decision['action']}}
-        if current.get('user_context_run_id')!=current.get('run_id'):
+        if policy.personal_card and current.get('user_context_run_id')!=current.get('run_id'):
             # Một lần mỗi lượt chạy: những gì HercFit đã biết về người dùng, để router đọc thay vì hỏi.
             ctx=request_context.get(None)
             card=await personal_context.load_card(ctx.backend,ctx.token) if ctx else None
@@ -179,8 +183,14 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
          ('answer' if s.get('status')=='running' and (s.get('prepared_reply') or (
              s.get('fast_read_complete') and s.get('decision',{}).get('action')=='answer')) else 'orchestrator')))
     # Câu trả lời cá nhân hoá được viết từ dữ liệu của người dùng và bằng chứng tra cứu, dù tra cứu tìm được gì.
-    graph.add_conditional_edges('research',lambda s:'answer' if (s.get('decision') or {}).get('personalize') or s.get('research_answer')
-                                or s.get('prepared_reply') or s.get('status') in {'needs_input','failed'} else 'orchestrator')
+    def after_research(s):
+        decision=s.get('decision') or {}
+        if decision.get('plan_task')=='plan_build' and s.get('status')=='running':
+            return 'orchestrator'  # chế độ Plan: nguyên tắc đã tra cứu, tiếp theo dựng lịch tập bằng tool
+        if decision.get('personalize') or s.get('research_answer') or s.get('prepared_reply') or s.get('status') in {'needs_input','failed'}:
+            return 'answer'
+        return 'orchestrator'
+    graph.add_conditional_edges('research',after_research)
     graph.add_conditional_edges('confirmation',lambda s:'execute' if s.get('approved') else END)
     # Lệnh finalize bị từ chối với 409 quay lại dưới dạng bản xem trước mới cần được xác nhận riêng.
     graph.add_conditional_edges('execute',lambda s:'confirmation' if s.get('status')=='pending_confirmation' else 'orchestrator')

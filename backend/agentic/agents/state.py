@@ -39,8 +39,11 @@ class RouteDecision(BaseModel):
     objectives: list[str] = Field(default_factory=list, max_length=3)
     research_queries: list[str] = Field(default_factory=list, max_length=3)
     personalize: bool = Field(default=False, description="Advice or analysis about this user's own body/training/nutrition: read their stored data first")
-    topic: Literal['running', 'strength', 'training', 'nutrition', 'body', 'recovery', 'general'] | None = Field(
+    topic: Literal['running', 'strength', 'training', 'nutrition', 'body', 'recovery', 'wellbeing', 'general'] | None = Field(
         default=None, description='Subject of a personalized request; selects which stored analytics are read')
+    plan_task: Literal['advice', 'life_review', 'plan_build'] | None = Field(default=None, description=(
+        'Plan mode only: advice = in-depth question, life_review = analysis of sleep/activity/nutrition/body/recovery '
+        'quality, plan_build = create a training plan. Leave empty in normal chat.'))
     meal_log: list[MealLog] = Field(default_factory=list, max_length=4, description=(
         'Only for LOG_FOOD: one entry per meal the user reports (separate meals for different times), each with '
         'its foods. Leave empty for any other intent.'))
@@ -48,6 +51,10 @@ class RouteDecision(BaseModel):
     read_only: SkipJsonSchema[bool] = False
 
 class AgentState(TypedDict, total=False):
+    # Chế độ trò chuyện người dùng chọn ('normal' | 'plan'); vắng mặt ở checkpoint cũ (xem services/mode.py).
+    mode: str
+    # Chế độ thường gặp câu hỏi tư vấn: mời người dùng hỏi lại ở chế độ này.
+    suggested_mode: str | None
     model_auth_failed: bool
     jev_events: list[dict[str, Any]]
     jev_rejections: dict[str, Any]

@@ -55,6 +55,8 @@ class AgentSettings(BaseSettings):
     # Một lượt ghi bữa ăn = định tuyến + 2–3 vòng tool + trả lời. Tốc độ sinh của FPT dao động 12–40 token/s
     # (cùng ~700 token: 17–60 s, đo ngày 02/11), nên 120 s từng hết hạn giữa chừng khi provider chậm.
     RUN_TIMEOUT_SECONDS: float = Field(default=180, gt=0)
+    # Chế độ Plan: đọc dữ liệu sâu, tra cứu theo từng câu hỏi con và trả lời ở effort cao, nên cần thời gian dài hơn.
+    PLAN_RUN_TIMEOUT_SECONDS: float = Field(default=300, gt=0)
     CONFIRMATION_TTL_SECONDS: int = Field(default=1800, gt=0)
     RESEARCH_SOURCE_DOMAINS: list[str] = []
     # DeepSeek trên FPT suy nghĩ ~9k token cho mỗi lần trích xuất ở mức mặc định (25-70 s); "low" giữ
@@ -78,6 +80,8 @@ class AgentSettings(BaseSettings):
     JEV_MODEL: str | None = None
     JEV_TIMEOUT_SECONDS: float = Field(default=3, gt=0, le=10)
     JEV_ENFORCE_PERCENT: int = Field(default=100, ge=0, le=100)
+    # Các cổng mà một lượt chạy 'enforce' được phép thay đổi quyết định; cổng còn lại chỉ ghi nhận như 'shadow'.
+    JEV_ENFORCE_PHASES: list[Literal['routing', 'local', 'final']] = ['routing', 'local', 'final']
     JEV_POLICY_VERSION: str = Field(default='v1', min_length=1, max_length=64)
     JEV_INPUT_PRICE_PER_MILLION: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     JEV_OUTPUT_PRICE_PER_MILLION: float | None = Field(default=None, ge=0, allow_inf_nan=False)
@@ -176,6 +180,6 @@ class AgentSettings(BaseSettings):
     @property
     def session_lease_seconds(self):
         # Bao trùm cả lượt chạy cùng phần ghi nhật ký; lease bị bỏ dở sẽ tự hết hạn.
-        return self.RUN_TIMEOUT_SECONDS + 60
+        return max(self.RUN_TIMEOUT_SECONDS, self.PLAN_RUN_TIMEOUT_SECONDS) + 60
 
 agent_settings = AgentSettings()

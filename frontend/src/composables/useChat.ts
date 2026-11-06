@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import type {
   ChatMessage,
+  ChatMode,
   ChatResponse,
   PendingAction,
   SessionSummary,
@@ -20,7 +21,28 @@ const activeNode = ref<string | null>(null)
 const pendingAction = ref<PendingAction | null>(null)
 const isSavingImage = ref<boolean>(false)
 const error = ref<string | null>(null)
+/** Chế độ của phiên đang mở; được nhớ theo từng phiên cho tới khi người dùng tắt. */
+const chatMode = ref<ChatMode>('normal')
 let streamController: AbortController | null = null
+
+const MODE_KEY = 'hercfit.chatMode.'
+
+function storedMode(sessionId: string): ChatMode {
+  try {
+    return localStorage.getItem(MODE_KEY + sessionId) === 'plan' ? 'plan' : 'normal'
+  } catch {
+    return 'normal'
+  }
+}
+
+function rememberMode(sessionId: string, value: ChatMode): void {
+  try {
+    if (value === 'plan') localStorage.setItem(MODE_KEY + sessionId, 'plan')
+    else localStorage.removeItem(MODE_KEY + sessionId)
+  } catch {
+    // Trình duyệt chặn localStorage: chế độ chỉ giữ trong phiên làm việc hiện tại.
+  }
+}
 
 const NODE_LABELS: Record<string, string> = {
   orchestrator: 'Đang phân tích ý định & điều phối...',
@@ -53,8 +75,14 @@ export function useChat() {
     }
   }
 
+  function setChatMode(value: ChatMode): void {
+    chatMode.value = value
+    if (activeSessionId.value) rememberMode(activeSessionId.value, value)
+  }
+
   function createNewSession(): void {
     activeSessionId.value = crypto.randomUUID()
+    chatMode.value = 'normal'
     messages.value = []
     pendingAction.value = null
     activeNode.value = null
@@ -64,6 +92,7 @@ export function useChat() {
   async function selectSession(sessionId: string): Promise<void> {
     if (isStreaming.value) return
     activeSessionId.value = sessionId
+    chatMode.value = storedMode(sessionId)
     isLoadingHistory.value = true
     error.value = null
     pendingAction.value = null
@@ -146,6 +175,8 @@ export function useChat() {
       activeSessionId.value = crypto.randomUUID()
     }
     const currentSessionId = activeSessionId.value
+    const mode = chatMode.value
+    rememberMode(currentSessionId, mode)
     error.value = null
     pendingAction.value = null
 
@@ -153,6 +184,7 @@ export function useChat() {
       id: crypto.randomUUID(),
       role: 'human',
       content: text,
+      mode,
       timestamp: new Date().toISOString(),
     })
 
@@ -173,6 +205,7 @@ export function useChat() {
         body: JSON.stringify({
           session_id: currentSessionId,
           message: text,
+          mode,
         }),
       })
 
@@ -233,6 +266,7 @@ export function useChat() {
                 pending_action: pending,
                 clarification: normalizeClarification(event.clarification),
                 illustrations: Array.isArray(event.illustrations) ? event.illustrations : [],
+                suggested_mode: event.suggested_mode === 'plan' ? 'plan' : null,
                 status: event.status,
                 timestamp: new Date().toISOString(),
               }
@@ -395,6 +429,13 @@ export function useChat() {
     }
   }
 
+  /** Nút "Hỏi ở chế độ Plan": bật chế độ Plan cho phiên rồi gửi lại đúng câu hỏi. */
+  async function askInPlan(text: string): Promise<void> {
+    if (isStreaming.value) return
+    setChatMode('plan')
+    await sendMessage(text)
+  }
+
   return {
     sessions,
     activeSessionId,
@@ -415,6 +456,9 @@ export function useChat() {
     sendMessage,
     stopStreaming,
     confirmAction,
+    chatMode,
+    setChatMode,
+    askInPlan,
   }
 }
 

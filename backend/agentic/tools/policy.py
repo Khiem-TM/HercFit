@@ -32,6 +32,22 @@ def allowed_tools(domain):
     }
 
 
+# Yêu cầu sửa/xoá một bản ghi đã có (không dấu). Chỉ khi đó tool update_/delete_ mới được bind ở chế độ ghi nhanh.
+EDIT_REQUEST = re.compile(r'\b(?:sua|xoa|cap nhat|chinh lai|huy|nham|ghi lai|doi lai|doi thanh|'
+                          r'update|delete|edit|remove|change|fix|undo)\b')
+
+
+def logging_tools(allowed, domain, request):
+    """Chế độ ghi nhanh: chỉ tool của chính miền và catalog nó phụ thuộc; tool sửa/xoá chỉ khi yêu cầu nói tới.
+
+    Schema của các tool ghi buổi tập rất lớn (create/update_trainings, log/update_sport_session mỗi cái 7–9k ký tự),
+    nên bỏ các tool không dùng tới giảm đáng kể token và lựa chọn nhiễu của model."""
+    edits = bool(EDIT_REQUEST.search(normalize_food_text(request or '')))
+    keep = {domain, CATALOG_DEPENDENCIES.get(domain)}
+    return {name: spec for name, spec in allowed.items()
+            if spec.domain in keep and (edits or not name.startswith(('update_', 'delete_')))}
+
+
 def needs_catalog_handoff(domain, text):
     if domain not in CATALOG_DEPENDENCIES:
         return False

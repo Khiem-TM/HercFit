@@ -83,6 +83,11 @@ class JevService:
         bucket = int(hashlib.sha256(str(state.get('run_id', '')).encode()).hexdigest(), 16) % 100
         return 'enforce' if bucket < getattr(self.settings, 'JEV_ENFORCE_PERCENT', 100) else 'shadow'
 
+    def phase_mode(self, mode, phase):
+        """Một lượt chạy 'enforce' chỉ thay đổi quyết định ở các cổng trong JEV_ENFORCE_PHASES; cổng khác như 'shadow'."""
+        phases = getattr(self.settings, 'JEV_ENFORCE_PHASES', ('routing', 'local', 'final'))
+        return 'shadow' if mode == 'enforce' and phase not in phases else mode
+
     @observed('jev.evaluate', 'tool', capture=('phase',), output=False)
     async def evaluate(self, state, phase, projection, questions):
         result = await self._evaluate(state, phase, projection, questions)
@@ -93,7 +98,7 @@ class JevService:
 
     async def _evaluate(self, state, phase, projection, questions):
         started = time.monotonic()
-        mode = self.selected_mode(state)
+        mode = self.phase_mode(self.selected_mode(state), phase)
         result = {'status': 'unknown', 'answers': {}, 'mode': mode, 'enforced': mode == 'enforce',
                   'phase': phase, 'reason': None, 'usage': None, 'model': None, 'cost': None,
                   'duration_ms': 0, 'cached': False, 'attempted': False,
@@ -136,7 +141,7 @@ class JevService:
             reservation = await self.ledger.reserve(state, phase, fingerprint, mode)
         except Exception:
             return unknown('ledger_unavailable')
-        mode = reservation['mode']
+        mode = self.phase_mode(reservation['mode'], phase)
         result.update(mode=mode, enforced=mode == 'enforce')
         if reservation['status'] == 'cached':
             saved = copy.deepcopy(reservation['result'])

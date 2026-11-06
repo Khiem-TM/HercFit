@@ -340,7 +340,13 @@ export interface ChatResponse {
   illustrations?: Illustration[]
   sources: SourceItem[]
   tool_outputs: Record<string, unknown>[]
+  /** Chế độ của lượt chạy; suggested_mode = 'plan' khi chế độ thường mời hỏi lại ở chế độ Plan. */
+  mode?: ChatMode | null
+  suggested_mode?: 'plan' | null
 }
+
+/** Nút "Plan" trên ô nhập: normal = ghi nhận dữ liệu; plan = tư vấn chuyên sâu, phân tích, lập kế hoạch tập. */
+export type ChatMode = 'normal' | 'plan'
 
 export interface ChatMessage {
   id: string
@@ -351,6 +357,10 @@ export interface ChatMessage {
   pending_action?: PendingAction | null
   clarification?: Clarification | null
   illustrations?: Illustration[]
+  /** Trợ lý mời hỏi lại câu trước ở chế độ Plan (chế độ thường không tư vấn). */
+  suggested_mode?: 'plan' | null
+  /** Tin nhắn người dùng gửi ở chế độ Plan. */
+  mode?: ChatMode
   /**
    * Trạng thái chỉ ở client: 'streaming' khi token đang tới, 'stopped' sau khi người dùng huỷ, và 'confirmed' /
    * 'rejected' cho yêu cầu xác nhận mà người dùng đã trả lời.

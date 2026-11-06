@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { defineAsyncComponent, nextTick, onMounted, ref, shallowRef, useTemplateRef } from 'vue'
-import { PanelLeftOpen, Plus, Sparkles } from 'lucide-vue-next'
+import { PanelLeftOpen, Sparkles } from 'lucide-vue-next'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmptyState from '@/components/chat/ChatEmptyState.vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
@@ -29,11 +29,12 @@ const {
   sendMessage,
   stopStreaming,
   confirmAction,
+  chatMode,
+  setChatMode,
+  askInPlan,
 } = useChat()
 
 const KnowledgePanel = defineAsyncComponent(() => import('@/components/knowledge/KnowledgePanel.vue'))
-const ImageLibraryModal = defineAsyncComponent(() => import('@/components/media/ImageLibraryModal.vue'))
-const isImageLibraryOpen = ref(false)
 const isKnowledgeOpen = ref(false)
 const knowledgeTab = ref<KnowledgeTab>('overview')
 const isUserModalOpen = ref(false)
@@ -53,10 +54,10 @@ async function handleConfirm(decision: 'approve' | 'reject', extras: ConfirmExtr
   if (decision === 'approve' && !error.value && (tool === 'create_training_plans' || tool === 'update_training_plans')) openPlan()
 }
 
-/** Nút "Lập lịch mới" ở thanh bên: nhờ trợ lý đề xuất lịch, người dùng sửa và xác nhận trên thẻ. */
+/** Nút "Lập lịch mới" ở thanh bên: lập lịch thuộc chế độ Plan (đọc dữ liệu, tra nguyên tắc rồi đề xuất lịch). */
 function createPlan(): void {
   if (isStreaming.value || isConfirming.value) return
-  sendMessage('Lập giúp mình một lịch tập mới theo mục tiêu hiện tại.')
+  askInPlan('Lập giúp mình một lịch tập mới theo mục tiêu hiện tại.')
 }
 
 function openUserModal(): void {
@@ -102,10 +103,6 @@ onMounted(async () => {
   }
   await loadSessions()
 })
-
-function handleSelectPrompt(prompt: string): void {
-  sendMessage(prompt)
-}
 </script>
 
 <template>
@@ -165,19 +162,7 @@ function handleSelectPrompt(prompt: string): void {
           </span>
         </div>
 
-        <button type="button" class="ml-auto mr-2 shrink-0 whitespace-nowrap rounded-full border border-ink/10 px-3 py-1.5 text-xs text-on-surface-variant hover:bg-ink/10" aria-haspopup="dialog" @click="isImageLibraryOpen = true">Ảnh</button>
-        <button type="button" class="mr-2 shrink-0 whitespace-nowrap rounded-full border border-ink/10 px-3 py-1.5 text-xs text-on-surface-variant hover:bg-ink/10" :aria-pressed="isKnowledgeOpen && knowledgeTab === 'plan'" @click="openPlan">Kế hoạch</button>
-        <button type="button" class="mr-3 shrink-0 whitespace-nowrap rounded-full border border-gold/25 px-3 py-1.5 text-xs text-gold hover:bg-gold/10" :aria-expanded="isKnowledgeOpen" @click="isKnowledgeOpen = !isKnowledgeOpen">✧ Tri thức của tôi</button>
-        <button
-          v-if="hasMessages"
-          type="button"
-          :disabled="isStreaming"
-          class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-ink/10 bg-ink/[0.04] px-3 py-1.5 text-xs text-on-surface-variant transition-colors hover:border-ink/25 hover:text-primary disabled:opacity-50"
-          @click="createNewSession"
-        >
-          <Plus class="h-3.5 w-3.5" />
-          <span>Hội thoại mới</span>
-        </button>
+        <button type="button" class="ml-auto shrink-0 whitespace-nowrap rounded-full border border-gold/25 px-3 py-1.5 text-xs text-gold hover:bg-gold/10" :aria-expanded="isKnowledgeOpen" @click="isKnowledgeOpen = !isKnowledgeOpen">✧ Dashboard</button>
       </header>
 
       <!-- Banner lỗi -->
@@ -199,14 +184,14 @@ function handleSelectPrompt(prompt: string): void {
       >
         <ChatEmptyState
           :user="user"
-          @select-prompt="handleSelectPrompt"
         >
           <template #composer>
             <ChatComposer
+              :mode="chatMode"
               :is-streaming="isStreaming"
-              :active-node-label="activeNodeLabel"
               @send="sendMessage"
               @stop="stopStreaming"
+              @update:mode="setChatMode"
             />
           </template>
         </ChatEmptyState>
@@ -222,16 +207,18 @@ function handleSelectPrompt(prompt: string): void {
           :pending-action="pendingAction"
           @confirm="handleConfirm"
           @send="sendMessage"
+          @ask-in-plan="askInPlan"
         />
 
         <!-- Khung soạn tin ghim ở dưới cùng -->
         <div class="shrink-0 px-4 pb-5 pt-2 md:px-8">
           <div class="mx-auto w-full max-w-3xl">
             <ChatComposer
+              :mode="chatMode"
               :is-streaming="isStreaming"
-              :active-node-label="activeNodeLabel"
               @send="sendMessage"
               @stop="stopStreaming"
+              @update:mode="setChatMode"
             />
           </div>
         </div>
@@ -239,7 +226,6 @@ function handleSelectPrompt(prompt: string): void {
     </main>
 
     <KnowledgePanel v-if="isKnowledgeOpen" v-model:tab="knowledgeTab" :busy="isStreaming || isConfirming" :activity="activeNodeLabel" :revision="messages.length + Number(isStreaming) + Number(isConfirming) + sessions.length" @close="isKnowledgeOpen = false" @open-settings="openSettings" @create-plan="createPlan" />
-    <ImageLibraryModal v-if="isImageLibraryOpen" @close="isImageLibraryOpen = false" />
 
     <!-- Hộp thoại Hồ sơ, Số đo & Cài đặt -->
     <UserSettingsModal

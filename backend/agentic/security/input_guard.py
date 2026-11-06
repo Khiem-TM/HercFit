@@ -37,3 +37,22 @@ def safe_query(query,private_values=()):
     if any(v and len(v)>2 and v.casefold() in query.casefold() for v in private_values):
         raise ValueError('Private query')
     return query.strip()
+
+
+def public_queries(primary,variants=(),private_values=()):
+    """(truy vấn chính, các biến thể, số truy vấn bị bỏ). Mỗi truy vấn qua safe_query riêng: một biến thể
+    lỗi (có số đo, quá dài, chứa dữ liệu riêng) chỉ bị bỏ, không làm hỏng cả lần tra cứu. Truy vấn chính
+    lỗi thì biến thể hợp lệ đầu tiên thay chỗ; không còn truy vấn nào thì ValueError như safe_query."""
+    def checked(query):
+        try:
+            return safe_query(query,private_values)
+        except ValueError:
+            return None
+    main=checked(primary)
+    given=[q for q in variants or [] if q]
+    others=[q for q in map(checked,given) if q]
+    dropped=(bool(primary) and not main)+len(given)-len(others)
+    if not main and not others:
+        raise ValueError('A public research topic without personal data is required')
+    main=main or others[0]
+    return main,(others or [main])[:3],dropped

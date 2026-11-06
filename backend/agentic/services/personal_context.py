@@ -20,7 +20,7 @@ from domains.catalog.models.foods import normalize_food_text
 CONTEXT_PATH = '/api/assistant/context'
 CARD_KEYS = frozenset({'today', 'profile', 'body', 'athlete', 'running', 'training_4w', 'inventory'})
 TIMEZONE = 'Asia/Ho_Chi_Minh'
-TOPICS = ('running', 'strength', 'training', 'nutrition', 'body', 'recovery', 'general')
+TOPICS = ('running', 'strength', 'training', 'nutrition', 'body', 'recovery', 'wellbeing', 'general')
 
 # Cách diễn đạt khiến yêu cầu nói về chính người dùng này (không dấu, chữ thường).
 FIRST_PERSON = re.compile(r"\b(?:toi|minh|tui|em|ban than|cua toi|cua minh)\b|the trang|hien tai|trinh do|phu hop voi|"
@@ -55,6 +55,24 @@ def today() -> date:
 def is_personal_advice(text: str) -> bool:
     words = normalize_food_text(text or '')
     return bool(FIRST_PERSON.search(words) and ADVICE.search(words))
+
+
+# Môn thể thao và thuật ngữ khoa học vận động ngoài TOPIC_WORDS (không dấu); "boi" (bởi) không dùng một mình.
+SPORT_TERMS = (r'the thao|tap luyen|the duc|the hinh|the luc|suc ben|suc manh|khoi dong|gian co|keo gian|nhip tim|'
+               r'bong da|cau long|bong ro|bong chuyen|boi loi|dap xe|leo nui|vo2 ?max|lactate|lactic|glycogen|creatine|'
+               r'whey|bcaa|dien giai|electrolyte|cardio|hiit|aerobic|anaerobic|crossfit|calisthenics|yoga|pilates|'
+               r'triathlon|trail|tennis|football|soccer|basketball|cycling|swim|workout|exercise|stretch|warm.?up')
+# Cách hỏi kiến thức (không dấu): khác với trò chuyện, kể lại hay cảm ơn.
+QUESTION_WORDS = re.compile(r'\b(?:gi|nen|co phai|duoc khong|hay khong|nhu the nao|the nao|lam sao|tai sao|vi sao|bao nhieu|bao lau|khi nao|co nen|'
+                            r'co tot|co hai|co loi|co can|khac nhau|khac gi|anh huong|tac dung|loi ich|'
+                            r'what|why|how|when|which|should|does|difference)\b')
+KNOWLEDGE_TOPIC = re.compile('|'.join([*TOPIC_WORDS.values(), SPORT_TERMS]))
+
+
+def knowledge_question(text: str) -> bool:
+    """Một câu hỏi kiến thức về thể thao, dinh dưỡng hay cơ thể: lưới an toàn khi router gọi nó là trò chuyện."""
+    words = normalize_food_text(text or '')
+    return bool(QUESTION_WORDS.search(words) and KNOWLEDGE_TOPIC.search(words))
 
 
 def topic_for(text: str, domain: str | None = None) -> str:
@@ -94,6 +112,9 @@ def deep_reads(topic: str, end: date | None = None) -> list[tuple[str, dict]]:
         'nutrition': [('get_nutrition_targets', {'timezone': TIMEZONE}), ('get_progress', _range(14, end)), ('current_goal', {})],
         'body': [('get_progress', _range(28, end)), ('current_goal', {}), ('latest_metrics', {})],
         'recovery': [('get_health_overview', {'days': 28, 'timezone': TIMEZONE}), ('get_training_load', _range(7, end))],
+        # Chất lượng sống (chế độ Plan): giấc ngủ, vận động, phục hồi từ thiết bị cùng ăn uống, cơ thể và tải tập.
+        'wellbeing': [('get_health_overview', {'days': 28, 'timezone': TIMEZONE}), ('get_progress', _range(28, end)),
+                      ('latest_metrics', {}), ('current_goal', {}), ('get_training_load', _range(7, end))],
     }.get(topic, [])
 
 
@@ -227,6 +248,9 @@ def retrieval_descriptor(card: dict | None, topic: str) -> str | None:
         return 'Training guidance for an ' + ', '.join(parts) if level[0] in 'aeiou' else 'Training guidance for a ' + ', '.join(parts)
     if topic == 'strength':
         return f"Strength training guidance for {'an' if level[0] in 'aeiou' else 'a'} {level} lifter training {athlete.get('available_days', 3)} days per week"
+    if topic == 'wellbeing':
+        return (f"Sleep, recovery, daily activity and nutrition habits for {'an' if level[0] in 'aeiou' else 'a'} "
+                f"{level} recreational athlete")
     if topic in {'nutrition', 'body'}:
         return f"Nutrition and body composition guidance for {'an' if level[0] in 'aeiou' else 'a'} {level} recreational athlete"
     return None

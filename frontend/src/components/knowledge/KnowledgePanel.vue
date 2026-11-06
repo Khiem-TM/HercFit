@@ -324,8 +324,6 @@ onUnmounted(() => {
     <header class="head">
       <div>
         <p class="eyeline">THE OLYMPUS OBSERVATORY · ATLAS CÁ NHÂN</p>
-        <h2>Bản đồ <em>tri thức</em></h2>
-        <p class="subtitle">Những gì trợ lý ghi nhớ về bạn, kết tinh từ bữa ăn, buổi tập, số đo và các cuộc trò chuyện.</p>
       </div>
       <button class="icon-button" type="button" aria-label="Đóng bản đồ" @click="emit('close')"><X :size="18" /></button>
     </header>
@@ -412,11 +410,8 @@ onUnmounted(() => {
 .width-grip:hover::before, .width-grip:focus-visible::before, .resizing .width-grip::before { opacity: 1; }
 .width-grip:hover i, .width-grip:focus-visible i, .resizing .width-grip i { height: 76px; background: light-dark(#886f35, #e6cf9e); box-shadow: 0 0 16px light-dark(#87671a99, #d4b77d99); }
 .width-grip:focus-visible i { outline: 2px solid light-dark(#867854, #f3e6c6); outline-offset: 3px; }
-.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: clamp(18px, 3cqi, 28px) var(--gutter) 14px; }
-.eyeline { font: 8px 'JetBrains Mono', monospace; letter-spacing: .2em; color: light-dark(#7d6431, #bda77c); margin: 0 0 10px; }
-.head h2 { font-family: 'Playfair Display', serif; font-size: clamp(24px, 3.5cqi, 38px); font-weight: 400; line-height: 1.15; letter-spacing: -.04em; margin: 0; }
-.head h2 em { color: light-dark(#87671a, #d4b77d); font-weight: 400; }
-.subtitle { font-size: 11px; color: light-dark(#6d6b67, #8e8c88); margin: 9px 0 0; max-width: 460px; line-height: 1.6; }
+.head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: clamp(18px, 3cqi, 28px) var(--gutter) 14px; }
+.eyeline { font: 8px 'JetBrains Mono', monospace; letter-spacing: .2em; color: light-dark(#7d6431, #bda77c); margin: 0; }
 .icon-button { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border: 1px solid light-dark(#18181812, #ffffff12); border-radius: 50%; color: light-dark(#5a564d, #aca89e); background: transparent; transition: color 220ms, background 220ms, transform 300ms; }
 .icon-button:hover { color: light-dark(#88754c, #f0dfba); background: light-dark(#87671a12, #d4b77d12); }
 .icon-button:active { transform: scale(.9); }
@@ -470,11 +465,9 @@ footer { display: flex; justify-content: space-between; padding: 12px var(--gutt
 @keyframes observatory-arrive { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
 /* Chính độ rộng của bảng, không phải của màn hình, quyết định cách sắp xếp nội dung. */
 @container observatory (max-width: 480px) {
-  .subtitle { display: none; }
   .tabs button { gap: 4px; font-size: 10px; padding: 8px 3px; }
 }
 @container observatory (min-width: 980px) {
-  .subtitle { max-width: 620px; font-size: 12px; }
   .empty-sky p { font-size: 24px; max-width: 420px; }
 }
 @media (max-width: 1000px) { .observatory { position: fixed; inset: 0 0 0 auto; width: min(860px, 100vw); } }

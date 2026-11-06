@@ -13,7 +13,7 @@ from agentic.observability.telemetry import active_metrics, merge_retrieval
 
 # Các chủ đề ngữ cảnh cá nhân (services.personal_context.TOPICS) và miền graph chứa dữ liệu của chúng.
 TOPIC_DOMAINS={'running':'trainings','strength':'trainings','training':'trainings','nutrition':'meals',
-               'body':'metrics','recovery':'recovery'}
+               'body':'metrics','recovery':'recovery','wellbeing':'recovery'}
 
 
 def decision_domains(decision):

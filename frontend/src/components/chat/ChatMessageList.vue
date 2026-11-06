@@ -22,7 +22,17 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'confirm', decision: 'approve' | 'reject', extras: ConfirmExtras): void
   (e: 'send', text: string): void
+  (e: 'ask-in-plan', text: string): void
 }>()
+
+/** Câu người dùng vừa hỏi trước một lời mời sang chế độ Plan, để gửi lại đúng câu đó. */
+function questionBefore(msg: ChatMessage): string | null {
+  const index = props.messages.indexOf(msg)
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (props.messages[i].role === 'human') return props.messages[i].content
+  }
+  return null
+}
 
 const containerRef = ref<HTMLElement | null>(null)
 
@@ -143,6 +153,18 @@ function host(url: string): string {
                 @send="text => emit('send', text)"
               />
             </Transition>
+
+            <!-- Chế độ thường không tư vấn: gửi lại câu hỏi ở chế độ Plan -->
+            <button
+              v-if="msg.suggested_mode === 'plan' && msg.id === lastMessageId && questionBefore(msg)"
+              type="button"
+              :disabled="isStreaming || isConfirming"
+              class="inline-flex w-fit items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs text-gold transition-colors hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
+              @click="emit('ask-in-plan', questionBefore(msg) as string)"
+            >
+              <Sparkles class="h-3.5 w-3.5" />
+              Hỏi ở chế độ Plan
+            </button>
 
             <!-- Nguồn tra cứu -->
             <div

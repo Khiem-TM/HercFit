@@ -188,6 +188,9 @@ class ChatResponse(BaseModel):
     illustrations: list[Illustration] = Field(default_factory=list)
     sources: list[dict[str, Any]] = Field(default_factory=list)
     tool_outputs: list[dict[str, Any]] = Field(default_factory=list)
+    # Chế độ của lượt chạy; suggested_mode='plan' khi chế độ ghi nhanh mời người dùng hỏi lại ở chế độ Plan.
+    mode: Literal['normal', 'plan'] | None = None
+    suggested_mode: Literal['plan'] | None = None
 
     @field_validator('clarification', mode='before')
     @classmethod

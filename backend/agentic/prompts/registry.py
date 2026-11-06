@@ -21,6 +21,7 @@ from agentic.prompts.v2.personal import PERSONAL_ROUTING, PERSONALIZED_ANSWER
 from agentic.prompts.v3.domains import COACH_GUIDANCE as COACH_GUIDANCE_V3
 from agentic.prompts.v3.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V3
 from agentic.prompts.v3.clarification import PROMPT as CLARIFICATION_PROMPT_V3
+from agentic.prompts.v3 import routing as v3_routing
 from agentic.prompts.v4.domains import COACH_GUIDANCE as COACH_GUIDANCE_V4
 from agentic.prompts.v4.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V4
 from agentic.prompts.v5.domains import COACH_GUIDANCE as COACH_GUIDANCE_V5
@@ -56,6 +57,10 @@ TEMPLATES = MappingProxyType({
     ('health.guidance', 'v4'): HEALTH_GUIDANCE_V4,
     # v5: lịch tập lưu bằng một lệnh, sửa trên thẻ xác nhận; không còn lịch bữa ăn.
     ('training.coach', 'v5'): COACH_GUIDANCE_V5,
+    # v3: định tuyến theo chế độ trò chuyện: bản rút gọn cho ghi nhanh, khối hướng dẫn cho chế độ Plan.
+    ('orchestration.route_normal', 'v3'): v3_routing.NORMAL_ROUTING_PROMPT,
+    ('orchestration.plan', 'v3'): v3_routing.PLAN_ROUTING,
+    ('orchestration.plan_mode_reply', 'v3'): v3_routing.PLAN_MODE_REPLY,
 })
 
 _QUESTIONS = {

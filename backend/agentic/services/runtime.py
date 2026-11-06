@@ -6,7 +6,8 @@ from fastapi import HTTPException
 from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
 from langgraph.types import Command
 from agentic.core.providers.fpt import ToolMarkupFilter, strip_tool_markup
-from agentic.services import catalog_choice
+# 'modes', không phải 'mode': _run_stream có biến cục bộ mode (kiểu sự kiện stream).
+from agentic.services import catalog_choice, mode as modes
 from agentic.tools.output import carry_over
 from agentic.services.clarification import catalog_groups, fallback_clarification, logs_training
 from agentic.services.failure_reply import NODE_ERROR, failure_reply
@@ -118,7 +119,9 @@ class Runtime:
             intent=state.get('decision',{}).get('intent'),pending_action=pending if is_pending else None,
             clarification=self.clarification(state,reply),
             illustrations=state.get('illustrations') or [],
-            sources=state.get('sources',[]),tool_outputs=state.get('tool_outputs',[]))
+            sources=state.get('sources',[]),tool_outputs=state.get('tool_outputs',[]),
+            mode=state.get('mode') if state.get('mode') in modes.MODES else None,
+            suggested_mode=state.get('suggested_mode'))
 
     @staticmethod
     def clarification(state,reply):
@@ -130,9 +133,11 @@ class Runtime:
             form=fallback_clarification(reply, catalog_groups(state), logs_training(state))
         return Clarification.sanitize(form)
 
-    async def run(self,input,thread_id,emit=None):
-        annotate(business_run_id=thread_id, graph_thread_id=thread_id)
+    async def run(self,input,thread_id,emit=None,chat_mode=modes.FULL):
+        annotate(business_run_id=thread_id, graph_thread_id=thread_id, chat_mode=chat_mode)
         config=self.config(thread_id) # Lấy cấu hình
+        # Client model, ngân sách tra cứu và timeout của lượt chạy này đọc chế độ từ biến ngữ cảnh.
+        marker=modes.current.set(chat_mode)
         try:
             from agentic.observability.node_span import span
             with span('agent_run',thread_id):
@@ -144,6 +149,8 @@ class Runtime:
             state=dict(snapshot.values) if snapshot else {}
             state.update(status='failed',reply=interrupted_reply(state,exc))
             return self.response(state)
+        finally:
+            modes.current.reset(marker)
 
     async def _run_stream(self,input,thread_id,config,emit):
         from agentic.observability.tracing import current
@@ -155,7 +162,7 @@ class Runtime:
         first_token = False
         markup, generation = ToolMarkupFilter(), None
         try:
-            async with asyncio.timeout(self.settings.RUN_TIMEOUT_SECONDS):
+            async with asyncio.timeout(modes.run_timeout(self.settings, modes.current.get())):
                 async for item in self.graph.astream(input,config,stream_mode=['updates','messages'] if stream_tokens else 'updates'):
                     mode, data = item if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str) else ('updates', item)
                     if mode == 'messages':
@@ -244,10 +251,11 @@ class Runtime:
                      'graph_context':None,'graph_retrieval_attempted':False,'graph_context_run_id':None,'graph_context_domains':[],'turn':None,
                      'fast_read_plan':None,'fast_read_complete':False,'telemetry':{},'execution_records':[],
                      'jev_events':[], 'jev_rejections':{}, 'model_auth_failed':False,'session_memory':memory,'safety':None,
-                     'user_context':None,'user_context_run_id':None,'personal_reads_done':False,'research_evidence':None,'route_trace':[]}
+                     'user_context':None,'user_context_run_id':None,'personal_reads_done':False,'research_evidence':None,'route_trace':[],
+                     'mode':payload.mode,'suggested_mode':None}
             await self.graph.aupdate_state(self.config(thread_id),initial,as_node='__start__')
             await self.store.bind(payload.session_id,thread_id)
-            return await self.run(None,thread_id,emit)
+            return await self.run(None,thread_id,emit,payload.mode)
 
     @observed('runtime.confirm', capture=('payload',))
     async def confirm(self,payload,user_id,emit=None):
@@ -312,7 +320,9 @@ class Runtime:
                     update['pending_action']={**snapshot.values['pending_action'],**edited}
                 await self.graph.aupdate_state(self.config(session['thread_id']),update,as_node='confirmation')
             resume={'decision':payload.decision,**({'action':edited} if edited else {})}
-            result=await self.run(Command(resume=resume) if interrupted else None,session['thread_id'],emit)
+            # Lượt tiếp tục chạy ở đúng chế độ đã lưu trong checkpoint, không theo client.
+            result=await self.run(Command(resume=resume) if interrupted else None,session['thread_id'],emit,
+                                  snapshot.values.get('mode') or modes.FULL)
             latest=await self.store.action(payload.action_id)
             if latest['status'] in {'executed','rejected','failed'}:
                 await self.store.set_action(payload.action_id,latest['status'],result.model_dump(mode='json'))
