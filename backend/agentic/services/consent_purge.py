@@ -17,6 +17,7 @@ lần thu hồi một lần (domain_event_deliveries):
 Dữ kiện thiết bị trong graph đã được trigger của backend đánh tombstone. Bản
 ghi chat hiển thị vẫn được giữ: đó là cuộc trò chuyện của người dùng, họ có thể tự xoá.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -26,19 +27,22 @@ from contextlib import suppress
 from agentic.tools.registry import REGISTRY
 
 logger = logging.getLogger(__name__)
-CONSUMER = 'agentic.consent_purge'
+CONSUMER = "agentic.consent_purge"
 POLL_SECONDS = 10
-HEALTH_TOOLS = frozenset(name for name, spec in REGISTRY.items() if spec.domain == 'health')
-HEALTH_DOMAINS = frozenset({'health'})
-HEALTH_RECORD_KINDS = frozenset({'DailyHealth', 'SleepSession', 'DeviceWorkout'})
+HEALTH_TOOLS = frozenset(name for name, spec in REGISTRY.items() if spec.domain == "health")
+HEALTH_DOMAINS = frozenset({"health"})
+HEALTH_RECORD_KINDS = frozenset({"DailyHealth", "SleepSession", "DeviceWorkout"})
 
 
 def is_health_episode(data: dict) -> bool:
     """Một lượt đã ghi nhật ký (`tools`) hoặc lần thực thi (`tool`) có chạm tới dữ liệu sức khoẻ."""
-    tools = [data['tool']] if data.get('tool') else list(data.get('tools') or [])
-    refs = data.get('resource_refs') or []
-    return (data.get('domain') in HEALTH_DOMAINS or any(tool in HEALTH_TOOLS for tool in tools)
-            or any(isinstance(ref, dict) and ref.get('kind') in HEALTH_RECORD_KINDS for ref in refs))
+    tools = [data["tool"]] if data.get("tool") else list(data.get("tools") or [])
+    refs = data.get("resource_refs") or []
+    return (
+        data.get("domain") in HEALTH_DOMAINS
+        or any(tool in HEALTH_TOOLS for tool in tools)
+        or any(isinstance(ref, dict) and ref.get("kind") in HEALTH_RECORD_KINDS for ref in refs)
+    )
 
 
 async def purge_user_health(runtime, user_id: str) -> dict:
@@ -46,7 +50,7 @@ async def purge_user_health(runtime, user_id: str) -> dict:
     for session_id in await runtime.store.user_session_ids(user_id):
         sessions += 1
         async with runtime.store.session(session_id, user_id, create=False) as session:
-            current = session.get('thread_id')
+            current = session.get("thread_id")
             for thread in await runtime.store.threads(session_id):
                 if thread != current:
                     await runtime.saver.adelete_thread(thread)
@@ -55,19 +59,27 @@ async def purge_user_health(runtime, user_id: str) -> dict:
             if current:
                 snapshot = await runtime.state(current)
                 values = (snapshot.values if snapshot else None) or {}
-                outputs = values.get('tool_outputs') or []
-                kept = [output for output in outputs if output.get('tool') not in HEALTH_TOOLS]
+                outputs = values.get("tool_outputs") or []
+                kept = [output for output in outputs if output.get("tool") not in HEALTH_TOOLS]
                 # Xác nhận đang chờ giữ nguyên thread của nó; output của nó không phải lần đọc sức khoẻ.
-                if (len(kept) != len(outputs) or values.get('user_context')) and not values.get('pending_action'):
-                    await runtime.graph.aupdate_state(runtime.config(current),
-                                                      {'tool_outputs': kept, 'user_context': None},
-                                                      as_node='__start__')
+                if (len(kept) != len(outputs) or values.get("user_context")) and not values.get(
+                    "pending_action"
+                ):
+                    await runtime.graph.aupdate_state(
+                        runtime.config(current),
+                        {"tool_outputs": kept, "user_context": None},
+                        as_node="__start__",
+                    )
                     rewritten += 1
         if runtime.memory:
             await runtime.memory.forget(session_id)
     episodes = await runtime.store.forget_episodes(user_id, is_health_episode)
-    return {'sessions': sessions, 'threads_deleted': threads_deleted, 'checkpoints_rewritten': rewritten,
-            'episodes_removed': sum(episodes.values())}
+    return {
+        "sessions": sessions,
+        "threads_deleted": threads_deleted,
+        "checkpoints_rewritten": rewritten,
+        "episodes_removed": sum(episodes.values()),
+    }
 
 
 async def purge_once(runtime, *, limit: int = 50) -> int:
@@ -75,19 +87,32 @@ async def purge_once(runtime, *, limit: int = 50) -> int:
     handled = 0
     async with runtime.store.pool.connection() as conn:
         async with conn.transaction():
-            rows = await (await conn.execute('''
+            rows = await (
+                await conn.execute(
+                    """
                 SELECT e.id, e.user_id, e.payload FROM domain_events e
                 WHERE e.topic = 'consent.changed' AND e.occurred_at > now() - interval '7 days'
                   AND NOT EXISTS (SELECT 1 FROM domain_event_deliveries d WHERE d.consumer = %s AND d.event_id = e.id)
-                ORDER BY e.id LIMIT %s FOR UPDATE OF e SKIP LOCKED''', (CONSUMER, limit))).fetchall()
+                ORDER BY e.id LIMIT %s FOR UPDATE OF e SKIP LOCKED""",
+                    (CONSUMER, limit),
+                )
+            ).fetchall()
             for row in rows:
-                payload = row['payload'] or {}
-                if payload.get('purpose') == 'assistant' and not payload.get('granted'):
-                    result = await purge_user_health(runtime, str(row['user_id']))
-                    logger.info('consent_purge sessions=%s threads=%s rewritten=%s episodes=%s', result['sessions'],
-                                result['threads_deleted'], result['checkpoints_rewritten'], result['episodes_removed'])
-                await conn.execute('INSERT INTO domain_event_deliveries (consumer, event_id) VALUES (%s, %s) '
-                                   'ON CONFLICT DO NOTHING', (CONSUMER, row['id']))
+                payload = row["payload"] or {}
+                if payload.get("purpose") == "assistant" and not payload.get("granted"):
+                    result = await purge_user_health(runtime, str(row["user_id"]))
+                    logger.info(
+                        "consent_purge sessions=%s threads=%s rewritten=%s episodes=%s",
+                        result["sessions"],
+                        result["threads_deleted"],
+                        result["checkpoints_rewritten"],
+                        result["episodes_removed"],
+                    )
+                await conn.execute(
+                    "INSERT INTO domain_event_deliveries (consumer, event_id) VALUES (%s, %s) "
+                    "ON CONFLICT DO NOTHING",
+                    (CONSUMER, row["id"]),
+                )
                 handled += 1
     return handled
 

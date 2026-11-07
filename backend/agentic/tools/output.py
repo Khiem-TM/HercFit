@@ -1,8 +1,36 @@
 import json
 
-FOOD_FIELDS = ('id', 'code', 'name_vi', 'name_en', 'category_vi', 'item_type', 'source_type', 'serving_size', 'serving_unit',
-               'energy_kcal', 'protein_g', 'carbohydrate_g', 'fat_g', 'fiber_g', 'portions', 'portion_weight_g', 'image_url')
-EXERCISE_FIELDS = ('id', 'code', 'name_vi', 'name_en', 'kind', 'source_type', 'muscle_groups', 'equipment', 'configuration', 'image_url')
+FOOD_FIELDS = (
+    "id",
+    "code",
+    "name_vi",
+    "name_en",
+    "category_vi",
+    "item_type",
+    "source_type",
+    "serving_size",
+    "serving_unit",
+    "energy_kcal",
+    "protein_g",
+    "carbohydrate_g",
+    "fat_g",
+    "fiber_g",
+    "portions",
+    "portion_weight_g",
+    "image_url",
+)
+EXERCISE_FIELDS = (
+    "id",
+    "code",
+    "name_vi",
+    "name_en",
+    "kind",
+    "source_type",
+    "muscle_groups",
+    "equipment",
+    "configuration",
+    "image_url",
+)
 CATALOG_LIMIT = 20
 CARRY_ITEM_CHARS = 4000
 CARRY_TOTAL_CHARS = 16000
@@ -10,51 +38,67 @@ CARRY_TOTAL_CHARS = 16000
 
 def nutrition_basis(unit, size):
     """Nói rõ giá trị dinh dưỡng tính theo cái gì, để câu trả lời không bao giờ đoán theo 100 g hay theo khẩu phần."""
-    if unit == 'PORTION':
-        return 'mỗi suất'
+    if unit == "PORTION":
+        return "mỗi suất"
     try:
-        amount = f'{float(size):g}'
+        amount = f"{float(size):g}"
     except (TypeError, ValueError):
-        amount = '1'
-    return {'G': f'mỗi {amount} g', 'ML': f'mỗi {amount} ml'}.get(unit, f'mỗi {amount} khẩu phần')
+        amount = "1"
+    return {"G": f"mỗi {amount} g", "ML": f"mỗi {amount} ml"}.get(unit, f"mỗi {amount} khẩu phần")
 
 
 def _project(record, fields):
     if not isinstance(record, dict):
         return record
     projected = {key: record[key] for key in fields if key in record}
-    if fields is FOOD_FIELDS and record.get('serving_unit'):
-        projected['nutrition_basis'] = nutrition_basis(record.get('serving_unit'), record.get('serving_size'))
-    quality = record.get('data_quality')
-    if fields is FOOD_FIELDS and isinstance(quality, dict) and quality.get('portion_energy_range_kcal'):
+    if fields is FOOD_FIELDS and record.get("serving_unit"):
+        projected["nutrition_basis"] = nutrition_basis(
+            record.get("serving_unit"), record.get("serving_size")
+        )
+    quality = record.get("data_quality")
+    if (
+        fields is FOOD_FIELDS
+        and isinstance(quality, dict)
+        and quality.get("portion_energy_range_kcal")
+    ):
         # Merged samples of one dish at different portion sizes: lets replies say "tuỳ cỡ suất".
-        projected['portion_energy_range_kcal'] = quality['portion_energy_range_kcal']
+        projected["portion_energy_range_kcal"] = quality["portion_energy_range_kcal"]
     return projected
 
 
 def compact_output(tool: str, data):
     """Phép chiếu giữ cấu trúc cho kết quả catalog; các output khác đi qua nguyên vẹn."""
-    fields = FOOD_FIELDS if tool.endswith('_foods') else EXERCISE_FIELDS if tool.endswith('_exercises') else None
+    fields = (
+        FOOD_FIELDS
+        if tool.endswith("_foods")
+        else EXERCISE_FIELDS
+        if tool.endswith("_exercises")
+        else None
+    )
     if fields is None:
         return data
     if isinstance(data, list):
         items = [_project(record, fields) for record in data[:CATALOG_LIMIT]]
-        return items if len(data) <= CATALOG_LIMIT else items + [{'truncated': len(data) - CATALOG_LIMIT}]
-    if isinstance(data, dict) and isinstance(data.get('record'), dict):
-        return {**data, 'record': _project(data['record'], fields)}
-    return _project(data, fields) if isinstance(data, dict) and 'name_vi' in data else data
+        return (
+            items
+            if len(data) <= CATALOG_LIMIT
+            else items + [{"truncated": len(data) - CATALOG_LIMIT}]
+        )
+    if isinstance(data, dict) and isinstance(data.get("record"), dict):
+        return {**data, "record": _project(data["record"], fields)}
+    return _project(data, fields) if isinstance(data, dict) and "name_vi" in data else data
 
 
 # Trường chỉ để hiển thị (thẻ chọn món, ảnh minh hoạ): giữ trong state, không gửi cho model. Một lần tra 17 món
 # "xôi ..." từng tốn ~12,5k ký tự, phần lớn là URL ảnh và mô tả nguồn, đẩy lời gọi tool kế tiếp quá 30 s
 # (lượt chạy f6924adb và b5a60b71 timeout trước khi kịp xem trước bữa ăn).
-MODEL_HIDDEN = frozenset({'image_url', 'category_vi', 'item_type'})
+MODEL_HIDDEN = frozenset({"image_url", "category_vi", "item_type"})
 
 
 def _decimal(value):
-    """"409.000000" -> "409", "11.400000" -> "11.4": cùng giá trị, ít token hơn."""
-    if isinstance(value, str) and '.' in value and value.replace('.', '', 1).lstrip('-').isdigit():
-        return value.rstrip('0').rstrip('.')
+    """ "409.000000" -> "409", "11.400000" -> "11.4": cùng giá trị, ít token hơn."""
+    if isinstance(value, str) and "." in value and value.replace(".", "", 1).lstrip("-").isdigit():
+        return value.rstrip("0").rstrip(".")
     return value
 
 
@@ -62,26 +106,33 @@ def _lean(record):
     if not isinstance(record, dict):
         return record
     lean = {key: _decimal(value) for key, value in record.items() if key not in MODEL_HIDDEN}
-    if isinstance(lean.get('portions'), list):
-        lean['portions'] = [{key: _decimal(value) for key, value in portion.items() if key != 'source'}
-                            if isinstance(portion, dict) else portion for portion in lean['portions']]
+    if isinstance(lean.get("portions"), list):
+        lean["portions"] = [
+            {key: _decimal(value) for key, value in portion.items() if key != "source"}
+            if isinstance(portion, dict)
+            else portion
+            for portion in lean["portions"]
+        ]
     return lean
 
 
 def model_view(tool: str, data):
     """Bản kết quả catalog mà model đọc: như compact_output nhưng bỏ các trường chỉ để hiển thị."""
-    if not tool.endswith(('_foods', '_exercises')):
+    if not tool.endswith(("_foods", "_exercises")):
         return data
     if isinstance(data, list):
         return [_lean(record) for record in data]
-    if isinstance(data, dict) and isinstance(data.get('record'), dict):
-        return {**data, 'record': _lean(data['record'])}
-    return _lean(data) if isinstance(data, dict) and 'name_vi' in data else data
+    if isinstance(data, dict) and isinstance(data.get("record"), dict):
+        return {**data, "record": _lean(data["record"])}
+    return _lean(data) if isinstance(data, dict) and "name_vi" in data else data
 
 
 def clamp_catalog_query(tool: str, args: dict) -> dict:
-    if tool in {'list_foods', 'list_exercises'} and (args.get('limit') or CATALOG_LIMIT) > CATALOG_LIMIT:
-        return {**args, 'limit': CATALOG_LIMIT}
+    if (
+        tool in {"list_foods", "list_exercises"}
+        and (args.get("limit") or CATALOG_LIMIT) > CATALOG_LIMIT
+    ):
+        return {**args, "limit": CATALOG_LIMIT}
     return args
 
 
@@ -89,18 +140,21 @@ def carry_over(outputs: list[dict]) -> str | None:
     """Bản tóm tắt có giới hạn của kết quả tool lượt trước cho lượt sau."""
     parts, used = [], 0
     for output in reversed(outputs):
-        tool = output.get('tool', '')
-        text = json.dumps({**output, 'output': model_view(tool, compact_output(tool, output.get('output')))},
-                          ensure_ascii=False, default=str)
+        tool = output.get("tool", "")
+        text = json.dumps(
+            {**output, "output": model_view(tool, compact_output(tool, output.get("output")))},
+            ensure_ascii=False,
+            default=str,
+        )
         if len(text) > CARRY_ITEM_CHARS:
-            text = text[:CARRY_ITEM_CHARS] + '…(rút gọn)'
+            text = text[:CARRY_ITEM_CHARS] + "…(rút gọn)"
         if used + len(text) > CARRY_TOTAL_CHARS:
             break
         parts.append(text)
         used += len(text)
-    return '[' + ','.join(reversed(parts)) + ']' if parts else None
+    return "[" + ",".join(reversed(parts)) + "]" if parts else None
 
 
 def bounded_json(value, limit: int) -> str:
     text = json.dumps(value, ensure_ascii=False, default=str)
-    return text if len(text) <= limit else text[:limit] + '…(rút gọn do quá dài)'
+    return text if len(text) <= limit else text[:limit] + "…(rút gọn do quá dài)"

@@ -1,20 +1,26 @@
-from agentic.core.paths import AGENTIC_ROOT, BACKEND_ROOT
 from typing import Literal
+
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from agentic.core.app.env_sources import JevDotEnvSettingsSource, canonical_source
 
-# Định nghĩa cấu hình cho Agentic Service
+from agentic.core.app.env_sources import JevDotEnvSettingsSource, canonical_source
+from agentic.core.paths import AGENTIC_ROOT, BACKEND_ROOT
+
+
 class AgentSettings(BaseSettings):
     # Giá trị riêng của agent ghi đè giá trị mặc định dùng chung, khớp với cả hai file Compose.
     # Biến môi trường tường minh của tiến trình vẫn có độ ưu tiên cao nhất.
-    model_config = SettingsConfigDict(env_file=(str(BACKEND_ROOT / '.env'), str(AGENTIC_ROOT / '.env')), extra='ignore', env_ignore_empty=True)
-    MODE: str = 'dev'
+    model_config = SettingsConfigDict(
+        env_file=(str(BACKEND_ROOT / ".env"), str(AGENTIC_ROOT / ".env")),
+        extra="ignore",
+        env_ignore_empty=True,
+    )
+    MODE: str = "dev"
     AGENT_PORT: int = 8081
-    BACKEND_BASE_URL: str = 'http://localhost:8080'
+    BACKEND_BASE_URL: str = "http://localhost:8080"
     BACKEND_TIMEOUT_SECONDS: float = 15
-    DEFAULT_PROVIDER: Literal['fpt', 'openai', 'openai_compatible'] = 'fpt'
-    DEFAULT_MODEL: str = 'DeepSeek-V4-Flash'
+    DEFAULT_PROVIDER: Literal["fpt", "openai", "openai_compatible"] = "fpt"
+    DEFAULT_MODEL: str = "DeepSeek-V4-Flash"
     DECISION_MODEL: str | None = None
     RESPONSE_MODEL: str | None = None
     TOOL_MODEL: str | None = None
@@ -22,23 +28,20 @@ class AgentSettings(BaseSettings):
     MODEL_API_KEY: SecretStr | None = None
     OPENAI_API_KEY: SecretStr | None = None
     FPT_API_KEY: SecretStr | None = None
-    FPT_BASE_URL: str = 'https://mkp-api.fptcloud.com'
-    MODEL_BASE_URL: str = 'https://api.openai.com/v1'
+    FPT_BASE_URL: str = "https://mkp-api.fptcloud.com"
+    MODEL_BASE_URL: str = "https://api.openai.com/v1"
     MODEL_TIMEOUT_SECONDS: float = 30
     # Timeout theo vai trò: các lần gọi routing/tool/clarify trả về JSON nhỏ và nên
     # chuyển dự phòng nhanh; trước đây một lần gọi bị treo tốn 30 s hai lần (đuôi ≈60 s).
     ROUTING_TIMEOUT_SECONDS: float = Field(default=12, gt=0)
-    # Lần gọi tool ghi cả payload (các món của bữa ăn, dinh dưỡng của thực phẩm): p95 là 13,6 s trên 500 bước tool đã lưu,
-    # nên 12 s làm hỏng ~5% số đó, mỗi lần ba lượt thử (lượt chạy 195ff084 bị timeout sau một lệnh ghi đã xác nhận).
-    # Ngày 02/11, lượt f6924adb và b5a60b71 (ghi 2 bữa ăn sau khi tra 17 món "xôi ...") có lời gọi tool mất 29–45 s:
-    # 30 s cắt một lời gọi vẫn đúng rồi thử lại từ đầu, hai lần thử lại đốt hết ngân sách 120 s của lượt.
+    # Tool có thể dựng payload nhiều món trong 29–45 s; timeout ngắn gây thử lại lệnh đã duyệt.
     TOOL_TIMEOUT_SECONDS: float = Field(default=60, gt=0)
     RESPONSE_TIMEOUT_SECONDS: float = Field(default=30, gt=0)
     RESEARCH_TIMEOUT_SECONDS: float = Field(default=45, gt=0)
     MODEL_MAX_RETRIES: int = Field(default=1, ge=0, le=3)
     CLARIFY_MODEL: str | None = None
     # Endpoint tương thích OpenAI thứ hai (tuỳ chọn), dùng khi endpoint chính lỗi hoặc timeout.
-    FALLBACK_PROVIDER: Literal['fpt', 'openai', 'openai_compatible'] | None = None
+    FALLBACK_PROVIDER: Literal["fpt", "openai", "openai_compatible"] | None = None
     FALLBACK_MODEL: str | None = None
     FALLBACK_BASE_URL: str | None = None
     FALLBACK_API_KEY: SecretStr | None = None
@@ -49,11 +52,12 @@ class AgentSettings(BaseSettings):
     MODEL_STREAM_USAGE: bool = False
     SSE_HEARTBEAT_SECONDS: float = Field(default=15, gt=0)
     TAVILY_API_KEY: SecretStr | None = None
-    AGENT_DATABASE_URL: SecretStr = SecretStr('postgresql://hercfit:hercfit_secret@localhost:5432/hercfit_db')
+    AGENT_DATABASE_URL: SecretStr = SecretStr(
+        "postgresql://hercfit:hercfit_secret@localhost:5432/hercfit_db"
+    )
     MAX_TOOL_CALLS: int = Field(default=12, ge=1, le=50)
     MAX_GRAPH_STEPS: int = Field(default=60, ge=10)
-    # Một lượt ghi bữa ăn = định tuyến + 2–3 vòng tool + trả lời. Tốc độ sinh của FPT dao động 12–40 token/s
-    # (cùng ~700 token: 17–60 s, đo ngày 02/11), nên 120 s từng hết hạn giữa chừng khi provider chậm.
+    # Bao trùm định tuyến, nhiều vòng tool và trả lời khi provider sinh token chậm.
     RUN_TIMEOUT_SECONDS: float = Field(default=180, gt=0)
     # Chế độ Plan: đọc dữ liệu sâu, tra cứu theo từng câu hỏi con và trả lời ở effort cao, nên cần thời gian dài hơn.
     PLAN_RUN_TIMEOUT_SECONDS: float = Field(default=300, gt=0)
@@ -61,11 +65,10 @@ class AgentSettings(BaseSettings):
     RESEARCH_SOURCE_DOMAINS: list[str] = []
     # DeepSeek trên FPT suy nghĩ ~9k token cho mỗi lần trích xuất ở mức mặc định (25-70 s); "low" giữ
     # nguyên các khẳng định trong 5-12 s. Chỉ áp dụng cho client tra cứu FPT (None để tắt).
-    RESEARCH_REASONING_EFFORT: Literal['low', 'medium', 'high'] | None = 'low'
-    # Mức suy luận của lời gọi tool. 'low' nhanh (3–17 s) nhưng 2/3 lần viết "Xem trước bữa ăn… bạn xác nhận nhé"
-    # bằng văn bản thay vì gọi create_meals, nên frontend không có thẻ xác nhận (lượt 955777c0, 02/11). 'medium' gọi
-    # đúng tool 4/4 lần trong 10–24 s; mức mặc định của model 3/3 lần nhưng 14–45 s. None để dùng mặc định.
-    TOOL_REASONING_EFFORT: Literal['low', 'medium', 'high'] | None = 'medium'
+    RESEARCH_REASONING_EFFORT: Literal["low", "medium", "high"] | None = "low"
+    # 'medium' giúp model gọi tool dựng thẻ xác nhận; 'low' từng chỉ viết bản xem trước bằng chữ.
+    # None dùng mức mặc định của model.
+    TOOL_REASONING_EFFORT: Literal["low", "medium", "high"] | None = "medium"
     # Dùng chung với backend (backend/.env): ký các lệnh finalize tra cứu đã kiểm chứng.
     RESEARCH_ATTESTATION_SECRET: SecretStr | None = None
     # Dùng chung với backend (backend/.env): chứng minh service này khi đổi token người dùng
@@ -73,16 +76,18 @@ class AgentSettings(BaseSettings):
     AGENT_SERVICE_SECRET: SecretStr | None = None
     # Quên output của tool sức khoẻ, thẻ ngữ cảnh và bộ nhớ phiên khi người dùng thu hồi consent.
     CONSENT_PURGE_ENABLED: bool = True
-    JEV_MODE: Literal['off', 'shadow', 'enforce'] = 'off'
-    JEV_BASE_URL: str = Field(default='https://litellm.otanicloud.link/v1',
-                              validation_alias=AliasChoices('JEV_BASE_URL', 'JEV_GATEWAY_URL'))
+    JEV_MODE: Literal["off", "shadow", "enforce"] = "off"
+    JEV_BASE_URL: str = Field(
+        default="https://litellm.otanicloud.link/v1",
+        validation_alias=AliasChoices("JEV_BASE_URL", "JEV_GATEWAY_URL"),
+    )
     JEV_API_KEY: SecretStr | None = None
     JEV_MODEL: str | None = None
     JEV_TIMEOUT_SECONDS: float = Field(default=3, gt=0, le=10)
     JEV_ENFORCE_PERCENT: int = Field(default=100, ge=0, le=100)
     # Các cổng mà một lượt chạy 'enforce' được phép thay đổi quyết định; cổng còn lại chỉ ghi nhận như 'shadow'.
-    JEV_ENFORCE_PHASES: list[Literal['routing', 'local', 'final']] = ['routing', 'local', 'final']
-    JEV_POLICY_VERSION: str = Field(default='v1', min_length=1, max_length=64)
+    JEV_ENFORCE_PHASES: list[Literal["routing", "local", "final"]] = ["routing", "local", "final"]
+    JEV_POLICY_VERSION: str = Field(default="v1", min_length=1, max_length=64)
     JEV_INPUT_PRICE_PER_MILLION: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     JEV_OUTPUT_PRICE_PER_MILLION: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     RAG_ENABLED: bool = False
@@ -91,10 +96,10 @@ class AgentSettings(BaseSettings):
     # Mẫu toàn tin nhắn chặt chẽ cho các lệnh đọc phổ biến (tiến độ, mục tiêu hiện tại, số đo
     # gần nhất, hồ sơ, mục tiêu calo): một lần gọi trả lời thay vì bốn.
     FAST_READ_ENABLED: bool = True
-    NEO4J_URI: str = 'bolt://localhost:7687'
-    NEO4J_USER: str = 'neo4j'
+    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: SecretStr | None = None
-    NEO4J_DATABASE: str = 'neo4j'
+    NEO4J_DATABASE: str = "neo4j"
     KG_BACKEND_DATABASE_URL: SecretStr | None = None
     KG_RETRIEVAL_TIMEOUT_MS: int = Field(default=150, ge=1, le=5000)
     KG_FACT_LIMIT: int = Field(default=12, ge=1, le=12)
@@ -123,9 +128,9 @@ class AgentSettings(BaseSettings):
     # Bộ nhớ phiên Redis là tầng tuỳ chọn, dựng lại được, nằm trên checkpoint.
     # Nâng dần off -> shadow -> on; mọi lỗi Redis đều quay về dùng checkpoint.
     REDIS_URL: SecretStr | None = None
-    REDIS_KEY_PREFIX: str = Field(default='hf:agent', min_length=1, max_length=64)
+    REDIS_KEY_PREFIX: str = Field(default="hf:agent", min_length=1, max_length=64)
     REDIS_TIMEOUT_MS: int = Field(default=100, ge=10, le=2000)
-    SESSION_MEMORY_MODE: Literal['off', 'shadow', 'on'] = 'off'
+    SESSION_MEMORY_MODE: Literal["off", "shadow", "on"] = "off"
     SESSION_MEMORY_TTL_SECONDS: int = Field(default=30 * 24 * 3600, gt=0)
     SESSION_MEMORY_MAX_TURNS: int = Field(default=200, ge=10, le=1000)
     # Số tin nhắn nguyên văn mang vào mỗi lượt; 40 khớp với hành vi chỉ dùng checkpoint.
@@ -135,51 +140,77 @@ class AgentSettings(BaseSettings):
     SESSION_MEMORY_SUMMARY_MAX_CHARS: int = Field(default=2000, ge=200, le=8000)
     SESSION_MEMORY_ENTITY_LIMIT: int = Field(default=20, ge=0, le=50)
     SUMMARY_MODEL: str | None = None
-    CORS_ORIGINS: list[str] = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5174', 'http://127.0.0.1:5174']
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ]
 
     @classmethod
-    def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):
+    def settings_customise_sources(
+        cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+    ):
         dotenv = JevDotEnvSettingsSource(
-            settings_cls, env_file=dotenv_settings.env_file,
+            settings_cls,
+            env_file=dotenv_settings.env_file,
             env_file_encoding=dotenv_settings.env_file_encoding,
             case_sensitive=dotenv_settings.case_sensitive,
             env_ignore_empty=dotenv_settings.env_ignore_empty,
         )
-        return tuple(canonical_source(source) for source in (init_settings, env_settings, dotenv, file_secret_settings))
+        return tuple(
+            canonical_source(source)
+            for source in (init_settings, env_settings, dotenv, file_secret_settings)
+        )
 
     def check(self):
-        if self.JEV_MODE != 'off':
+        if self.JEV_MODE != "off":
             self.check_jev()
         if not self.model_api_key:
-            raise ValueError(f'API key for {self.DEFAULT_PROVIDER} is required; runtime never falls back to fake models')
-        if not self.TAVILY_API_KEY and self.MODE != 'dev':
-            raise ValueError('TAVILY_API_KEY is required')
-        if self.SESSION_MEMORY_MODE != 'off' and not self.REDIS_URL:
-            raise ValueError('REDIS_URL is required when SESSION_MEMORY_MODE is enabled')
+            raise ValueError(
+                f"API key for {self.DEFAULT_PROVIDER} is required; runtime never falls back to fake models"
+            )
+        if not self.TAVILY_API_KEY and self.MODE != "dev":
+            raise ValueError("TAVILY_API_KEY is required")
+        if self.SESSION_MEMORY_MODE != "off" and not self.REDIS_URL:
+            raise ValueError("REDIS_URL is required when SESSION_MEMORY_MODE is enabled")
 
     def check_jev(self, *, require_model=True):
         from urllib.parse import urlsplit
+
         url = urlsplit(self.JEV_BASE_URL)
-        if url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment:
-            raise ValueError('JEV_BASE_URL / JEV_GATEWAY_URL must be an HTTPS API base without credentials, query or fragment')
+        if (
+            url.scheme != "https"
+            or not url.hostname
+            or url.username
+            or url.password
+            or url.query
+            or url.fragment
+        ):
+            raise ValueError(
+                "JEV_BASE_URL / JEV_GATEWAY_URL must be an HTTPS API base without credentials, query or fragment"
+            )
         if require_model and (not self.JEV_MODEL or not self.JEV_MODEL.strip()):
-            raise ValueError('JEV_MODEL is required; discover the gateway model using agentic.scripts.jev_preflight')
+            raise ValueError(
+                "JEV_MODEL is required; discover the gateway model using agentic.scripts.jev_preflight"
+            )
         if not self.JEV_API_KEY or not self.JEV_API_KEY.get_secret_value().strip():
-            raise ValueError('JEV_API_KEY (gateway virtual key) is required when Jev is enabled')
+            raise ValueError("JEV_API_KEY (gateway virtual key) is required when Jev is enabled")
 
     @property
     def model_api_key(self):
-        if self.DEFAULT_PROVIDER == 'fpt':
+        if self.DEFAULT_PROVIDER == "fpt":
             return self.FPT_API_KEY
         return self.MODEL_API_KEY or self.OPENAI_API_KEY
 
     @property
     def model_base_url(self):
-        return self.FPT_BASE_URL if self.DEFAULT_PROVIDER == 'fpt' else self.MODEL_BASE_URL
+        return self.FPT_BASE_URL if self.DEFAULT_PROVIDER == "fpt" else self.MODEL_BASE_URL
 
     @property
     def session_lease_seconds(self):
         # Bao trùm cả lượt chạy cùng phần ghi nhật ký; lease bị bỏ dở sẽ tự hết hạn.
         return max(self.RUN_TIMEOUT_SECONDS, self.PLAN_RUN_TIMEOUT_SECONDS) + 60
+
 
 agent_settings = AgentSettings()

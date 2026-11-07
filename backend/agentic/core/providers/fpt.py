@@ -1,4 +1,5 @@
 """Adapter chat/tool/stream tương thích OpenAI cho FPT Marketplace."""
+
 import json
 import re
 from typing import Any
@@ -10,9 +11,17 @@ from langchain_openai import ChatOpenAI
 
 # DeepSeek có thể sinh lời gọi tool dưới dạng văn bản DSML thô khi endpoint bỏ qua bước phân tích.
 _BAR = r"[｜|]"
-_DSML_BLOCK = re.compile(rf"<{_BAR}DSML{_BAR}(?:tool|function)_calls>.*?(?:</{_BAR}DSML{_BAR}(?:tool|function)_calls>|$)", re.S)
-_DSML_INVOKE = re.compile(rf"<{_BAR}DSML{_BAR}invoke\s+name=\"([^\"]+)\"\s*>(.*?)</{_BAR}DSML{_BAR}invoke>", re.S)
-_DSML_PARAM = re.compile(rf"<{_BAR}DSML{_BAR}parameter\s+name=\"([^\"]+)\"(?:\s+string=\"(true|false)\")?\s*>(.*?)</{_BAR}DSML{_BAR}parameter>", re.S)
+_DSML_BLOCK = re.compile(
+    rf"<{_BAR}DSML{_BAR}(?:tool|function)_calls>.*?(?:</{_BAR}DSML{_BAR}(?:tool|function)_calls>|$)",
+    re.S,
+)
+_DSML_INVOKE = re.compile(
+    rf"<{_BAR}DSML{_BAR}invoke\s+name=\"([^\"]+)\"\s*>(.*?)</{_BAR}DSML{_BAR}invoke>", re.S
+)
+_DSML_PARAM = re.compile(
+    rf"<{_BAR}DSML{_BAR}parameter\s+name=\"([^\"]+)\"(?:\s+string=\"(true|false)\")?\s*>(.*?)</{_BAR}DSML{_BAR}parameter>",
+    re.S,
+)
 
 
 def _dsml_value(raw: str, is_string: str | None) -> Any:
@@ -32,11 +41,17 @@ def recover_dsml_tool_calls(message: AIMessage) -> AIMessage:
     calls = []
     for block in _DSML_BLOCK.findall(content):
         for name, body in _DSML_INVOKE.findall(block):
-            args = {key: _dsml_value(raw, flag or None) for key, flag, raw in _DSML_PARAM.findall(body)}
-            calls.append({"name": name, "args": args, "id": f"call_{uuid4().hex}", "type": "tool_call"})
+            args = {
+                key: _dsml_value(raw, flag or None) for key, flag, raw in _DSML_PARAM.findall(body)
+            }
+            calls.append(
+                {"name": name, "args": args, "id": f"call_{uuid4().hex}", "type": "tool_call"}
+            )
     if not calls:
         return message
-    return message.model_copy(update={"content": _DSML_BLOCK.sub("", content).strip(), "tool_calls": calls})
+    return message.model_copy(
+        update={"content": _DSML_BLOCK.sub("", content).strip(), "tool_calls": calls}
+    )
 
 
 def strip_tool_markup(text: str) -> str:
@@ -61,7 +76,7 @@ class ToolMarkupFilter:
         found = [i for i in (self.pending.find(m) for m in _MARKERS) if i >= 0]
         if found:
             self.blocked = True
-            out, self.pending = self.pending[:min(found)], ""
+            out, self.pending = self.pending[: min(found)], ""
             return out
         cut = self.pending.rfind("<")
         tail = self.pending[cut:] if cut >= 0 else ""
@@ -116,8 +131,11 @@ class FPTChatOpenAI(ChatOpenAI):
     def _create_chat_result(self, response: Any, generation_info: dict | None = None) -> ChatResult:
         result = super()._create_chat_result(response, generation_info)
         result.generations = [
-            ChatGeneration(message=recover_dsml_tool_calls(gen.message), generation_info=gen.generation_info)
-            if isinstance(gen.message, AIMessage) else gen
+            ChatGeneration(
+                message=recover_dsml_tool_calls(gen.message), generation_info=gen.generation_info
+            )
+            if isinstance(gen.message, AIMessage)
+            else gen
             for gen in result.generations
         ]
         return result

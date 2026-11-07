@@ -3,6 +3,7 @@
 Dùng khi tracing tắt hoặc thiếu SDK Langfuse. Việc tính token/chi phí nghiệp vụ thuộc về
 agentic.observability.telemetry một cách độc lập.
 """
+
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -12,7 +13,7 @@ from uuid import uuid4
 
 from agentic.observability.settings import ObservabilitySettings
 
-current = ContextVar('hercfit_observation', default=None)
+current = ContextVar("hercfit_observation", default=None)
 
 
 @dataclass
@@ -41,10 +42,11 @@ class Observer:
 
     def status(self):
         return {
-            'enabled': False, 'configured': self.config.configured,
-            'propagation_configured': False,
-            'capture_mode': self.config.LANGFUSE_CAPTURE_MODE,
-            'last_export_error': None,
+            "enabled": False,
+            "configured": self.config.configured,
+            "propagation_configured": False,
+            "capture_mode": self.config.LANGFUSE_CAPTURE_MODE,
+            "last_export_error": None,
         }
 
     @contextmanager
@@ -72,23 +74,25 @@ def annotate(**metadata):
 
 def outcome(status, **metadata):
     if state := current.get():
-        state.metadata['status'] = status
+        state.metadata["status"] = status
 
 
 @contextmanager
-def span(name, run_type='chain', *, inputs=None, **metadata):
+def span(name, run_type="chain", *, inputs=None, **metadata):
     yield None
 
 
-def observed(name, run_type='chain', *, capture=(), output=True):
+def observed(name, run_type="chain", *, capture=(), output=True):
     def decorate(fn):
         @wraps(fn)
         async def wrapped(*args, **kwargs):
             if current.get() is None:
-                with observer().request(name, 'worker' if 'worker' in name else 'agentic'):
+                with observer().request(name, "worker" if "worker" in name else "agentic"):
                     return await fn(*args, **kwargs)
             return await fn(*args, **kwargs)
+
         return wrapped
+
     return decorate
 
 

@@ -1,54 +1,112 @@
 from typing import Annotated, Any, Literal
-from typing_extensions import TypedDict
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.json_schema import SkipJsonSchema # Loại bỏ trường khỏi JSON schema
+
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.json_schema import SkipJsonSchema  # Loại bỏ trường khỏi JSON schema
+from typing_extensions import TypedDict
 
-Domain = Literal['profile', 'metrics', 'goals', 'meals', 'trainings', 'foods', 'exercises', 'progress', 'training_plans', 'coaching', 'health']
+Domain = Literal[
+    "profile",
+    "metrics",
+    "goals",
+    "meals",
+    "trainings",
+    "foods",
+    "exercises",
+    "progress",
+    "training_plans",
+    "coaching",
+    "health",
+]
+
 
 class MealLogItem(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    food: str = Field(max_length=80, description='Food name exactly as the user said it, without quantity words')
-    quantity: float | None = Field(default=None, gt=0, le=5000,
-                                   description='Amount the user stated; null when they did not say how much')
-    unit: Literal['SERVING', 'G', 'ML'] | None = Field(
-        default=None, description='SERVING for counted portions (cái, bát, tô, đĩa, suất, ly, cốc, phần, quả); '
-                                  'G or ML only when the user gave grams/millilitres; null when unknown')
+    model_config = ConfigDict(extra="forbid")
+    food: str = Field(
+        max_length=80, description="Food name exactly as the user said it, without quantity words"
+    )
+    quantity: float | None = Field(
+        default=None,
+        gt=0,
+        le=5000,
+        description="Amount the user stated; null when they did not say how much",
+    )
+    unit: Literal["SERVING", "G", "ML"] | None = Field(
+        default=None,
+        description="SERVING for counted portions (cái, bát, tô, đĩa, suất, ly, cốc, phần, quả); "
+        "G or ML only when the user gave grams/millilitres; null when unknown",
+    )
 
 
 class MealLog(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    name: str | None = Field(default=None, max_length=120, description='Short meal name, e.g. Bữa sáng, Bữa trưa')
-    consumed_at: str | None = Field(default=None, description='ISO 8601 time with offset, resolved from the current time '
-                                                              '(sáng nay, trưa nay, vừa xong); null when unknown')
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(
+        default=None, max_length=120, description="Short meal name, e.g. Bữa sáng, Bữa trưa"
+    )
+    consumed_at: str | None = Field(
+        default=None,
+        description="ISO 8601 time with offset, resolved from the current time "
+        "(sáng nay, trưa nay, vừa xong); null when unknown",
+    )
     items: list[MealLogItem] = Field(default_factory=list, max_length=5)
 
 
 # Điều phối response model trả về --> Hỗ trợ orschestration
 class RouteDecision(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
     intent: str
-    next_agent: Literal['tool', 'research', 'orchestrator']
+    next_agent: Literal["tool", "research", "orchestrator"]
     domain: Domain | None = None
-    action: Literal['answer', 'clarify', 'tool', 'research', 'finish']
-    instruction: str = Field(description='Concrete next task, not private reasoning')
+    action: Literal["answer", "clarify", "tool", "research", "finish"]
+    instruction: str = Field(description="Concrete next task, not private reasoning")
     missing_fields: list[str] = Field(default_factory=list)
-    research_query: str | None = Field(default=None, description='Public food/exercise name or sports knowledge question; no personal details', max_length=180)
+    research_query: str | None = Field(
+        default=None,
+        description="Public food/exercise name or sports knowledge question; no personal details",
+        max_length=180,
+    )
     explicit_web_request: bool = False
     objectives: list[str] = Field(default_factory=list, max_length=3)
     research_queries: list[str] = Field(default_factory=list, max_length=3)
-    personalize: bool = Field(default=False, description="Advice or analysis about this user's own body/training/nutrition: read their stored data first")
-    topic: Literal['running', 'strength', 'training', 'nutrition', 'body', 'recovery', 'wellbeing', 'general'] | None = Field(
-        default=None, description='Subject of a personalized request; selects which stored analytics are read')
-    plan_task: Literal['advice', 'life_review', 'plan_build'] | None = Field(default=None, description=(
-        'Plan mode only: advice = in-depth question, life_review = analysis of sleep/activity/nutrition/body/recovery '
-        'quality, plan_build = create a training plan. Leave empty in normal chat.'))
-    meal_log: list[MealLog] = Field(default_factory=list, max_length=4, description=(
-        'Only for LOG_FOOD: one entry per meal the user reports (separate meals for different times), each with '
-        'its foods. Leave empty for any other intent.'))
+    personalize: bool = Field(
+        default=False,
+        description="Advice or analysis about this user's own body/training/nutrition: read their stored data first",
+    )
+    topic: (
+        Literal[
+            "running",
+            "strength",
+            "training",
+            "nutrition",
+            "body",
+            "recovery",
+            "wellbeing",
+            "general",
+        ]
+        | None
+    ) = Field(
+        default=None,
+        description="Subject of a personalized request; selects which stored analytics are read",
+    )
+    plan_task: Literal["advice", "life_review", "plan_build"] | None = Field(
+        default=None,
+        description=(
+            "Plan mode only: advice = in-depth question, life_review = analysis of sleep/activity/nutrition/body/recovery "
+            "quality, plan_build = create a training plan. Leave empty in normal chat."
+        ),
+    )
+    meal_log: list[MealLog] = Field(
+        default_factory=list,
+        max_length=4,
+        description=(
+            "Only for LOG_FOOD: one entry per meal the user reports (separate meals for different times), each with "
+            "its foods. Leave empty for any other intent."
+        ),
+    )
     create_distinct: SkipJsonSchema[bool] = False
     read_only: SkipJsonSchema[bool] = False
+
 
 class AgentState(TypedDict, total=False):
     # Chế độ trò chuyện người dùng chọn ('normal' | 'plan'); vắng mặt ở checkpoint cũ (xem services/mode.py).

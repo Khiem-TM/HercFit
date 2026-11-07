@@ -1,10 +1,14 @@
 """Lớp bọc request chỉ dành cho tool, quanh các schema chuẩn của backend."""
+
 from datetime import date
 from typing import Any
 from uuid import UUID
+
 from pydantic import Field
+
 from domains.shared.schemas.common import InputSchema
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName
+
 
 class Empty(InputSchema):
     pass
@@ -27,7 +31,7 @@ class TimezoneQuery(InputSchema):
 
 
 class TemplatePreview(InputSchema):
-    resource_id: str = Field(description='Program template code from list_training_templates')
+    resource_id: str = Field(description="Program template code from list_training_templates")
     start_date: date
     weeks: int | None = Field(default=None, ge=1, le=16)
     name: str | None = None

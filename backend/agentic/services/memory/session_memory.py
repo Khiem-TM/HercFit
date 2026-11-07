@@ -6,7 +6,7 @@ các lượt đã ra khỏi cửa sổ và các bản ghi mà cuộc trò chuy�
 Các lời gọi trên đường xử lý request chạy trong advisory lock của phiên, bị giới hạn bởi
 REDIS_TIMEOUT_MS và không bao giờ ném lỗi: sự cố chỉ làm mất phần bộ nhớ bổ sung.
 """
-from agentic.prompts.registry import get_prompt
+
 import asyncio
 import contextvars
 import json
@@ -21,11 +21,23 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from redis.asyncio import Redis
 from redis.exceptions import WatchError
 
+from agentic.core.app.config import AgentSettings
 from agentic.observability import annotate, graph_config, observed
-from agentic.services.memory.transcript import (LAST_MESSAGE_CHARS, TITLE_CHARS, entities_from_state, fold_plan, gap_turns,
-                                       merge_entities, outside_messages, render_memory, seed_turns, turn_from_state)
+from agentic.prompts.registry import get_prompt
+from agentic.services.memory.transcript import (
+    LAST_MESSAGE_CHARS,
+    TITLE_CHARS,
+    entities_from_state,
+    fold_plan,
+    gap_turns,
+    merge_entities,
+    outside_messages,
+    render_memory,
+    seed_turns,
+    turn_from_state,
+)
 
-SUMMARY_PROMPT = get_prompt('memory.summary')
+SUMMARY_PROMPT = get_prompt("memory.summary")
 
 logger = logging.getLogger(__name__)
 
@@ -62,54 +74,77 @@ class Recall:
     gap: list = field(default_factory=list)
     entities: list = field(default_factory=list)
     message_count: int = 0
-    status: str = 'empty'
+    status: str = "empty"
 
     @classmethod
     def from_state(cls, value, status):
         value = value if isinstance(value, dict) else {}
-        return cls(summary=value.get('summary'), upto_seq=int(value.get('upto_seq') or 0),
-                   covered=int(value.get('covered') or 0), entities=list(value.get('entities') or []), status=status)
+        return cls(
+            summary=value.get("summary"),
+            upto_seq=int(value.get("upto_seq") or 0),
+            covered=int(value.get("covered") or 0),
+            entities=list(value.get("entities") or []),
+            status=status,
+        )
 
     def render(self):
         return render_memory(self.summary, self.gap, self.entities, MEMORY_CHARS) or None
 
     def state(self):
         # Bản sao bền vững trong checkpoint: mất Redis không làm mất bản tóm tắt.
-        return {'summary': self.summary, 'upto_seq': self.upto_seq, 'covered': self.covered, 'entities': self.entities}
+        return {
+            "summary": self.summary,
+            "upto_seq": self.upto_seq,
+            "covered": self.covered,
+            "entities": self.entities,
+        }
 
 
 class SessionMemory:
-    def __init__(self, redis, settings, models=None):
+    def __init__(self, redis, settings: AgentSettings, models=None):
         self.redis, self.settings, self.models = redis, settings, models
-        self.mode = getattr(settings, 'SESSION_MEMORY_MODE', 'off')
-        self.prefix = getattr(settings, 'REDIS_KEY_PREFIX', 'hf:agent')
-        self.timeout = getattr(settings, 'REDIS_TIMEOUT_MS', 100) / 1000
-        self.ttl = getattr(settings, 'SESSION_MEMORY_TTL_SECONDS', 30 * 24 * 3600)
-        self.max_turns = getattr(settings, 'SESSION_MEMORY_MAX_TURNS', 200)
-        self.window = getattr(settings, 'SESSION_MEMORY_WINDOW_MESSAGES', 40)
-        self.summarize = models is not None and getattr(settings, 'SESSION_MEMORY_SUMMARY_ENABLED', True)
-        self.trigger = getattr(settings, 'SESSION_MEMORY_SUMMARY_TRIGGER_TURNS', 4)
-        self.summary_chars = getattr(settings, 'SESSION_MEMORY_SUMMARY_MAX_CHARS', 2000)
-        self.entity_limit = getattr(settings, 'SESSION_MEMORY_ENTITY_LIMIT', 20)
+        self.mode = settings.SESSION_MEMORY_MODE
+        self.prefix = settings.REDIS_KEY_PREFIX
+        self.timeout = settings.REDIS_TIMEOUT_MS / 1000
+        self.ttl = settings.SESSION_MEMORY_TTL_SECONDS
+        self.max_turns = settings.SESSION_MEMORY_MAX_TURNS
+        self.window = settings.SESSION_MEMORY_WINDOW_MESSAGES
+        self.summarize = models is not None and settings.SESSION_MEMORY_SUMMARY_ENABLED
+        self.trigger = settings.SESSION_MEMORY_SUMMARY_TRIGGER_TURNS
+        self.summary_chars = settings.SESSION_MEMORY_SUMMARY_MAX_CHARS
+        self.entity_limit = settings.SESSION_MEMORY_ENTITY_LIMIT
         self._down_until = 0.0
         self._purged_since = None
         self._tasks = {}
 
     @classmethod
-    def connect(cls, settings, models=None):
-        redis = Redis.from_url(settings.REDIS_URL.get_secret_value(), decode_responses=True, socket_timeout=2,
-                               socket_connect_timeout=1, health_check_interval=30, max_connections=50)
+    def connect(cls, settings: AgentSettings, models=None):
+        redis = Redis.from_url(
+            settings.REDIS_URL.get_secret_value(),
+            decode_responses=True,
+            socket_timeout=2,
+            socket_connect_timeout=1,
+            health_check_interval=30,
+            max_connections=50,
+        )
         return cls(redis, settings, models)
 
     @property
     def reads(self):
         """Chế độ shadow ghi và đo; chỉ 'on' mới phục vụ lệnh đọc và prompt từ Redis."""
-        return self.mode == 'on'
+        return self.mode == "on"
 
     def _keys(self, session_id):
         # Hash tag giữ các khoá của một phiên trong cùng một slot Cluster cho WATCH/MULTI.
-        base = f'{self.prefix}:s:{{{session_id}}}'
-        return Keys(base + ':meta', base + ':turns', base + ':order', base + ':summary', base + ':entities', base + ':summarizing')
+        base = f"{self.prefix}:s:{{{session_id}}}"
+        return Keys(
+            base + ":meta",
+            base + ":turns",
+            base + ":order",
+            base + ":summary",
+            base + ":entities",
+            base + ":summarizing",
+        )
 
     async def _guard(self, op, call, timeout=None):
         if monotonic() < self._down_until:
@@ -120,12 +155,12 @@ class SessionMemory:
         except Exception as exc:
             self._down_until = monotonic() + BREAKER_SECONDS
             # Nội dung exception có thể lặp lại khoá hoặc payload; chỉ ghi tên lớp.
-            logger.warning('session_memory_failed op=%s error_type=%s', op, type(exc).__name__)
+            logger.warning("session_memory_failed op=%s error_type=%s", op, type(exc).__name__)
             return None
 
     async def health(self):
-        ok = await self._guard('ping', self.redis.ping)
-        return {'mode': self.mode, 'status': 'ok' if ok else 'unavailable'}
+        ok = await self._guard("ping", self.redis.ping)
+        return {"mode": self.mode, "status": "ok" if ok else "unavailable"}
 
     async def close(self):
         tasks = list(self._tasks.values())
@@ -134,13 +169,13 @@ class SessionMemory:
         await asyncio.gather(*tasks, return_exceptions=True)
         await self.redis.aclose()
 
-    @observed('memory.record', output=False)
+    @observed("memory.record", output=False)
     async def record_run(self, values, at=None):
         """Upsert lượt của lượt chạy. Bên gọi đang giữ khoá phiên."""
         values = values or {}
-        if not values.get('session_id') or not values.get('user_id') or not turn_from_state(values):
+        if not values.get("session_id") or not values.get("user_id") or not turn_from_state(values):
             return False
-        return bool(await self._guard('record', lambda: self._record(values, at)))
+        return bool(await self._guard("record", lambda: self._record(values, at)))
 
     async def _read(self, k):
         async with self.redis.pipeline(transaction=False) as pipe:
@@ -150,46 +185,81 @@ class SessionMemory:
             return await pipe.execute()
 
     async def _record(self, values, at):
-        session_id, generation = values['session_id'], int(values.get('session_generation') or 1)
-        turn, k = turn_from_state(values), self._keys(values['session_id'])
+        session_id, generation = values["session_id"], int(values.get("session_generation") or 1)
+        turn, k = turn_from_state(values), self._keys(values["session_id"])
         async with self.redis.pipeline(transaction=False) as pipe:
             pipe.hgetall(k.meta)
-            pipe.hget(k.turns, turn['run_id'])
+            pipe.hget(k.turns, turn["run_id"])
             pipe.exists(k.turns)
             pipe.get(k.entities)
             pipe.hgetall(k.summary)
             meta, old, stored, entities, summary = await pipe.execute()
-        if not meta or int(meta.get('generation', 0)) != generation or not stored:
+        if not meta or int(meta.get("generation", 0)) != generation or not stored:
             # Phiên mới, đã xoá hoặc bị đẩy ra một phần: dựng lại từ cửa sổ checkpoint.
             return await self._seed(k, values, at)
         old = json.loads(old) if old else None
-        seq = old['seq'] if old else int(meta['next_seq'])
-        message_count = int(meta['message_count']) + len(turn['messages']) - (len(old['messages']) if old else 0)
-        turn_count = int(meta['turn_count']) + (0 if old else 1)
-        upto, covered = int(summary.get('upto_seq', 0)), int(summary.get('covered_messages', 0))
+        seq = old["seq"] if old else int(meta["next_seq"])
+        message_count = (
+            int(meta["message_count"])
+            + len(turn["messages"])
+            - (len(old["messages"]) if old else 0)
+        )
+        turn_count = int(meta["turn_count"]) + (0 if old else 1)
+        upto, covered = int(summary.get("upto_seq", 0)), int(summary.get("covered_messages", 0))
         dropped = []
         if turn_count > self.max_turns:
             ids = await self.redis.zrange(k.order, 0, turn_count - self.max_turns - 1)
-            dropped = [json.loads(row) for row in await self.redis.hmget(k.turns, ids) if row] if ids else []
+            dropped = (
+                [json.loads(row) for row in await self.redis.hmget(k.turns, ids) if row]
+                if ids
+                else []
+            )
         # Các lượt bị cắt trước khi được tóm tắt thì bỏ qua để số đếm khớp với cửa sổ.
-        lost = [t for t in dropped if t['seq'] > upto]
+        lost = [t for t in dropped if t["seq"] > upto]
         if lost:
-            upto, covered = max(t['seq'] for t in lost), covered + sum(len(t['messages']) for t in lost)
+            upto, covered = (
+                max(t["seq"] for t in lost),
+                covered + sum(len(t["messages"]) for t in lost),
+            )
         async with self.redis.pipeline(transaction=True) as pipe:
-            pipe.hset(k.turns, turn['run_id'], json.dumps({**turn, 'seq': seq}, ensure_ascii=False))
-            pipe.zadd(k.order, {turn['run_id']: seq})
+            pipe.hset(k.turns, turn["run_id"], json.dumps({**turn, "seq": seq}, ensure_ascii=False))
+            pipe.zadd(k.order, {turn["run_id"]: seq})
             if dropped:
-                pipe.hdel(k.turns, *(t['run_id'] for t in dropped))
-                pipe.zrem(k.order, *(t['run_id'] for t in dropped))
-            pipe.hset(k.meta, mapping={
-                'last_message': turn['messages'][-1]['content'].strip()[:LAST_MESSAGE_CHARS],
-                'message_count': message_count, 'turn_count': turn_count - len(dropped),
-                'next_seq': max(int(meta['next_seq']), seq + 1), 'status': turn['status'] or '',
-                'last_run_id': turn['run_id'], 'last_interaction_at': at or _now()})
-            pipe.set(k.entities, json.dumps(merge_entities(json.loads(entities or '[]'), entities_from_state(values), seq,
-                                                           self.entity_limit), ensure_ascii=False))
+                pipe.hdel(k.turns, *(t["run_id"] for t in dropped))
+                pipe.zrem(k.order, *(t["run_id"] for t in dropped))
+            pipe.hset(
+                k.meta,
+                mapping={
+                    "last_message": turn["messages"][-1]["content"].strip()[:LAST_MESSAGE_CHARS],
+                    "message_count": message_count,
+                    "turn_count": turn_count - len(dropped),
+                    "next_seq": max(int(meta["next_seq"]), seq + 1),
+                    "status": turn["status"] or "",
+                    "last_run_id": turn["run_id"],
+                    "last_interaction_at": at or _now(),
+                },
+            )
+            pipe.set(
+                k.entities,
+                json.dumps(
+                    merge_entities(
+                        json.loads(entities or "[]"),
+                        entities_from_state(values),
+                        seq,
+                        self.entity_limit,
+                    ),
+                    ensure_ascii=False,
+                ),
+            )
             if lost:
-                pipe.hset(k.summary, mapping={'upto_seq': upto, 'covered_messages': covered, 'generation': generation})
+                pipe.hset(
+                    k.summary,
+                    mapping={
+                        "upto_seq": upto,
+                        "covered_messages": covered,
+                        "generation": generation,
+                    },
+                )
             for key in k.data:
                 pipe.expire(key, self.ttl)
             await pipe.execute()
@@ -197,80 +267,138 @@ class SessionMemory:
         return True
 
     async def _seed(self, k, values, at):
-        generation = int(values.get('session_generation') or 1)
-        turns = seed_turns(values)[-self.max_turns:]
+        generation = int(values.get("session_generation") or 1)
+        turns = seed_turns(values)[-self.max_turns :]
         for seq, turn in enumerate(turns, 1):
-            turn['seq'] = seq
-        messages = [m for turn in turns for m in turn['messages']]
-        human = next((m for m in messages if m['role'] == 'human'), None)
-        restored = values.get('session_memory') or {}
+            turn["seq"] = seq
+        messages = [m for turn in turns for m in turn["messages"]]
+        human = next((m for m in messages if m["role"] == "human"), None)
+        restored = values.get("session_memory") or {}
         async with self.redis.pipeline(transaction=True) as pipe:
             pipe.unlink(*k.data)
-            pipe.hset(k.turns, mapping={t['run_id']: json.dumps(t, ensure_ascii=False) for t in turns})
-            pipe.zadd(k.order, {t['run_id']: t['seq'] for t in turns})
-            pipe.hset(k.meta, mapping={
-                'user_id': str(values['user_id']), 'generation': generation,
-                'title': human['content'].strip()[:TITLE_CHARS] if human else '',
-                'last_message': messages[-1]['content'].strip()[:LAST_MESSAGE_CHARS],
-                'message_count': len(messages), 'turn_count': len(turns), 'next_seq': len(turns) + 1,
-                'status': turns[-1]['status'] or '', 'last_run_id': turns[-1]['run_id'], 'last_interaction_at': at or _now()})
-            pipe.set(k.entities, json.dumps(merge_entities(restored.get('entities') or [], entities_from_state(values), len(turns),
-                                                           self.entity_limit), ensure_ascii=False))
-            if restored.get('summary'):
+            pipe.hset(
+                k.turns, mapping={t["run_id"]: json.dumps(t, ensure_ascii=False) for t in turns}
+            )
+            pipe.zadd(k.order, {t["run_id"]: t["seq"] for t in turns})
+            pipe.hset(
+                k.meta,
+                mapping={
+                    "user_id": str(values["user_id"]),
+                    "generation": generation,
+                    "title": human["content"].strip()[:TITLE_CHARS] if human else "",
+                    "last_message": messages[-1]["content"].strip()[:LAST_MESSAGE_CHARS],
+                    "message_count": len(messages),
+                    "turn_count": len(turns),
+                    "next_seq": len(turns) + 1,
+                    "status": turns[-1]["status"] or "",
+                    "last_run_id": turns[-1]["run_id"],
+                    "last_interaction_at": at or _now(),
+                },
+            )
+            pipe.set(
+                k.entities,
+                json.dumps(
+                    merge_entities(
+                        restored.get("entities") or [],
+                        entities_from_state(values),
+                        len(turns),
+                        self.entity_limit,
+                    ),
+                    ensure_ascii=False,
+                ),
+            )
+            if restored.get("summary"):
                 # Bản sao trong checkpoint bao phủ những gì có trước cửa sổ này.
-                pipe.hset(k.summary, mapping={'text': restored['summary'], 'upto_seq': 0, 'covered_messages': 0,
-                                              'generation': generation, 'updated_at': _now()})
+                pipe.hset(
+                    k.summary,
+                    mapping={
+                        "text": restored["summary"],
+                        "upto_seq": 0,
+                        "covered_messages": 0,
+                        "generation": generation,
+                        "updated_at": _now(),
+                    },
+                )
             for key in k.data:
                 pipe.expire(key, self.ttl)
             await pipe.execute()
-        self._maybe_summarize(values['session_id'], generation, len(messages), 0)
+        self._maybe_summarize(values["session_id"], generation, len(messages), 0)
         return True
 
     async def _current(self, session, values, at):
         """Meta, tóm tắt và thực thể sau khi ghi lượt chạy mới nhất nếu Redis đã bỏ lỡ nó."""
-        k = self._keys(session['session_id'])
+        k = self._keys(session["session_id"])
         meta, summary, entities = await self._read(k)
-        if meta and int(meta.get('generation', 0)) != int(session['generation']):
+        if meta and int(meta.get("generation", 0)) != int(session["generation"]):
             await self.redis.unlink(*k.data)
             meta, summary, entities = {}, {}, None
-        if values.get('run_id') and meta.get('last_run_id') != values['run_id'] and turn_from_state(values):
+        if (
+            values.get("run_id")
+            and meta.get("last_run_id") != values["run_id"]
+            and turn_from_state(values)
+        ):
             # Lượt chạy kết thúc mà không ghi lại (stream bị huỷ, sập) hoặc có từ trước khi dùng Redis.
-            await self._record({**values, 'session_id': session['session_id'],
-                                'session_generation': int(session['generation'])}, at)
+            await self._record(
+                {
+                    **values,
+                    "session_id": session["session_id"],
+                    "session_generation": int(session["generation"]),
+                },
+                at,
+            )
             meta, summary, entities = await self._read(k)
         return k, meta, summary, entities
 
-    @observed('memory.recall', 'retriever', output=False)
+    @observed("memory.recall", "retriever", output=False)
     async def recall(self, session, previous, at=None):
         """Bộ nhớ ngoài cửa sổ checkpoint. Quay về dùng bản sao riêng của checkpoint."""
         started = perf_counter()
         previous = previous or {}
-        recall = (await self._guard('recall', lambda: self._recall(session, previous, at))
-                  or Recall.from_state(previous.get('session_memory'), 'unavailable'))
-        annotate(status=recall.status, duration_ms=round((perf_counter() - started) * 1000, 3), memory_mode=self.mode,
-                 memory_summary_chars=len(recall.summary or ''), memory_entity_count=len(recall.entities),
-                 memory_gap_turns=len(recall.gap))
+        recall = await self._guard(
+            "recall", lambda: self._recall(session, previous, at)
+        ) or Recall.from_state(previous.get("session_memory"), "unavailable")
+        annotate(
+            status=recall.status,
+            duration_ms=round((perf_counter() - started) * 1000, 3),
+            memory_mode=self.mode,
+            memory_summary_chars=len(recall.summary or ""),
+            memory_entity_count=len(recall.entities),
+            memory_gap_turns=len(recall.gap),
+        )
         return recall
 
     async def _recall(self, session, previous, at):
         k, meta, summary, entities = await self._current(session, previous, at)
         if not meta:
-            return Recall.from_state(previous.get('session_memory'), 'empty')
-        upto, covered = int(summary.get('upto_seq', 0)), int(summary.get('covered_messages', 0))
-        outside = outside_messages(int(meta['message_count']), covered, self.window)
+            return Recall.from_state(previous.get("session_memory"), "empty")
+        upto, covered = int(summary.get("upto_seq", 0)), int(summary.get("covered_messages", 0))
+        outside = outside_messages(int(meta["message_count"]), covered, self.window)
         gap = []
         if outside and self.summarize:
             # Nối các lượt mà bản tóm tắt chưa tới, để không gì bị quên ở giữa.
-            ids = await self.redis.zrangebyscore(k.order, f'({upto}', '+inf', start=0, num=min(outside, 2 * self.trigger))
+            ids = await self.redis.zrangebyscore(
+                k.order, f"({upto}", "+inf", start=0, num=min(outside, 2 * self.trigger)
+            )
             rows = await self.redis.hmget(k.turns, ids) if ids else []
             gap = gap_turns([json.loads(row) for row in rows if row], outside)
-        return Recall(summary=summary.get('text') or None, upto_seq=upto, covered=covered, gap=gap,
-                      entities=json.loads(entities or '[]'), message_count=int(meta['message_count']), status='ok')
+        return Recall(
+            summary=summary.get("text") or None,
+            upto_seq=upto,
+            covered=covered,
+            gap=gap,
+            entities=json.loads(entities or "[]"),
+            message_count=int(meta["message_count"]),
+            status="ok",
+        )
 
-    @observed('memory.transcript', output=False)
+    @observed("memory.transcript", output=False)
     async def transcript(self, session, values, at=None):
         """Cuộc trò chuyện đã lưu cho /history, cũ nhất trước; None nghĩa là đọc checkpoint."""
-        return await self._guard('transcript', lambda: self._transcript(session, values or {}, at), max(self.timeout, 0.5))
+        return await self._guard(
+            "transcript",
+            lambda: self._transcript(session, values or {}, at),
+            max(self.timeout, 0.5),
+        )
 
     async def _transcript(self, session, values, at):
         k, meta, _, _ = await self._current(session, values, at)
@@ -278,40 +406,53 @@ class SessionMemory:
         if not ids:
             return None
         rows = await self.redis.hmget(k.turns, ids)
-        return [{'role': m['role'], 'content': m['content'], 'name': m['name']}
-                for row in rows if row for m in json.loads(row)['messages']]
+        return [
+            {"role": m["role"], "content": m["content"], "name": m["name"]}
+            for row in rows
+            if row
+            for m in json.loads(row)["messages"]
+        ]
 
     async def metas(self, rows):
         """Tóm tắt danh sách phiên. Chỉ đọc: các phiên được khởi tạo dưới khoá của chúng ở nơi khác."""
         rows = list(rows)
+
         async def read():
             async with self.redis.pipeline(transaction=False) as pipe:
                 for row in rows:
-                    pipe.hgetall(self._keys(row['session_id']).meta)
+                    pipe.hgetall(self._keys(row["session_id"]).meta)
                 values = await pipe.execute()
             # Meta bỏ lỡ lượt chạy mới nhất là đã cũ; phiên đó dùng checkpoint của nó.
-            return {row['session_id']: meta for row, meta in zip(rows, values)
-                    if meta and meta.get('generation') == str(row.get('generation'))
-                    and meta.get('last_run_id') == row.get('thread_id')}
-        return (await self._guard('metas', read) if rows else None) or {}
+            return {
+                row["session_id"]: meta
+                for row, meta in zip(rows, values)
+                if meta
+                and meta.get("generation") == str(row.get("generation"))
+                and meta.get("last_run_id") == row.get("thread_id")
+            }
+
+        return (await self._guard("metas", read) if rows else None) or {}
 
     async def forget(self, session_id):
         k = self._keys(session_id)
-        await self._guard('forget', lambda: self.redis.unlink(*k.data, k.lock))
+        await self._guard("forget", lambda: self.redis.unlink(*k.data, k.lock))
 
     async def purge_deleted(self, store):
         """Xoá bộ nhớ của các phiên đã xoá mà lệnh xoá chưa tới được Redis."""
         started = datetime.now(timezone.utc)
-        rows = await store.deleted_sessions(self._purged_since or started - timedelta(seconds=self.ttl))
+        rows = await store.deleted_sessions(
+            self._purged_since or started - timedelta(seconds=self.ttl)
+        )
         failed = False
         for row in rows:
-            k = self._keys(row['session_id'])
+            k = self._keys(row["session_id"])
+
             async def purge():
                 try:
                     async with self.redis.pipeline(transaction=True) as pipe:
                         await pipe.watch(k.meta)
-                        generation = await pipe.hget(k.meta, 'generation')
-                        if generation is not None and int(generation) > int(row['generation']):
+                        generation = await pipe.hget(k.meta, "generation")
+                        if generation is not None and int(generation) > int(row["generation"]):
                             return False  # phiên được dùng lại: thế hệ mới của nó đang sống
                         pipe.multi()
                         pipe.unlink(*k.data, k.lock)
@@ -319,21 +460,27 @@ class SessionMemory:
                         return True
                 except WatchError:
                     return False
-            failed = failed or await self._guard('purge', purge) is None
+
+            failed = failed or await self._guard("purge", purge) is None
         if not failed:
             self._purged_since = started - timedelta(minutes=1)
         return len(rows)
 
     def _maybe_summarize(self, session_id, generation, message_count, covered):
-        if (not self.summarize or session_id in self._tasks
-                or outside_messages(message_count, covered, self.window) < 2 * self.trigger):
+        if (
+            not self.summarize
+            or session_id in self._tasks
+            or outside_messages(message_count, covered, self.window) < 2 * self.trigger
+        ):
             return
         # Ngữ cảnh mới: bản tóm tắt sống lâu hơn request và được trace riêng.
-        task = asyncio.get_running_loop().create_task(self._summarize(session_id, generation), context=contextvars.Context())
+        task = asyncio.get_running_loop().create_task(
+            self._summarize(session_id, generation), context=contextvars.Context()
+        )
         self._tasks[session_id] = task
         task.add_done_callback(lambda _: self._tasks.pop(session_id, None))
 
-    @observed('memory.summarize', output=False)
+    @observed("memory.summarize", output=False)
     async def _summarize(self, session_id, generation):
         k, token = self._keys(session_id), uuid4().hex
         try:
@@ -352,31 +499,47 @@ class SessionMemory:
                         pipe.delete(k.lock)
                         await pipe.execute()
         except Exception as exc:
-            logger.warning('session_memory_failed op=summarize error_type=%s', type(exc).__name__)
+            logger.warning("session_memory_failed op=summarize error_type=%s", type(exc).__name__)
 
     async def _fold(self, k, generation):
         meta, summary, _ = await self._read(k)
-        if not meta or int(meta.get('generation', 0)) != generation:
+        if not meta or int(meta.get("generation", 0)) != generation:
             return False
-        upto, covered = int(summary.get('upto_seq', 0)), int(summary.get('covered_messages', 0))
-        outside = outside_messages(int(meta['message_count']), covered, self.window)
-        ids = await self.redis.zrangebyscore(k.order, f'({upto}', '+inf', start=0, num=min(outside, FOLD_TURNS)) if outside else []
+        upto, covered = int(summary.get("upto_seq", 0)), int(summary.get("covered_messages", 0))
+        outside = outside_messages(int(meta["message_count"]), covered, self.window)
+        ids = (
+            await self.redis.zrangebyscore(
+                k.order, f"({upto}", "+inf", start=0, num=min(outside, FOLD_TURNS)
+            )
+            if outside
+            else []
+        )
         rows = await self.redis.hmget(k.turns, ids) if ids else []
         batch = fold_plan([json.loads(row) for row in rows if row], outside, FOLD_CHARS)
-        text = await self._condense(summary.get('text'), batch) if batch else None
+        text = await self._condense(summary.get("text"), batch) if batch else None
         if not text:
             return False
         try:
             async with self.redis.pipeline(transaction=True) as pipe:
                 await pipe.watch(k.meta, k.summary)
                 current = await pipe.hgetall(k.summary)
-                if (await pipe.hget(k.meta, 'generation') != str(generation) or int(current.get('upto_seq', 0)) != upto
-                        or int(current.get('covered_messages', 0)) != covered):
+                if (
+                    await pipe.hget(k.meta, "generation") != str(generation)
+                    or int(current.get("upto_seq", 0)) != upto
+                    or int(current.get("covered_messages", 0)) != covered
+                ):
                     return False
                 pipe.multi()
-                pipe.hset(k.summary, mapping={'text': text, 'upto_seq': batch[-1]['seq'], 'generation': generation,
-                                              'covered_messages': covered + sum(len(t['messages']) for t in batch),
-                                              'updated_at': _now()})
+                pipe.hset(
+                    k.summary,
+                    mapping={
+                        "text": text,
+                        "upto_seq": batch[-1]["seq"],
+                        "generation": generation,
+                        "covered_messages": covered + sum(len(t["messages"]) for t in batch),
+                        "updated_at": _now(),
+                    },
+                )
                 pipe.expire(k.summary, self.ttl)
                 await pipe.execute()
         except WatchError:
@@ -384,12 +547,25 @@ class SessionMemory:
         return True
 
     async def _condense(self, previous, turns):
-        conversation = [{'vai': 'Người dùng' if m['role'] == 'human' else 'Trợ lý', 'noi_dung': m['content']}
-                        for turn in turns for m in turn['messages']]
-        result = await self.models.get('summary').ainvoke([
-            SystemMessage(content=SUMMARY_PROMPT.format(limit=self.summary_chars)),
-            HumanMessage(content=json.dumps({'tom_tat_cu': previous or '', 'cac_luot_moi': conversation}, ensure_ascii=False)),
-        ], config=graph_config())
-        text = (result.content if isinstance(result.content, str) else '').strip()
-        annotate(input_count=len(turns), output_count=len(text), truncated=len(text) > self.summary_chars)
-        return text[:self.summary_chars] or None
+        conversation = [
+            {"vai": "Người dùng" if m["role"] == "human" else "Trợ lý", "noi_dung": m["content"]}
+            for turn in turns
+            for m in turn["messages"]
+        ]
+        result = await self.models.get("summary").ainvoke(
+            [
+                SystemMessage(content=SUMMARY_PROMPT.format(limit=self.summary_chars)),
+                HumanMessage(
+                    content=json.dumps(
+                        {"tom_tat_cu": previous or "", "cac_luot_moi": conversation},
+                        ensure_ascii=False,
+                    )
+                ),
+            ],
+            config=graph_config(),
+        )
+        text = (result.content if isinstance(result.content, str) else "").strip()
+        annotate(
+            input_count=len(turns), output_count=len(text), truncated=len(text) > self.summary_chars
+        )
+        return text[: self.summary_chars] or None

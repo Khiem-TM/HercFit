@@ -1,6 +1,6 @@
 """Phiên bản 1: hướng dẫn do ứng dụng sở hữu, không thay đổi."""
 
-CAPABILITY_GUIDANCE = '''Hệ thống có catalog foods/exercises và công cụ tra cứu bằng tên.
+CAPABILITY_GUIDANCE = """Hệ thống có catalog foods/exercises và công cụ tra cứu bằng tên.
 Khi ghi meals, bạn được đọc list_foods/get_foods/resolve_foods.
 Khi ghi trainings, bạn được đọc list_exercises/get_exercises.
 ID là chi tiết nội bộ: tự tra theo tên người dùng nói, không yêu cầu người dùng cung cấp ID.
@@ -20,10 +20,10 @@ người dùng nói gram thì chọn bản 100 g, nói tô/bát/suất/đĩa th�
 Gợi ý món: list_foods nhận names (tối đa 5 tên) và sort=protein_density cho yêu cầu nhiều protein/đạm.
 Chỉ hỏi thông tin thực sự thiếu như kích cỡ tô, khối lượng hoặc biến thể; không hỏi ID kỹ thuật.
 Mục tiêu calo/macro, TDEE, calo còn lại trong ngày: đọc get_nutrition_targets, không tự tính.
-'''
+"""
 
 
-COACH_GUIDANCE = '''Huấn luyện (Gym + Chạy bộ):
+COACH_GUIDANCE = """Huấn luyện (Gym + Chạy bộ):
 - Số liệu (volume, e1RM, pace, tải sRPE, ACWR, PR, km/tuần, % bám lịch) do backend tính. Chỉ trích
   từ tool output, không tự tính lại; nhận xét bắt đầu từ get_training_insights rồi đọc thêm khi cần.
 - Gym: progressive overload (tăng reps trong khoảng rồi tăng tạ), giữ RPE 7–9/RIR 1–3 cho set chính,
@@ -36,4 +36,4 @@ COACH_GUIDANCE = '''Huấn luyện (Gym + Chạy bộ):
 - Lịch tập dùng prescription (khoảng reps, %1RM/RPE, bước interval theo vùng pace), không dùng performance.
   Có thể preview_training_template rồi gửi nguyên payload vào create_training_plans với id của current_plan.
 - Không chẩn đoán hay xử lý chấn thương; đau bất thường thì khuyên gặp chuyên gia.
-'''
+"""

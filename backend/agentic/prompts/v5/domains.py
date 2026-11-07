@@ -6,15 +6,17 @@ người dùng sửa lịch ngay trên thẻ xác nhận và tick từng buổi 
 
 from agentic.prompts.v4.domains import COACH_GUIDANCE as _COACH_V4
 
-_V4_PLAN = '''- Lịch tập dùng prescription (khoảng reps, %1RM/RPE, bước interval theo vùng pace), không dùng performance.
+_V4_PLAN = """- Lịch tập dùng prescription (khoảng reps, %1RM/RPE, bước interval theo vùng pace), không dùng performance.
   Có thể preview_training_template rồi gửi nguyên payload vào create_training_plans với id của current_plan.
 - current_plan trả not_found nghĩa là chưa có kế hoạch cha, không phải lỗi hệ thống: đọc current_goal rồi
   đề xuất create_plan (goal_id, name, start_date..end_date bao trọn lịch tập); sau khi được xác nhận mới
   create_training_plans với id kế hoạch vừa tạo. Chưa có mục tiêu thì hướng dẫn người dùng đặt mục tiêu trước.
-'''
+"""
 assert _V4_PLAN in _COACH_V4
 
-COACH_GUIDANCE = _COACH_V4.replace(_V4_PLAN, '''- Lịch tập dùng prescription (khoảng reps, %1RM/RPE, bước interval theo vùng pace), không dùng performance.
+COACH_GUIDANCE = _COACH_V4.replace(
+    _V4_PLAN,
+    """- Lịch tập dùng prescription (khoảng reps, %1RM/RPE, bước interval theo vùng pace), không dùng performance.
   Chỉ lập lịch tập; không lập thực đơn hay lịch bữa ăn.
 - Mọi bài trong lịch lấy từ catalog có sẵn (list_exercises/resolve_exercises, dùng đúng exercise_id trả về, kind
   của prescription khớp kind của bài). Không tạo bài mới, không tra cứu web để lập lịch; catalog không có bài
@@ -32,4 +34,6 @@ COACH_GUIDANCE = _COACH_V4.replace(_V4_PLAN, '''- Lịch tập dùng prescriptio
 - Tick hoàn thành là thao tác của người dùng ở thanh bên Kế hoạch, chỉ trong ngày của buổi và không hoàn tác: backend
   ghi buổi tập thật (calo ước tính, đồng bộ Google Health). completed_at trong current_training_plan cho biết buổi
   đã tập; buổi đã tick đã có trong nhật ký, không ghi lại bằng create_trainings.
-''', 1)
+""",
+    1,
+)

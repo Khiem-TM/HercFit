@@ -11,13 +11,14 @@
 Logic graph đọc chế độ từ state đã checkpoint; client model, ngân sách tra cứu và timeout đọc biến ngữ cảnh
 `current` mà runtime đặt cho đúng lượt chạy đó.
 """
+
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 
-NORMAL, PLAN, FULL = 'normal', 'plan', 'full'
+NORMAL, PLAN, FULL = "normal", "plan", "full"
 MODES = (NORMAL, PLAN)
 
-RESEARCH_LIMITS = {'web': 8, 'search': 3, 'llm': 3, 'rounds': 2}
+RESEARCH_LIMITS = {"web": 8, "search": 3, "llm": 3, "rounds": 2}
 
 
 @dataclass(frozen=True)
@@ -53,22 +54,33 @@ class ModePolicy:
 POLICIES = {
     FULL: ModePolicy(FULL),
     NORMAL: ModePolicy(
-        NORMAL, domains=frozenset({'meals', 'foods', 'trainings', 'exercises', 'metrics', 'progress'}),
-        knowledge=False, personal_card=False, lean_tools=True, guidance=False,
+        NORMAL,
+        domains=frozenset({"meals", "foods", "trainings", "exercises", "metrics", "progress"}),
+        knowledge=False,
+        personal_card=False,
+        lean_tools=True,
+        guidance=False,
         # Tool giữ 'medium': ở 'low' model từng viết bản xem trước bằng chữ thay vì gọi create_meals (02/11).
-        efforts={'response': 'low'}),
+        efforts={"response": "low"},
+    ),
     PLAN: ModePolicy(
-        PLAN, deep=True, shortcuts=False,
-        efforts={'research': 'medium', 'response': 'high'}, timeouts={'research': 60, 'response': 90},
-        research_seconds=120, research_limits={'web': 10, 'search': 4, 'llm': 4, 'rounds': 3}, documents=8),
+        PLAN,
+        deep=True,
+        shortcuts=False,
+        efforts={"research": "medium", "response": "high"},
+        timeouts={"research": 60, "response": 90},
+        research_seconds=120,
+        research_limits={"web": 10, "search": 4, "llm": 4, "rounds": 3},
+        documents=8,
+    ),
 }
 
-current: ContextVar[str] = ContextVar('chat_mode', default=FULL)
+current: ContextVar[str] = ContextVar("chat_mode", default=FULL)
 
 
 def policy(state=None) -> ModePolicy:
     """Chính sách của state (trường 'mode'), hoặc của lượt chạy hiện tại khi không truyền state."""
-    name = current.get() if state is None else state.get('mode')
+    name = current.get() if state is None else state.get("mode")
     return POLICIES.get(name or FULL, POLICIES[FULL])
 
 

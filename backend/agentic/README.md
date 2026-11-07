@@ -4,6 +4,20 @@ FastAPI + LangGraph service for authenticated nutrition, training, catalog and
 research workflows. The implementation was reorganized in place; public HTTP
 contracts, database migrations and existing graph behavior remain compatible.
 
+## Python style
+
+Use one statement per line, grouped imports and a 100-character line target.
+Required configuration comes from `AgentSettings`; validate external input at its
+boundary and retain checks for optional checkpoint fields and service outages.
+Test doubles should provide the configuration fields used by the component.
+
+From the repository root, check the style with the pinned development tool:
+
+```sh
+uvx --from ruff==0.17.4 ruff format --check backend/agentic
+uvx --from ruff==0.17.4 ruff check backend/agentic
+```
+
 - [Architecture, module ownership and workflow](docs/architecture.md)
 - [Audit and prioritized refactoring plan](docs/refactoring-plan.md)
 - [Exact old-to-new module map](docs/module-map.json)

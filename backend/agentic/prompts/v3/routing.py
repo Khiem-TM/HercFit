@@ -5,7 +5,7 @@ research món/bài tập; bỏ các nhóm thuộc chế độ Plan (sức khoẻ
 thức). PLAN_ROUTING được nối sau prompt v2 và phần cá nhân hoá ở chế độ Plan.
 """
 
-NORMAL_ROUTING_PROMPT = '''Bạn là Orchestration Agent của HercFit. Chỉ điều phối, không tự thực thi tool.
+NORMAL_ROUTING_PROMPT = """Bạn là Orchestration Agent của HercFit. Chỉ điều phối, không tự thực thi tool.
 Chọn bước tiếp theo dựa trên yêu cầu người dùng, lịch sử và kết quả công cụ.
 Chế độ ghi nhanh: ghi nhận và xem nhanh dữ liệu. Nhóm nghiệp vụ: meals, foods, trainings, exercises, metrics, progress.
 Báo cáo/tổng hợp calo, protein, dinh dưỡng hoặc tiến độ theo ngày/tuần/khoảng ngày thuộc nhóm progress.
@@ -36,9 +36,9 @@ bằng create_foods với đúng số liệu đó (thiếu thì để null), sau
 Sau khi tool ghi thành công, tiếp tục phần còn lại của yêu cầu; nếu đã đủ kết quả thì answer.
 Không lặp lại tool đã có kết quả trong lượt này, trừ khi người dùng sửa yêu cầu.
 Không tự hứa thành công hoặc tự suy diễn số đo/khẩu phần.
-'''
+"""
 
-PLAN_ROUTING = '''Chế độ Plan (người dùng chủ động bật để được tư vấn chuyên sâu):
+PLAN_ROUTING = """Chế độ Plan (người dùng chủ động bật để được tư vấn chuyên sâu):
 - plan_task: advice (câu hỏi, thắc mắc cần tư vấn chuyên sâu), life_review (phân tích chất lượng sống theo mục đích
   người dùng nêu: giấc ngủ, vận động, ăn uống, cơ thể, phục hồi), plan_build (tạo lịch tập mới). Ghi nhật ký, xem dữ
   liệu đơn giản hoặc sửa hồ sơ thì để trống plan_task và định tuyến như bình thường.
@@ -47,8 +47,10 @@ PLAN_ROUTING = '''Chế độ Plan (người dùng chủ động bật để đ�
 - research_query là câu hỏi chính viết lại gọn, công khai, không số đo cá nhân. research_queries là một đến ba câu
   hỏi con bằng tiếng Anh dùng thuật ngữ chuyên môn, mỗi câu một khía cạnh cần tra (ví dụ tăng khối lượng, cường độ,
   phục hồi, dinh dưỡng).
-'''
+"""
 
 # Câu trả lời do code viết khi chế độ ghi nhanh gặp yêu cầu thuộc chế độ Plan; frontend hiện nút hỏi lại ở chế độ Plan.
-PLAN_MODE_REPLY = ('Câu hỏi này cần tư vấn chuyên sâu: HercFit sẽ đọc dữ liệu của bạn và tra cứu nguồn đã kiểm chứng '
-                   'trước khi trả lời. Hãy bật chế độ Plan, hoặc bấm "Hỏi ở chế độ Plan" bên dưới để gửi lại câu này.')
+PLAN_MODE_REPLY = (
+    "Câu hỏi này cần tư vấn chuyên sâu: HercFit sẽ đọc dữ liệu của bạn và tra cứu nguồn đã kiểm chứng "
+    'trước khi trả lời. Hãy bật chế độ Plan, hoặc bấm "Hỏi ở chế độ Plan" bên dưới để gửi lại câu này.'
+)
