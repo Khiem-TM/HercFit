@@ -5,7 +5,7 @@ from agentic.tools.registry import REGISTRY
 
 COACH_GUIDANCE = get_prompt('training.coach', 'v5')
 CAPABILITY_GUIDANCE = get_prompt('nutrition.capabilities')
-HEALTH_GUIDANCE = get_prompt('health.guidance', 'v4')
+HEALTH_GUIDANCE = get_prompt('health.guidance', 'v5')
 
 CATALOG_DEPENDENCIES = {'meals': 'foods', 'trainings': 'exercises', 'training_plans': 'exercises'}
 # Các miền chỉ đọc bổ sung: huấn luyện diễn giải nhật ký/tiến độ, ghi nhật ký có thể kiểm tra lịch tập.

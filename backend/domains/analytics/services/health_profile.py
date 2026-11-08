@@ -12,6 +12,7 @@ from statistics import mean, median, pstdev
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
+from domains.analytics.services.daily_health.baseline import median as baseline_median
 from domains.health_records.schemas.health import (
     ACTIVITY_LABELS,
     ACTIVITY_ORDER,
@@ -195,10 +196,11 @@ def _sleep(sessions, end: date, age: int | None, zone: str) -> SleepOverview:
 
 
 def _recovery(daily, end: date) -> RecoveryOverview:
+    """Trung vị 7 ngày gần nhất so với trung vị các ngày trước đó trong cửa sổ (đường nền dùng chung)."""
     recent = [d for d in daily if d.local_date > end - timedelta(days=7)]
     baseline = [d for d in daily if d.local_date <= end - timedelta(days=7)]
-    rhr_7d, rhr_base = _avg(d.resting_hr_bpm for d in recent), _avg(d.resting_hr_bpm for d in baseline)
-    hrv_7d, hrv_base = _avg(d.hrv_ms for d in recent), _avg(d.hrv_ms for d in baseline)
+    rhr_7d, rhr_base = baseline_median(d.resting_hr_bpm for d in recent), baseline_median(d.resting_hr_bpm for d in baseline)
+    hrv_7d, hrv_base = baseline_median(d.hrv_ms for d in recent), baseline_median(d.hrv_ms for d in baseline)
     enough_rhr = sum(1 for d in baseline if d.resting_hr_bpm is not None) >= 7
     enough_hrv = sum(1 for d in baseline if d.hrv_ms is not None) >= 7
     elevated = rhr_7d - rhr_base >= RHR_ELEVATION_BPM if rhr_7d is not None and rhr_base is not None and enough_rhr else None
@@ -206,7 +208,7 @@ def _recovery(daily, end: date) -> RecoveryOverview:
                   if hrv_7d is not None and hrv_base and enough_hrv else None)
     signals = []
     if elevated:
-        signals.append(f"Nhịp tim nghỉ 7 ngày ({rhr_7d} bpm) cao hơn nền 28 ngày ({rhr_base} bpm) "
+        signals.append(f"Nhịp tim nghỉ 7 ngày ({rhr_7d} bpm) cao hơn nền trước đó ({rhr_base} bpm) "
                        f"≥ {RHR_ELEVATION_BPM} bpm: có thể cơ thể chưa hồi phục đủ")
     if suppressed:
         signals.append(f"HRV 7 ngày ({hrv_7d} ms) thấp hơn nền ({hrv_base} ms) ≥ {HRV_DROP_PCT}%")

@@ -24,6 +24,7 @@ from agentic.prompts.v3.clarification import PROMPT as CLARIFICATION_PROMPT_V3
 from agentic.prompts.v3 import routing as v3_routing
 from agentic.prompts.v4.domains import COACH_GUIDANCE as COACH_GUIDANCE_V4
 from agentic.prompts.v4.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V4
+from agentic.prompts.v5.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V5
 from agentic.prompts.v5.domains import COACH_GUIDANCE as COACH_GUIDANCE_V5
 
 
@@ -57,6 +58,8 @@ TEMPLATES = MappingProxyType({
     ('health.guidance', 'v4'): HEALTH_GUIDANCE_V4,
     # v5: lịch tập lưu bằng một lệnh, sửa trên thẻ xác nhận; không còn lịch bữa ăn.
     ('training.coach', 'v5'): COACH_GUIDANCE_V5,
+    # v5: Daily Health Intelligence: hôm nay/hồi phục/độ sẵn sàng đọc đánh giá tất định get_health_assessment.
+    ('health.guidance', 'v5'): HEALTH_GUIDANCE_V5,
     # v3: định tuyến theo chế độ trò chuyện: bản rút gọn cho ghi nhanh, khối hướng dẫn cho chế độ Plan.
     ('orchestration.route_normal', 'v3'): v3_routing.NORMAL_ROUTING_PROMPT,
     ('orchestration.plan', 'v3'): v3_routing.PLAN_ROUTING,

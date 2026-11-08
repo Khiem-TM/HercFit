@@ -35,7 +35,7 @@ class ContextQueryRead(BaseModel):
                         "Dữ liệu thiết bị cần đồng ý của người dùng; dữ liệu nhạy cảm cần đồng ý riêng.")
 async def get_context(service: UserContextDep, topic: Topic = "overview", period: Period = "28d",
                       budget: Annotated[int, Query(ge=200, le=context_api.BASE_BUDGET * 2)] = context_api.BASE_BUDGET,
-                      timezone: TimeZoneName = "Asia/Ho_Chi_Minh"):
+                      timezone: TimeZoneName | None = None):
     context = await context_api.get(service.session, service.user, topic=topic, period=period, budget=budget,
                                     zone=timezone)
     await service.session.commit()
@@ -47,7 +47,7 @@ async def get_context(service: UserContextDep, topic: Topic = "overview", period
 async def query_context(service: UserContextDep, topics: Annotated[list[Topic], Query(min_length=1, max_length=8)],
                         period: Period = "28d",
                         budget: Annotated[int, Query(ge=200, le=8000)] = context_api.DEEP_BUDGET,
-                        timezone: TimeZoneName = "Asia/Ho_Chi_Minh"):
+                        timezone: TimeZoneName | None = None):
     sections, used = [], 0
     for topic in dict.fromkeys(topics):
         remaining = budget - used

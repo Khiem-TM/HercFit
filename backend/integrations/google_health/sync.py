@@ -22,6 +22,7 @@ import httpx
 from sqlalchemy import select, text
 
 from core.database import get_async_engine, get_db_session
+from domains.shared import events
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE
 from integrations.google_health import tokens
 from integrations.google_health.client import GoogleHealthClient, GoogleHealthError, ReauthRequired
@@ -142,6 +143,10 @@ async def _finish(connection_id: UUID, started: datetime, *, status: dict[str, d
         if status is not None:
             connection.sync_cursor = merge_cursor(connection.sync_cursor or {}, status, start)
             connection.last_success_at = started
+            # Cùng transaction với last_success_at: briefing/insight phản ứng theo dữ liệu mới (chỉ id và ngày).
+            await events.publish(session, "health.synced", connection.user_id,
+                                 {"connection_id": str(connection.id), "through": datetime.now(ZoneInfo(
+                                     zone or connection.timezone or DEFAULT_TIMEZONE)).date().isoformat()})
         if zone:
             connection.timezone = zone
         if profile:

@@ -22,6 +22,7 @@ from datetime import date, timedelta
 from typing import Any
 from uuid import UUID
 
+from domains.analytics.services.daily_health.baseline import robust
 from domains.health_records import ports, views
 
 ALGORITHM_VERSION = "baseline-median-v1"
@@ -45,6 +46,8 @@ class Baseline:
     window_days: int
     as_of: date
     algorithm_version: str = ALGORITHM_VERSION
+    # Độ lệch tuyệt đối trung vị (cùng đơn vị với chỉ số): độ phân tán bền với ngày ngoại lai.
+    mad: float | None = None
 
 
 def day_state(value: Any, column: str, availability: ports.TypeAvailability | None, day: date) -> str:
@@ -88,10 +91,11 @@ async def baselines(session, user_id: UUID, as_of: date, window_days: int = 28) 
     result = {}
     for metric in BASELINE_METRICS:
         values = [float(getattr(row, metric)) for row in rows.values() if getattr(row, metric) is not None]
+        found = robust(values)
         result[metric] = Baseline(
-            metric=metric, value=round(statistics.median(values), 2) if values else None,
-            spread=round(statistics.pstdev(values), 2) if len(values) > 1 else None, n=len(values),
-            window_days=window_days, as_of=as_of)
+            metric=metric, value=round(found.median, 2) if found.median is not None else None,
+            spread=round(statistics.pstdev(values), 2) if len(values) > 1 else None, n=found.n,
+            window_days=window_days, as_of=as_of, mad=round(found.mad, 2) if found.mad is not None else None)
     return result
 
 

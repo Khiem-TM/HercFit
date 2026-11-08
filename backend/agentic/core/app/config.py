@@ -1,8 +1,9 @@
 from agentic.core.paths import AGENTIC_ROOT, BACKEND_ROOT
 from typing import Literal
-from pydantic import AliasChoices, Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from agentic.core.app.env_sources import JevDotEnvSettingsSource, canonical_source
+from agentic.core.roster import AGENTS
 
 # Định nghĩa cấu hình cho Agentic Service
 class AgentSettings(BaseSettings):
@@ -37,6 +38,14 @@ class AgentSettings(BaseSettings):
     RESEARCH_TIMEOUT_SECONDS: float = Field(default=45, gt=0)
     MODEL_MAX_RETRIES: int = Field(default=1, ge=0, le=3)
     CLARIFY_MODEL: str | None = None
+    # Model riêng của từng agent, JSON {"nutrition": "gemma-4-26B-A4B-it", ...} (tên agent: core/roster.py). Agent vắng
+    # mặt dùng model của vai trò; lỗi, timeout hoặc output sai schema của model riêng nâng lên model của vai trò.
+    AGENT_MODELS: dict[str, str] = Field(default_factory=dict)
+    # Timeout của model riêng (trần, không bao giờ dài hơn timeout của vai trò): gemma-4-26B từng treo tới hết 60 s của
+    # vai trò tool với prompt coach ~16k token (ma trận 07/11); cắt sớm để nâng lên model của vai trò kịp thời.
+    AGENT_MODEL_TIMEOUT_SECONDS: float = Field(default=20, gt=0)
+    # Tin nhắn nhiều ý (RouteDecision.tasks) chạy song song ở các agent chuyên trách; False: luôn tuần tự như trước.
+    PARALLEL_AGENTS: bool = True
     # Endpoint tương thích OpenAI thứ hai (tuỳ chọn), dùng khi endpoint chính lỗi hoặc timeout.
     FALLBACK_PROVIDER: Literal['fpt', 'openai', 'openai_compatible'] | None = None
     FALLBACK_MODEL: str | None = None
@@ -136,6 +145,15 @@ class AgentSettings(BaseSettings):
     SESSION_MEMORY_ENTITY_LIMIT: int = Field(default=20, ge=0, le=50)
     SUMMARY_MODEL: str | None = None
     CORS_ORIGINS: list[str] = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5174', 'http://127.0.0.1:5174']
+
+    @field_validator('AGENT_MODELS')
+    @classmethod
+    def known_agents(cls, value):
+        # Tên agent gõ sai sẽ âm thầm dùng model mặc định: dừng ngay khi khởi động thay vì vậy.
+        unknown = sorted(set(value) - AGENTS)
+        if unknown:
+            raise ValueError('Unknown agents in AGENT_MODELS: ' + ', '.join(unknown))
+        return value
 
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):

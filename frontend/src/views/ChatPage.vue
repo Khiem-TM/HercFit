@@ -6,6 +6,7 @@ import ChatEmptyState from '@/components/chat/ChatEmptyState.vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import ChatSidebar from '@/components/chat/ChatSidebar.vue'
 import UserSettingsModal from '@/components/chat/UserSettingsModal.vue'
+import NotificationBell from '@/components/notifications/NotificationBell.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useChat } from '@/composables/useChat'
 import type { ConfirmExtras } from '@/components/chat/cards/ConfirmationCard.vue'
@@ -39,7 +40,7 @@ const isKnowledgeOpen = ref(false)
 const knowledgeTab = ref<KnowledgeTab>('overview')
 const isUserModalOpen = ref(false)
 // Màn hình đồng ý của Google Health quay về /chat?integration=google-health&result=...
-const userModalTab = ref<'profile' | 'integrations'>('profile')
+const userModalTab = ref<'profile' | 'integrations' | 'notifications'>('profile')
 const integrationResult = ref<string | null>(null)
 
 function openPlan(): void {
@@ -60,13 +61,19 @@ function createPlan(): void {
   askInPlan('Lập giúp mình một lịch tập mới theo mục tiêu hiện tại.')
 }
 
+/** "Hỏi trợ lý" từ thẻ sẵn sàng hoặc thông báo: câu hỏi sức khoẻ cá nhân thuộc chế độ Plan (có miền health). */
+function askAboutHealth(text: string): void {
+  if (isStreaming.value || isConfirming.value) return
+  askInPlan(text)
+}
+
 function openUserModal(): void {
   userModalTab.value = 'profile'
   integrationResult.value = null
   isUserModalOpen.value = true
 }
 
-function openSettings(tab: 'profile' | 'integrations'): void {
+function openSettings(tab: 'profile' | 'integrations' | 'notifications'): void {
   userModalTab.value = tab
   integrationResult.value = null
   isUserModalOpen.value = true
@@ -162,7 +169,10 @@ onMounted(async () => {
           </span>
         </div>
 
-        <button type="button" class="ml-auto shrink-0 whitespace-nowrap rounded-full border border-gold/25 px-3 py-1.5 text-xs text-gold hover:bg-gold/10" :aria-expanded="isKnowledgeOpen" @click="isKnowledgeOpen = !isKnowledgeOpen">✧ Dashboard</button>
+        <div class="ml-auto flex shrink-0 items-center gap-2">
+          <NotificationBell @ask="askAboutHealth" @settings="openSettings('notifications')" />
+          <button type="button" class="shrink-0 whitespace-nowrap rounded-full border border-gold/25 px-3 py-1.5 text-xs text-gold hover:bg-gold/10" :aria-expanded="isKnowledgeOpen" @click="isKnowledgeOpen = !isKnowledgeOpen">✧ Dashboard</button>
+        </div>
       </header>
 
       <!-- Banner lỗi -->
@@ -225,7 +235,7 @@ onMounted(async () => {
       </template>
     </main>
 
-    <KnowledgePanel v-if="isKnowledgeOpen" v-model:tab="knowledgeTab" :busy="isStreaming || isConfirming" :activity="activeNodeLabel" :revision="messages.length + Number(isStreaming) + Number(isConfirming) + sessions.length" @close="isKnowledgeOpen = false" @open-settings="openSettings" @create-plan="createPlan" />
+    <KnowledgePanel v-if="isKnowledgeOpen" v-model:tab="knowledgeTab" :busy="isStreaming || isConfirming" :activity="activeNodeLabel" :revision="messages.length + Number(isStreaming) + Number(isConfirming) + sessions.length" @close="isKnowledgeOpen = false" @open-settings="openSettings" @create-plan="createPlan" @ask="askAboutHealth" />
 
     <!-- Hộp thoại Hồ sơ, Số đo & Cài đặt -->
     <UserSettingsModal

@@ -13,6 +13,7 @@ from agentic.services import catalog_choice, meal_logging, mode
 from agentic.services.routing import latest_request
 from domains.shared.models.catalog import normalize_food_text
 from agentic.services.write_reply import executed_writes, repeats_write, write_reply
+from agentic.core import roster
 from agentic.core.context import request_context
 from agentic.tools.integrations.backend_client import BackendError
 from agentic.core.providers.fpt import strip_tool_markup
@@ -90,6 +91,10 @@ class ToolAgent:
         result=await bound.ainvoke(layout(prompt, state.get('messages',[]), tail))
         if not result.tool_calls and self.text_preview(state, result.content):
             annotate(tool_text_preview=True)
+            if roster.assigned_model(self.settings, 'tool'):
+                # Model riêng (nhỏ) của agent viết văn bản thay vì gọi lệnh ghi: lần thử lại nâng lên model của vai trò.
+                with roster.escalate():
+                    bound=self.models.get('tool').bind_tools([s.as_tool() for s in allowed.values()], parallel_tool_calls=False)
             result=await bound.ainvoke(layout(prompt, state.get('messages',[]), [*tail, NO_TEXT_PREVIEW]))
         calls=result.tool_calls
         if not calls:

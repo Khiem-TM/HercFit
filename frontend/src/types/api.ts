@@ -431,8 +431,8 @@ export interface NutritionTargets {
 }
 
 // ---- Google Health: ghi xuyên qua (/api/v2/health/records) -----------------------------------
-/** Loại Google sở hữu mà HercFit ghi thẳng lên Google (buổi thể thao, số đo cơ thể, nước uống). */
-export type HealthRecordKind = 'exercise' | 'weight' | 'height' | 'body-fat' | 'hydration'
+/** Loại Google sở hữu mà HercFit ghi thẳng lên Google (buổi thể thao, số đo cơ thể, nước uống, giấc ngủ ghi tay). */
+export type HealthRecordKind = 'exercise' | 'weight' | 'height' | 'body-fat' | 'hydration' | 'sleep'
 
 /** Một điểm Google do HercFit vừa ghi; `pending` khi Google chưa trả điểm (lần đồng bộ sau mang về). */
 export interface HealthRecordRead {
@@ -445,4 +445,131 @@ export interface HealthRecordRead {
   written_by_hercfit: boolean
   pending: boolean
   derived: Record<string, unknown>
+}
+
+// ---- Đánh giá hằng ngày (/api/v2/health/daily-assessment) -----------------------------------
+// API bỏ các trường null (exclude_none), nên mọi trường có thể thiếu đều là optional.
+export type ReadinessState = 'ready' | 'steady' | 'ease_off' | 'recover' | 'needs_review' | 'insufficient_data'
+export type ReadinessConfidence = 'high' | 'medium' | 'low'
+export type ReasonKind = 'strain' | 'positive' | 'data' | 'review' | 'info'
+
+export interface MetricReading {
+  metric: string
+  label: string
+  unit: string
+  value?: number
+  measured_on?: string
+  state: string
+  baseline?: number
+  baseline_mad?: number
+  baseline_n: number
+  delta?: number
+  delta_pct?: number
+  z?: number
+  provider_relative?: boolean
+}
+
+export interface ReadinessTrend {
+  metric: string
+  label: string
+  unit: string
+  recent?: number
+  recent_n: number
+  baseline?: number
+  baseline_n: number
+  delta_pct?: number
+  direction: 'up' | 'down' | 'flat' | 'unknown'
+}
+
+export interface ReadinessReason {
+  code: string
+  kind: ReasonKind
+  metric?: string
+  value?: number
+  baseline?: number
+  unit?: string
+  delta?: number
+  text: string
+}
+
+export interface SleepNight {
+  date: string
+  bedtime: string
+  wake_time: string
+  minutes_asleep?: number
+  minutes_in_bed?: number
+  efficiency_pct?: number
+  minutes_to_fall_asleep?: number
+  minutes_awake?: number
+  deep_minutes?: number
+  rem_minutes?: number
+  light_minutes?: number
+  deep_pct?: number
+  rem_pct?: number
+  light_pct?: number
+  manual?: boolean
+}
+
+export interface SleepDetail {
+  last_night?: SleepNight
+  week: {
+    nights: number
+    need_minutes: number
+    avg_minutes_asleep?: number
+    debt_minutes?: number
+    bedtime_sd_minutes?: number
+    wake_sd_minutes?: number
+  }
+}
+
+/** GET /api/v2/health/daily-assessment: chỉ số hôm nay so với nền cá nhân, giấc ngủ và độ sẵn sàng tất định. */
+export interface DailyAssessment {
+  date: string
+  timezone: string
+  algorithm_version: string
+  state: ReadinessState
+  label: string
+  confidence: ReadinessConfidence
+  summary: string
+  reasons: ReadinessReason[]
+  recommendations: { code: string; text: string }[]
+  metrics: MetricReading[]
+  trends: ReadinessTrend[]
+  sleep?: SleepDetail
+  load?: { yesterday?: number; acute_7d: number; chronic_weekly: number; acwr?: number; sessions_without_rpe: number }
+  data_quality: { connected: boolean; last_sync_at?: string; stale: boolean; missing: string[]; baseline_days: number }
+  method: string
+  disclaimer: string
+}
+
+// ---- Thông báo trong ứng dụng (/api/v2/notifications) ---------------------------------------
+export type NotificationKind = 'briefing' | 'insight' | 'praise' | 'data_quality'
+
+export interface AppNotification {
+  id: string
+  kind: NotificationKind
+  code: string
+  priority: number
+  local_date: string
+  title: string
+  body: string
+  payload: Record<string, unknown>
+  created_at: string
+  seen_at: string | null
+  expires_at: string | null
+}
+
+export interface NotificationList {
+  items: AppNotification[]
+  unread: number
+}
+
+/** enabled là consent "proactive" (mặc định tắt); các trường còn lại là tuỳ chọn hiển thị. */
+export interface NotificationPreferences {
+  enabled: boolean
+  briefing_time: string
+  categories: NotificationKind[]
+  quiet_hours: { start: string; end: string }
+  max_per_day: number
+  timezone?: string
 }

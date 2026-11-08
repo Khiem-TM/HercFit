@@ -86,7 +86,9 @@ def topic_for(text: str, domain: str | None = None) -> str:
 
 def wants_personal_context(text: str, decision: dict) -> bool:
     """Cờ của router, hoặc tư vấn cá nhân do code phát hiện, ngoài các luồng ghi/catalog."""
-    if decision.get('read_only') or decision.get('intent') in NON_ADVICE_INTENTS:
+    intent = str(decision.get('intent') or '')
+    # Mọi nhãn ghi nhật ký (LOG_FOOD, LOG_SLEEP, ...): "ghi giúp tôi" là lệnh ghi, không phải xin tư vấn.
+    if decision.get('read_only') or intent in NON_ADVICE_INTENTS or intent.startswith('LOG_'):
         return False
     action = decision.get('action')
     if action in {'research', 'answer', 'clarify'}:
@@ -111,9 +113,12 @@ def deep_reads(topic: str, end: date | None = None) -> list[tuple[str, dict]]:
         'training': [profile, ('get_training_summary', _range(56, end)), insights],
         'nutrition': [('get_nutrition_targets', {'timezone': TIMEZONE}), ('get_progress', _range(14, end)), ('current_goal', {})],
         'body': [('get_progress', _range(28, end)), ('current_goal', {}), ('latest_metrics', {})],
-        'recovery': [('get_health_overview', {'days': 28, 'timezone': TIMEZONE}), ('get_training_load', _range(7, end))],
+        # Đánh giá hằng ngày (độ sẵn sàng, lý do có số liệu) đi trước tổng quan 28 ngày.
+        'recovery': [('get_health_assessment', {'timezone': TIMEZONE}), ('get_health_overview', {'days': 28, 'timezone': TIMEZONE}),
+                     ('get_training_load', _range(7, end))],
         # Chất lượng sống (chế độ Plan): giấc ngủ, vận động, phục hồi từ thiết bị cùng ăn uống, cơ thể và tải tập.
-        'wellbeing': [('get_health_overview', {'days': 28, 'timezone': TIMEZONE}), ('get_progress', _range(28, end)),
+        'wellbeing': [('get_health_assessment', {'timezone': TIMEZONE}),
+                      ('get_health_overview', {'days': 28, 'timezone': TIMEZONE}), ('get_progress', _range(28, end)),
                       ('latest_metrics', {}), ('current_goal', {}), ('get_training_load', _range(7, end))],
     }.get(topic, [])
 

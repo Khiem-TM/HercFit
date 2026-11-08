@@ -1,9 +1,14 @@
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 from typing_extensions import TypedDict
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.json_schema import SkipJsonSchema # Loại bỏ trường khỏi JSON schema
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
+
+def collect_results(left, right):
+    """Reducer của agent_results: các nhánh song song cùng cộng dồn; None (do join trả về) đặt lại danh sách."""
+    return [] if right is None else [*(left or []), *right]
+
 
 Domain = Literal['profile', 'metrics', 'goals', 'meals', 'trainings', 'foods', 'exercises', 'progress', 'training_plans', 'coaching', 'health']
 
@@ -23,6 +28,21 @@ class MealLog(BaseModel):
     consumed_at: str | None = Field(default=None, description='ISO 8601 time with offset, resolved from the current time '
                                                               '(sáng nay, trưa nay, vừa xong); null when unknown')
     items: list[MealLogItem] = Field(default_factory=list, max_length=5)
+
+
+class AgentTask(BaseModel):
+    """Một phần độc lập của tin nhắn nhiều ý, giao cho agent chuyên trách sở hữu miền của nó (chạy song song).
+
+    Không ràng buộc nào ở đây được làm hỏng cả quyết định định tuyến: miền lạ thành None (lượt đi tuần tự)."""
+    model_config = ConfigDict(extra='ignore')
+    domain: Domain | None = None
+    intent: str = Field(default='', description='Label of this part, e.g. LOG_FOOD, LOG_EXERCISE, BODY_REVIEW')
+    instruction: str = Field(default='', description='Only this part of the request, as a concrete task')
+
+    @field_validator('domain', mode='before')
+    @classmethod
+    def known_domain(cls, value):
+        return value if value in get_args(Domain) else None
 
 
 # Điều phối response model trả về --> Hỗ trợ orschestration
@@ -45,8 +65,12 @@ class RouteDecision(BaseModel):
         'Plan mode only: advice = in-depth question, life_review = analysis of sleep/activity/nutrition/body/recovery '
         'quality, plan_build = create a training plan. Leave empty in normal chat.'))
     meal_log: list[MealLog] = Field(default_factory=list, max_length=4, description=(
-        'Only for LOG_FOOD: one entry per meal the user reports (separate meals for different times), each with '
-        'its foods. Leave empty for any other intent.'))
+        'Only for LOG_FOOD or a LOG_FOOD task: one entry per meal the user reports (separate meals for different '
+        'times), each with its foods. Leave empty otherwise.'))
+    tasks: list[AgentTask] = Field(default_factory=list, description=(
+        'Only when one new message combines 2-3 independent requests in different areas (e.g. log a meal AND log a '
+        'workout AND read body/activity data): one task per part, run in parallel. Leave empty for a single request, '
+        'a follow-up or form answer, or when any part is a knowledge/advice question.'))
     create_distinct: SkipJsonSchema[bool] = False
     read_only: SkipJsonSchema[bool] = False
 
@@ -108,3 +132,7 @@ class AgentState(TypedDict, total=False):
     personal_reads_done: bool
     research_evidence: dict[str, Any] | None
     route_trace: list[dict[str, Any]]
+    # Giao việc song song (services/delegation.py): kết quả từng nhánh agent cộng dồn qua reducer, nút join gộp rồi
+    # đặt lại; các bản xem trước còn lại chờ thẻ xác nhận của chúng, từng thẻ một.
+    agent_results: Annotated[list[dict[str, Any]], collect_results]
+    pending_queue: list[dict[str, Any]]

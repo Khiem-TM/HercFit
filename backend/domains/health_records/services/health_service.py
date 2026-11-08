@@ -7,6 +7,7 @@ from fastapi import Request
 from domains.body.models.body_metrics import BodyMetric
 from domains.body.services import readings
 from domains.health_records import ports, views
+from domains.health_records.types import spec
 from domains.identity import consent
 from domains.health_records.schemas.health import (
     WORN_DAY_MIN_STEPS,
@@ -22,6 +23,9 @@ from domains.analytics.services.health_profile import MIN_WORN_DAYS_FOR_LEVEL, b
 
 from core.principal import AGENT_CLIENT_HEADER  # noqa: E402,F401  (re-export cho các import cũ)
 COMPLETE_DAY_MIN_MEALS = 2
+# Loại mẫu mà registry đánh dấu nhạy cảm (types.DataType.sensitive), theo tên sample_type của API.
+SENSITIVE_SAMPLES = frozenset(sample for data_type, (sample, *_rest) in views.SAMPLES.items()
+                              if spec(data_type).sensitive)
 
 
 async def measured_resting_hr(session, user_id, today: date) -> int | None:
@@ -116,5 +120,10 @@ class HealthService(UserService):
         return rows[query.offset:query.offset + query.limit]
 
     async def samples(self, query: HealthSampleQuery):
+        # Mẫu nhạy cảm (đường huyết) cần consent `sensitive` riêng của trợ lý, như context API (topic vitals).
+        hidden = set() if await consent.device_access(self.session, self.user_id, "sensitive") else SENSITIVE_SAMPLES
+        if query.sample_type in hidden:
+            await consent.require_device_access(self.session, self.user_id, "sensitive")
         rows = await views.samples(self.session, self.user_id, query.start_date, query.end_date, query.sample_type)
+        rows = [row for row in rows if row.sample_type not in hidden]
         return rows[query.offset:query.offset + query.limit]

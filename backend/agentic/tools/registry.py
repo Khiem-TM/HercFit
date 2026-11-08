@@ -170,12 +170,28 @@ add('get_health_context','health','GET','/v2/assistant/context',HealthContextQue
 add('query_health_context','health','GET','/v2/assistant/context:query',HealthContextDeepQuery,dict[str,_Any],
     'Deeper context for several topics within a token budget (default 4000). vitals needs separate consent; '
     'ECG is the device classification only: report it, never diagnose.')
+
+# Daily Health Intelligence (backend domains/analytics/services/daily_health): chỉ số hôm nay so với nền cá nhân,
+# xu hướng 7 ngày, tải tập và trạng thái sẵn sàng tất định kèm lý do có số liệu và độ tin cậy.
+from datetime import date as _date
+from domains.analytics.schemas.daily_health import DailyAssessmentRead
+
+
+class DailyAssessmentQuery(TimezoneQuery):
+    date: _date | None = _Field(default=None, description='Local day to assess; omit for today')
+
+
+add('get_health_assessment','health','GET','/v2/health/daily-assessment',DailyAssessmentQuery,DailyAssessmentRead,
+    'Deterministic daily assessment: last night sleep, HRV, resting HR, SpO2, breathing and skin temperature against '
+    'the user\'s own 28-day baseline, 7-day trends, training load, and a readiness state (ready, steady, ease_off, '
+    'recover, needs_review, insufficient_data) with numeric reasons and confidence. Start questions about today, '
+    'recovery or whether to train hard here. Report it as given; never recompute, never diagnose.')
 HEALTH_TOOL_KINDS = {'list_daily_health': 'DailyHealth', 'list_sleep_sessions': 'SleepSession',
                      'list_device_workouts': 'DeviceWorkout'}
 
 # Ghi xuyên qua lên Google Health (Google là nguồn sự thật, HercFit không giữ bản riêng):
-# buổi thể thao (mọi môn không phải gym) và nước uống. Gym vẫn là create_trainings.
-from integrations.google_health.records import HydrationInput, SportInput
+# buổi thể thao (mọi môn không phải gym), nước uống và giấc ngủ ghi tay. Gym vẫn là create_trainings.
+from integrations.google_health.records import HydrationInput, SleepInput, SportInput
 from integrations.google_health.schemas import HealthRecordRead
 
 add('log_sport_session','trainings','POST','/v2/health/records/exercise',SportInput,HealthRecordRead,
@@ -191,6 +207,13 @@ add('log_water','meals','POST','/v2/health/records/hydration',HydrationInput,Hea
     'Propose logging water intake in ml to Google Health. Must await human confirmation.',True)
 add('delete_water','meals','DELETE','/v2/health/records/hydration/{resource_id}',Resource,None,
     'Delete a water log HercFit wrote to Google after confirmation.')
+# Giấc ngủ ghi tay thuộc metrics (body_health ghi); domain health giữ nguyên chỉ đọc.
+add('log_sleep','metrics','POST','/v2/health/records/sleep',SleepInput,HealthRecordRead,
+    'Propose logging a night of sleep the user reports (bedtime started_at, wake time ended_at, timezone) to Google '
+    'Health, for nights the device did not record. Only what the user said: no stages or awakenings. A night the '
+    'device already recorded is refused (409). Must await human confirmation.',True)
+add('delete_sleep','metrics','DELETE','/v2/health/records/sleep/{resource_id}',Resource,None,
+    'Delete a sleep entry HercFit wrote to Google (ids from list_sleep_sessions) after confirmation.')
 
 
 # Các lệnh ghi mà thẻ xác nhận cần tổng do server tính, ảnh chụp dữ liệu và hình ảnh.
@@ -201,4 +224,5 @@ PREVIEW_PATHS = {
     'update_training_plans': '/api/training-plans/{resource_id}/preview',
     'log_sport_session': '/api/v2/health/records/exercise:preview',
     'log_water': '/api/v2/health/records/hydration:preview',
+    'log_sleep': '/api/v2/health/records/sleep:preview',
 }

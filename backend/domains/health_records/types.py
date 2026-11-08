@@ -44,7 +44,8 @@ class Owner(StrEnum):
 SCOPE_PREFIX = "https://www.googleapis.com/auth/googlehealth."
 ACT, MET, SLEEP, NUTRITION, ECG, IRN = (
     "activity_and_fitness", "health_metrics_and_measurements", "sleep", "nutrition", "ecg", "irn")
-WRITE_GROUPS = frozenset({ACT, MET, NUTRITION})
+# Giấc ngủ ghi tay (giờ ngủ–giờ dậy) được ghi xuyên lên Google như nước uống, cân nặng.
+WRITE_GROUPS = frozenset({ACT, MET, NUTRITION, SLEEP})
 # dailyRollUp: heart-rate, total-calories và active-minutes chỉ cho khoảng tối đa 14 ngày.
 SHORT_ROLLUP = frozenset({"heart-rate", "total-calories", "active-minutes"})
 SESSION_PAGE = 25          # exercise và sleep: tối đa 25 điểm mỗi trang
@@ -112,7 +113,7 @@ TYPES: dict[str, DataType] = {item.id: item for item in (
     DataType("vo2-max", S, ACT), DataType("run-vo2-max", S, ACT), DataType("respiratory-rate-sleep-summary", S, MET),
     DataType("blood-glucose", S, MET, sensitive=True), DataType("core-body-temperature", S, MET),
     # --- phiên ---
-    DataType("exercise", SE, ACT, owner=WT), DataType("sleep", SE, SLEEP), DataType("hydration-log", SE, NUTRITION, owner=WT),
+    DataType("exercise", SE, ACT, owner=WT), DataType("sleep", SE, SLEEP, owner=WT), DataType("hydration-log", SE, NUTRITION, owner=WT),
     DataType("electrocardiogram", SE, ECG, Read.LIST, sensitive=True),
     DataType("irregular-rhythm-notification", SE, IRN, Read.LIST, sensitive=True),
     DataType("nutrition-log", SE, NUTRITION, Read.NONE, HF),

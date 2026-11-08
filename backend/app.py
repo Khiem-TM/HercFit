@@ -48,6 +48,10 @@ async def lifespan(app: FastAPI):
     if settings.google_health_configured and settings.GOOGLE_HEALTH_SYNC_LOOP:
         from integrations.google_health.scheduler import health_sync_loop
         health_task = asyncio.create_task(health_sync_loop())
+    briefing_task = None
+    if settings.DAILY_BRIEFING_LOOP:
+        from domains.notifications.services.loop import daily_briefing_loop
+        briefing_task = asyncio.create_task(daily_briefing_loop())
     metrics_stop, metrics_task = asyncio.Event(), None
     if settings.API_ROUTE_METRICS:
         from core.database import get_db_session
@@ -61,7 +65,7 @@ async def lifespan(app: FastAPI):
             metrics_stop.set()  # flush lần cuối trước khi đóng pool
             with suppress(asyncio.CancelledError, asyncio.TimeoutError):
                 await asyncio.wait_for(metrics_task, 5)
-        for task in (cleanup_task, health_task):
+        for task in (cleanup_task, health_task, briefing_task):
             if task is not None:
                 task.cancel()
                 with suppress(asyncio.CancelledError):

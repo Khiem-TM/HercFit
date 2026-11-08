@@ -1,8 +1,8 @@
 import { onUnmounted, shallowRef, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import type {
-  BodyMetricRead, DailyHealth, DeviceWorkout, HealthConnection, HealthOverview, HealthProfile, HealthSample,
-  ProgressDay, SleepSession,
+  BodyMetricRead, DailyAssessment, DailyHealth, DeviceWorkout, HealthConnection, HealthOverview, HealthProfile,
+  HealthSample, ProgressDay, SleepSession,
 } from '@/types/api'
 import { dashboardTimezone, localDay, shiftDay } from '../dashboard/dashboardData'
 
@@ -20,6 +20,8 @@ export interface HealthData {
   progress: ProgressDay[]
   /** Số đo cơ thể đồng bộ từ thiết bị (source GOOGLE_HEALTH). */
   measurements: BodyMetricRead[]
+  /** Đánh giá hôm nay (độ sẵn sàng, giấc ngủ); backend tự chọn múi giờ của tài khoản. */
+  assessment: DailyAssessment | null
 }
 
 /** Mọi lần đọc Google Health cho một cửa sổ ngày địa phương. Lần tải lại giữ dữ liệu trước trên màn hình. */
@@ -49,7 +51,7 @@ export function useHealthData(windowDays: () => number) {
         return fallback
       }
     }
-    const [connection, profile, overview, daily, sleep, workouts, samples, progress, metrics] = await Promise.all([
+    const [connection, profile, overview, daily, sleep, workouts, samples, progress, metrics, assessment] = await Promise.all([
       read<HealthConnection | null>('connection', '/api/integrations/google-health', null),
       read<HealthProfile | null>('profile', `/api/health/profile?timezone=${dashboardTimezone}`, null),
       read<HealthOverview | null>('overview', `/api/health/overview?days=${windowDays()}&timezone=${dashboardTimezone}`, null),
@@ -59,6 +61,7 @@ export function useHealthData(windowDays: () => number) {
       read<HealthSample[]>('samples', `/api/health/samples?${range}`, []),
       read<{ days: ProgressDay[] }>('progress', `/api/progress?${new URLSearchParams({ start_date: start, end_date: end, timezone: dashboardTimezone })}`, { days: [] }),
       read<BodyMetricRead[]>('measurements', `/api/body-metrics?${new URLSearchParams({ recorded_from: `${start}T00:00:00+07:00`, limit: '200' })}`, []),
+      read<DailyAssessment | null>('assessment', '/api/v2/health/daily-assessment', null),
     ])
     if (current.signal.aborted) return
     const days: string[] = []
@@ -66,6 +69,7 @@ export function useHealthData(windowDays: () => number) {
     data.value = {
       start, end, days, connection, profile, overview, daily, sleep, workouts, samples, progress: progress.days,
       measurements: metrics.filter(metric => metric.source === 'GOOGLE_HEALTH'),
+      assessment,
     }
     failed.value = errors
     loading.value = false

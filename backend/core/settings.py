@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     GOOGLE_HEALTH_REDIRECT_URI: str | None = None
     GOOGLE_HEALTH_SYNC_LOOP: bool = True
     GOOGLE_HEALTH_SYNC_INTERVAL_MINUTES: int = Field(default=360, ge=15, le=7 * 24 * 60)
+    # Briefing buổi sáng và insight (domains/notifications): chỉ cho người dùng đã bật thông báo chủ động.
+    DAILY_BRIEFING_LOOP: bool = True
+    DAILY_BRIEFING_POLL_MINUTES: int = Field(default=15, ge=1, le=24 * 60)
     # Gốc Google Health API. Chỉ ghi đè cho test hoặc emulator: https, hoặc http thường
     # trên localhost (access token của người dùng không bao giờ gửi qua http thường tới host khác).
     GOOGLE_HEALTH_API_ROOT: str = Field(

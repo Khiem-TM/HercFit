@@ -18,7 +18,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
 
-PURPOSES = ("assistant",)
+# assistant: trợ lý đọc dữ liệu; proactive: HercFit chủ động gửi thông báo (briefing, insight).
+PURPOSES = ("assistant", "proactive")
 DATA_GROUPS = ("device", "sensitive")
 ACTORS = ("USER", "SYSTEM", "MIGRATION")
 
@@ -26,7 +27,7 @@ ACTORS = ("USER", "SYSTEM", "MIGRATION")
 class UserConsent(Base):
     __tablename__ = "user_consents"
     __table_args__ = (
-        CheckConstraint("purpose IN ('assistant')", name="ck_user_consents_purpose"),
+        CheckConstraint("purpose IN ('assistant', 'proactive')", name="ck_user_consents_purpose"),
         CheckConstraint("data_group IN ('device', 'sensitive')", name="ck_user_consents_data_group"),
         CheckConstraint("version >= 1", name="ck_user_consents_version"),
     )

@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 TOPICS = frozenset({
     "consent.changed",          # {purpose, data_group, granted, version}
+    "health.synced",            # {connection_id, through}: một lần đồng bộ thiết bị thành công
 })
 
 

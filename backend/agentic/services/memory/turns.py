@@ -33,6 +33,8 @@ def route_summary(state):
     return {
         'router': labels(next((step for step in trace if step.get('stage') == 'router'), None)),
         'rules': [step['rule'] for step in trace if step.get('stage') == 'rule'][:12],
+        # Các agent chuyên trách supervisor đã giao việc, theo thứ tự.
+        'agents': [step['agent'] for step in trace if step.get('stage') == 'agent'][:8],
         'final': labels(last('final')),
         'user_context': {'loaded': bool(card), 'missing': list(card.get('missing') or [])[:10] if card else []},
         'context_reads': [{'tool': read['tool'], 'ok': read['ok']} for read in (context or {}).get('reads', [])][:8],

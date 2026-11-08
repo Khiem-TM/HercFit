@@ -2,6 +2,7 @@
 import { reactive, ref, watch } from 'vue'
 import {
   Activity,
+  Bell,
   Check,
   Download,
   HeartPulse,
@@ -15,8 +16,9 @@ import {
 import { useAuth } from '@/composables/useAuth'
 import { type ThemeMode, useTheme } from '@/composables/useTheme'
 import HealthIntegrationPanel from '@/components/chat/HealthIntegrationPanel.vue'
+import NotificationSettingsPanel from '@/components/notifications/NotificationSettingsPanel.vue'
 
-type SettingsTab = 'profile' | 'metrics' | 'integrations' | 'settings'
+type SettingsTab = 'profile' | 'metrics' | 'integrations' | 'notifications' | 'settings'
 
 const props = defineProps<{
   open: boolean
@@ -290,6 +292,20 @@ async function handleErase(): Promise<void> {
             type="button"
             class="flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-medium transition-colors"
             :class="
+              activeTab === 'notifications'
+                ? 'border-ink text-primary'
+                : 'border-transparent text-outline hover:text-on-surface-variant'
+            "
+            @click="activeTab = 'notifications'"
+          >
+            <Bell class="h-3.5 w-3.5" />
+            <span>Thông báo</span>
+          </button>
+
+          <button
+            type="button"
+            class="flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-medium transition-colors"
+            :class="
               activeTab === 'settings'
                 ? 'border-ink text-primary'
                 : 'border-transparent text-outline hover:text-on-surface-variant'
@@ -502,6 +518,9 @@ async function handleErase(): Promise<void> {
             v-else-if="activeTab === 'integrations'"
             :result="integrationResult"
           />
+
+          <!-- TAB 4: Thông báo chủ động (briefing buổi sáng, insight) -->
+          <NotificationSettingsPanel v-else-if="activeTab === 'notifications'" />
 
           <!-- TAB 4: Cài đặt & phiên -->
           <div v-else class="space-y-5">

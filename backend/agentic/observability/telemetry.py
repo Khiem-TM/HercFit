@@ -1,5 +1,6 @@
 """Số đo model/node không chứa nội dung; không có prompt, completion hay thông tin xác thực."""
 from agentic.observability import graph_config
+from agentic.core import roster
 from contextvars import ContextVar
 from time import perf_counter
 import math
@@ -71,11 +72,55 @@ def merge_jev_metrics(telemetry, events):
     telemetry['total_model_cost'] = None if unknown else telemetry.get('llm_cost', 0) + telemetry.get('jev_cost', 0)
 
 
+def merge_agents(previous, current):
+    """Số đo theo agent của lượt chạy: lời gọi, token, thời gian model và số lần mỗi model thật sự trả lời."""
+    merged = {name: {**entry, 'models': dict(entry.get('models') or {})} for name, entry in (previous or {}).items()}
+    for name, entry in (current or {}).items():
+        total = merged.setdefault(name, {'models': {}})
+        for key in ('llm_calls', 'input_tokens', 'output_tokens'):
+            total[key] = total.get(key, 0) + entry.get(key, 0)
+        total['model_ms'] = round(total.get('model_ms', 0) + entry.get('model_ms', 0), 3)
+        for model, calls in (entry.get('models') or {}).items():
+            total['models'][model] = total['models'].get(model, 0) + calls
+    return merged
+
+
+BRANCH_COUNTERS = ('llm_calls', 'input_tokens', 'output_tokens', 'model_ms', 'llm_cost', 'llm_cost_unknown_calls',
+                   'llm_usage_unknown_calls')
+
+
+def merge_branches(telemetry, branches, limit=60):
+    """Gộp số đo của các nhánh agent chạy song song vào lượt chạy. `parallel` giữ thời gian thật (nhánh dài nhất)
+    và tổng thời gian các nhánh, để thấy mức tăng tốc so với chạy tuần tự."""
+    merged = dict(telemetry or {})
+    durations = []
+    for branch in branches:
+        for key in BRANCH_COUNTERS:
+            if key in branch:
+                merged[key] = merged.get(key, 0) + branch[key]
+        if branch.get('agents'):
+            merged['agents'] = merge_agents(merged.get('agents'), branch['agents'])
+        nodes = branch.get('nodes') or []
+        merged['nodes'] = [*merged.get('nodes', []), *({**node, 'parallel': True} for node in nodes)][-limit:]
+        durations.append(round(sum(node.get('duration_ms', 0) for node in nodes), 3))
+    if durations:
+        merged['parallel'] = {'tasks': len(durations), 'wall_ms': max(durations), 'sum_ms': round(sum(durations), 3)}
+    merge_jev_metrics(merged, [])
+    return merged
+
+
 class _Usage(BaseCallbackHandler):
     def __init__(self):
         self.input_tokens = 0
         self.output_tokens = 0
         self.available = False
+        # (provider, model) của lần gọi chat cuối: model thật sự trả lời khi model chính lỗi và dự phòng chạy.
+        self.served = None
+
+    def on_chat_model_start(self, serialized, messages, *, metadata=None, **kwargs):
+        metadata = metadata or {}
+        if metadata.get('hercfit_model'):
+            self.served = (metadata.get('hercfit_provider'), metadata['hercfit_model'])
 
     def on_llm_end(self, response, **kwargs):
         usage = (response.llm_output or {}).get('token_usage', {})
@@ -94,15 +139,20 @@ class _Usage(BaseCallbackHandler):
 
 
 class _MeasuredModel:
-    def __init__(self, model, price=None):
+    def __init__(self, model, price=None, *, agent=None, prices=None):
         self.model = model
         self.price = price
+        # Agent sở hữu lời gọi (core/roster.py) và bảng giá để tính phí theo model thật sự trả lời.
+        self.agent, self.prices = agent, prices
+
+    def _wrap(self, model):
+        return _MeasuredModel(model, self.price, agent=self.agent, prices=self.prices)
 
     def with_structured_output(self, *args, **kwargs):
-        return _MeasuredModel(self.model.with_structured_output(*args, **kwargs), self.price)
+        return self._wrap(self.model.with_structured_output(*args, **kwargs))
 
     def bind_tools(self, *args, **kwargs):
-        return _MeasuredModel(self.model.bind_tools(*args, **kwargs), self.price)
+        return self._wrap(self.model.bind_tools(*args, **kwargs))
 
     async def ainvoke(self, messages, **kwargs):
         metrics = active_metrics.get()
@@ -120,6 +170,8 @@ class _MeasuredModel:
         else:
             callbacks = [*(callbacks or []), usage]
         config['callbacks'] = callbacks
+        if self.agent:
+            config['metadata'] = {**(config.get('metadata') or {}), 'agent': self.agent}
         started = perf_counter()
         metrics['llm_calls'] = metrics.get('llm_calls', 0) + 1
         result = None
@@ -129,12 +181,22 @@ class _MeasuredModel:
         finally:
             metadata = getattr(result, 'usage_metadata', None) or {}
             available = usage.available or {'input_tokens', 'output_tokens'} <= metadata.keys()
-            metrics['input_tokens'] = metrics.get('input_tokens', 0) + (usage.input_tokens or metadata.get('input_tokens', 0) or 0)
-            metrics['output_tokens'] = metrics.get('output_tokens', 0) + (usage.output_tokens or metadata.get('output_tokens', 0) or 0)
-            metrics['model_ms'] = metrics.get('model_ms', 0) + round((perf_counter() - started) * 1000, 3)
+            input_tokens = usage.input_tokens or metadata.get('input_tokens', 0) or 0
+            output_tokens = usage.output_tokens or metadata.get('output_tokens', 0) or 0
+            elapsed = round((perf_counter() - started) * 1000, 3)
+            metrics['input_tokens'] = metrics.get('input_tokens', 0) + input_tokens
+            metrics['output_tokens'] = metrics.get('output_tokens', 0) + output_tokens
+            metrics['model_ms'] = metrics.get('model_ms', 0) + elapsed
             if not available:
                 metrics['llm_usage_unknown_calls'] = metrics.get('llm_usage_unknown_calls', 0) + 1
+            if self.agent:
+                entry = {'llm_calls': 1, 'input_tokens': input_tokens, 'output_tokens': output_tokens, 'model_ms': elapsed,
+                         'models': {usage.served[1]: 1} if usage.served else {}}
+                metrics['agents'] = merge_agents(metrics.get('agents'), {self.agent: entry})
             price = self.price
+            if usage.served and self.prices is not None:
+                # Model dự phòng (nâng cấp) trả lời thì tính theo giá của chính nó; chưa cấu hình giá là chưa biết.
+                price = self.prices.get(f'{usage.served[0]}/{usage.served[1]}')
             if available and isinstance(price, dict) and all(type(price.get(k)) in (int, float) and math.isfinite(price[k]) and price[k] >= 0 for k in ('input_per_million', 'output_per_million')):
                 cost = ((usage.input_tokens if usage.available else metadata['input_tokens']) * price['input_per_million']
                         + (usage.output_tokens if usage.available else metadata['output_tokens']) * price['output_per_million']) / 1e6
@@ -153,4 +215,4 @@ class MeasuredModels:
         model = self.models.get(role)
         metadata = getattr(model, 'metadata', None) or {}
         price = self.prices.get(f"{metadata.get('hercfit_provider')}/{metadata.get('hercfit_model')}")
-        return _MeasuredModel(model, price)
+        return _MeasuredModel(model, price, agent=roster.agent_for(role), prices=self.prices)

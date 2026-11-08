@@ -32,7 +32,7 @@ class GoogleHealthDirectory:
             return None
         return ports.ProviderStatus(provider=HEALTH_PROVIDER, status=connection.status,
                                     provider_profile=dict(connection.provider_profile or {}),
-                                    last_success_at=connection.last_success_at)
+                                    last_success_at=connection.last_success_at, timezone=connection.timezone)
 
     async def availability(self, session, user_id: UUID) -> dict[str, ports.TypeAvailability]:
         connection = await HealthConnection.for_user(session, user_id)
@@ -67,6 +67,13 @@ class GoogleHealthDirectory:
         if point_id is not None:
             return await records.update(session, user_id, kind, point_id, payload or {})
         return await records.create(session, user_id, kind, payload or {})
+
+    async def refresh(self, user_id: UUID, days: int = 2) -> bool:
+        """Đồng bộ ngay vài ngày gần nhất (trước briefing buổi sáng); False khi chưa kết nối."""
+        from integrations.google_health import sync
+
+        result = await sync.run(user_id, days=days)
+        return result.get("status") in {"ok", "partial"}
 
     async def before_account_erasure(self, session, user_id: UUID) -> None:
         from integrations.google_health.connection import revoke_connection

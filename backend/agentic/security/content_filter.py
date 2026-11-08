@@ -36,6 +36,12 @@ _EATING_DISORDER = re.compile(r"\b(moc hong|moc hong cho non|non ra|tu gay non|a
                               r"thuoc nhuan trang de giam|nhin an (?:hoan toan|nhieu ngay|\d+ ngay)|nhin doi (?:\d+ ngay|nhieu ngay)|"
                               r"chan an tam than|bieng an tam than|cuong an|so an|so beo den muc|"
                               r"anorexia|bulimia|purge|purging|laxatives? (?:to|for) (?:lose|weight))\b")
+# Triệu chứng có thể nghiêm trọng khi tập hoặc khi nghỉ (đau/tức ngực, ngất, khó thở dữ dội, tim đập bất thường).
+# Cố ý không bắt "xíu" (một xíu) hay "ngắt quãng" (tập ngắt quãng): chỉ cụm từ rõ nghĩa triệu chứng.
+_RED_FLAG = re.compile(r"\b((?:dau|tuc|that)(?: that)? nguc|chest (?:pain|tightness)|ngat xiu|bi ngat|bi xiu|"
+                       r"xiu (?:di|nga)|choang ngat|bat tinh|faint(?:ed|ing)?|passed out|syncope|"
+                       r"kho tho (?:du doi|nang|ca khi nghi|khi nghi)|tho khong noi|shortness of breath at rest|"
+                       r"tim dap (?:loan|bat thuong|khong deu)|loan nhip tim)\b")
 _KCAL = re.compile(r"\b(\d{2,4})\s*(?:kcal|calo|calories|cal)\b")
 _DAY_WORDS = re.compile(r"\b(moi ngay|1 ngay|mot ngay|ca ngay|hang ngay|ngay|a day|per day|daily)\b")
 _MEAL_WORDS = re.compile(r"\b(bua|snack|mon|meal|breakfast|lunch|dinner)\b")
@@ -44,7 +50,8 @@ _RAPID_LOSS = re.compile(r"\bgiam\s+(\d+(?:[.,]\d+)?)\s*(?:kg|ky|can|kilo)\b[^.!
 _AGE = re.compile(r"\b(?:toi|em|minh|con|chau|tui)\s+(?:nam nay\s+)?(\d{1,2})\s*tuoi\b|\b(\d{1,2})\s*tuoi\b")
 _LOSS_INTENT = re.compile(r"\b(giam can|giam mo|an kieng|nhin an|cat calo|lose weight|diet)\b")
 _MEDICAL = re.compile(r"\b(mang thai|co bau|dang bau|cho con bu|tieu duong|dai thao duong|suy than|benh than|benh tim|"
-                      r"tang huyet ap|gout|ozempic|wegovy|semaglutide|mounjaro|tirzepatide|insulin|"
+                      r"tang huyet ap|huyet ap|gout|ozempic|wegovy|semaglutide|mounjaro|tirzepatide|insulin|"
+                      r"lieu thuoc|giam lieu|tang lieu|ngung thuoc|ngung uong thuoc|"
                       r"pregnan|breastfeed|diabet|kidney disease)\b")
 
 
@@ -62,6 +69,12 @@ def assess(text: str) -> SafetyVerdict | None:
                              "Có dấu hiệu hành vi ăn uống gây hại. Không đưa mục tiêu calo, thực đơn giảm cân hay cách nhịn ăn. "
                              "Trả lời đồng cảm, nêu rằng các hành vi này có thể nguy hiểm, khuyến khích gặp bác sĩ hoặc chuyên gia "
                              "dinh dưỡng, tâm lý. " + EMERGENCY)
+    if _RED_FLAG.search(t):
+        return SafetyVerdict("red_flag_symptom", "caution",
+                             "Người dùng nêu triệu chứng có thể nghiêm trọng (đau/tức ngực, ngất, khó thở dữ dội hoặc tim đập "
+                             "bất thường). Mở đầu bằng an toàn: ngừng tập; nếu triệu chứng đang xảy ra, nặng hoặc kéo dài thì gọi "
+                             "cấp cứu 115 hoặc đến cơ sở y tế ngay. Không chấm độ sẵn sàng tập, không đoán nguyên nhân, không "
+                             "chẩn đoán; chỉ sau phần an toàn mới nói về dữ liệu thiết bị nếu người dùng hỏi.")
     for match in _KCAL.finditer(t):
         kcal = int(match.group(1))
         window = t[max(0, match.start() - 40): match.end() + 40]

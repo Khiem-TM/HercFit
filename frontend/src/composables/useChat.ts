@@ -46,7 +46,13 @@ function rememberMode(sessionId: string, value: ChatMode): void {
 
 const NODE_LABELS: Record<string, string> = {
   orchestrator: 'Đang phân tích ý định & điều phối...',
-  tool: 'Đang truy xuất dữ liệu & công cụ...',
+  nutrition: 'Agent dinh dưỡng đang xử lý bữa ăn & thực phẩm...',
+  training_log: 'Agent tập luyện đang xử lý buổi tập & bài tập...',
+  body_health: 'Agent cơ thể đang đọc số đo...',
+  daily_health: 'Agent sức khoẻ hằng ngày đang phân tích dữ liệu thiết bị...',
+  coach: 'Agent huấn luyện đang xử lý mục tiêu & lịch tập...',
+  delegate: 'Các agent đang xử lý song song từng phần yêu cầu...',
+  join: 'Đang gộp kết quả của các agent...',
   research: 'Đang tra cứu nguồn dinh dưỡng & vận động...',
   confirmation: 'Đang chuẩn bị bản xem trước xác nhận...',
   execution: 'Đang ghi nhận dữ liệu vào hồ sơ...',

@@ -58,6 +58,8 @@ export const TOOL_TITLES: Record<string, string> = {
   delete_sport_session: 'Xoá buổi thể thao',
   log_water: 'Ghi nước uống',
   delete_water: 'Xoá lần uống nước',
+  log_sleep: 'Ghi giấc ngủ',
+  delete_sleep: 'Xoá giấc ngủ ghi tay',
 }
 
 /** Một lệnh ghi không có chạy thử làm gì, được nói trên thẻ của nó. */
@@ -76,6 +78,8 @@ export const ACTION_NOTES: Record<string, string> = {
   delete_sport_session: 'Buổi thể thao sẽ bị xoá khỏi Google Health.',
   log_water: 'Ghi thẳng lên Google Health; Google giữ bản gốc.',
   delete_water: 'Lần uống nước sẽ bị xoá khỏi Google Health.',
+  log_sleep: 'Ghi thẳng lên Google Health giờ đi ngủ và giờ thức dậy bạn khai; không có giai đoạn ngủ.',
+  delete_sleep: 'Giấc ngủ ghi tay sẽ bị xoá khỏi Google Health.',
 }
 
 /** Tiêu đề thẻ cho lệnh ghi catalog; bản ghi được dùng lại không phải mục catalog mới. */
@@ -157,7 +161,10 @@ const FIELD_NAMES: Record<string, string> = {
   amount_ml: 'Lượng nước', performance: 'Thực hiện', distance_meters: 'Quãng đường', intensity: 'Cường độ',
 }
 // Cùng một trường mang nghĩa khác theo lệnh ghi (nước uống không phải bữa ăn).
-const TOOL_FIELD_NAMES: Record<string, Record<string, string>> = { log_water: { consumed_at: 'Thời điểm uống' } }
+const TOOL_FIELD_NAMES: Record<string, Record<string, string>> = {
+  log_water: { consumed_at: 'Thời điểm uống' },
+  log_sleep: { started_at: 'Giờ đi ngủ', ended_at: 'Giờ thức dậy', minutes_in_bed: 'Thời gian trên giường' },
+}
 const FIELD_UNITS: Record<string, string> = {
   weight_kg: 'kg', height_cm: 'cm', body_fat_pct: '%', muscle_mass_kg: 'kg', energy_kcal: 'kcal', protein_g: 'g',
   resting_hr: 'bpm', max_hr: 'bpm', amount_ml: 'ml', distance_meters: 'm',

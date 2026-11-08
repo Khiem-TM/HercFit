@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Iterable
 from uuid import UUID, uuid5
@@ -141,6 +141,25 @@ def daily_columns(data_type: str, value: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+ASLEEP_STAGES = {"ASLEEP", "LIGHT", "DEEP", "REM", "RESTLESS"}
+
+
+def _stage_minutes(stages: list[Any], point: HealthPoint) -> tuple[int | None, int]:
+    """(phút ngủ từ các đoạn ngủ, phút trên giường của cả khoảng) khi chưa có summary của Google."""
+    asleep = 0.0
+    for stage in stages:
+        if not isinstance(stage, dict) or stage.get("type") not in ASLEEP_STAGES:
+            continue
+        try:
+            start = datetime.fromisoformat(str(stage["startTime"]))
+            end = datetime.fromisoformat(str(stage["endTime"]))
+        except (KeyError, ValueError):
+            continue
+        asleep += max(0.0, (end - start).total_seconds() / 60)
+    in_period = round((point.end_at - point.start_at).total_seconds() / 60)
+    return (round(asleep) if asleep else None), in_period
+
+
 def sleep_row(point: HealthPoint) -> dict[str, Any] | None:
     if point.start_at is None or point.end_at is None or point.end_at <= point.start_at:
         return None
@@ -149,6 +168,9 @@ def sleep_row(point: HealthPoint) -> dict[str, Any] | None:
     stages = {item.get("type"): _minutes(item.get("minutes")) for item in summary.get("stagesSummary") or []
               if isinstance(item, dict)}
     asleep, in_period = _minutes(summary.get("minutesAsleep")), _minutes(summary.get("minutesInSleepPeriod"))
+    if not summary:
+        # Vừa ghi tay, Google chưa trả summary (trường output-only): suy ra từ các đoạn đã ghi.
+        asleep, in_period = _stage_minutes(value.get("stages") or [], point)
     is_nap = bool(metadata.get("nap", False))
     return {
         **_entity(point), "source": HEALTH_PROVIDER, "start_at": point.start_at,
@@ -159,7 +181,7 @@ def sleep_row(point: HealthPoint) -> dict[str, Any] | None:
         "deep_minutes": stages.get("DEEP"), "light_minutes": stages.get("LIGHT"), "rem_minutes": stages.get("REM"),
         "awake_minutes": stages.get("AWAKE"),
         "efficiency_pct": round(min(100.0, 100 * asleep / in_period), 2) if asleep and in_period else None,
-        "data_source": {},
+        "data_source": {"manual": True} if point.written_by_hercfit else {},
         # Chi tiết giữ nguyên: lần thức giấc ngắn có thể chồng lên giai đoạn, không bao giờ cộng vào tổng.
         "stages": value.get("stages") or [], "short_awakenings": value.get("shortAwakenings") or [],
     }
