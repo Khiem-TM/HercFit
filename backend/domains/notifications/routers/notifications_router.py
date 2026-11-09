@@ -6,7 +6,7 @@ thông báo chủ động là một consent.
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, WebSocket, status
 
 from api.dependencies import UserContextDep
 from core import principal
@@ -19,10 +19,10 @@ from domains.notifications.schemas.notification import (
     NotificationPreferencesRead,
     NotificationRead,
 )
-from domains.notifications.services import inbox
+from domains.notifications.services import inbox, realtime
 
 router = APIRouter(prefix="/notifications", tags=["notifications"], route_class=IdempotentRoute)
-_briefing_limiter = SlidingWindowLimiter(6)
+_review_limiter = SlidingWindowLimiter(6)
 
 
 def _user_only() -> None:
@@ -52,14 +52,20 @@ async def put_preferences(update: NotificationPreferences, service: UserContextD
     return await inbox.save_preferences(service.session, service.user, update)
 
 
-@router.post("/briefing:run", response_model=NotificationList, summary="Tạo bản tóm tắt hôm nay ngay",
-             description="Không chờ giờ briefing hay dữ liệu; vẫn dedup theo ngày và cần đã bật thông báo chủ động.")
+@router.post("/review:run", response_model=NotificationList, summary="Tạo đánh giá ngày hôm nay ngay",
+             description="Không chờ giờ đánh giá hay giờ yên lặng; vẫn một lần mỗi ngày và cần đã bật thông báo chủ động.")
 @transaction
-async def run_briefing(service: UserContextDep):
+async def run_review(service: UserContextDep):
     _user_only()
-    enforce(_briefing_limiter, f"briefing:{service.user_id}")
+    enforce(_review_limiter, f"review:{service.user_id}")
     await inbox.evaluate(service.session, service.user, force=True)
     return await inbox.inbox(service.session, service.user_id)
+
+
+@router.websocket("/stream")
+async def notification_stream(websocket: WebSocket):
+    """Thông báo tức thì. Tin nhắn đầu tiên phải là {"type": "auth", "token": "<access token>"} (xem realtime)."""
+    await realtime.stream(websocket)
 
 
 @router.post("/{notification_id}:seen", response_model=NotificationRead, summary="Đánh dấu đã xem")

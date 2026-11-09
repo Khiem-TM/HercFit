@@ -1,4 +1,4 @@
-"""Bảng `user_notifications`: hộp thư trong ứng dụng, một dòng một thông báo (migration 0029)."""
+"""Bảng `user_notifications`: hộp thư trong ứng dụng, một dòng một thông báo (migration 0029; loại mới ở 0030, 0031)."""
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -13,7 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from core.database import Base
 from domains.shared.models.basemodel import uuid7
 
-KINDS = ("briefing", "insight", "praise", "data_quality")
+KINDS = ("briefing", "insight", "praise", "data_quality", "reminder", "summary", "proposal", "alert", "review")
 
 
 class UserNotification(Base):
@@ -21,7 +21,9 @@ class UserNotification(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "dedup_key", name="uq_user_notifications_dedup"),
         Index("ix_user_notifications_user_created", "user_id", "created_at"),
-        CheckConstraint("kind IN ('briefing', 'insight', 'praise', 'data_quality')", name="user_notifications_kind_check"),
+        CheckConstraint("kind IN ('briefing', 'insight', 'praise', 'data_quality', 'reminder', 'summary', 'proposal', "
+                        "'alert', 'review')",
+                        name="user_notifications_kind_check"),
         CheckConstraint("priority BETWEEN 1 AND 3", name="user_notifications_priority_check"),
     )
 
@@ -77,6 +79,21 @@ class UserNotification(Base):
             return set()
         query = select(cls.dedup_key).where(cls.user_id == user_id, cls.dedup_key.in_(dedup_keys))
         return set((await session.execute(query)).scalars())
+
+    @classmethod
+    async def recent(cls, session, user_id: PyUUID, codes: list[str], since: date) -> list[tuple[str, date, int]]:
+        """(mã, ngày, payload.severity_rank) đã gửi từ ngày `since`, kể cả đã bỏ qua (cho thời gian chờ)."""
+        if not codes:
+            return []
+        rank = func.coalesce(cls.payload["severity_rank"].as_integer(), 0)
+        query = select(cls.code, cls.local_date, rank).where(
+            cls.user_id == user_id, cls.code.in_(codes), cls.local_date >= since)
+        return [(code, day, int(value)) for code, day, value in (await session.execute(query)).all()]
+
+    @classmethod
+    async def titles(cls, session, user_id: PyUUID, kind: str, day: date) -> list[str]:
+        query = select(cls.title).where(cls.user_id == user_id, cls.kind == kind, cls.local_date == day)
+        return list((await session.execute(query.order_by(cls.created_at))).scalars())
 
     @classmethod
     async def owned(cls, session, user_id: PyUUID, notification_id: PyUUID) -> UserNotification | None:

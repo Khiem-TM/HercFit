@@ -1,4 +1,4 @@
-"""Backtest Daily Health: chạy engine readiness và bộ soạn thông báo trên kịch bản mô phỏng và dữ liệu thật.
+"""Backtest Daily Health: chạy engine readiness và bộ luật cảnh báo chỉ số trên kịch bản mô phỏng và dữ liệu thật.
 
     python -m scripts.daily_health_backtest --scenarios            # dữ liệu tổng hợp có nhãn (không cần DB)
     python -m scripts.daily_health_backtest --real --days 60       # dữ liệu thật, chỉ đọc (DB theo backend/.env)
@@ -26,8 +26,10 @@ from zoneinfo import ZoneInfo
 from domains.analytics.services.daily_health import analytics
 from domains.analytics.services.daily_health.service import WINDOW_DAYS, build
 from domains.health_records import ports
+from domains.analytics.services.health_rules import catalog
+from domains.analytics.services.health_rules.evaluate import DayHealth, Features, Profile
+from domains.analytics.services.health_rules.evaluate import evaluate as evaluate_rules
 from domains.notifications.schemas.notification import NotificationPreferences
-from domains.notifications.services import briefing
 
 ZONE = "Asia/Ho_Chi_Minh"
 TZ = ZoneInfo(ZONE)
@@ -184,32 +186,42 @@ def evaluate(daily: list[Any], sleep: list[Any], loads: dict[date, Decimal], day
     return results
 
 
-def simulate_notifications(assessments: list[Any], prefs: NotificationPreferences | None = None) -> dict[str, Any]:
-    """Hai nhịp mỗi ngày (giờ briefing và 3 giờ sau), dedup và giới hạn mỗi ngày như hộp thư thật."""
+def simulate_notifications(daily: list[Any], days: list[date], prefs: NotificationPreferences | None = None,
+                           profile: Profile | None = None) -> dict[str, Any]:
+    """Bộ luật chỉ số (health_rules) chạy mỗi ngày trên dữ liệu tới ngày đó, với dedup, thời gian chờ của từng luật
+    và giới hạn mỗi ngày như hộp thư thật (cảnh báo khẩn không tính vào giới hạn)."""
     prefs = prefs or NotificationPreferences(enabled=True)
-    sent, keys, per_kind, neutral_ok = [], set(), Counter(), True
-    briefing_hour, briefing_minute = map(int, prefs.briefing_time.split(":"))
-    for assessment in assessments:
+    profile = profile or Profile(sex="MALE", age=30)
+    health = {row.local_date: DayHealth(
+        rhr=float(row.resting_hr_bpm) if row.resting_hr_bpm is not None else None,
+        spo2=float(row.spo2_avg_pct) if row.spo2_avg_pct is not None else None,
+        sleep_minutes=row.sleep_minutes, steps=row.steps, active_zone_minutes=row.active_zone_minutes)
+        for row in daily}
+    sent, keys, last = [], set(), {}
+    per_rule, per_severity = Counter(), Counter()
+    for day in days:
         used = 0
-        for hours in (0, 3.02):
-            local_now = datetime.combine(assessment.date, datetime.min.time(), TZ).replace(
-                hour=briefing_hour, minute=briefing_minute) + timedelta(hours=hours)
-            if briefing.quiet(prefs, local_now):
+        features = Features(day, health={d: value for d, value in health.items() if d <= day})
+        for signal in evaluate_rules(features, profile, prefs.alert_groups):
+            key, rank = f"alert:{signal.rule}:{signal.severity}:{signal.anchor.isoformat()}", \
+                catalog.SEVERITY_RANK[signal.severity]
+            previous = last.get(signal.rule)
+            if key in keys or (previous and (day - previous[0]).days < signal.meta.cooldown_days
+                               and previous[1] >= rank):
                 continue
-            for draft in briefing.compose(assessment, prefs, local_now):
-                if draft.dedup_key in keys or used >= prefs.max_per_day:
-                    continue
-                keys.add(draft.dedup_key)
-                used += 1
-                per_kind[draft.kind] += 1
-                sent.append({"date": assessment.date.isoformat(), "kind": draft.kind, "code": draft.code})
-                if assessment.state == "needs_review" and (draft.code != "BRIEFING_NEUTRAL" and draft.kind == "briefing"
-                                                           or any(ch.isdigit() for ch in draft.body)):
-                    neutral_ok = False
-    weeks = max(1.0, len(assessments) / 7)
+            if used >= prefs.max_per_day and signal.severity != "urgent":
+                continue
+            keys.add(key)
+            last[signal.rule] = (day, rank)
+            used += signal.severity != "urgent"
+            per_rule[signal.rule] += 1
+            per_severity[signal.severity] += 1
+            sent.append({"date": day.isoformat(), "rule": signal.rule, "severity": signal.severity})
+    weeks = max(1.0, len(days) / 7)
     return {"total": len(sent), "per_week": round(len(sent) / weeks, 2),
-            "per_week_by_kind": {kind: round(count / weeks, 2) for kind, count in sorted(per_kind.items())},
-            "needs_review_always_neutral": neutral_ok, "sent": sent}
+            "per_week_by_rule": {rule: round(count / weeks, 2) for rule, count in sorted(per_rule.items())},
+            "per_week_by_severity": {sev: round(count / weeks, 2) for sev, count in sorted(per_severity.items())},
+            "sent": sent}
 
 
 def score(scenario: Scenario, results: list[Any]) -> dict[str, Any]:
@@ -238,7 +250,7 @@ def run_scenarios(seed: int = 7) -> dict[str, Any]:
         daily, sleep, loads = _rows(scenario.days)
         days = [END - timedelta(days=DAYS - 1 - index) for index in range(FIRST_EVALUATED, DAYS)]
         results = evaluate(daily, sleep, loads, days)
-        notifications = simulate_notifications(results)
+        notifications = simulate_notifications(daily, days)
         report[scenario.name] = {"description": scenario.description, **score(scenario, results),
                                  "notifications": {k: v for k, v in notifications.items() if k != "sent"}}
     return report
@@ -270,7 +282,7 @@ async def run_real(days: int) -> list[dict[str, Any]]:
             age = user.age if user.age is not None else ((status.provider_profile or {}).get("age") if status else None)
             evaluated = [today - timedelta(days=offset) for offset in range(days - 1, -1, -1)]
             results = evaluate(daily, sleep, loads, evaluated, availability=lambda _day: available, age=age, zone=zone)
-            notifications = simulate_notifications(results)
+            notifications = simulate_notifications(daily, evaluated, profile=Profile(sex=user.sex, age=age))
             report.append({"user": f"user-{index + 1}", "timezone": zone, "days": days,
                            "nights_with_sleep": len({night.local_date for night in sleep if not night.is_nap}),
                            "states": dict(Counter(r.state for r in results)),
@@ -286,7 +298,7 @@ def markdown(scenarios: dict[str, Any] | None, real: list[dict[str, Any]] | None
     if scenarios:
         lines += ["## Kịch bản mô phỏng (dữ liệu tổng hợp, nhãn do bộ sinh đặt)", "",
                   "| Kịch bản | Ngày | Trạng thái | Báo nhầm (ngày bình thường) | Bắt ngày căng | Bắt ngày ốm (review/recover) "
-                  "| Thiếu dữ liệu → insufficient | Thông báo/tuần | needs_review luôn trung tính |",
+                  "| Thiếu dữ liệu → insufficient | Cảnh báo chỉ số/tuần | Theo mức độ |",
                   "|---|---|---|---|---|---|---|---|---|"]
         fmt = lambda value: "—" if value is None else f"{100 * value:.0f}%"  # noqa: E731
         for name, row in scenarios.items():
@@ -294,14 +306,14 @@ def markdown(scenarios: dict[str, Any] | None, real: list[dict[str, Any]] | None
             lines.append(f"| {name} | {row['days']} | {states} | {fmt(row['false_alarm_rate'])} | "
                          f"{fmt(row['strain_detection'])} | {fmt(row['review_detection'])} | "
                          f"{fmt(row['missing_as_insufficient'])} | {row['notifications']['per_week']} | "
-                         f"{'có' if row['notifications']['needs_review_always_neutral'] else 'KHÔNG'} |")
+                         f"{row['notifications']['per_week_by_severity']} |")
         lines.append("")
     if real is not None:
         lines += ["## Dữ liệu thật (chỉ đọc)", ""]
         for row in real:
             lines.append(f"- {row['user']} ({row['timezone']}, {row['days']} ngày, {row['nights_with_sleep']} đêm có giấc ngủ): "
                          f"trạng thái {row['states']}, độ tin cậy {row['confidence']}, "
-                         f"thông báo {row['notifications']['per_week']}/tuần {row['notifications']['per_week_by_kind']}")
+                         f"cảnh báo {row['notifications']['per_week']}/tuần {row['notifications']['per_week_by_rule']}")
         if not real:
             lines.append("- Không có người dùng nào có kết nối Google Health.")
     return "\n".join(lines) + "\n"

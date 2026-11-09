@@ -1,4 +1,6 @@
-"""Lập lịch briefing: mỗi nhịp tiêu thụ sự kiện `health.synced` và quét người dùng đã tới giờ briefing.
+"""Lập lịch thông báo: mỗi nhịp tiêu thụ sự kiện `health.synced` rồi xét thông báo của mọi người dùng đã bật
+thông báo chủ động: nhắc lịch tập ở mọi nhịp; cảnh báo chỉ số khi có dữ liệu thiết bị mới, mỗi giờ một lần, hoặc
+lúc tới giờ đánh giá ngày (khi đó đồng bộ thiết bị trước nếu dữ liệu đã cũ để có số bước, phút vận động mới nhất).
 
 Chạy trong lifespan của API (như vòng đồng bộ Google Health). Nhiều tiến trình cùng chạy vẫn an toàn:
 khoá advisory cho phần tiêu thụ sự kiện, và dedup_key duy nhất cho phần tạo thông báo.
@@ -16,13 +18,12 @@ from core.database import get_db_session
 from core.settings import settings
 from domains.health_records import ports
 from domains.identity.models.user import User
-from domains.notifications.models.notification import UserNotification
-from domains.notifications.services import briefing, inbox
+from domains.notifications.services import inbox
 from domains.shared import events
 
 logger = logging.getLogger(__name__)
 CONSUMER = "backend.daily_briefing"
-# Đồng bộ cũ hơn chừng này lúc tới giờ briefing thì đồng bộ ngay để có giấc ngủ đêm qua.
+# Đồng bộ cũ hơn chừng này lúc tới giờ đánh giá ngày thì đồng bộ ngay để có số liệu mới nhất trong ngày.
 REFRESH_IF_OLDER = timedelta(hours=2)
 
 
@@ -52,18 +53,19 @@ async def run_once(now: datetime | None = None) -> dict[str, int]:
                 user = await session.get(User, user_id)
                 prefs = await inbox.preferences(session, user)
                 local_now = now.astimezone(ZoneInfo(prefs.timezone))
-                due = briefing.briefing_due(prefs, local_now) and not await UserNotification.keys(
-                    session, user_id, [f"briefing:{local_now.date().isoformat()}"])
-                if user_id not in synced and not due:
-                    continue
+                due = await inbox.review_due(session, user_id, prefs, local_now)
+                hourly = local_now.minute < settings.DAILY_BRIEFING_POLL_MINUTES
+                health = user_id in synced or due or hourly
                 if due and user_id not in synced:
                     status = await ports.provider_status(session, user_id)
                     refresh = bool(status is not None and status.connected and (
                         status.last_success_at is None or now - status.last_success_at > REFRESH_IF_OLDER))
             if refresh:
                 await ports.refresh(user_id)
+            # Nhắc lịch tập (buổi hôm nay, buổi bị lỡ) được xét ở mọi nhịp.
             async with get_db_session() as session:
-                created += len(await inbox.evaluate(session, await session.get(User, user_id), now=now))
+                created += len(await inbox.evaluate(session, await session.get(User, user_id), now=now,
+                                                    health=health))
         except Exception as exc:  # một người dùng lỗi không chặn người khác
             logger.warning("daily_briefing_error user=%s error=%s", user_id, type(exc).__name__)
     return {"events": len(rows), "users": len(users), "created": created}
