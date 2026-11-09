@@ -15,7 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from domains.shared.models.basemodel import BaseModel, utc_now
 from domains.shared.models.domain import guard_immutable
-from domains.body.schemas.body_metrics import BodyMetricCreate, BodyMetricQuery
+from domains.body.schemas.body_metrics import CIRCUMFERENCES, BodyMetricCreate, BodyMetricQuery
 from domains.shared.schemas.common import UserScope
 
 if TYPE_CHECKING:
@@ -30,10 +30,15 @@ class BodyMetric(BaseModel):
             for field in ("weight_kg", "height_cm", "muscle_mass_kg")
         ],
         CheckConstraint("body_fat_pct >= 0 AND body_fat_pct <= 100", name="ck_body_metrics_body_fat"),
+        *[
+            CheckConstraint(f"{field} > 0 AND {field} < 400", name=f"ck_body_metrics_{field}")
+            for field in CIRCUMFERENCES
+        ],
         CheckConstraint("jsonb_typeof(additional_metrics) = 'object'", name="ck_body_metrics_additional_object"),
         # Mẫu từ thiết bị mỗi mẫu mang một số đo (cân nặng từ cân, một chỉ số mỡ cơ thể).
         CheckConstraint("weight_kg IS NOT NULL OR height_cm IS NOT NULL OR body_fat_pct IS NOT NULL "
-                        "OR muscle_mass_kg IS NOT NULL", name="ck_body_metrics_any_measurement"),
+                        "OR muscle_mass_kg IS NOT NULL OR chest_cm IS NOT NULL OR waist_cm IS NOT NULL "
+                        "OR hip_cm IS NOT NULL", name="ck_body_metrics_any_measurement"),
         CheckConstraint("source IN ('MANUAL', 'GOOGLE_HEALTH')", name="ck_body_metrics_source"),
         Index("ix_body_metrics_user_recorded", "user_id", "recorded_at", "id"),
     )
@@ -48,6 +53,10 @@ class BodyMetric(BaseModel):
     height_cm: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
     body_fat_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     muscle_mass_kg: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
+    # Vòng ngực / eo / hông (cm): Google Health không có, nên luôn lưu trong HercFit (migration 0030).
+    chest_cm: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    waist_cm: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    hip_cm: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
     additional_metrics: Mapped[dict[str, Any]] = mapped_column(
         JSONB(none_as_null=True), default=dict, server_default=text("'{}'::jsonb"), nullable=False,
     )
@@ -106,11 +115,13 @@ class BodyMetric(BaseModel):
     @classmethod
     async def latest(cls, session: AsyncSession, user_id: PyUUID, field: str, *,
                      respect_consent: bool = True) -> Any | None:
-        """Số đo mới nhất có `field` (weight_kg, height_cm, body_fat_pct) từ cả hai nguồn."""
+        """Số đo mới nhất có `field` (weight_kg, height_cm, body_fat_pct, vòng đo) từ cả hai nguồn."""
         from domains.body.services import readings
 
         local = (await session.execute(cls._user_query(user_id).where(getattr(cls, field).is_not(None))
                                        .order_by(cls.recorded_at.desc(), cls.id.desc()).limit(1))).scalar_one_or_none()
+        if field not in readings.FIELDS:  # vòng đo, khối cơ: chỉ có trong HercFit
+            return local
         google = await readings.google(session, user_id, limit=1, field=field, respect_consent=respect_consent)
         found = [item for item in (local, *google) if item is not None]
         return max(found, key=lambda item: item.recorded_at) if found else None

@@ -29,7 +29,8 @@ from domains.analytics.services.daily_health.analytics import MIN_BASELINE_DAYS,
 from domains.health_records.schemas.health import HRV_DROP_PCT, RHR_ELEVATION_BPM, recommended_sleep_hours
 
 # v2: thêm phân tích giấc ngủ (nợ ngủ 7 đêm, độ đều giờ ngủ, hiệu quả, ngủ ghi tay).
-ALGORITHM_VERSION = "readiness-heuristic-v2"
+# v3: thêm điểm sẵn sàng 0–100 (SCORE), suy ra từ cùng các độ lệch; trạng thái không đổi.
+ALGORITHM_VERSION = "readiness-heuristic-v3"
 THRESHOLDS = {
     "sleep_short_vs_baseline_min": 45,     # ngủ ít hơn nền cá nhân chừng này phút (và dưới khuyến nghị)
     "sleep_short_no_baseline_min": 60,     # khi chưa có nền: thấp hơn mức khuyến nghị tối thiểu chừng này phút
@@ -51,6 +52,19 @@ THRESHOLDS = {
     "high_confidence_days": 21,
     "medium_confidence_days": 14,
 }
+# Điểm 0–100 chỉ là cách đọc nhanh của trạng thái, không phải chỉ số sinh lý: 70 = đúng nền của bạn,
+# mỗi độ lệch chuẩn (theo hướng tốt) cộng/trừ 10 điểm, trung bình có trọng số trên các chỉ số có nền;
+# tín hiệu căng thẳng không gắn với ba chỉ số này (tải tăng nhanh, nợ ngủ) trừ thêm. Kết quả luôn được kẹp
+# vào khoảng của trạng thái, để điểm và nhãn không bao giờ nói hai điều khác nhau.
+SCORE = {
+    "base": 70,
+    "points_per_sd": 10,
+    "weights": {"hrv_ms": 0.4, "resting_hr_bpm": 0.3, "sleep_minutes": 0.3},
+    "z_clip": 3.0,
+    "sleep_z_max": 1.0,            # ngủ nhiều hơn nền không làm "sẵn sàng hơn" quá một độ lệch
+    "other_strain_penalty": 6,
+    "bands": {"ready": (70, 100), "steady": (55, 85), "ease_off": (35, 69), "recover": (0, 49)},
+}
 LABELS = {"ready": "Sẵn sàng", "steady": "Ổn định", "ease_off": "Nên giảm nhẹ", "recover": "Ưu tiên hồi phục",
           "needs_review": "Cần xem lại", "insufficient_data": "Chưa đủ dữ liệu"}
 RECOMMENDATIONS = {
@@ -70,7 +84,8 @@ RECOMMENDATIONS = {
 DISCLAIMER = ("Đánh giá độ sẵn sàng tập luyện theo heuristic từ dữ liệu thiết bị so với nền của chính bạn; "
               "không phải chẩn đoán y khoa.")
 METHOD = (f"{ALGORITHM_VERSION}: đường nền trung vị/MAD 28 ngày đã trọn trước ngày đo, HRV so trên thang log, "
-          "luật trạng thái tất định; các ngưỡng là heuristic thăm dò.")
+          "luật trạng thái tất định; điểm 0–100 = 70 + 10 × độ lệch có trọng số, kẹp theo trạng thái; "
+          "các ngưỡng là heuristic thăm dò.")
 CORE = ("sleep_minutes", "hrv_ms", "resting_hr_bpm")
 # Độ sẵn sàng nói về đêm qua: cần ít nhất giấc ngủ hoặc HRV của đêm đó, có đường nền.
 NIGHT = ("sleep_minutes", "hrv_ms")
@@ -257,6 +272,31 @@ def _recommendations(state: str, codes: set[str], sleep_missing: bool = False) -
     return [Recommendation(code=key, text=RECOMMENDATIONS[key]) for key in keys]
 
 
+def score(state: str, readings: list[MetricReading], reasons: list[Reason]) -> int | None:
+    """Điểm sẵn sàng 0–100, hoặc None khi trạng thái không phải một mức sẵn sàng (cần xem lại, thiếu dữ liệu)."""
+    band = SCORE["bands"].get(state)
+    if band is None:
+        return None
+    clip = SCORE["z_clip"]
+    sign = {"hrv_ms": 1, "resting_hr_bpm": -1, "sleep_minutes": 1}
+    total = weight = 0.0
+    for reading in readings:
+        if reading.metric not in sign or reading.value is None or reading.z is None \
+                or reading.baseline_n < MIN_BASELINE_DAYS:
+            continue
+        z = max(-clip, min(clip, sign[reading.metric] * reading.z))
+        if reading.metric == "sleep_minutes":
+            z = min(z, SCORE["sleep_z_max"])
+        w = SCORE["weights"][reading.metric]
+        total += w * z
+        weight += w
+    raw = SCORE["base"] + SCORE["points_per_sd"] * (total / weight if weight else 0.0)
+    raw -= SCORE["other_strain_penalty"] * sum(1 for reason in reasons
+                                                if reason.kind == "strain" and reason.code not in PHYSIOLOGICAL)
+    low, high = band
+    return int(round(max(low, min(high, raw))))
+
+
 def decide(*, day: date, zone: str, readings: list[MetricReading], trends: list[Trend], load: LoadSummary | None,
            quality: DataQuality, age: int | None, sleep: SleepDetail | None = None) -> DailyAssessmentRead:
     reasons = signals(readings, trends, load, quality, age, sleep)
@@ -269,6 +309,7 @@ def decide(*, day: date, zone: str, readings: list[MetricReading], trends: list[
     summary = LABELS[state] + (": " + "; ".join(headline) if headline else "")
     return DailyAssessmentRead(
         date=day, timezone=zone, algorithm_version=ALGORITHM_VERSION, state=state, label=LABELS[state],
+        score=score(state, readings, reasons),
         confidence=_confidence(state, readings, quality, day), summary=summary, reasons=reasons,
         recommendations=_recommendations(state, {reason.code for reason in reasons},
                                          sleep_missing=sleep is not None and sleep.last_night is None),

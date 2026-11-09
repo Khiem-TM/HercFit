@@ -20,6 +20,16 @@ class HealthConsentUpdate(InputSchema):
     share_sensitive_with_assistant: bool | None = None
 
 
+SyncGroup = Literal["sleep", "rhr", "hrv", "steps", "body"]
+SyncFrequency = Literal["hourly", "open", "manual"]
+
+
+class HealthSyncSettingsUpdate(InputSchema):
+    """Chỉ những khoá được gửi mới đổi."""
+    groups: dict[SyncGroup, bool] | None = None
+    frequency: SyncFrequency | None = None
+
+
 class HealthConnectionRead(BaseModel):
     provider: str = HEALTH_PROVIDER
     configured: bool
@@ -40,6 +50,9 @@ class HealthConnectionRead(BaseModel):
     # Số điểm đang lưu theo loại, và trạng thái đọc từng loại {from, through, error}.
     records: dict[str, int] = {}
     types: dict[str, Any] = {}
+    # Đủ năm nhóm (true = đang đồng bộ) và tần suất đồng bộ nền.
+    sync_groups: dict[str, bool] = {}
+    sync_frequency: SyncFrequency = "hourly"
 
 
 class HealthSyncAccepted(BaseModel):

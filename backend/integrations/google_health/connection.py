@@ -14,6 +14,7 @@ from core.security import generate_secure_token, pkce_pair
 from core.settings import settings
 from domains.health_records.models.health_points import HealthPoint
 from domains.health_records.schemas.health import HEALTH_PROVIDER
+from domains.health_records.types import SYNC_GROUPS
 from domains.identity import consent
 from domains.identity.models.oauth_account import OAuthAccount
 from domains.identity.models.user import User
@@ -43,7 +44,8 @@ class HealthConnectionService(UserService):
         connection = await self.connection()
         configured = settings.google_health_configured
         if connection is None:
-            return HealthConnectionRead(configured=configured, connected=False)
+            return HealthConnectionRead(configured=configured, connected=False,
+                                        sync_groups={group: True for group in SYNC_GROUPS})
         records = dict((await self.session.execute(
             select(HealthPoint.data_type, func.count()).where(HealthPoint.user_id == self.user_id)
             .group_by(HealthPoint.data_type))).all())
@@ -58,6 +60,7 @@ class HealthConnectionService(UserService):
             provider_profile=connection.provider_profile or {}, last_sync_at=connection.last_sync_at,
             last_success_at=connection.last_success_at, last_error_code=connection.last_error_code,
             records=records, types=connection.sync_cursor or {},
+            sync_groups=sync_groups(connection), sync_frequency=connection.sync_frequency or "hourly",
         )
 
     def start(self, share_with_assistant: bool | None) -> tuple[str, str, str]:
@@ -86,6 +89,18 @@ class HealthConnectionService(UserService):
         await self.session.flush()
         return await self.status()
 
+    async def update_settings(self, groups: dict[str, bool] | None, frequency: str | None) -> HealthConnectionRead:
+        """Nhóm dữ liệu được đồng bộ và tần suất. Tắt một nhóm chỉ dừng đọc nó; dữ liệu đã có giữ nguyên."""
+        connection = await HealthConnection.for_user(self.session, self.user_id, for_update=True)
+        if connection is None:
+            raise HTTPException(404, "Chưa kết nối Google Health")
+        if groups:
+            connection.sync_groups = {**(connection.sync_groups or {}), **groups}
+        if frequency:
+            connection.sync_frequency = frequency
+        await self.session.flush()
+        return await self.status()
+
     async def require_active(self) -> HealthConnection:
         connection = await self.connection()
         if connection is None or connection.status != "ACTIVE":
@@ -103,6 +118,11 @@ class HealthConnectionService(UserService):
         if purge_data:
             await purge_device_data(self.session, self.user_id)
         return await self.status()
+
+
+def sync_groups(connection: HealthConnection) -> dict[str, bool]:
+    stored = connection.sync_groups or {}
+    return {group: stored.get(group) is not False for group in SYNC_GROUPS}
 
 
 async def revoke_connection(connection: HealthConnection, http: httpx.AsyncClient | None = None) -> None:

@@ -120,6 +120,25 @@ TYPES: dict[str, DataType] = {item.id: item for item in (
     # --- thực phẩm ---
     DataType("food-measurement-unit", Kind.FOOD, NUTRITION, Read.NONE),
 )}
+# Nhóm dữ liệu người dùng bật/tắt đồng bộ (Hồ sơ & kết nối › Kết nối). Loại không thuộc nhóm nào
+# (SpO2, nhịp thở, VO2 max, buổi vận động, nước uống...) luôn được đọc như trước.
+SYNC_GROUPS: dict[str, tuple[str, ...]] = {
+    "sleep": ("sleep", "daily-sleep-temperature-derivations", "respiratory-rate-sleep-summary"),
+    "rhr": ("daily-resting-heart-rate", "heart-rate"),
+    "hrv": ("daily-heart-rate-variability",),
+    "steps": ("steps", "distance", "floors", "active-minutes", "active-zone-minutes", "active-energy-burned",
+              "total-calories", "sedentary-period"),
+    "body": ("weight", "height", "body-fat"),
+}
+SYNC_FREQUENCIES = ("hourly", "open", "manual")
+
+
+def disabled_types(groups: dict[str, bool] | None) -> frozenset[str]:
+    """Các loại thuộc nhóm người dùng đã tắt; khoá vắng mặt nghĩa là nhóm đang bật."""
+    return frozenset(data_type for group, members in SYNC_GROUPS.items()
+                     if (groups or {}).get(group) is False for data_type in members)
+
+
 # Loại do HercFit ghi được đánh dấu bằng một lần reconcile self-sources khi đọc.
 SELF_MARKED = frozenset(item.id for item in TYPES.values() if item.owner is WT)
 # Đơn vị khẩu phần trong catalog food-measurement-unit (434 đơn vị, kiểm tra trên tài khoản thật
@@ -156,9 +175,10 @@ def spec(data_type: str) -> DataType:
         raise KeyError(f"Unknown Google Health data type {data_type!r}") from None
 
 
-def readable(granted: list[str] | tuple[str, ...]) -> list[DataType]:
+def readable(granted: list[str] | tuple[str, ...], skip: frozenset[str] = frozenset()) -> list[DataType]:
     scopes = set(granted)
-    return [item for item in TYPES.values() if item.read is not Read.NONE and item.read_scope in scopes]
+    return [item for item in TYPES.values()
+            if item.read is not Read.NONE and item.read_scope in scopes and item.id not in skip]
 
 
 def can_write(data_type: str, granted: list[str] | tuple[str, ...]) -> bool:

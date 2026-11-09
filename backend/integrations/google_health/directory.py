@@ -11,7 +11,7 @@ from sqlalchemy import event, text
 
 from domains.health_records import ports
 from domains.health_records.schemas.health import HEALTH_PROVIDER
-from domains.health_records.types import TYPES, Read
+from domains.health_records.types import TYPES, Read, disabled_types
 from integrations.google_health.models import HealthConnection
 
 logger = logging.getLogger(__name__)
@@ -40,8 +40,9 @@ class GoogleHealthDirectory:
             return {}
         granted = set(connection.granted_scopes or [])
         cursor = connection.sync_cursor or {}
+        off = disabled_types(connection.sync_groups)
         return {item.id: ports.TypeAvailability(
-                    granted=item.read_scope in granted, enabled=True,
+                    granted=item.read_scope in granted, enabled=item.id not in off,
                     complete_through=_day((cursor.get(item.id) or {}).get("through")),
                     complete_from=_day((cursor.get(item.id) or {}).get("from")))
                 for item in TYPES.values() if item.read is not Read.NONE}
@@ -69,9 +70,15 @@ class GoogleHealthDirectory:
         return await records.create(session, user_id, kind, payload or {})
 
     async def refresh(self, user_id: UUID, days: int = 2) -> bool:
-        """Đồng bộ ngay vài ngày gần nhất (trước briefing buổi sáng); False khi chưa kết nối."""
+        """Đồng bộ ngay vài ngày gần nhất (trước briefing buổi sáng); False khi chưa kết nối hoặc người dùng
+        chọn chỉ đồng bộ khi mở ứng dụng / thủ công (đồng bộ nền là việc của tần suất "hourly")."""
         from integrations.google_health import sync
+        from core.database import get_db_session
 
+        async with get_db_session() as session:
+            connection = await HealthConnection.for_user(session, user_id)
+        if connection is None or (connection.sync_frequency or "hourly") != "hourly":
+            return False
         result = await sync.run(user_id, days=days)
         return result.get("status") in {"ok", "partial"}
 

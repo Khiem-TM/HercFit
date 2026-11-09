@@ -33,6 +33,9 @@ class Reading:
     height_cm: Decimal | None = None
     body_fat_pct: Decimal | None = None
     muscle_mass_kg: Decimal | None = None
+    chest_cm: Decimal | None = None
+    waist_cm: Decimal | None = None
+    hip_cm: Decimal | None = None
     additional_metrics: dict[str, Any] = field(default_factory=dict)
     source: str = "GOOGLE_HEALTH"
     version_id: int = 1

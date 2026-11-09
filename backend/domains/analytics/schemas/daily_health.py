@@ -124,6 +124,8 @@ class DailyAssessmentRead(BaseModel):
     algorithm_version: str
     state: ReadinessState
     label: str
+    # 0–100, None khi needs_review / insufficient_data (readiness.score).
+    score: int | None = None
     confidence: Confidence
     summary: str
     reasons: list[Reason]

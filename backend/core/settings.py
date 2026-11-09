@@ -80,7 +80,8 @@ class Settings(BaseSettings):
     GOOGLE_HEALTH_ENABLED: bool = True
     GOOGLE_HEALTH_REDIRECT_URI: str | None = None
     GOOGLE_HEALTH_SYNC_LOOP: bool = True
-    GOOGLE_HEALTH_SYNC_INTERVAL_MINUTES: int = Field(default=360, ge=15, le=7 * 24 * 60)
+    # Nhịp của vòng đồng bộ nền; mỗi nhịp chỉ đồng bộ kết nối "hourly" đã quá một giờ (sync.due).
+    GOOGLE_HEALTH_SYNC_INTERVAL_MINUTES: int = Field(default=15, ge=5, le=7 * 24 * 60)
     # Briefing buổi sáng và insight (domains/notifications): chỉ cho người dùng đã bật thông báo chủ động.
     DAILY_BRIEFING_LOOP: bool = True
     DAILY_BRIEFING_POLL_MINUTES: int = Field(default=15, ge=1, le=24 * 60)

@@ -69,13 +69,14 @@ async def pushed_names(user_id: UUID) -> set[str]:
 
 
 async def pull(client: GoogleHealthClient, user_id: UUID, granted: list[str], start: date, end: date,
-               zone: str) -> dict[str, dict[str, Any]]:
-    """Đồng bộ [start, end) cho mọi loại đọc được; trả về trạng thái từng loại cho `sync_cursor`."""
+               zone: str, skip: frozenset[str] = frozenset()) -> dict[str, dict[str, Any]]:
+    """Đồng bộ [start, end) cho mọi loại đọc được, trừ các loại người dùng đã tắt (`skip`);
+    trả về trạng thái từng loại cho `sync_cursor`."""
     async with get_db_session() as session:
         before = await views.kg_facts(session, user_id, start, end - timedelta(days=1))
     pushed = await pushed_names(user_id)
     status: dict[str, dict[str, Any]] = {}
-    for t in readable(granted):
+    for t in readable(granted, skip):
         try:
             points, complete = await fetch(client, t, start, end, zone)
             own: set[str] = set()
