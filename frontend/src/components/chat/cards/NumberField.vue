@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from 'vue'
-import { Check, Minus, Plus } from 'lucide-vue-next'
+import { AlertCircle, Minus, Plus } from 'lucide-vue-next'
 import type { NumberFrame } from '@/types/api'
 import { formatNumber, snap } from '@/features/chat/clarification'
 
@@ -41,61 +41,43 @@ function commit(raw: string) {
 </script>
 
 <template>
-  <div class="mt-3">
-    <div class="flex items-center gap-2.5">
-      <span class="inline-flex items-center rounded-xl border bg-sunken" :class="invalid ? 'border-amber-400/60' : 'border-ink/15'">
-        <button
-          type="button"
-          :disabled="disabled || (value !== null && value <= frame.min)"
-          class="grid h-11 w-11 place-items-center text-on-surface hover:text-primary disabled:opacity-40"
-          :aria-label="`Giảm ${label}`"
-          @click="step(-1)"
-        >
-          <Minus class="h-4 w-4" aria-hidden="true" />
-        </button>
-        <input
-          :value="draft"
-          type="text"
-          inputmode="decimal"
-          :disabled="disabled"
-          :aria-label="`${label} (${frame.unit})`"
-          :aria-invalid="invalid"
-          :aria-describedby="hintId"
-          placeholder="—"
-          class="h-11 w-20 bg-transparent text-center font-label-code text-lg text-primary placeholder:text-outline focus:outline-none"
-          @change="type(($event.target as HTMLInputElement).value)"
-          @keydown.enter.prevent="commit(($event.target as HTMLInputElement).value)"
-        />
-        <button
-          type="button"
-          :disabled="disabled || (value !== null && value >= frame.max)"
-          class="grid h-11 w-11 place-items-center text-on-surface hover:text-primary disabled:opacity-40"
-          :aria-label="`Tăng ${label}`"
-          @click="step(1)"
-        >
-          <Plus class="h-4 w-4" aria-hidden="true" />
-        </button>
-      </span>
-      <span class="text-sm text-on-surface-variant">{{ frame.unit }}</span>
-    </div>
-
-    <div v-if="presets.length" class="mt-3 flex flex-wrap gap-2">
-      <button
-        v-for="preset in presets"
-        :key="preset"
-        type="button"
-        :disabled="disabled"
-        :aria-pressed="value === preset"
-        class="inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-4 text-sm transition-colors disabled:opacity-50"
-        :class="value === preset ? 'border-gold bg-gold/15 text-primary' : 'border-ink/15 bg-ink/[0.04] text-on-surface hover:border-ink/30'"
-        @click="emit('change', preset)"
-      >
-        <Check v-if="value === preset" class="h-3.5 w-3.5 shrink-0 text-gold" aria-hidden="true" />{{ formatNumber(preset) }} {{ frame.unit }}
+  <div class="numf">
+    <div class="num">
+      <button type="button" class="rb" :disabled="disabled || (value !== null && value <= frame.min)" :aria-label="`Giảm ${label}`" @click="step(-1)">
+        <Minus :size="18" :stroke-width="2.2" aria-hidden="true" />
+      </button>
+      <label class="numin" :class="{ bad: invalid }">
+        <input :value="draft" type="text" inputmode="decimal" :disabled="disabled" :aria-label="`${label} (${frame.unit})`"
+               :aria-invalid="invalid" :aria-describedby="hintId" placeholder="—"
+               @change="type(($event.target as HTMLInputElement).value)"
+               @keydown.enter.prevent="commit(($event.target as HTMLInputElement).value)" />
+        <span class="unit">{{ frame.unit }}</span>
+      </label>
+      <button type="button" class="rb" :disabled="disabled || (value !== null && value >= frame.max)" :aria-label="`Tăng ${label}`" @click="step(1)">
+        <Plus :size="18" :stroke-width="2.2" aria-hidden="true" />
       </button>
     </div>
-
-    <p :id="hintId" class="mt-2 text-[11px]" :class="invalid ? 'text-amber-300' : 'text-on-surface-variant'" aria-live="polite">
-      {{ invalid ? `Giá trị phải trong khoảng ${range}` : `Khoảng hợp lệ ${range}` }}
-    </p>
+    <div v-if="presets.length" class="chips">
+      <button v-for="preset in presets" :key="preset" type="button" class="hf-tog" :disabled="disabled" :aria-pressed="value === preset"
+              @click="emit('change', preset)">{{ formatNumber(preset) }}</button>
+    </div>
+    <p v-if="invalid" :id="hintId" class="err" aria-live="polite"><AlertCircle :size="14" :stroke-width="2.2" aria-hidden="true" />Giá trị phải từ {{ range }}.</p>
+    <p v-else :id="hintId" class="hint">Khoảng hợp lệ: {{ range }}</p>
   </div>
 </template>
+
+<style scoped>
+.numf { display: flex; flex-direction: column; gap: 12px; }
+.num { display: flex; align-items: center; gap: 10px; }
+.rb { width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--hf-line-3); background: var(--hf-card); color: var(--hf-ink); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.rb:hover:not(:disabled) { background: var(--hf-fill-3); }
+.rb:disabled { opacity: .4; }
+.numin { flex: 1; height: 60px; border: 1px solid var(--hf-line-3); border-radius: 18px; display: flex; align-items: center; padding: 0 18px; gap: 8px; background: var(--hf-card); }
+.numin:focus-within { border-color: var(--hf-ink); }
+.numin input { border: 0; outline: none; font-size: 28px; font-weight: 700; width: 100%; background: transparent; min-width: 0; color: var(--hf-ink); font-family: inherit; }
+.numin.bad { border-color: var(--hf-bad); box-shadow: 0 0 0 3px var(--hf-err-bg); }
+.unit { font-size: 15px; color: var(--hf-muted); font-weight: 600; white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.hint { font-size: 12px; color: var(--hf-muted); margin: 0; }
+.err { font-size: 12px; color: var(--hf-bad); display: flex; gap: 6px; align-items: center; margin: 0; }
+</style>

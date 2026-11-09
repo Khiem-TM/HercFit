@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import { Activity, CalendarDays, Check, Dumbbell, GlassWater, Loader2, Ruler, ShieldAlert, Target, Trash2, UserRound, UtensilsCrossed, X } from 'lucide-vue-next'
+import { Activity, CalendarDays, Clock, Dumbbell, GlassWater, Loader2, Ruler, ShieldAlert, Target, Trash2, UserRound, UtensilsCrossed } from 'lucide-vue-next'
 import type { PendingAction } from '@/types/api'
 import CatalogCardBody from './CatalogCardBody.vue'
 import FieldsCardBody from './FieldsCardBody.vue'
@@ -68,6 +68,9 @@ function fieldsIcon(tool: string) {
 const icon = computed(() => ({ meal: UtensilsCrossed, training: Dumbbell, plan: CalendarDays, catalog: kind.value === 'catalog' && display.value?.domain === 'exercises' ? Dumbbell : UtensilsCrossed, sport: Activity, fields: fieldsIcon(props.action.tool) })[kind.value])
 const expires = computed(() => new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date(props.action.expires_at)))
 const photoLabel = computed(() => kind.value === 'meal' ? 'Ảnh bữa ăn của bạn' : 'Ảnh buổi tập của bạn')
+const destructive = computed(() => props.action.tool.startsWith('delete_'))
+const confirmLabel = computed(() => (props.busy ? 'Đang lưu…' : destructive.value ? 'Xác nhận xoá'
+  : edited.value ? 'Lưu bản đã sửa' : photo.value || imageSource.value ? 'Xác nhận & lưu ảnh' : 'Xác nhận lưu'))
 
 function decide(decision: 'approve' | 'reject') {
   emit('confirm', decision, decision === 'approve' ? { photo: photo.value, imageSource: imageSource.value, payload: edited.value } : {})
@@ -75,55 +78,57 @@ function decide(decision: 'approve' | 'reject') {
 </script>
 
 <template>
-  <article class="overflow-hidden rounded-2xl border border-ink/[0.14] bg-panel-raised shadow-[0_20px_50px_rgb(var(--c-shadow)/calc(0.55*var(--shadow-k)))]" :aria-label="`Xác nhận: ${title}`" :data-card="kind">
-    <header class="flex items-start gap-3.5 border-b border-ink/[0.08] px-5 py-4">
-      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ink/[0.06] text-gold">
-        <component :is="icon" class="h-5 w-5" :stroke-width="1.6" aria-hidden="true" />
-      </div>
-      <div class="min-w-0 flex-1">
-        <p class="font-label-telemetry text-[10px] uppercase tracking-[0.16em] text-on-surface-variant">Xác nhận ghi dữ liệu · rev {{ action.revision }}</p>
-        <h4 class="mt-1 truncate font-headline-md text-xl leading-tight text-primary">{{ title }}</h4>
-        <p v-if="subtitle" class="mt-1 text-xs text-on-surface-variant">{{ subtitle }}</p>
-      </div>
-      <div class="flex shrink-0 flex-col items-end gap-1">
-        <span class="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 font-label-telemetry text-[10px] text-amber-300">Chờ xác nhận</span>
-        <span class="font-label-code text-[10px] text-on-surface-variant">Hết hạn {{ expires }}</span>
+  <article class="hf cf" :aria-label="`Xác nhận: ${title}`" :data-card="kind" :aria-busy="busy">
+    <header class="cfh">
+      <span class="cfic" :class="{ danger: destructive, sport: kind === 'sport' }">
+        <component :is="icon" :size="20" :stroke-width="1.8" aria-hidden="true" />
+      </span>
+      <div class="cft"><b>{{ title }}</b><span v-if="subtitle">{{ subtitle }}</span></div>
+      <div class="cfm">
+        <span class="rev hf-mono" :class="{ ed: edited }">Bản {{ action.revision }}{{ edited ? ' · đã sửa' : '' }}</span>
+        <span class="exp"><Clock :size="12" aria-hidden="true" />Hết hạn {{ expires }}</span>
       </div>
     </header>
 
-    <MealCardBody v-if="kind === 'meal'" :meal="display!" />
-    <TrainingCardBody v-else-if="kind === 'training'" :training="display!" />
-    <PlanCardBody v-else-if="kind === 'plan'" :plan="display!" :payload="action.payload || {}" :disabled="busy" @change="edited = $event" />
-    <CatalogCardBody v-else-if="kind === 'catalog'" v-model="imageSource" :candidate="display!" :disabled="busy" />
-    <SportCardBody v-else-if="kind === 'sport'" :preview="display!" :timezone="(action.payload?.timezone as string | undefined)" />
-    <FieldsCardBody v-else :tool="action.tool" :payload="action.payload || {}" />
+    <div class="cfb">
+      <MealCardBody v-if="kind === 'meal'" :meal="display!" />
+      <TrainingCardBody v-else-if="kind === 'training'" :training="display!" />
+      <PlanCardBody v-else-if="kind === 'plan'" :plan="display!" :payload="action.payload || {}" :disabled="busy" @change="edited = $event" />
+      <CatalogCardBody v-else-if="kind === 'catalog'" v-model="imageSource" :candidate="display!" :disabled="busy" />
+      <SportCardBody v-else-if="kind === 'sport'" :preview="display!" :timezone="(action.payload?.timezone as string | undefined)" />
+      <FieldsCardBody v-else :tool="action.tool" :payload="action.payload || {}" />
 
-    <div v-if="kind === 'meal' || kind === 'training'" class="mx-5 mt-4">
-      <PhotoAttachment v-model="photo" :label="photoLabel" :disabled="busy" />
+      <div v-if="kind === 'meal' || kind === 'training'" class="photo-wrap">
+        <PhotoAttachment v-model="photo" :label="photoLabel" :disabled="busy" />
+      </div>
     </div>
 
-    <footer class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/[0.08] px-5 py-4">
-      <p class="text-[11px] text-on-surface-variant">Chỉ lưu khi bạn bấm xác nhận.</p>
-      <div class="flex gap-2">
-        <button
-          type="button"
-          :disabled="busy"
-          class="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-ink/15 bg-ink/[0.04] px-4 text-xs font-medium text-on-surface transition-colors hover:border-ink/30 hover:bg-ink/[0.08] disabled:opacity-50"
-          @click="decide('reject')"
-        >
-          <X class="h-3.5 w-3.5" aria-hidden="true" />Từ chối
-        </button>
-        <button
-          type="button"
-          :disabled="busy"
-          class="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-ink px-4 text-xs font-semibold text-paper transition-transform hover:scale-[1.02] disabled:opacity-50 motion-reduce:transition-none motion-reduce:hover:scale-100"
-          @click="decide('approve')"
-        >
-          <Loader2 v-if="busy" class="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-          <Check v-else class="h-3.5 w-3.5" aria-hidden="true" />
-          {{ busy ? 'Đang lưu…' : edited ? 'Lưu bản đã sửa' : photo || imageSource ? 'Xác nhận & lưu ảnh' : 'Xác nhận lưu' }}
-        </button>
-      </div>
+    <footer class="cff">
+      <span class="note">Chỉ lưu khi bạn bấm xác nhận.</span>
+      <button type="button" class="hf-btn ghost" :disabled="busy" @click="decide('reject')">{{ destructive ? 'Giữ lại' : 'Từ chối' }}</button>
+      <button type="button" class="hf-btn" :class="destructive ? 'dng' : 'pri'" :disabled="busy" @click="decide('approve')">
+        <Loader2 v-if="busy" :size="14" class="hf-spin" aria-hidden="true" />{{ confirmLabel }}
+      </button>
     </footer>
   </article>
 </template>
+
+<style scoped>
+.cf { background: var(--hf-card); border: 1px solid var(--hf-line); border-radius: 22px; display: flex; flex-direction: column; box-shadow: 0 8px 24px rgba(0, 0, 0, .06); overflow: hidden; }
+.cfh { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 12px; }
+.cfic { width: 40px; height: 40px; border-radius: 12px; background: var(--hf-ink); color: var(--hf-on-ink); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.cfic.danger { background: var(--hf-err-bg); color: var(--hf-bad); }
+.cfic.sport { background: var(--hf-card); color: var(--hf-ink); border: 1px solid var(--hf-line); }
+.cft { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cft b { font-size: 16px; line-height: 1.3; overflow-wrap: anywhere; }
+.cft span { font-size: 12.5px; color: var(--hf-muted); }
+.cfm { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.rev { font-size: 11px; font-weight: 700; background: var(--hf-fill); border-radius: 6px; padding: 2px 7px; }
+.rev.ed { background: var(--hf-plan-bg); color: var(--hf-plan); }
+.exp { font-size: 11px; color: var(--hf-muted); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+/* Phần thân của từng loại thẻ tự canh lề (px-5) để dải số liệu có thể tràn mép thẻ. */
+.cfb { padding: 0 0 16px; display: flex; flex-direction: column; gap: 14px; }
+.photo-wrap { padding: 0 20px; }
+.cff { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--hf-line-2); background: var(--hf-fill-2); flex-wrap: wrap; }
+.note { margin-right: auto; font-size: 12px; color: var(--hf-muted); }
+</style>

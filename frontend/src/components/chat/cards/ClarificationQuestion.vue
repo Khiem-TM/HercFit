@@ -56,13 +56,12 @@ defineExpose({ focus: () => heading.value?.focus(), error: () => answerError(pro
 </script>
 
 <template>
-  <div role="group" :aria-labelledby="headingId" :data-frame="question.mode">
-    <p class="font-label-telemetry text-[10px] uppercase tracking-[0.16em] text-on-surface-variant">
-      <span v-if="showLabel" class="text-gold">{{ question.label }} · </span>{{ hint }}
+  <div class="question" role="group" :aria-labelledby="headingId" :data-frame="question.mode">
+    <p v-if="question.mode === 'quick_reply'" class="qr-row"><span class="qr">Trả lời nhanh</span></p>
+    <h4 :id="headingId" ref="heading" tabindex="-1" class="q">{{ question.question }}</h4>
+    <p v-if="showLabel || question.mode === 'multiple'" class="hint">
+      <template v-if="showLabel">{{ question.label }} · </template>{{ hint }}<template v-if="question.mode === 'multiple'"> · đã chọn {{ answer.optionIds.length }}</template>
     </p>
-    <h4 :id="headingId" ref="heading" tabindex="-1" class="mt-2 font-headline-md text-lg leading-snug text-primary focus:outline-none">
-      {{ question.question }}
-    </h4>
 
     <!-- Con số kèm đơn vị và khoảng -->
     <NumberField
@@ -78,53 +77,65 @@ defineExpose({ focus: () => heading.value?.focus(), error: () => answerError(pro
     <!-- Sets × reps × kg cho từng bài tập -->
     <template v-else-if="question.mode === 'sets'">
       <SetsEditor v-if="!emptyRows" :rows="rows ?? []" :answer="answer" :disabled="disabled" @change="editSets" />
-      <p v-else class="mt-3 text-xs text-on-surface-variant">Chọn bài tập ở câu trước để nhập số hiệp.</p>
-      <p v-if="setsMessage" class="mt-2 text-[11px] text-amber-300" aria-live="polite">{{ setsMessage }}</p>
+      <p v-else class="hint">Chọn bài tập ở câu trước để nhập số hiệp.</p>
+      <p v-if="setsMessage" class="err" aria-live="polite">{{ setsMessage }}</p>
     </template>
 
-    <!-- Lựa chọn catalog có ảnh -->
-    <div v-else-if="withImages" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-      <button
-        v-for="option in question.options"
-        :key="option.id"
-        type="button"
-        :disabled="disabled"
-        :aria-pressed="picked(option.id)"
-        class="overflow-hidden rounded-xl border-2 bg-ink/[0.03] text-left transition-colors disabled:opacity-50"
-        :class="picked(option.id) ? 'border-gold' : 'border-ink/10 hover:border-ink/30'"
-        @click="pick(option.id)"
-      >
-        <CatalogImage :src="option.image_url" :alt="option.label" :icon="option.ref?.kind === 'exercise' ? 'exercise' : 'food'" rounded="rounded-none" class="h-20 w-full" />
-        <span class="block px-3 py-2">
-          <span class="flex items-center gap-1.5 text-sm font-medium text-primary">
-            <Check v-if="picked(option.id)" class="h-3.5 w-3.5 text-gold" aria-hidden="true" />{{ option.label }}
-          </span>
-          <span v-if="option.description" class="mt-0.5 block text-[11px] text-on-surface-variant">{{ option.description }}</span>
-        </span>
+    <!-- Lưới catalog có ảnh -->
+    <div v-else-if="withImages" class="tiles">
+      <button v-for="option in question.options" :key="option.id" type="button" class="tile" :class="{ on: picked(option.id) }"
+              :disabled="disabled || (!picked(option.id) && question.mode === 'multiple' && answer.optionIds.length >= question.max_select)"
+              :aria-pressed="picked(option.id)" @click="pick(option.id)">
+        <CatalogImage :src="option.image_url" :alt="option.label" :icon="option.ref?.kind === 'exercise' ? 'exercise' : 'food'" rounded="rounded-[10px]" class="img" />
+        <b>{{ option.label }}</b>
+        <span v-if="option.description" class="m">{{ option.description }}</span>
+        <span v-if="picked(option.id)" class="ck"><Check :size="12" :stroke-width="3.5" aria-hidden="true" /></span>
       </button>
     </div>
 
-    <!-- Chip cho lựa chọn và trả lời nhanh -->
-    <div v-else class="mt-3 flex flex-wrap gap-2">
-      <button
-        v-for="option in question.options"
-        :key="option.id"
-        type="button"
-        :disabled="disabled"
-        :aria-pressed="picked(option.id)"
-        class="inline-flex min-h-[40px] items-center gap-1.5 border px-4 text-sm transition-colors disabled:opacity-50"
-        :class="[
-          picked(option.id) ? 'border-gold bg-gold/15 text-primary' : 'border-ink/15 bg-ink/[0.04] text-on-surface hover:border-ink/30',
-          option.description ? 'rounded-xl py-2 text-left' : 'rounded-full',
-        ]"
-        @click="pick(option.id)"
-      >
-        <Check v-if="picked(option.id)" class="h-3.5 w-3.5 shrink-0 text-gold" aria-hidden="true" />
-        <span>
-          {{ option.label }}
-          <span v-if="option.description" class="block text-[11px] text-on-surface-variant">{{ option.description }}</span>
-        </span>
+    <!-- Lựa chọn có mô tả: ô; không mô tả: chip -->
+    <div v-else-if="question.options.some(option => option.description)" class="opts">
+      <button v-for="option in question.options" :key="option.id" type="button" class="opt" :class="{ on: picked(option.id) }"
+              :disabled="disabled" :aria-pressed="picked(option.id)" @click="pick(option.id)">
+        <b>{{ option.label }}</b><span>{{ option.description }}</span>
+      </button>
+    </div>
+    <div v-else class="chips">
+      <button v-for="option in question.options" :key="option.id" type="button" class="hf-tog"
+              :disabled="disabled || (!picked(option.id) && question.mode === 'multiple' && answer.optionIds.length >= question.max_select)"
+              :aria-pressed="picked(option.id)" @click="pick(option.id)">
+        <Check v-if="picked(option.id) && question.mode === 'multiple'" :size="14" :stroke-width="3" aria-hidden="true" />{{ option.label }}
       </button>
     </div>
   </div>
 </template>
+
+<style scoped>
+.question { display: flex; flex-direction: column; gap: 12px; }
+.q { font-size: 16px; font-weight: 700; line-height: 1.4; margin: 0; color: var(--hf-ink); }
+.q:focus { outline: none; }
+.hint { font-size: 12px; color: var(--hf-muted); margin: -4px 0 0; }
+.err { font-size: 12px; color: var(--hf-bad); margin: 0; }
+.qr-row { margin: 0; }
+.qr { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--hf-qr); background: var(--hf-plan-bg); border-radius: 999px; padding: 3px 9px; }
+.opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.opt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 1px solid var(--hf-line-3); background: var(--hf-card); border-radius: 16px; padding: 12px 14px; min-height: 44px; }
+.opt:hover:not(:disabled) { background: var(--hf-fill-3); }
+.opt b { font-size: 14px; font-weight: 600; }
+.opt span { font-size: 12px; color: var(--hf-muted); line-height: 1.45; }
+.opt.on { background: var(--hf-ink); color: var(--hf-on-ink); border-color: var(--hf-ink); }
+.opt.on span { color: #C9C9CF; }
+.opt:disabled { opacity: .5; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.tile { position: relative; border: 1px solid var(--hf-line-3); background: var(--hf-card); border-radius: 16px; padding: 8px; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.tile:hover:not(:disabled) { background: var(--hf-fill-3); }
+.tile:disabled { opacity: .45; }
+.tile .img { aspect-ratio: 4 / 3; width: 100%; }
+.tile b { font-size: 13px; line-height: 1.3; padding: 0 2px; }
+.tile .m { font-size: 11px; color: var(--hf-muted); padding: 0 2px 2px; }
+.tile.on { border: 2px solid var(--hf-ink); padding: 7px; }
+.ck { position: absolute; top: 13px; right: 13px; width: 24px; height: 24px; border-radius: 50%; background: var(--hf-ink); color: var(--hf-on-ink); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px var(--hf-card); }
+@media (min-width: 640px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .opts { grid-template-columns: minmax(0, 1fr); } }
+</style>

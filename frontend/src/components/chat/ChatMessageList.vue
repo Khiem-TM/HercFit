@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import {
-  ExternalLink,
-  Loader2,
-  Sparkles,
-} from 'lucide-vue-next'
+import { AlertCircle, Check, ImageIcon, Sparkles } from 'lucide-vue-next'
 import type { ChatMessage, PendingAction } from '@/types/api'
+import HfLogo from '@/components/app/HfLogo.vue'
 import CatalogImage from '@/components/chat/cards/CatalogImage.vue'
 import ClarificationCard from '@/components/chat/cards/ClarificationCard.vue'
 import ConfirmationCard, { type ConfirmExtras } from '@/components/chat/cards/ConfirmationCard.vue'
@@ -67,85 +64,52 @@ function hidesReply(msg: ChatMessage): boolean {
 function host(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url }
 }
+
+/** Hai chữ đầu của tên miền làm "favicon" chữ cho nút nguồn. */
+function badge(url: string): string {
+  return host(url).replace(/\..*$/, '').slice(0, 2).toUpperCase()
+}
 </script>
 
 <template>
-  <div
-    ref="containerRef"
-    class="flex-1 overflow-y-auto px-4 py-6 md:px-8 scrollbar-thin"
-  >
-    <div class="mx-auto flex w-full max-w-3xl flex-col gap-6">
-      <div
-        v-for="msg in messages"
-        :key="msg.id"
-        class="flex w-full"
-        :class="msg.role === 'human' ? 'justify-end' : 'justify-start'"
-      >
-        <!-- Bong bóng tin nhắn của người dùng -->
-        <div
-          v-if="msg.role === 'human'"
-          class="max-w-[82%] rounded-2xl rounded-tr-sm border border-ink/10 bg-panel-hover px-4 py-3 text-sm leading-relaxed text-primary shadow-md"
-        >
-          <p class="whitespace-pre-wrap">{{ msg.content }}</p>
-        </div>
+  <div ref="containerRef" class="thread">
+    <div class="col720">
+      <template v-for="msg in messages" :key="msg.id">
+        <div v-if="msg.role === 'human'" class="um">{{ msg.content }}</div>
 
-        <!-- Khối tin nhắn của AI Agent -->
-        <div v-else class="msg-enter flex w-full max-w-[92%] items-start gap-3.5">
-          <!-- Avatar quả cầu Kinetic thu nhỏ -->
-          <div
-            class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-ink/20 shadow-inner"
-            style="background: radial-gradient(circle at 30% 30%, #4b4e54 0%, #18191c 70%, #0b0b0c 100%);"
-          >
-            <Sparkles class="h-3.5 w-3.5 text-primary" />
-          </div>
+        <div v-else class="am msg-enter">
+          <HfLogo :size="28" class="avatar" />
+          <div class="body">
+            <span v-if="msg.status === 'confirmed' || msg.status === 'rejected'" class="state" :class="msg.status === 'confirmed' ? 'ok' : 'no'">
+              <Check v-if="msg.status === 'confirmed'" :size="12" :stroke-width="3" aria-hidden="true" />
+              {{ msg.status === 'confirmed' ? 'Đã xác nhận' : 'Đã từ chối' }}
+            </span>
 
-          <div class="min-w-0 flex-1 space-y-3">
-            <div class="flex items-center gap-2">
-              <span class="font-label-code text-[11px] uppercase tracking-[0.16em] text-primary">
-                HERCFIT // OLYMPUS AGENT
-              </span>
-              <span
-                v-if="msg.status === 'pending_confirmation'"
-                class="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 font-label-telemetry text-[10px] text-amber-300"
-              >
-                CẦN XÁC NHẬN
-              </span>
-              <span
-                v-else-if="msg.status === 'confirmed' || msg.status === 'rejected'"
-                class="rounded-full border px-2 py-0.5 font-label-telemetry text-[10px]"
-                :class="msg.status === 'confirmed' ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-ink/15 bg-ink/[0.04] text-on-surface-variant'"
-              >
-                {{ msg.status === 'confirmed' ? 'ĐÃ XÁC NHẬN' : 'ĐÃ TỪ CHỐI' }}
-              </span>
+            <div v-if="msg.status === 'failed'" class="errb" role="alert">
+              <AlertCircle :size="18" aria-hidden="true" />
+              <div class="md" v-html="renderMarkdown(msg.content || 'Không hoàn tất được yêu cầu. Bạn có thể thử lại.')" />
             </div>
-
-            <!-- Nội dung tin nhắn -->
-            <div
-              class="rounded-2xl rounded-tl-sm border border-ink/[0.08] bg-panel/90 px-5 py-4 text-sm leading-relaxed text-on-surface"
-              :aria-busy="msg.status === 'streaming'"
-            >
+            <div v-else-if="msg.content || msg.status === 'streaming'" :aria-busy="msg.status === 'streaming'">
               <!-- renderMarkdown escape toàn bộ HTML trước rồi mới sinh các thẻ trong danh sách cho phép cố định. -->
-              <div
-                class="md"
-                v-html="renderMarkdown(asksForm(msg) && msg.clarification?.intro ? msg.clarification.intro : msg.content)"
-              />
-              <!-- Câu hỏi có thể nhắc tới câu trả lời ("trong danh sách trên"), nên nó luôn cách một chạm. -->
-              <details v-if="hidesReply(msg)" class="mt-2">
-                <summary class="cursor-pointer text-xs text-outline hover:text-on-surface">Xem toàn bộ tin nhắn</summary>
-                <div class="md mt-2 border-t border-ink/[0.06] pt-2" v-html="renderMarkdown(msg.content)" />
-              </details>
-              <span v-if="msg.status === 'streaming'" class="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-ink/70 align-middle" aria-hidden="true" />
-              <p v-if="msg.status === 'stopped'" class="mt-2 text-xs text-outline">Đã dừng theo yêu cầu.</p>
+              <div class="md" :class="{ stopped: msg.status === 'stopped' }"
+                   v-html="renderMarkdown(asksForm(msg) && msg.clarification?.intro ? msg.clarification.intro : msg.content)" />
+              <span v-if="msg.status === 'streaming'" class="caret" aria-hidden="true" />
             </div>
+            <!-- Câu hỏi có thể nhắc tới câu trả lời ("trong danh sách trên"), nên nó luôn cách một chạm. -->
+            <details v-if="hidesReply(msg)" class="more">
+              <summary class="hf-lnk">Xem toàn bộ tin nhắn</summary>
+              <div class="md" v-html="renderMarkdown(msg.content)" />
+            </details>
+            <span v-if="msg.status === 'stopped'" class="state no">Đã dừng</span>
 
             <!-- Ảnh minh hoạ từ tra cứu (ảnh trên web; chỉ được lưu sau khi xác nhận nhập) -->
-            <figure v-if="msg.illustrations && msg.illustrations.length" class="max-w-xs overflow-hidden rounded-xl border border-ink/[0.08] bg-panel">
-              <CatalogImage :src="msg.illustrations[0].url" :alt="msg.illustrations[0].description || 'Ảnh minh hoạ'" rounded="rounded-none" class="aspect-[4/3] w-full" />
-              <figcaption class="px-3 py-2 text-[11px] text-outline">Ảnh minh hoạ · {{ host(msg.illustrations[0].url) }}</figcaption>
+            <figure v-if="msg.illustrations && msg.illustrations.length" class="ill">
+              <CatalogImage :src="msg.illustrations[0].url" :alt="msg.illustrations[0].description || 'Ảnh minh hoạ'" rounded="rounded-none" class="ill-img" />
+              <figcaption><ImageIcon :size="13" aria-hidden="true" />{{ host(msg.illustrations[0].url) }}</figcaption>
             </figure>
 
             <!-- Các lựa chọn để con người quyết định -->
-            <Transition appear enter-active-class="transition duration-200 ease-out motion-reduce:transition-none" enter-from-class="translate-y-1 opacity-0">
+            <Transition appear enter-active-class="transition duration-base ease-out motion-reduce:transition-none" enter-from-class="translate-y-2 opacity-0">
               <ClarificationCard
                 v-if="asksForm(msg) && msg.clarification"
                 :clarification="msg.clarification"
@@ -155,41 +119,26 @@ function host(url: string): string {
             </Transition>
 
             <!-- Chế độ thường không tư vấn: gửi lại câu hỏi ở chế độ Plan -->
-            <button
-              v-if="msg.suggested_mode === 'plan' && msg.id === lastMessageId && questionBefore(msg)"
-              type="button"
-              :disabled="isStreaming || isConfirming"
-              class="inline-flex w-fit items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs text-gold transition-colors hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
-              @click="emit('ask-in-plan', questionBefore(msg) as string)"
-            >
-              <Sparkles class="h-3.5 w-3.5" />
-              Hỏi ở chế độ Plan
-            </button>
+            <div v-if="msg.suggested_mode === 'plan' && msg.id === lastMessageId && questionBefore(msg)" class="plan">
+              <span><Sparkles :size="16" aria-hidden="true" />Câu này phù hợp với chế độ Plan</span>
+              <button type="button" class="hf-btn sm" :disabled="isStreaming || isConfirming"
+                      @click="emit('ask-in-plan', questionBefore(msg) as string)">Hỏi ở chế độ Plan</button>
+            </div>
 
             <!-- Nguồn tra cứu -->
-            <div
-              v-if="msg.sources && msg.sources.length > 0"
-              class="flex flex-wrap gap-2 pt-1"
-            >
-              <a
-                v-for="(src, idx) in msg.sources"
-                :key="idx"
-                :href="src.url"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-ink/[0.08] bg-panel px-2.5 py-1 text-xs text-on-surface-variant transition-colors hover:border-ink/25 hover:text-primary"
-              >
-                <ExternalLink class="h-3 w-3 text-outline" />
-                <span class="max-w-[220px] truncate">{{ src.title || src.url }}</span>
+            <div v-if="msg.sources && msg.sources.length > 0" class="srcs">
+              <a v-for="(src, idx) in msg.sources" :key="idx" :href="src.url" target="_blank" rel="noopener noreferrer"
+                 class="srcb" :title="src.title || src.url">
+                <span class="fav">{{ badge(src.url) }}</span><span class="src-name">{{ host(src.url) }}</span>
               </a>
             </div>
           </div>
         </div>
-      </div>
+      </template>
 
       <!-- Thẻ xác nhận đang chờ -->
-      <Transition appear enter-active-class="transition duration-200 ease-out motion-reduce:transition-none" enter-from-class="translate-y-1 opacity-0">
-        <div v-if="pendingAction" :key="pendingAction.action_id" class="ml-11">
+      <Transition appear enter-active-class="transition duration-base ease-out motion-reduce:transition-none" enter-from-class="translate-y-2 opacity-0">
+        <div v-if="pendingAction" :key="pendingAction.action_id" class="pending">
           <ConfirmationCard
             :action="pendingAction"
             :busy="isConfirming"
@@ -198,36 +147,89 @@ function host(url: string): string {
         </div>
       </Transition>
 
-      <!-- Chỉ báo tiến độ stream (ẩn khi token câu trả lời đã hiển thị) -->
-      <div v-if="isStreaming && messages[messages.length - 1]?.status !== 'streaming'" class="flex items-center gap-3.5">
-        <div
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-ink/20 bg-panel-raised"
-        >
-          <Loader2 class="h-3.5 w-3.5 animate-spin text-primary" />
-        </div>
-        <div
-          class="inline-flex items-center gap-2 rounded-full border border-ink/[0.09] bg-panel px-4 py-2 text-xs text-on-surface-variant"
-        >
-          <span class="h-2 w-2 animate-ping rounded-full bg-ink" />
-          <span>{{ activeNodeLabel }}</span>
+      <!-- Chỉ báo tiến độ trước khi có token câu trả lời -->
+      <div v-if="isStreaming && messages[messages.length - 1]?.status !== 'streaming'" class="am">
+        <HfLogo :size="28" class="avatar" />
+        <div class="body">
+          <div class="steps" aria-live="polite">
+            <div><span class="dot run" aria-hidden="true" /><b>{{ activeNodeLabel || 'Đang xử lý…' }}</b></div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </template>
 
-
 <style scoped>
+.thread { flex: 1; overflow-y: auto; padding: 32px 24px 8px; }
+.col720 { max-width: 720px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 28px; }
+.um {
+  align-self: flex-end; max-width: 80%; background: var(--hf-bubble); color: var(--hf-ink); border-radius: 20px;
+  padding: 12px 16px; font-size: 15px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.am { display: flex; gap: 14px; align-items: flex-start; font-size: 16px; line-height: 1.7; color: var(--hf-text); }
+.avatar { margin-top: 2px; }
+.body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.md.stopped { color: var(--hf-sub-2); }
+.caret { display: inline-block; width: 8px; height: 18px; background: var(--hf-ink); vertical-align: -3px; margin-left: 2px; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.state {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700;
+  border-radius: 999px; padding: 3px 10px; line-height: 1.4;
+}
+.state.ok { background: var(--hf-ok-bg); color: var(--hf-ok-text); }
+.state.no { background: var(--hf-fill); color: var(--hf-sub); }
+.errb {
+  display: flex; gap: 10px; align-items: flex-start; background: var(--hf-err-bg); color: var(--hf-err-text);
+  border-radius: 16px; padding: 12px 14px; font-size: 14px; line-height: 1.5;
+}
+.errb svg { flex: none; margin-top: 2px; }
+.more summary { list-style: none; cursor: pointer; color: var(--hf-sub); }
+.more .md { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hf-line-2); }
+.ill { margin: 0; border-radius: 16px; overflow: hidden; border: 1px solid var(--hf-press); background: var(--hf-card); max-width: 420px; }
+.ill-img { display: block; width: 100%; height: 170px; }
+.ill figcaption { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 12px; color: var(--hf-muted); }
+.plan {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  background: var(--hf-plan-bg); color: var(--hf-plan-text); border-radius: 16px; padding: 10px 10px 10px 14px; font-size: 13.5px;
+}
+.plan span { display: inline-flex; gap: 8px; align-items: center; }
+.plan .hf-btn { background: var(--hf-plan); color: #fff; }
+.srcs { display: flex; flex-wrap: wrap; gap: 8px; }
+.srcb {
+  display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--hf-line); background: var(--hf-card);
+  border-radius: 999px; padding: 0 12px 0 6px; min-height: 36px; font-size: 12.5px; font-weight: 500;
+  text-decoration: none; color: var(--hf-ink); max-width: 260px;
+}
+.srcb:hover { background: var(--hf-fill-3); }
+.src-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--hf-fill); flex: none;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--hf-sub);
+}
+.pending { margin-left: 42px; }
+.steps {
+  display: flex; flex-direction: column; gap: 8px; background: var(--hf-card); border: 1px solid var(--hf-press);
+  border-radius: 16px; padding: 12px 14px; font-size: 13.5px; align-self: flex-start;
+}
+.steps div { display: flex; align-items: center; gap: 10px; }
+.dot { width: 18px; height: 18px; border-radius: 50%; flex: none; display: inline-flex; }
+.dot.run { border: 2px solid var(--hf-press); border-top-color: var(--hf-ink); animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 /* Câu trả lời mới hiện mờ dần một lần; bong bóng được cập nhật (stream -> bản cuối) giữ nguyên node và không chạy lại hiệu ứng. */
 .msg-enter { animation: msg-enter 180ms ease-out; }
 @keyframes msg-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .msg-enter { animation: none; } }
-.md :deep(p) { margin: 0 0 0.6rem; }
+.md :deep(p) { margin: 0 0 10px; }
 .md :deep(p:last-child) { margin-bottom: 0; }
-.md :deep(ul) { list-style: disc; padding-left: 1.25rem; margin: 0.25rem 0 0.6rem; }
-.md :deep(ol) { list-style: decimal; padding-left: 1.4rem; margin: 0.25rem 0 0.6rem; }
-.md :deep(li) { margin: 0.15rem 0; }
-.md :deep(strong) { color: rgb(255 255 255 / 0.95); font-weight: 600; }
-.md :deep(code) { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; background: rgb(255 255 255 / 0.08); padding: 0.05rem 0.3rem; border-radius: 0.3rem; }
-.md :deep(a) { text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
+.md :deep(ul) { list-style: disc; padding-left: 20px; margin: 4px 0 10px; }
+.md :deep(ol) { list-style: decimal; padding-left: 22px; margin: 4px 0 10px; }
+.md :deep(li) { margin: 3px 0; }
+.md :deep(strong) { color: var(--hf-ink); font-weight: 700; }
+.md :deep(code) { font-family: var(--hf-mono); font-size: 13px; background: var(--hf-fill); padding: 1px 5px; border-radius: 5px; }
+.md :deep(a) { color: var(--hf-ink); text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
+@media (max-width: 760px) {
+  .thread { padding: 20px 16px 8px; }
+  .pending { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .msg-enter, .caret, .dot.run { animation: none; } }
 </style>

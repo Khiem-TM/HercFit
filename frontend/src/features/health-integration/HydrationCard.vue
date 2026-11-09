@@ -35,26 +35,28 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <div class="space-y-3 rounded-2xl border border-ink/[0.08] bg-panel p-4 text-xs">
-    <div class="flex items-center gap-2">
-      <GlassWater class="h-4 w-4 text-primary" />
-      <h4 class="text-sm font-medium text-primary">Nước uống</h4>
-    </div>
-    <p class="text-[11px] text-outline">Ghi thẳng lên Google Health (Google giữ bản gốc). Bạn cũng có thể nói với trợ lý, ví dụ
-      “mình vừa uống 500 ml nước”.</p>
+  <div class="water">
+    <p class="hf-mut intro">Ghi thẳng lên Google Health (Google giữ bản gốc). Bạn cũng có thể nói với trợ lý, ví dụ “mình vừa uống 500 ml nước”.</p>
     <template v-if="canWrite">
-      <div class="flex flex-wrap items-center gap-2 text-on-surface-variant">
-        <input v-model.number="amount" type="number" min="10" max="5000" step="50" aria-label="Lượng nước (ml)"
-          class="w-24 rounded-lg border border-ink/15 bg-transparent px-2 py-1 text-primary" /> ml
-        <button v-for="preset in [250, 500]" :key="preset" type="button"
-          class="rounded-lg border border-ink/20 px-2 py-1 text-[11px] text-primary hover:bg-ink/10" @click="amount = preset">
-          {{ preset }} ml
-        </button>
-        <button type="button" :disabled="busy || !(amount > 0)"
-          class="rounded-xl bg-ink px-3 py-1.5 font-semibold text-paper hover:bg-ink/90 disabled:opacity-40" @click="save">Ghi</button>
+      <div class="row">
+        <label class="hf-sr" for="water-ml">Lượng nước (ml)</label>
+        <input id="water-ml" v-model.number="amount" class="hf-inp amount" type="number" min="10" max="5000" step="50" />
+        <span class="hf-mut">ml</span>
+        <button v-for="preset in [250, 500]" :key="preset" type="button" class="hf-tog" @click="amount = preset">{{ preset }} ml</button>
+        <button type="button" class="hf-btn pri" :disabled="busy || !(amount > 0)" @click="save">Ghi</button>
       </div>
-      <p v-if="message" :class="message.tone === 'ok' ? 'text-emerald-300' : 'text-error'">{{ message.text }}</p>
+      <p v-if="message" class="msg" :class="message.tone" role="status">{{ message.text }}</p>
     </template>
-    <p v-else class="text-[11px] text-amber-300">Chưa cấp quyền ghi dinh dưỡng lên Google Health. Bấm “Cấp thêm quyền” ở trên.</p>
+    <p v-else class="hf-warn">Chưa cấp quyền ghi dinh dưỡng lên Google Health. Bấm “Cấp thêm quyền” ở trên.</p>
   </div>
 </template>
+
+<style scoped>
+.water { display: flex; flex-direction: column; gap: 10px; }
+.intro { margin: 0; font-size: 13px; line-height: 1.5; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.amount { width: 110px; }
+.msg { margin: 0; font-size: 13px; }
+.msg.ok { color: var(--hf-ok-text); }
+.msg.error { color: var(--hf-bad); }
+</style>

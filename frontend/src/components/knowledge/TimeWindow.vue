@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, useTemplateRef, watch } from 'vue'
-import { CalendarRange } from 'lucide-vue-next'
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import type { DayRange } from '@/composables/useKnowledgeGraph'
 import { hubColor, type HubCounts, type KnowledgeHub, type KnowledgeWindow } from '@/types/knowledge'
 import { dayDiff, daysBetween, rangeLength, recentRange, sameRange } from './timeWindow'
@@ -151,6 +151,15 @@ function key(event: KeyboardEvent, edge: 'start' | 'end') {
   timer = setTimeout(commit, 450)
 }
 
+/** Dời cả cửa sổ một ngày (nút lùi / tiến mốc), không vượt khỏi lịch sử còn lưu. */
+function nudge(step: number) {
+  const start = startIndex.value + step
+  const end = endIndex.value + step
+  if (start < 0 || end > count.value - 1) return
+  draft.value = { start: days.value[start], end: days.value[end] }
+  commit()
+}
+
 function choose(length: number) {
   draft.value = length ? recentRange(props.min, props.max, length) : { start: props.min, end: props.max }
   commit()
@@ -163,14 +172,20 @@ onBeforeUnmount(() => clearTimeout(timer))
   <section class="time-window" :class="{ dragging: grip }" aria-label="Khoảng thời gian trên bản đồ">
     <div class="window-head">
       <p class="range">
-        <CalendarRange :size="13" :stroke-width="1.7" aria-hidden="true" />
-        <strong>{{ dayMonth(draft.start) }} – {{ dayMonth(draft.end) }}</strong>
+        <CalendarDays :size="20" :stroke-width="1.8" aria-hidden="true" />
+        <strong class="hf-mono">{{ dayMonth(draft.start) }} – {{ dayMonth(draft.end) }}</strong>
         <span>{{ rangeLength(draft) }} ngày · {{ activity }} hoạt động</span>
       </p>
-      <div class="presets" role="group" aria-label="Chọn nhanh khoảng thời gian">
-        <button v-for="preset in presets" :key="preset.days" type="button" :aria-pressed="activePreset === preset.days" @click="choose(preset.days)">
-          {{ preset.label }}
-        </button>
+      <div class="controls">
+        <button type="button" class="hf-ib soft step" aria-label="Lùi mốc 1 ngày" :disabled="startIndex <= 0" @click="nudge(-1)">
+          <ChevronLeft :size="16" aria-hidden="true" /></button>
+        <button type="button" class="hf-ib soft step" aria-label="Tiến mốc 1 ngày" :disabled="endIndex >= count - 1" @click="nudge(1)">
+          <ChevronRight :size="16" aria-hidden="true" /></button>
+        <div class="hf-seg soft" role="group" aria-label="Độ dài khoảng thời gian">
+          <button v-for="preset in presets" :key="preset.days" type="button" :aria-pressed="activePreset === preset.days" @click="choose(preset.days)">
+            {{ preset.label }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -191,54 +206,52 @@ onBeforeUnmount(() => clearTimeout(timer))
             aria-label="Ngày kết thúc" :aria-valuemin="startIndex" :aria-valuemax="count - 1" :aria-valuenow="endIndex"
             :aria-valuetext="longDate(draft.end)" @keydown="key($event, 'end')" @blur="commit" />
     </div>
-    <div class="axis" aria-hidden="true">
+    <div class="axis hf-mono" aria-hidden="true">
       <span class="edge-start">{{ dayMonth(min) }}</span>
       <span v-for="tick in ticks" :key="tick.day" :style="{ left: `${tick.at}%` }">{{ tick.label }}</span>
       <span class="edge-end">Hôm nay</span>
     </div>
 
-    <p v-if="failed" class="note warn" role="status">Chưa tải được khoảng này. <button type="button" @click="emit('retry')">Thử lại</button></p>
+    <p v-if="failed" class="note warn" role="status">Chưa tải được khoảng này. <button type="button" class="hf-lnk" @click="emit('retry')">Thử lại</button></p>
     <p v-else-if="clipped.length" class="note" role="status">
       Đang vẽ {{ clipped.join(', ') }} gần nhất. Thu hẹp khoảng thời gian để xem đủ.
     </p>
-    <span class="sr-only" aria-live="polite">{{ announced }}</span>
+    <p v-else class="note">Kéo hai mép hoặc dải chọn trên dòng thời gian để đổi khoảng; bản đồ bên dưới vẽ lại theo khoảng đã chọn.</p>
+    <span class="hf-sr" aria-live="polite">{{ announced }}</span>
   </section>
 </template>
 
 <style scoped>
-.time-window { --accent: light-dark(#87671a, #d4b77d); display: flex; flex-direction: column; gap: 6px; padding: 0 var(--gutter, 26px) 10px; }
-.window-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
-.range { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: 10px; color: light-dark(#6e6b64, #8f8c84); }
-.range svg { flex-shrink: 0; color: var(--accent); }
-.range strong { font: 500 11px 'JetBrains Mono', monospace; color: light-dark(#847755, #efe3c4); letter-spacing: .02em; white-space: nowrap; }
-.range span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.presets { display: flex; gap: 2px; padding: 2px; border: 1px solid light-dark(#1818180c, #ffffff0c); border-radius: 9px; background: light-dark(#eeedeb, #0c0d11); }
-.presets button { padding: 4px 9px; border-radius: 7px; font-size: 10px; color: light-dark(#6e6b64, #8f8c84); white-space: nowrap; transition: color 200ms, background 200ms; }
-.presets button:hover { color: light-dark(#847755, #efe3c4); }
-.presets button[aria-pressed=true] { background: light-dark(#87671a1f, #d4b77d1f); color: light-dark(#867854, #f3e6c6); }
-.track { position: relative; height: 40px; border: 1px solid light-dark(#1818180b, #ffffff0b); border-radius: 10px; background: linear-gradient(light-dark(#eeedeb, #0c0d11), light-dark(#f1f0ee, #0f1015)); cursor: pointer; user-select: none; touch-action: pan-y; }
-.bars { position: absolute; left: 0; top: 5px; width: 100%; height: calc(100% - 10px); pointer-events: none; }
-.bars.dim { opacity: .22; filter: saturate(.5); }
+.time-window { display: flex; flex-direction: column; gap: 10px; }
+.window-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 12px; }
+.range { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; margin: 0; font-size: 14px; color: var(--hf-muted); }
+.range svg { flex-shrink: 0; color: var(--hf-ink); }
+.range strong { font-size: 20px; font-weight: 700; color: var(--hf-ink); white-space: nowrap; }
+.controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.step { width: 40px; height: 40px; }
+.step:disabled { opacity: .4; }
+.track { position: relative; height: 72px; border-radius: 14px; background: var(--hf-fill-2); cursor: pointer; user-select: none; touch-action: pan-y; }
+.bars { position: absolute; left: 6px; top: 8px; width: calc(100% - 12px); height: calc(100% - 14px); pointer-events: none; }
+.bars.dim { opacity: .35; filter: grayscale(1); }
 .bars.lit { clip-path: inset(0 calc(100% - var(--right)) 0 var(--left)); transition: clip-path 120ms ease-out; }
 .dragging .bars.lit { transition: none; }
-.quiet { position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; color: light-dark(#8d8982, #6f6c65); pointer-events: none; }
-.band { position: absolute; top: 0; bottom: 0; left: var(--left); width: calc(var(--right) - var(--left)); border-radius: 9px; background: linear-gradient(180deg, light-dark(#87671a17, #d4b77d17), light-dark(#87671a06, #d4b77d06)); box-shadow: inset 0 0 0 1px light-dark(#87671a45, #d4b77d45), 0 0 22px light-dark(#87671a12, #d4b77d12); cursor: grab; transition: left 120ms ease-out, width 120ms ease-out; }
+.quiet { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; color: var(--hf-muted); pointer-events: none; }
+.band { position: absolute; top: 3px; bottom: 3px; left: var(--left); width: calc(var(--right) - var(--left)); border-radius: 10px; border: 2px solid var(--hf-ink); background: rgba(20, 20, 22, .04); cursor: grab; transition: left 120ms ease-out, width 120ms ease-out; }
 .dragging .band { cursor: grabbing; transition: none; }
-.handle { position: absolute; top: -4px; bottom: -4px; left: var(--left); width: 16px; margin-left: -8px; display: flex; justify-content: center; cursor: ew-resize; touch-action: none; outline: none; transition: left 120ms ease-out; }
+.handle { position: absolute; top: 0; bottom: 0; left: var(--left); width: 18px; margin-left: -9px; display: flex; align-items: center; justify-content: center; cursor: ew-resize; touch-action: none; outline: none; transition: left 120ms ease-out; }
 .handle.end { left: var(--right); }
 .dragging .handle { transition: none; }
-.handle::before { content: ''; width: 4px; height: 100%; border-radius: 3px; background: linear-gradient(light-dark(#867854, #f3e6c6), light-dark(#87671a, #d4b77d)); box-shadow: 0 0 12px light-dark(#87671a70, #d4b77d70); transition: transform 200ms, box-shadow 200ms; }
-.handle:hover::before, .handle.active::before { transform: scaleX(1.6); box-shadow: 0 0 16px light-dark(#87671a, #d4b77d); }
-.handle:focus-visible::before { box-shadow: 0 0 0 2px light-dark(#f3f2ef, #101216), 0 0 0 4px light-dark(#867854, #f3e6c6); }
-.axis { position: relative; height: 11px; font: 8px 'JetBrains Mono', monospace; color: light-dark(#8d8982, #6f6c65); letter-spacing: .04em; }
+.handle::before { content: ''; width: 6px; height: 28px; border-radius: 3px; background: var(--hf-ink); transition: transform 200ms; }
+.handle:hover::before, .handle.active::before { transform: scaleY(1.2); }
+.handle:focus-visible::before { box-shadow: 0 0 0 2px var(--hf-card), 0 0 0 4px var(--hf-acc); }
+.axis { position: relative; height: 18px; font-size: 11px; color: var(--hf-muted); }
 .axis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
 .axis .edge-start { left: 0; transform: none; }
 .axis .edge-end { left: auto; right: 0; transform: none; }
-.loading-line { position: absolute; left: 8px; right: 8px; top: -1px; height: 1px; background: linear-gradient(90deg, transparent, light-dark(#867854, #f3e6c6), transparent) no-repeat; background-size: 35% 100%; animation: scan 1.1s linear infinite; }
-.note { margin: 0; font-size: 10px; line-height: 1.5; color: light-dark(#786642, #b9a98a); }
-.note.warn { color: light-dark(#946142, #e8b99d); }
-.note button { margin-left: 4px; text-decoration: underline; }
+.loading-line { position: absolute; left: 8px; right: 8px; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--hf-ink), transparent) no-repeat; background-size: 35% 100%; animation: scan 1.1s linear infinite; }
+.note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--hf-muted); }
+.note.warn { color: var(--hf-warn-text); }
 @keyframes scan { from { background-position: -40% 0; } to { background-position: 140% 0; } }
-@media (pointer: coarse) { .handle { width: 26px; margin-left: -13px; } .track { height: 46px; } }
+@media (pointer: coarse) { .handle { width: 28px; margin-left: -14px; } }
 @media (prefers-reduced-motion: reduce) { .loading-line { animation: none; } .band, .handle, .bars.lit { transition: none; } }
 </style>

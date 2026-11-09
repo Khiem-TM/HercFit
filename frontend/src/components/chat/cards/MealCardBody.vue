@@ -40,14 +40,14 @@ const incomplete = computed(() => items.value.filter(item => item.nutrition_inco
         </p>
       </div>
       <div v-if="share" class="mb-3 mt-3 flex h-2 gap-0.5 overflow-hidden rounded-full" aria-hidden="true">
-        <div class="bg-mist" :style="{ width: `${share.protein}%` }" />
-        <div class="bg-gold" :style="{ width: `${share.carb}%` }" />
-        <div class="bg-clay" :style="{ width: `${share.fat}%` }" />
+        <div :style="{ width: `${share.protein}%`, background: 'var(--hf-blue)' }" />
+        <div :style="{ width: `${share.carb}%`, background: 'var(--hf-green)' }" />
+        <div :style="{ width: `${share.fat}%`, background: 'var(--hf-amber)' }" />
       </div>
       <dl class="grid grid-cols-4 gap-2 text-xs">
-        <div><dt class="text-on-surface-variant">Protein</dt><dd class="mt-0.5 font-label-code text-sm text-mist">{{ fmt(meal.protein_g, 1, 'g') }}</dd></div>
-        <div><dt class="text-on-surface-variant">Carb</dt><dd class="mt-0.5 font-label-code text-sm text-gold">{{ fmt(meal.carbohydrate_g, 1, 'g') }}</dd></div>
-        <div><dt class="text-on-surface-variant">Fat</dt><dd class="mt-0.5 font-label-code text-sm text-clay">{{ fmt(meal.fat_g, 1, 'g') }}</dd></div>
+        <div><dt class="text-on-surface-variant">Protein</dt><dd class="mt-0.5 font-label-code text-sm" style="color: var(--hf-blue)">{{ fmt(meal.protein_g, 1, 'g') }}</dd></div>
+        <div><dt class="text-on-surface-variant">Carb</dt><dd class="mt-0.5 font-label-code text-sm" style="color: var(--hf-green)">{{ fmt(meal.carbohydrate_g, 1, 'g') }}</dd></div>
+        <div><dt class="text-on-surface-variant">Fat</dt><dd class="mt-0.5 font-label-code text-sm" style="color: var(--hf-amber)">{{ fmt(meal.fat_g, 1, 'g') }}</dd></div>
         <div><dt class="text-on-surface-variant">Chất xơ</dt><dd class="mt-0.5 font-label-code text-sm text-primary">{{ fmt(meal.fiber_g, 1, 'g') }}</dd></div>
       </dl>
     </section>

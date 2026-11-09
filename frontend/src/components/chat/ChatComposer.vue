@@ -54,6 +54,20 @@ function handleSend(): void {
   })
 }
 
+/** Điền sẵn một câu mở đầu (chip "Ghi bữa ăn", nút trong Dashboard) để người dùng viết tiếp. */
+function prefill(text: string): void {
+  draft.value = text
+  nextTick(() => {
+    adjustHeight()
+    const el = textareaRef.value
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(text.length, text.length)
+  })
+}
+
+defineExpose({ prefill })
+
 function handleKeydown(event: KeyboardEvent): void {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
@@ -63,67 +77,80 @@ function handleKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <!-- Khung nhập tối giản: chỉ ô soạn tin, nút Plan và nút gửi -->
-  <div
-    class="w-full rounded-[20px] border border-ink/[0.09] bg-panel-raised/90 px-4 pt-3.5 pb-2.5 shadow-[0_24px_64px_rgb(var(--c-shadow)/calc(0.4*var(--shadow-k)))] backdrop-blur-xl transition-colors focus-within:border-ink/[0.2]"
-  >
+  <div class="composer" :class="{ plan: mode === 'plan' }">
+    <label for="chat-composer" class="hf-sr">Tin nhắn cho trợ lý</label>
     <textarea
+      id="chat-composer"
       ref="textareaRef"
       v-model="draft"
       rows="2"
       :disabled="disabled || isStreaming"
-      :placeholder="mode === 'plan'
-        ? 'Hỏi chuyên sâu, nhờ phân tích chất lượng sống hoặc lập kế hoạch tập...'
-        : 'Ghi bữa ăn, buổi tập, cân nặng hoặc xem nhanh tiến độ...'"
-      class="w-full resize-none bg-transparent text-sm leading-relaxed text-primary placeholder:text-outline focus:outline-none disabled:opacity-50"
+      :placeholder="isStreaming ? 'Trợ lý đang trả lời…' : mode === 'plan'
+        ? 'Hỏi chuyên sâu, nhờ phân tích hoặc lập kế hoạch tập…'
+        : 'Nhắn cho trợ lý HercFit…'"
       @input="adjustHeight"
       @keydown="handleKeydown"
     />
 
-    <!-- Thanh công cụ dưới cùng bên trong -->
-    <div class="mt-2 flex items-center justify-between gap-2 pt-1">
-      <div class="flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          :aria-pressed="mode === 'plan'"
-          :title="mode === 'plan'
-            ? 'Đang ở chế độ Plan: tư vấn chuyên sâu, phân tích và lập kế hoạch. Bấm để về chế độ ghi nhanh.'
-            : 'Bật chế độ Plan: tư vấn chuyên sâu, phân tích chất lượng sống và lập kế hoạch tập.'"
-          class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors"
-          :class="mode === 'plan'
-            ? 'border-gold/40 bg-gold/15 text-gold hover:bg-gold/20'
-            : 'border-ink/[0.08] bg-ink/[0.03] text-on-surface-variant hover:border-ink/20 hover:bg-ink/[0.07] hover:text-primary'"
-          @click="toggleMode"
-        >
-          <Sparkles class="h-3 w-3" />
-          <span>Plan</span>
-        </button>
-        <span v-if="mode === 'plan'" class="text-[11px] text-outline">Tư vấn chuyên sâu · phân tích · lập kế hoạch</span>
-      </div>
-
-      <!-- Nút tròn Gửi / Dừng -->
+    <div class="tools">
       <button
-        v-if="isStreaming"
         type="button"
-        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-ink/30 bg-ink/10 text-primary transition-all duration-200 hover:scale-105 hover:bg-ink/20"
-        title="Dừng trả lời"
-        aria-label="Dừng trả lời"
-        @click="emit('stop')"
+        class="tchip"
+        :class="{ on: mode === 'plan' }"
+        :aria-pressed="mode === 'plan'"
+        :title="mode === 'plan'
+          ? 'Đang ở chế độ Plan: tư vấn chuyên sâu, phân tích và lập kế hoạch. Bấm để về chế độ ghi nhanh.'
+          : 'Bật chế độ Plan: tư vấn chuyên sâu, phân tích chất lượng sống và lập kế hoạch tập.'"
+        @click="toggleMode"
       >
-        <Square class="h-3.5 w-3.5 fill-current" />
+        <Sparkles :size="14" aria-hidden="true" />Plan
+      </button>
+      <button type="button" class="tchip" :disabled="disabled || isStreaming" @click="prefill('Ghi bữa ăn: ')">Ghi bữa ăn</button>
+      <button type="button" class="tchip" :disabled="disabled || isStreaming" @click="prefill('Ghi buổi tập: ')">Ghi buổi tập</button>
+      <span class="grow" />
+      <button v-if="isStreaming" type="button" class="hf-btn sm pri" title="Dừng trả lời" @click="emit('stop')">
+        <Square :size="10" class="fill-current" aria-hidden="true" />Dừng
       </button>
       <button
         v-else
         type="button"
+        class="send"
         :disabled="!draft.trim() || disabled"
-        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-paper shadow-[0_0_20px_rgba(255,255,255,0.25)] transition-all duration-200 hover:scale-105 disabled:cursor-not-allowed disabled:bg-ink/15 disabled:text-outline disabled:shadow-none"
         title="Gửi tin nhắn"
         aria-label="Gửi tin nhắn"
         @click="handleSend"
       >
-        <ArrowUp class="h-4 w-4 stroke-[2.5]" />
+        <ArrowUp :size="16" :stroke-width="2.4" aria-hidden="true" />
       </button>
     </div>
   </div>
 </template>
 
+<style scoped>
+.composer {
+  background: var(--hf-card); border: 1px solid var(--hf-line); border-radius: 24px; box-shadow: 0 6px 24px var(--hf-shadow);
+  padding: 12px 12px 10px 18px; display: flex; flex-direction: column; gap: 6px; transition: border-color .15s;
+}
+.composer:focus-within { border-color: var(--hf-line-3); }
+.composer.plan { border-color: color-mix(in srgb, var(--hf-plan) 45%, var(--hf-line)); }
+textarea {
+  border: 0; outline: none; resize: none; font-size: 16px; line-height: 1.5; min-height: 52px; max-height: 160px;
+  background: transparent; color: var(--hf-ink); font-family: inherit; width: 100%;
+}
+textarea::placeholder { color: var(--hf-faint); }
+textarea:disabled { opacity: .6; }
+.tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.grow { flex: 1; }
+.tchip {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--hf-line); background: var(--hf-card);
+  border-radius: 999px; padding: 0 12px; min-height: 36px; font-size: 13px; font-weight: 500; color: var(--hf-sub);
+}
+.tchip:hover:not(:disabled) { background: var(--hf-fill-3); }
+.tchip:disabled { opacity: .5; }
+.tchip.on { background: var(--hf-plan-bg); color: var(--hf-plan-text); border-color: transparent; }
+.send {
+  width: 36px; height: 36px; border-radius: 12px; border: 0; background: var(--hf-ink); color: var(--hf-on-ink);
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+}
+.send:disabled { background: var(--hf-fill); color: var(--hf-ghost); cursor: not-allowed; }
+</style>
