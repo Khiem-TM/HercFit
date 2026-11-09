@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agentic.agents.workflow import build_workflow
 from agentic.core.app.api.health import router as health_router
+from agentic.core.app.api.internal.notify_router import router as internal_notify_router
 from agentic.core.app.api.v1.chat_router import router
 from agentic.core.app.config import AgentSettings, agent_settings
 from agentic.core.llm import Models
@@ -124,6 +125,9 @@ def create_agentic_app(
             app.state.backend = backend
             app.state.graph_context = graph_context
             app.state.runtime = runtime
+            app.state.models, app.state.settings = agent_models, settings
+            # Gợi ý dinh dưỡng của thẻ món thiếu dùng chung client Tavily (và bộ đệm) với tra cứu.
+            app.state.tavily = tavily
             async with manage_background_tasks(runtime, graph_context, store, settings):
                 yield
 
@@ -139,6 +143,7 @@ def create_agentic_app(
     )
     app.include_router(router, prefix="/api/v1")
     app.include_router(health_router)
+    app.include_router(internal_notify_router)
     return app
 
 

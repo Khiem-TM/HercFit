@@ -16,7 +16,7 @@ import { hubColor, hubTheme, type KnowledgeHub, type KnowledgeTab } from '@/type
 
 const props = defineProps<{ busy: boolean; activity: string; revision: number }>()
 const { message: healthSyncMessage, revision: healthRevision } = useKnowledgeHealthSync(() => schedule(0, 5000))
-const emit = defineEmits<{ close: []; 'open-settings': [tab: 'profile' | 'integrations']; 'create-plan': [] }>()
+const emit = defineEmits<{ close: []; 'open-settings': [tab: 'profile' | 'integrations' | 'notifications']; 'create-plan': []; ask: [text: string] }>()
 const tabs: { id: KnowledgeTab; label: string; icon: typeof Orbit }[] = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutGrid },
   { id: 'map', label: 'Bản đồ', icon: Orbit },
@@ -349,7 +349,8 @@ onUnmounted(() => {
       <Transition name="swap" mode="out-in">
         <KnowledgeDashboard v-if="tab === 'overview'" key="overview" class="scroll" :graph="graph"
                             :revision="healthRevision + revision" @explore="reveal"
-                            @connect="emit('open-settings', 'integrations')" @edit-profile="emit('open-settings', 'profile')" />
+                            @connect="emit('open-settings', 'integrations')" @edit-profile="emit('open-settings', 'profile')"
+                            @ask="emit('ask', $event)" />
         <div v-else-if="tab === 'map'" key="map" ref="mapView" class="map-view">
           <div ref="toolbar" class="map-toolbar">
             <div class="legend" role="toolbar" aria-label="Nhóm tri thức">

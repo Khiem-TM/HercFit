@@ -1,4 +1,4 @@
-"""Ghi xuyên qua (write-through) cho dữ liệu Google sở hữu: buổi thể thao, cân nặng, chiều cao, % mỡ, nước.
+"""Ghi xuyên qua (write-through) cho dữ liệu Google sở hữu: buổi thể thao, cân nặng, chiều cao, % mỡ, nước, giấc ngủ.
 
 HercFit không giữ bản riêng của các dữ liệu này: lệnh ghi đi thẳng lên Google, điểm Google trả về
 được lưu ngay vào health_points (đọc lại thấy ngay), và lần reconcile sau thay thế nó bằng bản của
@@ -15,7 +15,8 @@ from uuid import UUID
 
 import httpx
 from fastapi import HTTPException
-from pydantic import AwareDatetime, Field
+from pydantic import AwareDatetime, Field, model_validator
+from sqlalchemy import select
 
 from domains.catalog.schemas.exercises import ExercisePerformance
 from domains.health_records.models.health_points import HealthPoint
@@ -28,9 +29,11 @@ from integrations.google_health import kinds, tokens
 from integrations.google_health.client import PERMISSION, GoogleHealthClient, GoogleHealthError, ReauthRequired
 from integrations.google_health.models import HealthConnection
 
-Kind = Literal["exercise", "weight", "height", "body-fat", "hydration"]
+Kind = Literal["exercise", "weight", "height", "body-fat", "hydration", "sleep"]
 DATA_TYPE = {"exercise": "exercise", "weight": "weight", "height": "height", "body-fat": "body-fat",
-             "hydration": "hydration-log"}
+             "hydration": "hydration-log", "sleep": "sleep"}
+# Giấc ngủ ghi tay: một đêm hợp lý và gần đây (đồng hồ vẫn là nguồn chính khi có).
+SLEEP_MIN, SLEEP_MAX, SLEEP_MAX_AGE = timedelta(hours=1), timedelta(hours=16), timedelta(days=30)
 # Môn trong catalog (configuration.sport / activity) → ExerciseType của Google; không khớp thì SPORT.
 SPORT_TYPES = {"badminton": "BADMINTON", "basketball": "BASKETBALL", "football": "SOCCER", "soccer": "SOCCER",
                "pickleball": "PICKELBALL", "tennis": "TENNIS", "table_tennis": "TABLE_TENNIS",
@@ -68,8 +71,26 @@ class HydrationInput(InputSchema):
     timezone: TimeZoneName = DEFAULT_TIMEZONE
 
 
+class SleepInput(InputSchema):
+    started_at: AwareDatetime   # giờ đi ngủ
+    ended_at: AwareDatetime     # giờ thức dậy
+    timezone: TimeZoneName = DEFAULT_TIMEZONE
+
+    @model_validator(mode="after")
+    def _plausible(self):
+        span = self.ended_at - self.started_at
+        if not SLEEP_MIN <= span <= SLEEP_MAX:
+            raise ValueError("Giấc ngủ phải dài từ 1 đến 16 giờ (giờ dậy sau giờ đi ngủ).")
+        now = _now()
+        if self.ended_at > now + timedelta(minutes=5):
+            raise ValueError("Giờ thức dậy không được ở tương lai.")
+        if self.ended_at < now - SLEEP_MAX_AGE:
+            raise ValueError("Chỉ ghi được giấc ngủ trong 30 ngày gần nhất.")
+        return self
+
+
 SCHEMAS = {"exercise": SportInput, "weight": MeasurementInput, "height": MeasurementInput,
-           "body-fat": MeasurementInput, "hydration": HydrationInput}
+           "body-fat": MeasurementInput, "hydration": HydrationInput, "sleep": SleepInput}
 
 
 def exercise_type(snapshot: dict[str, Any]) -> str:
@@ -85,7 +106,21 @@ async def _bodyweight(session, user_id: UUID) -> float | None:
     return float(latest.weight_kg) if latest is not None and latest.weight_kg is not None else None
 
 
-async def build(session, user_id: UUID, kind: str, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+async def _no_device_sleep(session, user_id: UUID, start: datetime, end: datetime, *, exclude: UUID | None) -> None:
+    """Đêm thiết bị đã ghi thì không ghi tay chồng lên (Google sẽ có hai giấc ngủ cho cùng một đêm)."""
+    query = select(HealthPoint.id, HealthPoint.written_by_hercfit).where(
+        HealthPoint.user_id == user_id, HealthPoint.data_type == "sleep",
+        HealthPoint.start_at < end, HealthPoint.end_at > start)
+    for point_id, ours in (await session.execute(query)).all():
+        if point_id == exclude:
+            continue
+        raise HTTPException(409, {"code": "device_sleep_exists" if not ours else "sleep_exists",
+                                  "message": "Thiết bị đã ghi giấc ngủ cho khoảng giờ này." if not ours
+                                  else "Đã có giấc ngủ ghi tay trùng khoảng giờ này; hãy sửa bản đó."})
+
+
+async def build(session, user_id: UUID, kind: str, payload: dict[str, Any], *,
+                exclude: UUID | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     """(DataPoint gửi lên Google, các giá trị HercFit đã suy ra để hiển thị trên thẻ xác nhận)."""
     data = SCHEMAS[kind].model_validate(payload)
     if isinstance(data, SportInput):
@@ -107,6 +142,11 @@ async def build(session, user_id: UUID, kind: str, payload: dict[str, Any]) -> t
     if isinstance(data, HydrationInput):
         return kinds.Session.build_hydration(moment=data.consumed_at, zone=data.timezone,
                                              milliliters=data.amount_ml), {"amount_ml": data.amount_ml}
+    if isinstance(data, SleepInput):
+        await _no_device_sleep(session, user_id, data.started_at, data.ended_at, exclude=exclude)
+        minutes = round((data.ended_at - data.started_at).total_seconds() / 60)
+        return kinds.Session.build_sleep(start=data.started_at, end=data.ended_at, zone=data.timezone), {
+            "minutes_in_bed": minutes, "manual": True}
     point = kinds.Sample.build(DATA_TYPE[kind], moment=data.measured_at, zone=data.timezone, value=data.value)
     return point, {"value": data.value}
 
@@ -175,7 +215,7 @@ async def create(session, user_id: UUID, kind: str, payload: dict[str, Any]) -> 
 async def update(session, user_id: UUID, kind: str, point_id: UUID, payload: dict[str, Any]) -> dict[str, Any]:
     data_type = DATA_TYPE[kind]
     current = await _owned(session, user_id, kind, point_id)
-    point, derived = await build(session, user_id, kind, payload)
+    point, derived = await build(session, user_id, kind, payload, exclude=current.id)
     async with http_client() as http:
         client = await _client(session, user_id, data_type, http)
         try:

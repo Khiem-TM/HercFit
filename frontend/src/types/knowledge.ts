@@ -95,17 +95,17 @@ export const emptyKnowledgeGraph = (status = 'loading'): KnowledgeGraph => ({
   status, lag_ms: null, profile: null, insights: [], intents: [], nodes: [], edges: [],
 })
 
-/** `color` vẽ trên nền tối (và trên bản đồ sao, vốn luôn là bầu trời đêm); `light` đọc được trên nền giấy. */
+/** Màu nhóm theo thiết kế Dashboard: `light` trên nền sáng, `color` (sáng hơn) trên nền tối. */
 export const hubTheme: Record<KnowledgeHub, { label: string; color: string; light: string }> = {
-  goal: { label: 'Mục tiêu', color: '#d4b77d', light: '#87671a' },
-  body: { label: 'Cơ thể', color: '#8fc3d4', light: '#367689' },
-  nutrition: { label: 'Dinh dưỡng', color: '#a8cf9a', light: '#517c40' },
-  training: { label: 'Tập luyện', color: '#e3a37f', light: '#9b552a' },
-  conversation: { label: 'Hội thoại', color: '#b9a9e3', light: '#715d9d' },
+  goal: { label: 'Mục tiêu', color: '#F59E0B', light: '#B45309' },
+  body: { label: 'Cơ thể', color: '#60A5FA', light: '#2563EB' },
+  nutrition: { label: 'Dinh dưỡng', color: '#4ADE80', light: '#15803D' },
+  training: { label: 'Tập luyện', color: '#FB923C', light: '#C2410C' },
+  conversation: { label: 'Hội thoại', color: '#C4B5FD', light: '#7C3AED' },
 }
 
-export const ROOT_COLOR = '#fff1ce'
-const ROOT_LIGHT = '#7a6230'
+const ROOT_COLOR = '#F4F4F5'
+const ROOT_LIGHT = '#141416'
 
 export const kindLabels: Record<string, string> = {
   User: 'Hồ sơ của bạn', Hub: 'Nhóm tri thức', Group: 'Nhóm con', Goal: 'Mục tiêu', BodyMetric: 'Số đo cơ thể',
@@ -119,7 +119,8 @@ export function hubColor(hub: string | null | undefined): string {
   return `light-dark(${theme.light}, ${theme.color})`
 }
 
-/** Màu thường cho bản đồ sao (canvas không giải được light-dark()); bản đồ là bầu trời đêm ở cả hai theme. */
-export function skyColor(hub: string | null | undefined): string {
-  return hub && hub in hubTheme ? hubTheme[hub as KnowledgeHub].color : ROOT_COLOR
+/** Màu thường cho canvas của bản đồ (canvas không giải được light-dark()). */
+export function mapColor(hub: string | null | undefined, dark: boolean): string {
+  const theme = hub && hub in hubTheme ? hubTheme[hub as KnowledgeHub] : { color: ROOT_COLOR, light: ROOT_LIGHT }
+  return dark ? theme.color : theme.light
 }

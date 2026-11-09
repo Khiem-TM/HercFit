@@ -9,7 +9,6 @@ câu trả lời của nó chỉ được dựng từ các lệnh ghi đã thự
 # Các lệnh ghi đã thực thi, theo cách người dùng sẽ gọi tên chúng.
 WRITES = {
     "create_foods": "Món mới trong danh mục thực phẩm",
-    "finalize_foods": "Món trong danh mục thực phẩm",
     "create_exercises": "Bài tập mới trong danh mục",
     "finalize_exercises": "Bài tập trong danh mục",
     "create_meals": "Bữa ăn trong nhật ký",

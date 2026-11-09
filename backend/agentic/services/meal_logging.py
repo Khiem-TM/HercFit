@@ -33,17 +33,27 @@ def _moment(value: Any) -> datetime | None:
     return moment if moment.tzinfo is not None else None
 
 
-def complete(meal: dict) -> bool:
-    """Bữa có đủ dữ kiện để code dựng: thời điểm có múi giờ và mỗi món có tên, số lượng, đơn vị."""
+def item_key(index: int, position: int) -> str:
+    """Khoá của một món trong bản nháp (bữa thứ index, món thứ position): thẻ món thiếu trả lựa chọn theo khoá này."""
+    return f"{index}:{position}"
+
+
+def complete(meal: dict, resolved: dict | None = None, index: int = 0) -> bool:
+    """Bữa có đủ dữ kiện để code dựng: thời điểm có múi giờ và mỗi món có tên, số lượng, đơn vị
+    (món người dùng đã chọn trên thẻ món thiếu mang lượng và đơn vị của thẻ)."""
     items = meal.get("items") or []
+    resolved = resolved or {}
     return (
         bool(items)
         and _moment(meal.get("consumed_at")) is not None
         and all(
-            (item.get("food") or "").strip()
-            and (item.get("quantity") or 0) > 0
-            and item.get("unit") in COMPATIBLE
-            for item in items
+            item_key(index, position) in resolved
+            or (
+                (item.get("food") or "").strip()
+                and (item.get("quantity") or 0) > 0
+                and item.get("unit") in COMPATIBLE
+            )
+            for position, item in enumerate(items)
         )
     )
 
@@ -56,20 +66,21 @@ def eligible(state: dict) -> bool:
         and decision.get("domain") in DOMAINS
         and not decision.get("read_only")
         and not state.get("candidate")
-        and not state.get("catalog_draft")
         and not state.get("pending_action")
         and bool(decision.get("meal_log"))
     )
 
 
 def next_meal(state: dict) -> tuple[int, dict] | None:
-    """(vị trí, bữa) kế tiếp mà code dựng được; None thì đi đường model."""
+    """(vị trí, bữa) kế tiếp mà code tra catalog trước; None thì đi đường model.
+
+    Bữa còn thiếu lượng vẫn được tra: món catalog chưa có thì thẻ món thiếu hỏi luôn lượng ăn."""
     if not eligible(state):
         return None
     decision = state["decision"]
     index = int(decision.get("meal_log_next") or 0)
     meals = decision["meal_log"]
-    if index >= len(meals) or not complete(meals[index]):
+    if index >= len(meals) or not meals[index].get("items"):
         return None
     return index, meals[index]
 
@@ -90,10 +101,12 @@ def continues(state: dict) -> bool:
     )
 
 
-def names(meal: dict) -> list[str]:
+def names(meal: dict, resolved: dict | None = None, index: int = 0) -> list[str]:
+    """Tên cần tra catalog: mọi món trừ món người dùng đã chọn trên thẻ món thiếu."""
     seen: dict[str, str] = {}
-    for item in meal["items"]:
-        seen.setdefault(normalize_food_text(item["food"]), item["food"].strip())
+    for position, item in enumerate(meal["items"]):
+        if item_key(index, position) not in (resolved or {}):
+            seen.setdefault(normalize_food_text(item["food"]), item["food"].strip())
     return list(seen.values())
 
 
@@ -118,12 +131,27 @@ def _exact(query: str, unit: str, rows: list[dict]) -> dict | None:
     return hits[0] if len(hits) == 1 else None
 
 
-def match(meal: dict, rows: Any) -> list[dict] | None:
-    """Các món của create_meals khi mọi món khớp đúng một bản ghi với đơn vị dùng được; ngược lại None."""
+def match(meal: dict, rows: Any, resolved: dict | None = None, index: int = 0) -> list[dict] | None:
+    """Các món của create_meals khi mọi món khớp đúng một bản ghi với đơn vị dùng được; ngược lại None.
+
+    Món người dùng đã chọn trên thẻ món thiếu dùng thẳng bản ghi, lượng và đơn vị của thẻ (đã kiểm tra trước đó)."""
     if not isinstance(rows, list):
         return None
+    resolved = resolved or {}
     items = []
-    for item in meal["items"]:
+    for position, item in enumerate(meal["items"]):
+        choice = resolved.get(item_key(index, position))
+        if choice:
+            items.append(
+                {
+                    "food_id": choice["food_id"],
+                    "quantity": choice["quantity"],
+                    "unit": choice["unit"],
+                }
+            )
+            continue
+        if not item.get("unit") or not (item.get("quantity") or 0) > 0:
+            return None
         row = _exact(item["food"], item["unit"], rows)
         if row is None:
             return None

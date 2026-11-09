@@ -30,6 +30,10 @@ export interface BodyMetricRead {
   height_cm: number | null
   body_fat_pct: number | null
   muscle_mass_kg: number | null
+  /** Vòng ngực / eo / hông (cm), chỉ có trong HercFit (Google không có). */
+  chest_cm?: number | string | null
+  waist_cm?: number | string | null
+  hip_cm?: number | string | null
   recorded_at: string
   additional_metrics: Record<string, unknown>
   source?: 'MANUAL' | 'GOOGLE_HEALTH'
@@ -210,7 +214,13 @@ export interface HealthConnection {
   records: Record<string, number>
   /** Trạng thái đọc từng loại: khoảng ngày đã đọc trọn và lỗi của lần đọc gần nhất. */
   types: Record<string, HealthTypeStatus>
+  /** Nhóm dữ liệu đang đồng bộ (true) và tần suất đồng bộ nền. */
+  sync_groups?: Partial<Record<SyncGroup, boolean>>
+  sync_frequency?: SyncFrequency
 }
+
+export type SyncGroup = 'sleep' | 'rhr' | 'hrv' | 'steps' | 'body'
+export type SyncFrequency = 'hourly' | 'open' | 'manual'
 
 export interface HealthTypeStatus {
   from?: string | null
@@ -218,11 +228,15 @@ export interface HealthTypeStatus {
   error?: string | null
 }
 
+/** Một lần đo: cần ít nhất một số đo; đo lại vòng eo không phải là cân lại. */
 export interface BodyMetricCreatePayload {
-  weight_kg: number
+  weight_kg?: number | null
   height_cm?: number | null
   body_fat_pct?: number | null
   muscle_mass_kg?: number | null
+  chest_cm?: number | null
+  waist_cm?: number | null
+  hip_cm?: number | null
   additional_metrics?: Record<string, unknown>
 }
 
@@ -237,6 +251,8 @@ export interface GoalRead {
   targets: Record<string, unknown>
   context: Record<string, unknown>
   status: string
+  /** Khoá lạc quan cho PATCH /api/goals/{id}. */
+  version_id?: number
 }
 
 export interface SourceItem {
@@ -317,6 +333,55 @@ export interface Clarification {
   questions: ClarifyQuestion[]
 }
 
+/** Món người dùng nói mà catalog không có món nào trùng tên: thẻ cho tìm món trong catalog hoặc tạo món riêng. */
+export interface FoodGapItem {
+  key: string
+  query: string
+  /** Lượng trong bản nháp của router (điền sẵn); null khi người dùng chưa nói. */
+  quantity?: number | null
+  unit?: FoodUnit | null
+}
+
+export type FoodUnit = 'G' | 'ML' | 'SERVING'
+
+export interface FoodGap {
+  items: FoodGapItem[]
+  meal?: { name?: string | null; consumed_at?: string | null } | null
+}
+
+/** Lựa chọn trên thẻ món thiếu, gửi kèm tin nhắn tiếp theo (ChatRequest.food_choices). */
+export interface FoodChoice {
+  key: string
+  food_id: string
+  quantity: number
+  unit: FoodUnit
+}
+
+/** Gợi ý AI cho món riêng: đúng 4 chỉ số trên 100 g. */
+export interface FoodNutrition {
+  energy_kcal: number
+  carbohydrate_g: number
+  fat_g: number
+  protein_g: number
+}
+
+/** Một bản ghi catalog trả về từ GET /api/foods (các trường thẻ dùng). */
+export interface FoodRecord {
+  id: string
+  version_id: number
+  name_vi: string
+  name_en?: string | null
+  serving_size?: string | number | null
+  serving_unit: 'G' | 'ML' | 'PORTION'
+  energy_kcal?: string | number | null
+  protein_g?: string | number | null
+  carbohydrate_g?: string | number | null
+  fat_g?: string | number | null
+  portion_weight_g?: string | number | null
+  image_url?: string | null
+  source_type: 'SYSTEM' | 'CUSTOM'
+}
+
 /** Ảnh tra cứu từ web: chỉ hiển thị cho đến khi được nhập lên Cloudinary. */
 export interface Illustration {
   url: string
@@ -337,6 +402,7 @@ export interface ChatResponse {
   intent?: string | null
   pending_action?: PendingAction | null
   clarification?: Clarification | null
+  food_gap?: FoodGap | null
   illustrations?: Illustration[]
   sources: SourceItem[]
   tool_outputs: Record<string, unknown>[]
@@ -356,6 +422,8 @@ export interface ChatMessage {
   sources?: SourceItem[]
   pending_action?: PendingAction | null
   clarification?: Clarification | null
+  /** Thẻ món thiếu (tìm món / tạo món riêng), chỉ trả lời được ở lượt needs_input mới nhất. */
+  food_gap?: FoodGap | null
   illustrations?: Illustration[]
   /** Trợ lý mời hỏi lại câu trước ở chế độ Plan (chế độ thường không tư vấn). */
   suggested_mode?: 'plan' | null
@@ -431,8 +499,8 @@ export interface NutritionTargets {
 }
 
 // ---- Google Health: ghi xuyên qua (/api/v2/health/records) -----------------------------------
-/** Loại Google sở hữu mà HercFit ghi thẳng lên Google (buổi thể thao, số đo cơ thể, nước uống). */
-export type HealthRecordKind = 'exercise' | 'weight' | 'height' | 'body-fat' | 'hydration'
+/** Loại Google sở hữu mà HercFit ghi thẳng lên Google (buổi thể thao, số đo cơ thể, nước uống, giấc ngủ ghi tay). */
+export type HealthRecordKind = 'exercise' | 'weight' | 'height' | 'body-fat' | 'hydration' | 'sleep'
 
 /** Một điểm Google do HercFit vừa ghi; `pending` khi Google chưa trả điểm (lần đồng bộ sau mang về). */
 export interface HealthRecordRead {
@@ -445,4 +513,181 @@ export interface HealthRecordRead {
   written_by_hercfit: boolean
   pending: boolean
   derived: Record<string, unknown>
+}
+
+// ---- Đánh giá hằng ngày (/api/v2/health/daily-assessment) -----------------------------------
+// API bỏ các trường null (exclude_none), nên mọi trường có thể thiếu đều là optional.
+export type ReadinessState = 'ready' | 'steady' | 'ease_off' | 'recover' | 'needs_review' | 'insufficient_data'
+export type ReadinessConfidence = 'high' | 'medium' | 'low'
+export type ReasonKind = 'strain' | 'positive' | 'data' | 'review' | 'info'
+
+export interface MetricReading {
+  metric: string
+  label: string
+  unit: string
+  value?: number
+  measured_on?: string
+  state: string
+  baseline?: number
+  baseline_mad?: number
+  baseline_n: number
+  delta?: number
+  delta_pct?: number
+  z?: number
+  provider_relative?: boolean
+}
+
+export interface ReadinessTrend {
+  metric: string
+  label: string
+  unit: string
+  recent?: number
+  recent_n: number
+  baseline?: number
+  baseline_n: number
+  delta_pct?: number
+  direction: 'up' | 'down' | 'flat' | 'unknown'
+}
+
+export interface ReadinessReason {
+  code: string
+  kind: ReasonKind
+  metric?: string
+  value?: number
+  baseline?: number
+  unit?: string
+  delta?: number
+  text: string
+}
+
+export interface SleepNight {
+  date: string
+  bedtime: string
+  wake_time: string
+  minutes_asleep?: number
+  minutes_in_bed?: number
+  efficiency_pct?: number
+  minutes_to_fall_asleep?: number
+  minutes_awake?: number
+  deep_minutes?: number
+  rem_minutes?: number
+  light_minutes?: number
+  deep_pct?: number
+  rem_pct?: number
+  light_pct?: number
+  manual?: boolean
+}
+
+export interface SleepDetail {
+  last_night?: SleepNight
+  week: {
+    nights: number
+    need_minutes: number
+    avg_minutes_asleep?: number
+    debt_minutes?: number
+    bedtime_sd_minutes?: number
+    wake_sd_minutes?: number
+  }
+}
+
+/** GET /api/v2/health/daily-assessment: chỉ số hôm nay so với nền cá nhân, giấc ngủ và độ sẵn sàng tất định. */
+export interface DailyAssessment {
+  date: string
+  timezone: string
+  algorithm_version: string
+  state: ReadinessState
+  label: string
+  /** Điểm 0–100 do backend tính (readiness v3); null khi cần xem lại hoặc chưa đủ dữ liệu. */
+  score?: number | null
+  confidence: ReadinessConfidence
+  summary: string
+  reasons: ReadinessReason[]
+  recommendations: { code: string; text: string }[]
+  metrics: MetricReading[]
+  trends: ReadinessTrend[]
+  sleep?: SleepDetail
+  load?: { yesterday?: number; acute_7d: number; chronic_weekly: number; acwr?: number; sessions_without_rpe: number }
+  data_quality: { connected: boolean; last_sync_at?: string; stale: boolean; missing: string[]; baseline_days: number }
+  method: string
+  disclaimer: string
+}
+
+// ---- Thông báo trong ứng dụng (/api/v2/notifications) ---------------------------------------
+/** alert/review/reminder/proposal được tạo mới; các loại còn lại chỉ còn trong thông báo cũ chưa hết hạn. */
+export type NotificationKind = 'alert' | 'review' | 'reminder' | 'proposal' | 'briefing' | 'insight' | 'praise'
+  | 'data_quality' | 'summary'
+
+export interface AppNotification {
+  id: string
+  kind: NotificationKind
+  code: string
+  priority: number
+  local_date: string
+  title: string
+  body: string
+  payload: Record<string, unknown>
+  created_at: string
+  seen_at: string | null
+  expires_at: string | null
+}
+
+export interface NotificationList {
+  items: AppNotification[]
+  unread: number
+}
+
+export type AlertGroup = 'heart' | 'oxygen' | 'sleep' | 'weight' | 'nutrition' | 'activity'
+export type AlertSeverity = 'info' | 'warn' | 'urgent'
+
+export interface AlertSource { org: string; title: string; year: number; url: string; tier: 'byt' | 'who' | 'professional' }
+
+/** payload của thông báo `alert`: luật, giá trị so với ngưỡng và nguồn (backend tính, LLM chỉ viết lời). */
+export interface AlertPayload {
+  severity: AlertSeverity
+  group: AlertGroup
+  rule: string
+  features: {
+    metric: string; unit: string; direction: 'high' | 'low'; value: number; threshold: number; window: string
+    basis: string[]; evidence: { date: string; value: number }[]; sources: AlertSource[]
+  }
+  advice: string[]
+  ask: string
+}
+
+export interface ReviewDimension {
+  id: 'nutrition' | 'activity' | 'sleep' | 'recovery' | 'plan'
+  label: string
+  score: number | null
+  rating: 'good' | 'fair' | 'poor' | 'missing'
+  detail: string
+}
+
+/** payload của thông báo `review`: điểm do backend chấm, lời do LLM (hoặc code) viết. */
+export interface ReviewPayload {
+  review: { date: string; score: number | null; grade: string | null; dimensions: ReviewDimension[] }
+  highlights: string[]
+  improvements: string[]
+  tomorrow_tip: string
+  ask: string
+}
+
+/** enabled là consent "proactive" (mặc định tắt); các trường còn lại là tuỳ chọn. */
+export interface NotificationPreferences {
+  enabled: boolean
+  /** Cảnh báo khi chỉ số vượt ngưỡng của bộ luật y tế, theo nhóm. */
+  health_alerts: boolean
+  alert_groups: AlertGroup[]
+  /** Đánh giá chất lượng ngày: tối đa một lần mỗi ngày, từ giờ đã chọn. */
+  daily_review: boolean
+  daily_review_time: string
+  quiet_hours: { enabled: boolean; start: string; end: string }
+  max_per_day: number
+  /** Đề xuất điều chỉnh buổi tập khi điểm sẵn sàng dưới ngưỡng (người dùng luôn xác nhận qua trợ lý). */
+  adjust_on_low_readiness: boolean
+  readiness_threshold: 50 | 60 | 70
+  /** Buổi đã qua ngày mà chưa ghi nhận: hỏi trước, tự dời sang ngày trống gần nhất, hoặc không làm gì. */
+  missed_session: 'ask' | 'auto' | 'none'
+  workout_reminder: boolean
+  workout_reminder_time: string
+  timezone?: string
 }

@@ -9,31 +9,16 @@ tất định với câu trả lời. Mỗi lệnh được dựng lại theo ca
 
 import re
 from datetime import datetime, timezone
-from urllib.parse import urlparse
 
 from agentic.core.context import request_context
 from agentic.research.attestation import sign
 from agentic.research.contracts import ExerciseFinalization, FoodFinalization
-from agentic.research.quotes import canon, number_values
-from agentic.research.sources import TIER_RANK, rate
+from agentic.research.quotes import canon
 from domains.catalog.models.foods import normalize_food_text
-from domains.catalog.schemas.foods import FoodCreate
 
 FINALIZATIONS = {"foods": FoodFinalization, "exercises": ExerciseFinalization}
-# "400-700 kcal", "380 calo", "khoảng 250 Calories": một giá trị hoặc một khoảng có đơn vị năng lượng.
-ENERGY = re.compile(
-    r"(\d+(?:[.,]\d+)?)\s*(?:(?:-|–|—|đến|tới)\s*(\d+(?:[.,]\d+)?)\s*)?(?:kcal|calo(?:ries?)?|cal)\b",
-    re.I,
-)
 # Một câu hỏi hay lời đồn không phải là ước tính ("có thật ... 1600 kcal không vậy").
 QUESTION = re.compile(r"\?|\b(?:co that|co phai|bao nhieu|khong vay|khong nhi|phai khong)\b")
-TIER_LABEL = {
-    "primary": "Nguồn chính thống",
-    "professional": "Nguồn chuyên môn",
-    "secondary": "Báo, nguồn tham khảo",
-    "unknown": "Chưa kiểm chứng",
-}
-MAX_ESTIMATES = 4
 NOUN = {"foods": "món", "exercises": "bài tập"}
 MAX_REVISIONS = 5
 MAX_OPTIONS = 5
@@ -235,20 +220,6 @@ def apply(state, option):
     domain, candidate = choice["domain"], choice.get("candidate")
     if option["kind"] == "use" or (option["kind"] == "reuse" and not candidate):
         return None
-    if option["kind"] == "estimate":
-        return {
-            "catalog_choice": None,
-            "status": "running",
-            "error": None,
-            "catalog_draft": estimate_draft(choice["query"], option),
-            "decision": {
-                "intent": "catalog_estimate",
-                "action": "tool",
-                "next_agent": "tool",
-                "domain": domain,
-                "instruction": "Tạo bản xem trước món CUSTOM theo ước tính người dùng chọn, sau đó tiếp tục yêu cầu gốc.",
-            },
-        }
     if candidate and option["kind"] in {"reuse", "create_distinct"}:
         resolution = "reuse" if option["kind"] == "reuse" else "create_distinct"
         return {
@@ -284,123 +255,6 @@ def apply(state, option):
     }
 
 
-def _number(raw):
-    values = sorted(number_values(raw))
-    value = values[-1] if values else None
-    return int(value) if value is not None and value == int(value) else value
-
-
-def _host(url):
-    return (urlparse(url or "").hostname or "").removeprefix("www.") or url
-
-
-def _clip(text, limit):
-    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
-
-
-def estimate_form(target, claims, documents, product=None):
-    """(clarification, catalog_choice) đưa ra từng con số năng lượng có nguồn cho món đó, hoặc một form nhập tay.
-
-    Mỗi lựa chọn là một con số xuất hiện trong trích dẫn đã kiểm chứng về món này; người dùng, không phải
-    model, quyết định một ước tính cho khẩu phần hay công thức khác có hợp với những gì họ đã ăn không."""
-    from agentic.components.reranker import relevance
-
-    found = []
-    for claim in claims:
-        if claim.field != "energy_kcal":
-            continue
-        source = documents.get(claim.source_id) or {}
-        # Bản thân trích dẫn phải nói về món đó: "100 g bơ: 160 kcal" trên trang nói về đồ uống là một thành phần, không phải đồ uống.
-        if (
-            QUESTION.search(normalize_food_text(claim.quote))
-            or relevance(target, claim.quote) < 0.5
-        ):
-            continue
-        url = source.get("url") or ""
-        tier = rate(claim.source_id, url, product).tier
-        for match in ENERGY.finditer(claim.quote):
-            for raw in filter(None, match.groups()):
-                value = _number(raw)
-                if value and 0 < value <= 5000:
-                    found.append(
-                        {
-                            "kind": "estimate",
-                            "energy_kcal": value,
-                            "quote": _clip(claim.quote, 300),
-                            "url": url,
-                            "title": source.get("title") or "",
-                            "authority": tier,
-                            "applicable": claim.applicable,
-                        }
-                    )
-    found.sort(key=lambda o: (TIER_RANK[o["authority"]], not o["applicable"]))
-    options, choices, seen = [], {}, set()
-    for option in found:
-        if option["energy_kcal"] in seen or len(options) >= MAX_ESTIMATES:
-            continue
-        seen.add(option["energy_kcal"])
-        number = f"{option['energy_kcal']:g}"
-        value = f"Ghi {number} kcal cho món này (ước tính từ {_host(option['url'])})"
-        options.append(
-            {
-                "id": f"estimate-{len(options) + 1}",
-                "label": f"{number} kcal · {_host(option['url'])}",
-                "description": _clip(
-                    f"{TIER_LABEL[option['authority']]}: “{option['quote']}”", 200
-                ),
-                "value": value,
-            }
-        )
-        choices[canon(value)] = option
-    if not options:
-        return manual_form("foods", target), None
-    # Giá trị trên nhãn mà người dùng có, thay cho các ước tính này: form nhập nhãn, nằm sau lựa chọn riêng của nó.
-    label = manual_form("foods", target)["questions"]
-    options.append(
-        {
-            "id": "estimate-label",
-            "label": "Nhập theo nhãn/app của hãng",
-            "description": "Chọn khẩu phần, năng lượng và macro trên nhãn",
-            "value": LABEL_VALUE,
-        }
-    )
-    clarification = {
-        "intro": None,
-        "questions": [
-            {
-                "id": "q1",
-                "label": "Mức năng lượng",
-                "question": f'Bạn muốn ghi năng lượng cho "{target}" theo mức nào?',
-                "mode": "single",
-                "options": options,
-                "required": True,
-                "min_select": 1,
-                "max_select": 1,
-            },
-            *(
-                {
-                    **question,
-                    "id": "label-" + question["id"],
-                    "show_if": {"question": "q1", "option_ids": ["estimate-label"]},
-                }
-                for question in label
-            ),
-        ],
-    }
-    return clarification, {
-        "domain": "foods",
-        "query": target,
-        "choices": choices,
-        "candidate": None,
-    }
-
-
-LABEL_VALUE = "Ghi theo số liệu trên nhãn/app của hãng"
-FOOD_BASIS = (
-    ("basis-serving", "1 suất / ly / hộp", "1 suất (theo nhãn)"),
-    ("basis-100g", "100 g", "100 g"),
-    ("basis-100ml", "100 ml", "100 ml"),
-)
 EXERCISE_KINDS = (
     ("kind-strength", "Sức mạnh (tạ, máy, trọng lượng cơ thể)", "Sức mạnh"),
     ("kind-endurance", "Sức bền (chạy, đạp xe, bơi, chèo)", "Sức bền"),
@@ -437,60 +291,8 @@ def _choices(prefix, labels):
     ]
 
 
-def _nutrient(question_id, label, question, unit, high, step, required=False):
-    return {
-        "id": question_id,
-        "label": label,
-        "question": question,
-        "mode": "number",
-        "options": [],
-        "required": required,
-        "min_select": 1,
-        "max_select": 1,
-        "number": {
-            "unit": unit,
-            "min": 0,
-            "max": high,
-            "step": step,
-            "default": None,
-            "presets": [],
-        },
-    }
-
-
-def manual_form(domain, target):
-    """Khung trên thẻ cho các giá trị mà nhãn, ứng dụng hoặc người dùng có thể cung cấp: số và lựa chọn, không gõ tay."""
-    if domain == "foods":
-        return {
-            "intro": f'Bạn chọn số liệu dinh dưỡng của "{target}" theo nhãn hoặc app của hãng.',
-            "questions": [
-                {
-                    "id": "q1",
-                    "label": "Khẩu phần",
-                    "question": f'Số liệu trên nhãn của "{target}" tính cho khẩu phần nào?',
-                    "mode": "single",
-                    "options": [
-                        {"id": key, "label": label, "value": value}
-                        for key, label, value in FOOD_BASIS
-                    ],
-                    "required": True,
-                    "min_select": 1,
-                    "max_select": 1,
-                },
-                _nutrient(
-                    "q2",
-                    "Năng lượng",
-                    "Năng lượng của khẩu phần đó?",
-                    "kcal",
-                    5000,
-                    5,
-                    required=True,
-                ),
-                _nutrient("q3", "Protein", "Protein (nếu nhãn có)?", "g", 500, 0.5),
-                _nutrient("q4", "Carb", "Carbohydrate (nếu nhãn có)?", "g", 500, 0.5),
-                _nutrient("q5", "Fat", "Chất béo (nếu nhãn có)?", "g", 500, 0.5),
-            ],
-        }
+def manual_form(target):
+    """Khung trên thẻ cho thông tin bài tập mà người dùng cung cấp khi tra cứu chưa đủ căn cứ: lựa chọn, không gõ tay."""
     strength = {"question": "q1", "option_ids": ["kind-strength"]}
     return {
         "intro": f'Bạn chọn giúp thông tin bài tập "{target}".',
@@ -531,38 +333,4 @@ def manual_form(domain, target):
                 "show_if": strength,
             },
         ],
-    }
-
-
-def estimate_draft(target, option):
-    """Một thực phẩm CUSTOM từ ước tính người dùng đã chọn: chỉ năng lượng, theo khẩu phần (PORTION), kèm căn cứ."""
-    name = target[:1].upper() + target[1:]
-    payload = FoodCreate.model_validate(
-        {
-            "name_vi": name,
-            "serving_unit": "PORTION",
-            "energy_kcal": option["energy_kcal"],
-            "data_quality": {
-                "research": {
-                    "estimate": {
-                        k: option[k]
-                        for k in ("energy_kcal", "quote", "url", "title", "authority", "applicable")
-                    },
-                    "selected_by_user": True,
-                    "unverified_fields": ["protein_g", "carbohydrate_g", "fat_g", "fiber_g"],
-                }
-            },
-        }
-    ).model_dump(mode="json")
-    return {
-        "domain": "foods",
-        "payload": payload,
-        "estimate": {
-            k: option[k] for k in ("energy_kcal", "url", "title", "authority", "applicable")
-        },
-        "sources": [
-            {"url": option["url"], "title": option["title"], "authority": option["authority"]}
-        ]
-        if option["url"]
-        else [],
     }

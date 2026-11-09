@@ -228,7 +228,8 @@ export function useAuth() {
       throw new Error(detail?.detail || 'Không thể lưu chỉ số cơ thể.')
     }
     const created: BodyMetricRead = await resp.json()
-    latestBodyMetric.value = created
+    // "latest" là lần cân gần nhất: một lần đo chỉ có vòng eo / chiều cao không thay nó.
+    if (created.weight_kg != null) latestBodyMetric.value = created
     return created
   }
 
@@ -328,5 +329,6 @@ export function useAuth() {
     eraseAccount,
     logout,
     authFetch,
+    refreshSession,
   }
 }

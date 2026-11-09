@@ -1,4 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Doto:wght@700;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+@import "./app.css";
+@import "./motion.css";
 
 @tailwind base;
 @tailwind components;
@@ -199,7 +201,7 @@
     @apply font-label-telemetry text-label-telemetry text-outline uppercase tracking-widest block mb-space-xs;
   }
   .section-heading {
-    @apply font-headline-lg text-headline-lg-mobile md:text-headline-lg text-primary uppercase font-normal tracking-tight;
+    @apply font-headline-lg text-headline-lg-mobile md:text-headline-lg text-primary uppercase font-bold tracking-tight;
   }
 }
 

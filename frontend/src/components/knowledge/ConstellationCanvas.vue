@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
+import { useTheme } from '@/composables/useTheme'
 import cytoscape, { type Collection, type Core, type NodeSingular, type StylesheetCSS } from 'cytoscape'
 import type { KnowledgeNode } from '@/types/knowledge'
-import { ROOT_COLOR, skyColor } from '@/types/knowledge'
+import { mapColor } from '@/types/knowledge'
 import { createConstellationMotion } from './constellationMotion'
 import { ancestors, radialLayout, visibleEdges, type Point, type TreeIndex } from './knowledgeTree'
 
@@ -24,28 +25,29 @@ let queued = false
 let disposed = false
 let painted = false
 const ORBITS = [165, 300, 425, 540]
-const SIZE: Record<string, number> = { User: 74, Hub: 52, Group: 36, Goal: 32, Exercise: 30, Food: 28, Intent: 30 }
+const SIZE: Record<string, number> = { User: 76, Hub: 50, Group: 30, Goal: 24, Exercise: 24, Food: 22, Intent: 22 }
 const glyphs = new Map<string, string>()
 
-const stars = Array.from({ length: 110 }, (_, i) => ({
-  left: `${(i * 73.137) % 100}%`, top: `${(i * 47.391) % 100}%`,
-  '--brightness': .14 + (i % 6) * .07, '--twinkle': `${4 + i % 7}s`,
-  animationDelay: `${-(i % 13)}s`, width: `${i % 9 === 0 ? 2 : 1}px`,
-}))
+const { resolved: theme } = useTheme()
+const dark = () => theme.value === 'dark'
 
-/** Hub là mặt trời, nhóm là vòng, bản ghi là ngôi sao: nhìn hình dạng biết ngay độ sâu. */
+/** Bản đồ sáng theo thiết kế: nút là quả cầu nhỏ viền nét đứt, nhóm là quả cầu lớn có vành màu, gốc là đĩa mực
+ * có ngôi sao bốn cánh. Màu theo nhóm tri thức; bộ đệm theo theme vì canvas không đọc được biến CSS. */
 function glyph(kind: string, color: string) {
-  const key = `${kind}:${color}`
+  const night = dark()
+  const key = `${kind}:${color}:${night}`
   if (glyphs.has(key)) return glyphs.get(key)!
-  const star = `<path d="M40 14L42 37L64 40L42 43L40 66L38 43L16 40L38 37Z" fill="${color}" opacity=".9"/><circle cx="40" cy="40" r="3" fill="#fffaf0"/>`
-  const halo = `<defs><radialGradient id="g"><stop stop-color="${color}" stop-opacity=".55"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></radialGradient></defs><circle cx="40" cy="40" r="38" fill="url(#g)"/>`
-  const body = kind === 'Hub'
-    ? `${halo}<circle cx="40" cy="40" r="17" fill="${color}" opacity=".9"/><circle cx="40" cy="40" r="24" fill="none" stroke="${color}" stroke-opacity=".45"/><circle cx="40" cy="40" r="5" fill="#fffaf0" opacity=".9"/>`
-    : kind === 'User'
-      ? `${halo}<circle cx="40" cy="40" r="30" fill="none" stroke="${color}" stroke-opacity=".35"/>${star}`
+  const face = night ? '#1C1C1F' : '#FFFFFF'
+  const ink = night ? '#F4F4F5' : '#141416'
+  const body = kind === 'User'
+    ? `<circle cx="40" cy="40" r="38" fill="${ink}" fill-opacity=".08"/><circle cx="40" cy="40" r="30" fill="${ink}"/>`
+      + `<path d="M40 28L42.4 37.6L52 40L42.4 42.4L40 52L37.6 42.4L28 40L37.6 37.6Z" fill="${face}"/>`
+    : kind === 'Hub'
+      ? `<circle cx="40" cy="40" r="36" fill="${ink}" fill-opacity=".04"/><circle cx="40" cy="40" r="28" fill="${face}" stroke="${color}" stroke-width="2.5"/>`
+        + `<circle cx="40" cy="40" r="12" fill="${face}" stroke="${color}" stroke-width="2"/><circle cx="40" cy="40" r="9" fill="${color}"/>`
       : kind === 'Group'
-        ? `${halo}<circle cx="40" cy="40" r="15" fill="#101216" stroke="${color}" stroke-width="2.5"/><circle cx="40" cy="40" r="5" fill="${color}"/>`
-        : `${halo}${star}`
+        ? `<circle cx="40" cy="40" r="26" fill="${face}" stroke="${color}" stroke-width="2.5"/><circle cx="40" cy="40" r="10" fill="${color}"/>`
+        : `<circle cx="40" cy="40" r="26" fill="${face}" stroke="${color}" stroke-width="3" stroke-dasharray="7 5"/><circle cx="40" cy="40" r="10" fill="${color}"/>`
   const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">${body}</svg>`)
   glyphs.set(key, url)
   return url
@@ -59,10 +61,10 @@ function display(node: KnowledgeNode) {
 }
 
 function nodeData(node: KnowledgeNode) {
-  const color = node.kind === 'User' ? ROOT_COLOR : skyColor(node.hub)
+  const color = mapColor(node.kind === 'User' ? null : node.hub, dark())
   const size = SIZE[node.kind] ?? (node.depth >= 4 ? 18 : 24)
   return { id: node.id, kind: node.kind, display: display(node), color, size, glyph: glyph(node.kind, color),
-           font: node.kind === 'User' ? 15 : node.kind === 'Hub' ? 12 : node.depth >= 4 ? 9 : 10.5 }
+           font: node.kind === 'User' ? 15 : node.kind === 'Hub' ? 13 : node.depth >= 4 ? 10 : 11 }
 }
 
 function animateTo(node: NodeSingular, position: Point, opacity = 1, done?: () => void) {
@@ -115,7 +117,7 @@ function render() {
     }
     for (const edge of edges) {
       if (cy!.getElementById(edge.id).nonempty() || cy!.getElementById(edge.source).empty() || cy!.getElementById(edge.target).empty()) continue
-      const color = edge.kind === 'link' ? '#d4b77d' : skyColor(props.index.byId.get(edge.target)?.hub)
+      const color = edge.kind === 'link' ? palette().link : palette().edge
       cy!.add({ group: 'edges', data: { id: edge.id, source: edge.source, target: edge.target, kind: edge.kind, color } })
     }
     const depth = Math.max(0, ...props.visible.map(id => props.index.byId.get(id)?.depth ?? 0))
@@ -224,43 +226,51 @@ function focus(id: string) {
   else cy.stop().animate({ zoom: level, pan }, { duration: 650, easing: 'ease-in-out-cubic' })
 }
 
-const STYLE = [
-  { selector: 'node.knowledge', style: {
-    width: 'data(size)', height: 'data(size)', 'background-opacity': 0, 'background-image': 'data(glyph)', 'background-fit': 'contain',
-    'background-clip': 'none', label: 'data(display)', color: '#c9c5bb', 'font-size': 'data(font)', 'font-family': 'Geist, sans-serif',
-    'text-valign': 'bottom', 'text-margin-y': 4, 'text-wrap': 'wrap', 'text-max-width': '132px', 'line-height': 1.35,
-    'text-outline-width': 3, 'text-outline-color': '#101216', 'min-zoomed-font-size': 7, 'overlay-opacity': 0,
-    'underlay-color': 'data(color)', 'underlay-opacity': 0, 'underlay-padding': 7, 'underlay-shape': 'ellipse',
-    'border-width': 0, 'border-color': 'data(color)', 'z-index-compare': 'manual', 'z-index': 10,
-    'transition-property': 'underlay-opacity, border-width, border-opacity', 'transition-duration': 220 } },
-  { selector: 'node[kind="User"]', style: { color: '#fff1ce', 'font-family': 'Playfair Display, serif', 'text-margin-y': 6 } },
-  { selector: 'node[kind="Hub"]', style: { color: '#ece4d2', 'text-margin-y': 6, 'font-weight': 500 } },
-  { selector: 'node.expandable', style: { 'border-width': 1.2, 'border-style': 'dashed', 'border-opacity': .6 } },
-  { selector: 'node.open', style: { 'border-width': 1.6, 'border-style': 'solid', 'border-opacity': .9, 'underlay-opacity': .07 } },
-  { selector: 'node.orbit', style: {
-    width: 'data(size)', height: 'data(size)', 'background-opacity': 0, 'border-width': 1, 'border-color': '#d4b77d',
-    'border-opacity': .09, label: '', events: 'no', 'z-index-compare': 'manual', 'z-index': 0, 'underlay-opacity': 0,
-    'transition-property': 'opacity', 'transition-duration': 500 } },
-  { selector: 'edge', style: {
-    width: 1, 'line-color': 'data(color)', opacity: .34, 'curve-style': 'bezier', 'target-arrow-shape': 'none',
-    'z-index-compare': 'manual', 'z-index': 5, 'transition-property': 'opacity, width', 'transition-duration': 260 } },
-  { selector: 'edge[kind="link"]', style: {
-    'line-style': 'dashed', 'line-dash-pattern': [4, 5], width: .9, opacity: .45,
-    'curve-style': 'unbundled-bezier', 'control-point-distances': 36, 'control-point-weights': .5 } },
-  { selector: '.muted', style: { opacity: .16 } },
-  { selector: 'node.trail', style: { 'underlay-opacity': .06 } },
-  { selector: 'edge.trail', style: { opacity: .9, width: 1.6 } },
-  { selector: 'node.chosen', style: { 'underlay-opacity': .2, color: '#fff3d5', 'z-index': 30 } },
-  { selector: 'node.hovered, node.held', style: { 'underlay-opacity': .15, color: '#fff3d5', 'z-index': 20 } },
-  { selector: 'edge.hovered, edge.tethered', style: { opacity: .9, width: 1.6 } },
-] as unknown as StylesheetCSS[]
+function palette() {
+  return dark()
+    ? { text: '#E4E4E7', strong: '#F4F4F5', outline: '#141416', edge: '#3A3A40', link: '#55555B', trail: '#F4F4F5', orbit: '#2E2E33' }
+    : { text: '#26262A', strong: '#141416', outline: '#FAFAFA', edge: '#D4D4D8', link: '#A1A1AA', trail: '#141416', orbit: '#E4E4E7' }
+}
+
+function style(): StylesheetCSS[] {
+  const p = palette()
+  return [
+    { selector: 'node.knowledge', style: {
+      width: 'data(size)', height: 'data(size)', 'background-opacity': 0, 'background-image': 'data(glyph)', 'background-fit': 'contain',
+      'background-clip': 'none', label: 'data(display)', color: p.text, 'font-size': 'data(font)', 'font-family': 'Be Vietnam Pro, sans-serif',
+      'text-valign': 'bottom', 'text-margin-y': 5, 'text-wrap': 'wrap', 'text-max-width': '150px', 'line-height': 1.3,
+      'text-outline-width': 3, 'text-outline-color': p.outline, 'min-zoomed-font-size': 7, 'overlay-opacity': 0,
+      'underlay-color': 'data(color)', 'underlay-opacity': 0, 'underlay-padding': 6, 'underlay-shape': 'ellipse',
+      'border-width': 0, 'border-color': 'data(color)', 'z-index-compare': 'manual', 'z-index': 10,
+      'transition-property': 'underlay-opacity, border-width, border-opacity', 'transition-duration': 220 } },
+    { selector: 'node[kind="User"]', style: { color: p.strong, 'font-weight': 700, 'text-margin-y': 7 } },
+    { selector: 'node[kind="Hub"]', style: { color: p.strong, 'text-margin-y': 6, 'font-weight': 700 } },
+    { selector: 'node.open', style: { 'underlay-opacity': .08 } },
+    { selector: 'node.orbit', style: {
+      width: 'data(size)', height: 'data(size)', 'background-opacity': 0, 'border-width': 1, 'border-color': p.orbit,
+      'border-opacity': 1, label: '', events: 'no', 'z-index-compare': 'manual', 'z-index': 0, 'underlay-opacity': 0,
+      'transition-property': 'opacity', 'transition-duration': 500 } },
+    { selector: 'edge', style: {
+      width: 1.5, 'line-color': 'data(color)', opacity: 1, 'curve-style': 'bezier', 'target-arrow-shape': 'none',
+      'z-index-compare': 'manual', 'z-index': 5, 'transition-property': 'opacity, width, line-color', 'transition-duration': 220 } },
+    { selector: 'edge[kind="link"]', style: {
+      'line-style': 'dashed', 'line-dash-pattern': [4, 5], width: 1.5,
+      'curve-style': 'unbundled-bezier', 'control-point-distances': 36, 'control-point-weights': .5 } },
+    { selector: '.muted', style: { opacity: .22 } },
+    { selector: 'node.trail', style: { 'underlay-opacity': .06 } },
+    { selector: 'edge.trail', style: { 'line-color': p.trail, width: 2.4 } },
+    { selector: 'node.chosen', style: { 'underlay-opacity': .22, 'underlay-padding': 9, color: p.strong, 'font-weight': 700, 'z-index': 30 } },
+    { selector: 'node.hovered, node.held', style: { 'underlay-opacity': .14, color: p.strong, 'z-index': 20 } },
+    { selector: 'edge.hovered, edge.tethered', style: { 'line-color': p.trail, width: 2.4 } },
+  ] as unknown as StylesheetCSS[]
+}
 
 onMounted(() => {
   preference = window.matchMedia('(prefers-reduced-motion: reduce)')
   reduced.value = preference.matches
   preference.addEventListener('change', onPreference)
   cy = cytoscape({ container: host.value!, minZoom: .2, maxZoom: 2.4, wheelSensitivity: .15, boxSelectionEnabled: false,
-                   selectionType: 'single', autoungrabify: false, style: STYLE })
+                   selectionType: 'single', autoungrabify: false, style: style() })
   cy.add(ORBITS.map((radius, i) => ({ group: 'nodes' as const, data: { id: `orbit:${i}`, size: radius * 2 },
                                        position: { x: 0, y: 0 }, classes: 'orbit', grabbable: false, selectable: false })))
   cy.nodes('.orbit').style('opacity', 0)
@@ -306,6 +316,18 @@ onMounted(() => {
 watch(() => [props.visible, props.index], render)
 watch(() => props.expanded, render)
 watch(() => props.selectedId, highlight)
+// Đổi theme: vẽ lại nút (glyph theo theme) và đường nối với bảng màu mới.
+watch(theme, () => {
+  if (!cy) return
+  cy.style(style())
+  cy.batch(() => {
+    cy!.nodes('.knowledge').forEach(node => {
+      const record = props.index.byId.get(node.id())
+      if (record) node.data(nodeData(record))
+    })
+    cy!.edges().forEach(edge => { edge.data('color', edge.data('kind') === 'link' ? palette().link : palette().edge) })
+  })
+})
 onUnmounted(() => {
   disposed = true
   motion?.destroy()
@@ -319,12 +341,10 @@ defineExpose({ fit, zoom, focus })
 
 <template>
   <div ref="sky" class="sky" :class="{ 'is-dragging': dragging, 'is-hovering': hovering, 'is-still': reduced }" @pointermove="parallax" @pointerleave="resetParallax">
-    <div aria-hidden="true" class="nebula" />
-    <div aria-hidden="true" class="firmament"><i v-for="(s, i) in stars" :key="i" :style="s" /></div>
     <div ref="aura" aria-hidden="true" class="stellar-aura"><span class="aura-ring" /></div>
-    <div ref="host" class="graph-host" role="img" aria-label="Bản đồ tri thức cá nhân dạng chòm sao. Chạm một nhóm để mở các mục bên trong; dùng bảng chi tiết bên dưới để duyệt bằng bàn phím." />
+    <div ref="host" class="graph-host" role="img" aria-label="Bản đồ tri thức cá nhân. Chạm một nhóm để mở các mục bên trong; dùng khung chi tiết bên cạnh để duyệt bằng bàn phím." />
     <Transition name="hint">
-      <span v-if="hinted || dragging" class="gesture-hint" :class="{ active: dragging }" aria-live="polite">{{ dragging ? 'Chòm sao đang chuyển động' : 'Chạm để mở nhánh · Kéo để lay chuyển' }}</span>
+      <span v-if="hinted || dragging" class="gesture-hint" :class="{ active: dragging }" aria-live="polite">{{ dragging ? 'Đang kéo bản đồ' : 'Chạm để mở nhánh · Kéo để di chuyển' }}</span>
     </Transition>
   </div>
 </template>
@@ -338,29 +358,21 @@ defineExpose({ fit, zoom, focus })
   min-height: 0;
   overflow: hidden;
   isolation: isolate;
-  background: radial-gradient(ellipse at 50% 50%, #23232b66, transparent 68%), #101216;
+  background: radial-gradient(70% 70% at 50% 50%, var(--hf-card) 0%, var(--hf-fill-3) 100%);
 }
-.firmament, .graph-host, .nebula { position: absolute; inset: 0; }
-.graph-host { cursor: grab; animation: sky-arrive 900ms ease-out both; touch-action: none; }
+.graph-host { position: absolute; inset: 0; cursor: grab; animation: sky-arrive 600ms ease-out both; touch-action: none; }
 .is-hovering .graph-host { cursor: pointer; }
 .is-dragging .graph-host { cursor: grabbing; }
-.firmament { pointer-events: none; transform: translate(var(--parallax-x), var(--parallax-y)); transition: transform 1.2s cubic-bezier(.2,.8,.2,1); }
-.firmament i { position: absolute; aspect-ratio: 1; background: #eee4cf; border-radius: 50%; box-shadow: 0 0 6px #eee4cf55; opacity: var(--brightness); animation: twinkle var(--twinkle) ease-in-out infinite alternate; }
-.nebula { pointer-events: none; inset: -18%; background: radial-gradient(ellipse at 28% 40%, #b7a9d00e, transparent 45%), radial-gradient(ellipse at 72% 58%, #d4b77d0e, transparent 40%), radial-gradient(ellipse at 50% 85%, #8fc3d40a, transparent 40%); animation: nebula-drift 26s ease-in-out infinite alternate; }
-.stellar-aura { --halo-x: -200px; --halo-y: -200px; --halo-color: #d4b77d; position: absolute; pointer-events: none; left: 0; top: 0; width: 150px; height: 150px; border-radius: 50%; transform: translate(calc(var(--halo-x) - 75px), calc(var(--halo-y) - 75px)); background: radial-gradient(circle, color-mix(in srgb, var(--halo-color) 14%, transparent), transparent 65%); opacity: 0; transition: opacity 500ms ease; }
+.stellar-aura { --halo-x: -200px; --halo-y: -200px; --halo-color: #141416; position: absolute; pointer-events: none; left: 0; top: 0; width: 120px; height: 120px; border-radius: 50%; transform: translate(calc(var(--halo-x) - 60px), calc(var(--halo-y) - 60px)); background: radial-gradient(circle, color-mix(in srgb, var(--halo-color) 8%, transparent), transparent 65%); opacity: 0; transition: opacity 400ms ease; }
 .is-hovering .stellar-aura, .is-dragging .stellar-aura { opacity: 1; }
-.aura-ring { position: absolute; inset: 39px; border: 1px solid color-mix(in srgb, var(--halo-color) 30%, transparent); border-radius: 50%; animation: stellar-breathe 3s ease-in-out infinite; }
-.gesture-hint { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); pointer-events: none; white-space: nowrap; padding: 6px 12px; border: 1px solid #cbb68b14; border-radius: 20px; background: #13151b99; font-size: 10px; color: #9f998c; transition: color 300ms, background 300ms, border-color 300ms; }
-.gesture-hint.active { color: #ead6ae; background: #302a2080; border-color: #cbb68b35; }
+.aura-ring { display: none; }
+.gesture-hint { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); pointer-events: none; white-space: nowrap; padding: 6px 12px; border-radius: 999px; background: var(--hf-card); box-shadow: 0 2px 8px rgba(0, 0, 0, .08); font-size: 12px; color: var(--hf-muted); }
+.gesture-hint.active { color: var(--hf-ink); }
 .hint-enter-active, .hint-leave-active { transition: opacity 400ms ease, transform 400ms ease; }
 .hint-enter-from, .hint-leave-to { opacity: 0; transform: translate(-50%, -6px); }
-@keyframes twinkle { from { opacity: calc(var(--brightness) * .45); } to { opacity: var(--brightness); } }
-@keyframes nebula-drift { from { transform: translate(-1%, -1%) rotate(-4deg); } to { transform: translate(2%, 1%) rotate(4deg); } }
-@keyframes stellar-breathe { 0%,100% { transform: scale(.9); opacity: .35; } 50% { transform: scale(1.12); opacity: .8; } }
 @keyframes sky-arrive { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .graph-host, .firmament i, .nebula, .aura-ring { animation: none; }
-  .firmament, .stellar-aura, .gesture-hint { transition: none; }
+  .graph-host { animation: none; }
+  .stellar-aura, .gesture-hint { transition: none; }
 }
-.is-still .firmament { transform: none; }
 </style>

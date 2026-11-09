@@ -5,8 +5,8 @@ from agentic.tools.registry import REGISTRY
 from domains.catalog.models.foods import normalize_food_text
 
 COACH_GUIDANCE = get_prompt("training.coach", "v5")
-CAPABILITY_GUIDANCE = get_prompt("nutrition.capabilities")
-HEALTH_GUIDANCE = get_prompt("health.guidance", "v4")
+CAPABILITY_GUIDANCE = get_prompt("nutrition.capabilities", "v6")
+HEALTH_GUIDANCE = get_prompt("health.guidance", "v5")
 
 CATALOG_DEPENDENCIES = {"meals": "foods", "trainings": "exercises", "training_plans": "exercises"}
 # Các miền chỉ đọc bổ sung: huấn luyện diễn giải nhật ký/tiến độ, ghi nhật ký có thể kiểm tra lịch tập.
@@ -69,7 +69,13 @@ def needs_catalog_handoff(domain, text):
 
 def continue_catalog_lookup(state):
     dependency = CATALOG_DEPENDENCIES.get(state.get("decision", {}).get("domain"))
-    if not dependency or state.get("status") != "running" or state.get("catalog_handoff"):
+    # Câu trả lời do code viết (thẻ món thiếu, biên nhận sau khi ghi) kết thúc phần việc của agent.
+    if (
+        not dependency
+        or state.get("status") != "running"
+        or state.get("catalog_handoff")
+        or state.get("prepared_reply")
+    ):
         return False
     outputs = state.get("tool_outputs") or []
     if not outputs:

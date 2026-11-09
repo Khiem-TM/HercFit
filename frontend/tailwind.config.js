@@ -3,6 +3,14 @@ export default {
   darkMode: "class",
   theme: {
     extend: {
+      // Token chuyển động (src/motion/tokens.ts ghi biến CSS): duration-fast, ease-out... dùng chung với motion-v.
+      transitionDuration: {
+        instant: "var(--hf-dur-instant)", fast: "var(--hf-dur-fast)", base: "var(--hf-dur-base)",
+        slow: "var(--hf-dur-slow)",
+      },
+      transitionTimingFunction: {
+        out: "var(--hf-ease-out)", "in-out": "var(--hf-ease-in-out)", emphasized: "var(--hf-ease-emphasized)",
+      },
       colors: {
         // Màu theme là biến CSS (src/assets/main.css): mặc định tối, `html.light` cho theme sáng.
         "background": "rgb(var(--c-background) / <alpha-value>)",
@@ -86,42 +94,44 @@ export default {
         gutter: "1.5rem",
       },
       fontFamily: {
-        "headline-md": ["Playfair Display", "serif"],
-        "display-hero-mobile": ["Playfair Display", "serif"],
-        "headline-lg-mobile": ["Playfair Display", "serif"],
-        "body-sm": ["Geist", "sans-serif"],
-        "display-hero": ["Playfair Display", "serif"],
-        "quote-editorial": ["Playfair Display", "serif"],
+        // Cùng bộ font với ChatPage (src/assets/app.css --hf-font): Be Vietnam Pro cho tiêu đề và nội dung,
+        // JetBrains Mono cho nhãn kỹ thuật và mã.
+        "headline-md": ["Be Vietnam Pro", "system-ui", "sans-serif"],
+        "display-hero-mobile": ["Be Vietnam Pro", "system-ui", "sans-serif"],
+        "headline-lg-mobile": ["Be Vietnam Pro", "system-ui", "sans-serif"],
+        "body-sm": ["Be Vietnam Pro", "system-ui", "sans-serif"],
+        "display-hero": ["Be Vietnam Pro", "system-ui", "sans-serif"],
+        "quote-editorial": ["Be Vietnam Pro", "system-ui", "sans-serif"],
         "label-telemetry": ["JetBrains Mono", "monospace"],
-        "body-md": ["Geist", "sans-serif"],
-        "headline-lg": ["Playfair Display", "serif"],
+        "body-md": ["Be Vietnam Pro", "system-ui", "sans-serif"],
+        "headline-lg": ["Be Vietnam Pro", "system-ui", "sans-serif"],
         "label-code": ["JetBrains Mono", "monospace"],
-        "body-lg": ["Geist", "sans-serif"],
-        "headline-sm": ["Playfair Display", "serif"],
+        "body-lg": ["Be Vietnam Pro", "system-ui", "sans-serif"],
+        "headline-sm": ["Be Vietnam Pro", "system-ui", "sans-serif"],
       },
       fontSize: {
         "headline-md": [
           "28px",
           {
             lineHeight: "36px",
-            letterSpacing: "0.01em",
-            fontWeight: "400",
+            letterSpacing: "-0.01em",
+            fontWeight: "700",
           },
         ],
         "display-hero-mobile": [
           "38px",
           {
             lineHeight: "44px",
-            letterSpacing: "0.02em",
-            fontWeight: "400",
+            letterSpacing: "-0.03em",
+            fontWeight: "700",
           },
         ],
         "headline-lg-mobile": [
           "28px",
           {
             lineHeight: "34px",
-            letterSpacing: "0.02em",
-            fontWeight: "400",
+            letterSpacing: "-0.02em",
+            fontWeight: "700",
           },
         ],
         "body-sm": [
@@ -136,16 +146,16 @@ export default {
           "72px",
           {
             lineHeight: "76px",
-            letterSpacing: "0.04em",
-            fontWeight: "400",
+            letterSpacing: "-0.03em",
+            fontWeight: "700",
           },
         ],
         "quote-editorial": [
           "18px",
           {
             lineHeight: "28px",
-            letterSpacing: "0.06em",
-            fontWeight: "400",
+            letterSpacing: "0em",
+            fontWeight: "500",
           },
         ],
         "label-telemetry": [
@@ -168,8 +178,8 @@ export default {
           "40px",
           {
             lineHeight: "48px",
-            letterSpacing: "0.02em",
-            fontWeight: "400",
+            letterSpacing: "-0.02em",
+            fontWeight: "700",
           },
         ],
         "label-code": [
@@ -192,8 +202,8 @@ export default {
           "22px",
           {
             lineHeight: "28px",
-            letterSpacing: "0.01em",
-            fontWeight: "400",
+            letterSpacing: "-0.01em",
+            fontWeight: "700",
           },
         ],
       },

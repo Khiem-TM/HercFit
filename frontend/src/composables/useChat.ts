@@ -4,11 +4,13 @@ import type {
   ChatMessage,
   ChatMode,
   ChatResponse,
+  FoodChoice,
   PendingAction,
   SessionSummary,
 } from '@/types/api'
 import { MEDIA_TARGET } from '@/features/chat/confirmation'
 import { normalizeClarification } from '@/features/chat/clarification'
+import { normalizeFoodGap } from '@/features/chat/foodGap'
 import type { ConfirmExtras } from '@/components/chat/cards/ConfirmationCard.vue'
 
 const sessions = ref<SessionSummary[]>([])
@@ -46,7 +48,13 @@ function rememberMode(sessionId: string, value: ChatMode): void {
 
 const NODE_LABELS: Record<string, string> = {
   orchestrator: 'Đang phân tích ý định & điều phối...',
-  tool: 'Đang truy xuất dữ liệu & công cụ...',
+  nutrition: 'Agent dinh dưỡng đang xử lý bữa ăn & thực phẩm...',
+  training_log: 'Agent tập luyện đang xử lý buổi tập & bài tập...',
+  body_health: 'Agent cơ thể đang đọc số đo...',
+  daily_health: 'Agent sức khoẻ hằng ngày đang phân tích dữ liệu thiết bị...',
+  coach: 'Agent huấn luyện đang xử lý mục tiêu & lịch tập...',
+  delegate: 'Các agent đang xử lý song song từng phần yêu cầu...',
+  join: 'Đang gộp kết quả của các agent...',
   research: 'Đang tra cứu nguồn dinh dưỡng & vận động...',
   confirmation: 'Đang chuẩn bị bản xem trước xác nhận...',
   execution: 'Đang ghi nhận dữ liệu vào hồ sơ...',
@@ -137,6 +145,7 @@ export function useChat() {
         if (data.status === 'needs_input') {
           // Form chỉ mở ở tin nhắn needs_input; khi thiếu trạng thái này, tải lại trang chỉ còn cách trả lời bằng gõ chữ.
           lastAi.clarification = normalizeClarification(data.clarification)
+          lastAi.food_gap = normalizeFoodGap(data.food_gap)
           lastAi.status = 'needs_input'
         }
         if (Array.isArray(data.illustrations)) lastAi.illustrations = data.illustrations
@@ -167,7 +176,8 @@ export function useChat() {
     }
   }
 
-  async function sendMessage(rawText: string): Promise<void> {
+  /** `extra.food_choices`: lựa chọn trên thẻ món thiếu; server chỉ dùng khi thẻ đó đang mở. */
+  async function sendMessage(rawText: string, extra: { food_choices?: FoodChoice[] } = {}): Promise<void> {
     const text = rawText.trim()
     if (!text || isStreaming.value) return
 
@@ -206,6 +216,7 @@ export function useChat() {
           session_id: currentSessionId,
           message: text,
           mode,
+          ...(extra.food_choices?.length ? { food_choices: extra.food_choices } : {}),
         }),
       })
 
@@ -265,6 +276,7 @@ export function useChat() {
                 sources: Array.isArray(event.sources) ? event.sources : [],
                 pending_action: pending,
                 clarification: normalizeClarification(event.clarification),
+                food_gap: normalizeFoodGap(event.food_gap),
                 illustrations: Array.isArray(event.illustrations) ? event.illustrations : [],
                 suggested_mode: event.suggested_mode === 'plan' ? 'plan' : null,
                 status: event.status,

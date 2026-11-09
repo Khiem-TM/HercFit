@@ -19,7 +19,7 @@ from integrations.google_health import oauth, records
 from integrations.google_health.connection import HealthConnectionService, complete_connect, frontend_result
 from integrations.google_health.schemas import (
     HealthConnectionRead, HealthConnectRequest, HealthConnectResponse, HealthConsentUpdate, HealthRecordRead,
-    HealthSyncAccepted,
+    HealthSyncAccepted, HealthSyncSettingsUpdate,
 )
 from integrations.google_health.sync import BACKFILL_DAYS, run
 
@@ -78,6 +78,18 @@ async def callback(
 @transaction
 async def update_consent(payload: HealthConsentUpdate, service: HealthConnectionServiceDep):
     return await service.update_consent(payload.share_with_assistant, sensitive=payload.share_sensitive_with_assistant)
+
+
+@router.patch("/settings", response_model=HealthConnectionRead, summary="Nhóm dữ liệu đồng bộ và tần suất đồng bộ",
+              description="groups: sleep, rhr, hrv, steps, body (false = dừng đọc nhóm đó, dữ liệu cũ giữ nguyên). "
+                          "frequency: hourly (nền mỗi giờ), open (khi mở ứng dụng), manual (chỉ khi bấm đồng bộ).")
+@transaction
+async def update_settings(payload: HealthSyncSettingsUpdate, service: HealthConnectionServiceDep):
+    from core import principal
+    if principal.is_agent():
+        from fastapi import HTTPException
+        raise HTTPException(403, "Chỉ người dùng được đổi cài đặt đồng bộ.")
+    return await service.update_settings(payload.groups, payload.frequency)
 
 
 @router.post("/sync", status_code=status.HTTP_202_ACCEPTED, response_model=HealthSyncAccepted,

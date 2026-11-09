@@ -2,7 +2,7 @@
 import { onUnmounted, shallowRef, useId, useTemplateRef, watch } from 'vue'
 import { Camera, X } from 'lucide-vue-next'
 
-const props = defineProps<{ label: string; disabled?: boolean }>()
+const props = defineProps<{ label: string; disabled?: boolean; hint?: string }>()
 const model = defineModel<File | null>({ default: null })
 
 // Khớp với giới hạn của server (core/settings IMAGE_MAX_BYTES, định dạng của prepare_image).
@@ -39,7 +39,7 @@ function choose(event: Event) {
       <div class="min-w-0 flex-1">
         <p class="text-xs font-medium text-primary">{{ props.label }}</p>
         <p :id="hintId" class="mt-0.5 text-[11px] leading-4 text-on-surface-variant">
-          {{ model ? model.name : 'Tuỳ chọn · JPEG/PNG/WebP ≤ 5 MB · lưu lên Cloudinary sau khi xác nhận' }}
+          {{ model ? model.name : props.hint ?? 'Tuỳ chọn · JPEG/PNG/WebP ≤ 5 MB · lưu lên Cloudinary sau khi xác nhận' }}
         </p>
       </div>
       <input ref="input" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" tabindex="-1" @change="choose" />

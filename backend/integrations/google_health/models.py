@@ -27,6 +27,8 @@ class HealthConnection(BaseModel):
         CheckConstraint("jsonb_typeof(granted_scopes) = 'array'", name="ck_health_connections_scopes"),
         CheckConstraint("jsonb_typeof(provider_profile) = 'object'", name="ck_health_connections_profile"),
         CheckConstraint("jsonb_typeof(sync_cursor) = 'object'", name="ck_health_connections_cursor"),
+        CheckConstraint("jsonb_typeof(sync_groups) = 'object'", name="ck_health_connections_sync_groups"),
+        CheckConstraint("sync_frequency IN ('hourly', 'open', 'manual')", name="ck_health_connections_sync_frequency"),
     )
 
     user_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
@@ -47,6 +49,9 @@ class HealthConnection(BaseModel):
     provider_profile: Mapped[dict[str, Any]] = _json()
     # Trạng thái đọc theo từng loại: {data_type: {"through": "YYYY-MM-DD", "error": code | null}}.
     sync_cursor: Mapped[dict[str, Any]] = _json()
+    # Nhóm người dùng tắt đồng bộ ({"hrv": false}) và tần suất đồng bộ nền (migration 0030).
+    sync_groups: Mapped[dict[str, bool]] = _json()
+    sync_frequency: Mapped[str] = mapped_column(String(10), default="hourly", server_default="hourly", nullable=False)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)

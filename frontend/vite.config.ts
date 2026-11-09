@@ -29,6 +29,8 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8080",
         changeOrigin: true,
+        // WebSocket thông báo (/api/v2/notifications/stream).
+        ws: true,
       },
     },
   },

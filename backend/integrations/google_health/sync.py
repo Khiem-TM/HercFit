@@ -22,6 +22,8 @@ import httpx
 from sqlalchemy import select, text
 
 from core.database import get_async_engine, get_db_session
+from domains.shared import events
+from domains.health_records.types import disabled_types
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE
 from integrations.google_health import tokens
 from integrations.google_health.client import GoogleHealthClient, GoogleHealthError, ReauthRequired
@@ -32,6 +34,8 @@ from integrations.google_health.push import push_pending
 logger = logging.getLogger(__name__)
 BACKFILL_DAYS = 90
 RECENT_DAYS = 7
+# Tần suất "hourly": vòng nền đồng bộ lại khi lượt gần nhất đã cũ hơn chừng này (chừa lệch nhịp của vòng lặp).
+HOURLY = timedelta(minutes=55)
 
 
 def provider_profile(profile: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
@@ -107,7 +111,8 @@ async def _run(connection: HealthConnection, days: int | None, push_only: bool,
         zone = provider_timezone(settings) or zone
         span = days or (RECENT_DAYS if connection.sync_cursor else BACKFILL_DAYS)
         start = today - timedelta(days=span - 1)
-        status = await pull(client, connection.user_id, granted, start, end, zone)
+        status = await pull(client, connection.user_id, granted, start, end, zone,
+                            skip=disabled_types(connection.sync_groups))
         pushed = await push_pending(client, connection.user_id, today - timedelta(days=BACKFILL_DAYS - 1), end, zone)
     except ReauthRequired:
         await tokens.mark_reauth(connection.id)
@@ -142,17 +147,30 @@ async def _finish(connection_id: UUID, started: datetime, *, status: dict[str, d
         if status is not None:
             connection.sync_cursor = merge_cursor(connection.sync_cursor or {}, status, start)
             connection.last_success_at = started
+            # Cùng transaction với last_success_at: briefing/insight phản ứng theo dữ liệu mới (chỉ id và ngày).
+            await events.publish(session, "health.synced", connection.user_id,
+                                 {"connection_id": str(connection.id), "through": datetime.now(ZoneInfo(
+                                     zone or connection.timezone or DEFAULT_TIMEZONE)).date().isoformat()})
         if zone:
             connection.timezone = zone
         if profile:
             connection.provider_profile = profile
 
 
-async def sync_all(days: int | None = None) -> int:
-    """Một lượt cho mọi kết nối đang hoạt động (vòng lặp nền và CLI)."""
+def due(connection: HealthConnection, now: datetime) -> bool:
+    """Vòng nền chỉ đồng bộ kết nối "hourly" đã tới lượt; "open" và "manual" do người dùng kích hoạt."""
+    if (connection.sync_frequency or "hourly") != "hourly":
+        return False
+    return connection.last_sync_at is None or now - connection.last_sync_at >= HOURLY
+
+
+async def sync_all(days: int | None = None, *, scheduled: bool = False) -> int:
+    """Một lượt cho mọi kết nối đang hoạt động (CLI), hoặc chỉ những kết nối tới lượt (`scheduled`, vòng nền)."""
+    now = datetime.now(timezone.utc)
     async with get_db_session() as session:
-        users = list((await session.execute(select(HealthConnection.user_id).where(
+        connections = list((await session.execute(select(HealthConnection).where(
             HealthConnection.status == "ACTIVE", HealthConnection.is_active.is_(True)))).scalars())
+    users = [connection.user_id for connection in connections if not scheduled or due(connection, now)]
     for user_id in users:
         try:
             await run(user_id, days=days)

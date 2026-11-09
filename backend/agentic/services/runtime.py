@@ -9,7 +9,7 @@ from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
 from langgraph.types import Command
 
 from agentic.core.app.config import AgentSettings
-from agentic.core.app.schemas.response import ChatResponse, Clarification
+from agentic.core.app.schemas.response import ChatResponse, Clarification, FoodGap
 from agentic.core.providers.fpt import ToolMarkupFilter, strip_tool_markup
 from agentic.observability import (
     annotate,
@@ -21,7 +21,7 @@ from agentic.observability import (
 )
 
 # 'modes', không phải 'mode': _run_stream có biến cục bộ mode (kiểu sự kiện stream).
-from agentic.services import catalog_choice
+from agentic.services import catalog_choice, food_gap
 from agentic.services import mode as modes
 from agentic.services.clarification import catalog_groups, fallback_clarification, logs_training
 from agentic.services.failure_reply import NODE_ERROR, failure_reply
@@ -81,7 +81,7 @@ class Runtime:
         except Exception as exc:
             logger.warning("kg_journal_deferred error_type=%s", type(exc).__name__)
 
-    async def record_session(self, snapshot):
+    async def record_session(self, snapshot, previous_telemetry):
         """Metadata thanh bên và số token đã dùng trong ngày; lỗi không bao giờ ảnh hưởng câu trả lời."""
         values = getattr(snapshot, "values", None) or {}
         if not values.get("session_id"):
@@ -106,11 +106,24 @@ class Runtime:
                 and values.get("user_id")
                 and telemetry.get("run_id") == values.get("run_id")
             ):
-                await add_usage(
-                    values["user_id"],
-                    telemetry.get("total_input_tokens", telemetry.get("input_tokens", 0)),
-                    telemetry.get("total_output_tokens", telemetry.get("output_tokens", 0)),
+                # Telemetry trong checkpoint là tổng của cả lượt, gồm phần trước xác nhận.
+                # Chỉ tính token mới của lần chạy này, cả khi tiếp tục sau lỗi/timeout.
+                previous = (
+                    previous_telemetry
+                    if previous_telemetry.get("run_id") == values["run_id"]
+                    else {}
                 )
+
+                def added(key):
+                    return max(
+                        0,
+                        telemetry.get("total_" + key, telemetry.get(key, 0))
+                        - previous.get("total_" + key, previous.get(key, 0)),
+                    )
+
+                input_tokens, output_tokens = added("input_tokens"), added("output_tokens")
+                if input_tokens or output_tokens:
+                    await add_usage(values["user_id"], input_tokens, output_tokens)
         except Exception as exc:
             logger.warning("session_meta_deferred error_type=%s", type(exc).__name__)
 
@@ -163,6 +176,7 @@ class Runtime:
             intent=state.get("decision", {}).get("intent"),
             pending_action=pending if is_pending else None,
             clarification=self.clarification(state, reply),
+            food_gap=self.food_gap(state),
             illustrations=state.get("illustrations") or [],
             sources=state.get("sources", []),
             tool_outputs=state.get("tool_outputs", []),
@@ -174,12 +188,18 @@ class Runtime:
     def clarification(state, reply):
         # Câu trả lời needs_input nhận khung thẻ kể cả khi một nhánh bỏ qua node trả lời; câu hỏi không khung nào
         # vừa thì ở lại trong câu trả lời cho ô chat. Checkpoint cũ có thể chứa câu hỏi văn bản tự do: bị bỏ.
-        if state.get("status") != "needs_input":
+        if state.get("status") != "needs_input" or state.get("food_gap"):
             return None
         form = state.get("clarification")
         if form is None:
             form = fallback_clarification(reply, catalog_groups(state), logs_training(state))
         return Clarification.sanitize(form)
+
+    @staticmethod
+    def food_gap(state):
+        # Thẻ món thiếu chỉ hiển thị khi lượt đang dừng lại hỏi bằng nó; phần nháp nội bộ (bản nháp bữa) không ra ngoài.
+        gap = state.get("food_gap") if state.get("status") == "needs_input" else None
+        return FoodGap.model_validate(gap).model_dump(mode="json") if gap else None
 
     async def run(self, input, thread_id, emit=None, chat_mode=modes.FULL):
         annotate(business_run_id=thread_id, graph_thread_id=thread_id, chat_mode=chat_mode)
@@ -209,6 +229,8 @@ class Runtime:
     async def _run_stream(self, input, thread_id, config, emit):
         from agentic.observability.tracing import current
 
+        before = await self.state(thread_id)
+        previous_telemetry = dict(((before.values if before else {}).get("telemetry")) or {})
         observation = current.get()
         started = observation.started if observation else monotonic()
         first_progress = False
@@ -277,14 +299,14 @@ class Runtime:
             snapshot = await self.state(thread_id)
             await self.journal_snapshot(snapshot)
             await self.remember(snapshot)
-            await self.record_session(snapshot)
+            await self.record_session(snapshot, previous_telemetry)
             state = dict(snapshot.values) if snapshot else {}
             state.update(status="failed", reply=interrupted_reply(state, exc))
             return self.response(state)
         snapshot = await self.state(thread_id)
         await self.journal_snapshot(snapshot)
         await self.remember(snapshot)
-        await self.record_session(snapshot)
+        await self.record_session(snapshot, previous_telemetry)
         telemetry = snapshot.values.get("telemetry", {})
         logger.info(
             "agent_run_metrics",
@@ -374,8 +396,11 @@ class Runtime:
                 "status": "running",
                 "error": None,
                 "catalog_choice": catalog_choice.carried(previous),
-                "catalog_draft": None,
                 "prepared_reply": None,
+                "food_gap": food_gap.carried(previous),
+                "food_choices": [c.model_dump(mode="json") for c in payload.food_choices]
+                if payload.food_choices
+                else None,
                 "replying_to_form": previous.get("status") == "needs_input",
                 "graph_context": None,
                 "graph_retrieval_attempted": False,
@@ -538,6 +563,7 @@ class Runtime:
                 "clarification": self.clarification(
                     values, values.get("reply") or values.get("error") or ""
                 ),
+                "food_gap": self.food_gap(values),
                 "illustrations": values.get("illustrations") or [],
             }
 

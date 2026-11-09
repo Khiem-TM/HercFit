@@ -1,0 +1,6 @@
+Mô hình cơ thể 3D (body-male.glb, body-female.glb, body.json)
+
+Sinh bằng frontend/scripts/body-model/build_body_models.py từ Anny 0.6.2
+(NAVER LABS Europe, https://pypi.org/project/anny/), mã nguồn Apache License 2.0.
+Lưới và blendshape gốc là tài nguyên MakeHuman/MPFB2, CC0 1.0 (public domain).
+Tham chiếu: Human Mesh Modeling for Anny Body, arXiv:2511.03589.

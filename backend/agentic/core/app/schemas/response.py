@@ -267,6 +267,37 @@ class Illustration(BaseModel):
     description: str | None = None
 
 
+class FoodGapItem(BaseModel):
+    """One food the user named that matches no catalog name: the card resolves it by search or a custom food."""
+
+    key: str = Field(max_length=16)
+    query: str = Field(max_length=80)
+    # Lượng trong bản nháp của router (để điền sẵn trên thẻ); None khi người dùng chưa nói.
+    quantity: float | None = None
+    unit: Literal["SERVING", "G", "ML"] | None = None
+
+
+class FoodGapMeal(BaseModel):
+    name: str | None = None
+    consumed_at: str | None = None
+
+
+class FoodGap(BaseModel):
+    """Card asking the user to pick a catalog food or create a custom one for each missing food."""
+
+    items: list[FoodGapItem] = Field(min_length=1, max_length=5)
+    meal: FoodGapMeal | None = None
+
+
+class FoodNutrition(BaseModel):
+    """AI suggestion for a custom food: exactly four values per 100 g."""
+
+    energy_kcal: float
+    carbohydrate_g: float
+    fat_g: float
+    protein_g: float
+
+
 class PendingAction(BaseModel):
     action_id: str
     revision: int
@@ -288,6 +319,7 @@ class ChatResponse(BaseModel):
     agent_used: str = "orchestration_agent"
     pending_action: PendingAction | None = None
     clarification: Clarification | None = None
+    food_gap: FoodGap | None = None
     illustrations: list[Illustration] = Field(default_factory=list)
     sources: list[dict[str, Any]] = Field(default_factory=list)
     tool_outputs: list[dict[str, Any]] = Field(default_factory=list)

@@ -72,7 +72,7 @@ function handleOAuthLogin(): void {
                 >[RESTRICTED SANCTUM // ALPHA REGISTRY]</span
               >
               <h3
-                class="font-headline-lg text-primary uppercase tracking-tight font-normal leading-tight text-headline-lg-mobile md:text-headline-lg"
+                class="font-headline-lg text-primary uppercase tracking-tight font-bold leading-tight text-headline-lg-mobile md:text-headline-lg"
               >
                 BUILD YOUR BODY,<br />BUILD YOUR CONSISTENCY
               </h3>

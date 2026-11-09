@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { computed, useTemplateRef } from 'vue'
-import {
-  PanelLeftClose,
-  Plus,
-} from 'lucide-vue-next'
+import { LayoutDashboard, Orbit, PanelLeftClose, Plus } from 'lucide-vue-next'
 import type { SessionSummary, UserProfile } from '@/types/api'
-import ChatHistoryList from './ChatHistoryList.vue'
+import HfLogo from '@/components/app/HfLogo.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
+import ChatHistoryList from './ChatHistoryList.vue'
 
 const props = defineProps<{
   sessions: SessionSummary[]
@@ -20,6 +18,8 @@ const emit = defineEmits<{
   (e: 'select-session', sessionId: string): void
   (e: 'delete-session', sessionId: string): void
   (e: 'open-user-modal'): void
+  (e: 'open-dashboard'): void
+  (e: 'open-map'): void
   (e: 'collapse'): void
 }>()
 
@@ -29,66 +29,46 @@ defineExpose({
   focusToggle: () => collapseButton.value?.focus(),
 })
 
-const userInitials = computed(() => {
-  const name = props.user?.fullname || props.user?.email || 'HF'
-  const parts = name.trim().split(/\s+/)
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
-  }
-  return name.slice(0, 2).toUpperCase()
-})
-
+const displayName = computed(() => props.user?.nick_name || props.user?.fullname || 'Bạn')
+const initial = computed(() => (displayName.value.trim()[0] || 'B').toUpperCase())
 </script>
 
 <template>
-  <aside
-    id="chat-sidebar"
-    class="relative z-20 flex h-full min-h-0 w-[272px] shrink-0 flex-col overflow-hidden border-r border-ink/[0.07] bg-sunken select-none"
-  >
-    <!-- Phần trên: nút thương hiệu + nút cuộc trò chuyện mới -->
-    <div class="flex shrink-0 flex-col gap-2 p-3">
-      <div class="flex items-center justify-between px-1.5 py-1">
-        <a
-          href="/"
-          class="flex items-center gap-2.5 text-primary transition-opacity hover:opacity-80"
-        >
-          <span
-            class="flex h-7 w-7 items-center justify-center rounded-lg border border-ink/15 bg-ink/[0.04] font-headline-md text-sm font-bold tracking-wider"
-          >
-            H
-          </span>
-          <span class="font-label-code text-[11px] tracking-[0.22em] text-primary">
-            HERCFIT // AI
-          </span>
-        </a>
-
-        <button
-          ref="collapseButton"
-          type="button"
-          class="flex h-8 w-8 items-center justify-center rounded-lg text-outline transition-colors hover:bg-ink/[0.06] hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink/60"
-          title="Ẩn thanh bên"
-          aria-label="Ẩn thanh bên"
-          aria-controls="chat-sidebar"
-          aria-expanded="true"
-          @click="emit('collapse')"
-        >
-          <PanelLeftClose class="h-4 w-4" aria-hidden="true" />
-        </button>
-      </div>
-
-      <!-- Nút cuộc trò chuyện mới -->
+  <aside id="chat-sidebar" class="side" aria-label="Thanh bên">
+    <div class="brand">
+      <a href="/" class="brand-link">
+        <HfLogo :size="28" />
+        <span>HercFit</span>
+      </a>
       <button
+        ref="collapseButton"
         type="button"
-        :disabled="isStreaming"
-        class="group flex w-full items-center gap-3 rounded-xl border border-ink/[0.09] bg-panel px-3.5 py-2.5 text-left text-sm font-medium text-primary transition-all duration-200 hover:border-ink/25 hover:bg-panel-hover disabled:opacity-50"
-        title="Cuộc trò chuyện mới"
-        @click="emit('new-chat')"
+        class="hf-ib clear"
+        style="width: 40px; height: 40px"
+        title="Thu gọn thanh bên"
+        aria-label="Thu gọn thanh bên"
+        aria-controls="chat-sidebar"
+        aria-expanded="true"
+        @click="emit('collapse')"
       >
-        <Plus class="h-4 w-4 shrink-0 text-primary transition-transform duration-200 group-hover:rotate-90" />
-        <span class="truncate">Cuộc trò chuyện mới</span>
+        <PanelLeftClose :size="18" :stroke-width="1.8" aria-hidden="true" />
       </button>
     </div>
 
+    <button type="button" class="snav" :disabled="isStreaming" @click="emit('new-chat')">
+      <span class="new-dot"><Plus :size="14" :stroke-width="2.4" aria-hidden="true" /></span>
+      Cuộc trò chuyện mới
+    </button>
+    <button type="button" class="snav" @click="emit('open-dashboard')">
+      <LayoutDashboard :size="18" :stroke-width="1.8" class="nav-icon" aria-hidden="true" />
+      Dashboard
+    </button>
+    <button type="button" class="snav" @click="emit('open-map')">
+      <Orbit :size="18" :stroke-width="1.8" class="nav-icon" aria-hidden="true" />
+      Bản đồ dữ liệu
+    </button>
+
+    <p class="hf-lbl recent">Gần đây</p>
     <ChatHistoryList
       :sessions="sessions"
       :active-session-id="activeSessionId"
@@ -97,44 +77,49 @@ const userInitials = computed(() => {
       @delete-session="emit('delete-session', $event)"
     />
 
-    <!-- Phần dưới: avatar người dùng (mở hộp thoại Hồ sơ & Cài đặt) -->
-    <div class="flex shrink-0 items-center gap-2 border-t border-ink/[0.07] p-3">
-      <button
-        type="button"
-        class="group flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-ink/[0.06]"
-        title="Hồ sơ cá nhân & Cài đặt"
-        @click="emit('open-user-modal')"
-      >
-        <div class="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border border-ink/20 bg-panel-raised">
-          <img
-            v-if="user?.avatar_url"
-            :src="user.avatar_url"
-            :alt="user.fullname"
-            class="h-full w-full object-cover"
-            referrerpolicy="no-referrer"
-          />
-          <div
-            v-else
-            class="flex h-full w-full items-center justify-center font-label-code text-xs font-semibold text-primary"
-          >
-            {{ userInitials }}
-          </div>
-          <span
-            class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-sunken bg-emerald-400"
-          />
-        </div>
-
-        <div class="min-w-0 flex-1">
-          <p class="truncate text-xs font-medium text-primary">
-            {{ user?.fullname || 'Vận động viên HercFit' }}
-          </p>
-          <p class="truncate font-label-telemetry text-[10px] text-outline">
-            {{ user?.email || 'Cài đặt & Hồ sơ' }}
-          </p>
-        </div>
+    <div class="foot">
+      <button type="button" class="snav me" title="Hồ sơ & kết nối" @click="emit('open-user-modal')">
+        <span class="avatar">
+          <img v-if="user?.avatar_url" :src="user.avatar_url" :alt="displayName" referrerpolicy="no-referrer" />
+          <template v-else>{{ initial }}</template>
+        </span>
+        <span class="me-text">
+          <span class="me-name">{{ displayName }}</span>
+          <span class="me-sub">Hồ sơ &amp; kết nối</span>
+        </span>
       </button>
-      <ThemeToggle />
+      <ThemeToggle variant="app" />
     </div>
   </aside>
 </template>
 
+<style scoped>
+.side {
+  position: relative; z-index: 20; width: 268px; flex: none; height: 100%; min-height: 0;
+  display: flex; flex-direction: column; gap: 2px; padding: 12px; background: var(--hf-side); user-select: none;
+}
+.brand { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 14px 8px; }
+.brand-link { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; color: var(--hf-ink); text-decoration: none; }
+.snav {
+  display: flex; align-items: center; gap: 10px; border: 0; background: transparent; text-align: left; width: 100%;
+  padding: 0 10px; border-radius: 10px; font-size: 14px; font-weight: 500; color: var(--hf-ink); min-height: 40px;
+}
+.snav:hover:not(:disabled) { background: var(--hf-hover); }
+.snav:disabled { opacity: .5; }
+.new-dot {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--hf-ink); color: var(--hf-on-ink);
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+}
+.nav-icon { margin: 0 4px; flex: none; }
+.recent { padding: 18px 10px 6px; font-size: 12px; }
+.foot { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--hf-press); padding-top: 8px; margin-top: 4px; }
+.me { min-height: 52px; flex: 1; min-width: 0; padding: 0 8px; }
+.avatar {
+  width: 32px; height: 32px; border-radius: 50%; background: var(--hf-line); flex: none; overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.me-text { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.me-name, .me-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-sub { font-size: 12px; color: var(--hf-muted); font-weight: 400; }
+</style>

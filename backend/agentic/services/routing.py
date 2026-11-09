@@ -176,7 +176,47 @@ _HEALTH = (
     "Trả lời theo phân tích dữ liệu thiết bị đã xác minh; nêu khoảng ngày và nguồn. Chưa kết nối, chưa cho phép "
     "hoặc chưa có dữ liệu thì hướng dẫn vào Cài đặt → Kết nối. Không chẩn đoán."
 )
+_DAY = r"(?: hôm nay| sáng nay)?"
+# Độ sẵn sàng/hồi phục hôm nay: đánh giá tất định của backend (Daily Health Intelligence).
+_READINESS = (
+    "(?:"
+    + r"(?:(?:hôm nay|sáng nay) )?"
+    + _WHO
+    + r"(?:có )?nên tập(?: nặng| cường độ cao| hết sức)?"
+    + _DAY
+    + r"(?: không| được không| hay nghỉ)"
+    + "|"
+    + _LEAD
+    + r"(?:mức |độ )sẵn sàng(?: tập(?: luyện)?)?"
+    + _OWNER
+    + _DAY
+    + r"(?: thế nào| ra sao)?"
+    + "|"
+    + _LEAD
+    + r"(?:đánh giá )?(?:sức kh(?:oẻ|ỏe)|cơ thể)"
+    + _OWNER
+    + r" hôm nay(?: thế nào| ra sao)?"
+    + "|"
+    + r"(?:(?:hôm nay|sáng nay) )?"
+    + _WHO
+    + r"(?:hôm nay )?(?:đã )?hồi phục"
+    + _DAY
+    + r"(?: chưa| thế nào| ra sao)"
+    + r")[.!?]?"
+)
 FAST_TEMPLATES += (
+    FastTemplate(
+        "health.readiness",
+        1,
+        "health",
+        "get_health_assessment",
+        re.compile(_READINESS),
+        _HEALTH
+        + " Nêu trạng thái sẵn sàng, độ tin cậy và 1–3 lý do chính kèm đúng con số so với nền của "
+        "người dùng; thiếu dữ liệu thì nói rõ là chưa đủ để đánh giá.",
+        _timezone_argument,
+        "RECOVERY_REVIEW",
+    ),
     FastTemplate(
         "health.activity",
         1,

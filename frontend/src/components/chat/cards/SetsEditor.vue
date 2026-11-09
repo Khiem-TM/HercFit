@@ -47,11 +47,11 @@ function remove(row: SetRow, index: number) {
 </script>
 
 <template>
-  <ul class="mt-3 space-y-2">
-    <li v-for="row in rows" :key="row.id" class="rounded-xl border border-ink/10 bg-ink/[0.03] p-3">
+  <ul class="setlist">
+    <li v-for="row in rows" :key="row.id" class="setrow">
       <div class="flex items-center gap-3">
         <CatalogImage v-if="row.image_url" :src="row.image_url" :alt="row.label" icon="exercise" rounded="rounded-lg" class="h-10 w-10 shrink-0" />
-        <span class="min-w-0 flex-1 text-sm font-medium text-primary">{{ row.label }}</span>
+        <b class="min-w-0 flex-1 text-sm text-primary">{{ row.label }}</b>
         <span class="shrink-0 font-label-telemetry text-[10px] text-on-surface-variant">{{ groupsFor(answer, row).map(formatGroup).join(', ') }}</span>
       </div>
 
@@ -109,11 +109,15 @@ function remove(row: SetRow, index: number) {
         </button>
       </div>
 
-      <button type="button" :disabled="disabled"
-              class="mt-2 inline-flex min-h-[32px] items-center gap-1 text-[11px] text-gold hover:text-primary disabled:opacity-40"
-              @click="add(row)">
-        <Plus class="h-3 w-3" aria-hidden="true" />Thêm nhóm hiệp khác (đổi reps hoặc mức tạ)
-      </button>
+      <button type="button" :disabled="disabled" class="addset" @click="add(row)">+ Thêm nhóm hiệp</button>
     </li>
   </ul>
 </template>
+
+<style scoped>
+.setlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.setrow { border: 1px solid var(--hf-line-2); border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--hf-fill-2); }
+.addset { align-self: flex-start; border: 1px dashed var(--hf-line-3); background: transparent; border-radius: 999px; padding: 0 12px; min-height: 36px; font-size: 13px; font-weight: 600; color: var(--hf-sub); }
+.addset:hover:not(:disabled) { background: var(--hf-card); }
+.addset:disabled { opacity: .4; }
+</style>

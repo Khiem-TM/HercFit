@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { Loader2 } from "lucide-vue-next";
+import { AnimatePresence, MotionConfig, motion } from "motion-v";
 import SiteHeader from "./components/landing/SiteHeader.vue";
 import HeroSection from "./components/landing/HeroSection.vue";
 import AgentSection from "./components/landing/AgentSection.vue";
@@ -12,6 +13,7 @@ import ChatPage from "./views/ChatPage.vue";
 import { useAuth } from "./composables/useAuth";
 
 import { authenticatedDestination } from './features/onboarding/model';
+import { pageTransition, presence, reveal } from './motion';
 const OnboardingPage = defineAsyncComponent(() => import('./views/OnboardingPage.vue'));
 const selectedAgent = shallowRef("");
 const currentPath = ref(window.location.pathname);
@@ -49,19 +51,29 @@ onMounted(async () => {
   await bootstrapAuth();
 });
 
+/** Màn hiện tại, để AnimatePresence chuyển mờ dần giữa các màn (Landing, đăng nhập, Onboarding, Chat). */
+const view = computed(() => {
+  if (isAuthenticated.value && !isLoading.value) return user.value?.is_onboarding ? "chat" : "onboarding";
+  if ((isProtectedRoute.value || isAuthenticated.value) && isLoading.value) return "loading";
+  return isProtectedRoute.value && !isAuthenticated.value ? "gate" : "landing";
+});
+
 onBeforeUnmount(() => {
   window.removeEventListener("popstate", syncPath);
 });
 </script>
 
 <template>
+  <MotionConfig reduced-motion="user">
+  <AnimatePresence mode="wait">
+  <motion.div :key="view" v-bind="presence(pageTransition)">
   <!-- Không gian chat đã xác thực -->
-  <OnboardingPage v-if="isAuthenticated && !isLoading && !user?.is_onboarding" />
-  <ChatPage v-else-if="isAuthenticated && !isLoading" />
+  <OnboardingPage v-if="view === 'onboarding'" />
+  <ChatPage v-else-if="view === 'chat'" />
 
   <!-- Đang tải phiên xác thực / đổi mã Google OAuth -->
   <div
-    v-else-if="(isProtectedRoute || isAuthenticated) && isLoading"
+    v-else-if="view === 'loading'"
     class="flex h-screen w-screen flex-col items-center justify-center bg-background text-primary"
   >
     <Loader2 class="h-7 w-7 animate-spin text-primary" />
@@ -72,7 +84,7 @@ onBeforeUnmount(() => {
 
   <!-- Cổng chưa xác thực trên /chat hoặc callback thất bại -->
   <div
-    v-else-if="isProtectedRoute && !isAuthenticated"
+    v-else-if="view === 'gate'"
     class="relative flex h-screen w-screen flex-col items-center justify-center bg-background px-4 text-primary"
   >
     <div class="grain-overlay pointer-events-none" aria-hidden="true" />
@@ -82,7 +94,7 @@ onBeforeUnmount(() => {
       <p class="font-label-telemetry text-[10px] uppercase tracking-[0.22em] text-outline">
         PROTOCOL // AUTHENTICATION REQUIRED
       </p>
-      <h1 class="mt-2 font-headline-md text-2xl font-normal text-primary">
+      <h1 class="mt-2 font-headline-md text-2xl font-bold text-primary">
         Đăng nhập vào HercFit AI
       </h1>
       <p class="mt-2 text-xs leading-relaxed text-on-surface-variant">
@@ -117,15 +129,20 @@ onBeforeUnmount(() => {
     <SiteHeader />
     <main id="main-content" class="pt-16 relative overflow-hidden">
       <HeroSection />
-      <AgentSection
-        :selected-agent="selectedAgent"
-        @select="selectedAgent = $event"
-      />
-      <KnowledgeSection />
-      <ProtocolSection />
-      <AccessSection :selected-agent="selectedAgent" />
+      <motion.div v-bind="reveal">
+        <AgentSection
+          :selected-agent="selectedAgent"
+          @select="selectedAgent = $event"
+        />
+      </motion.div>
+      <motion.div v-bind="reveal"><KnowledgeSection /></motion.div>
+      <motion.div v-bind="reveal"><ProtocolSection /></motion.div>
+      <motion.div v-bind="reveal"><AccessSection :selected-agent="selectedAgent" /></motion.div>
     </main>
     <SiteFooter />
     <div class="grain-overlay" aria-hidden="true"></div>
   </template>
+  </motion.div>
+  </AnimatePresence>
+  </MotionConfig>
 </template>

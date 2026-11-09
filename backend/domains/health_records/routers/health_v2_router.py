@@ -3,17 +3,21 @@
 Phân trang bằng cursor; trợ lý cần consent thiết bị (identity.consent). Lệnh ghi xuyên qua lên
 Google (buổi thể thao, cân nặng, nước...) nằm ở /api/v2/health/records (integrations/google_health).
 """
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Annotated, Any, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from api.dependencies import UserContextDep
+from domains.analytics.schemas.daily_health import DailyAssessmentRead
 from domains.analytics.services import coverage as coverage_service
-from domains.health_records import views
+from domains.analytics.services.daily_health import service as daily_health
+from domains.health_records import ports, views
 from domains.identity import consent
+from domains.shared.schemas.tracking import TimeZoneName
 
 router = APIRouter(prefix="/health", tags=["health-data"])
 
@@ -50,18 +54,31 @@ async def sessions(service: UserContextDep, kind: Literal["sleep", "workout"], s
 
 @router.get("/insights", summary="Phân tích có phương pháp: nền 28 ngày và độ phủ dữ liệu")
 async def insights(service: UserContextDep, days: Annotated[int, Query(ge=7, le=90)] = 28,
-                   end_date: date | None = None):
+                   end_date: date | None = None, timezone: TimeZoneName | None = None):
     await consent.require_device_access(service.session, service.user_id)
-    end = end_date or datetime.now(timezone.utc).date()
+    zone = await ports.user_timezone(service.session, service.user_id, timezone)
+    today = datetime.now(ZoneInfo(zone)).date()
+    end = end_date or today
     start = end - timedelta(days=days - 1)
     report = await coverage_service.coverage(service.session, service.user_id, start, end)
-    baselines = await coverage_service.baselines_for(service.session, service.user_id, end, days)
+    baselines = await coverage_service.baselines_for(service.session, service.user_id, end, days, today=today)
     return {
-        "start_date": start, "end_date": end,
+        "start_date": start, "end_date": end, "timezone": zone,
         "baselines": [{"metric": b.metric, "label": coverage_service.BASELINE_METRICS[b.metric], "value": b.value,
-                       "spread": b.spread, "n": b.n, "window_days": b.window_days, "as_of": b.as_of,
+                       "spread": b.spread, "mad": b.mad, "n": b.n, "window_days": b.window_days, "as_of": b.as_of,
                        "method": "median of complete days before as_of", "algorithm_version": b.algorithm_version}
                       for b in baselines.values()],
         "coverage": {column: {key: value for key, value in entry.items() if key != "by_day"}
                      for column, entry in report.items()},
     }
+
+
+@router.get("/daily-assessment", response_model=DailyAssessmentRead, response_model_exclude_none=True,
+            summary="Đánh giá sức khoẻ hằng ngày: chỉ số so với nền cá nhân, xu hướng và độ sẵn sàng tập luyện",
+            description="Tất định, tính lúc đọc (domains/analytics/services/daily_health). Mỗi lý do mang giá trị, "
+                        "đường nền và đơn vị; thiếu dữ liệu được nêu rõ. Heuristic gợi ý cường độ tập, không phải "
+                        "chẩn đoán. Trợ lý cần consent thiết bị.")
+async def daily_assessment(service: UserContextDep, day: Annotated[date | None, Query(alias="date")] = None,
+                           timezone: TimeZoneName | None = None):
+    await consent.require_device_access(service.session, service.user_id)
+    return await daily_health.assess(service.session, service.user, day=day, zone=timezone)

@@ -37,3 +37,28 @@ COACH_GUIDANCE = _COACH_V4.replace(
 """,
     1,
 )
+
+
+# health.guidance v5: Daily Health Intelligence. Câu hỏi về hôm nay/hồi phục/độ sẵn sàng đọc đánh giá tất định
+# của backend (get_health_assessment); mô hình chỉ diễn giải, không tính, không chẩn đoán.
+from agentic.prompts.v4.domains import HEALTH_GUIDANCE as _HEALTH_V4  # noqa: E402
+
+_V4_START = """- Bắt đầu bằng get_health_context (topic: overview/activity/sleep/recovery/body/nutrition, period 7d/28d/90d);"""
+assert _V4_START in _HEALTH_V4
+
+HEALTH_GUIDANCE = _HEALTH_V4.replace(
+    _V4_START,
+    """- Câu hỏi về hôm nay, đêm qua, mức hồi phục hay "có nên tập nặng không": gọi get_health_assessment trước. Nó trả
+  trạng thái (ready, steady, ease_off, recover, needs_review, insufficient_data), độ tin cậy, các lý do kèm giá trị
+  và đường nền của chính người dùng, xu hướng 7 ngày và tải tập. Nêu trạng thái, 1–3 lý do chính với đúng con số
+  và độ tin cậy; không tự đổi trạng thái hay tính lại.
+  insufficient_data hoặc độ tin cậy thấp: nói rõ là chưa đủ dữ liệu (thiếu gì, đồng bộ khi nào), không đoán "ổn".
+  needs_review: khuyên kiểm tra cách đeo thiết bị và hỏi ý kiến nhân viên y tế nếu có triệu chứng; không chẩn đoán,
+  không nêu tên bệnh. Muốn đổi buổi tập theo đánh giá thì đề xuất để người dùng xác nhận (lịch tập là việc của
+  huấn luyện), không tự ghi.
+- Người dùng kể giờ ngủ của một đêm thiết bị không ghi ("tối qua ngủ 23h, dậy 6h30"): đề xuất log_sleep với
+  started_at/ended_at đúng giờ đó (kèm ngày, múi giờ) để người dùng xác nhận; không thêm giai đoạn hay lần thức.
+  Đêm thiết bị đã ghi (409) thì không ghi lại.
+- Câu hỏi về một khoảng thời gian: get_health_context (topic: overview/activity/sleep/recovery/body/nutrition, period 7d/28d/90d);""",
+    1,
+)

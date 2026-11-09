@@ -34,13 +34,13 @@ function handleStart(): void {
     <div
       class="relative w-full my-auto flex flex-col items-center justify-center py-space-lg"
     >
-      <div class="text-center z-10 max-w-5xl">
+      <div class="text-center z-10 max-w-5xl hf-stagger">
         <span
           class="font-label-code text-label-code tracking-[0.3em] uppercase text-on-surface-variant block mb-space-sm"
           >AUTONOMOUS MULTI-AGENT PHYSIOLOGY</span
         >
         <h1
-          class="font-display-hero uppercase tracking-tighter text-primary font-normal leading-none drop-shadow-2xl hero-heading text-display-hero-mobile md:text-display-hero"
+          class="font-display-hero uppercase tracking-tighter text-primary font-bold leading-none drop-shadow-2xl hero-heading text-display-hero-mobile md:text-display-hero"
         >
           SCULPTING THE DIVINE ARCHITECTURE
         </h1>

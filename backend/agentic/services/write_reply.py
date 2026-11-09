@@ -36,6 +36,7 @@ DONE = {
     "update_sport_session": "Đã cập nhật buổi thể thao trên Google Health",
     "delete_sport_session": "Đã xoá buổi thể thao khỏi Google Health",
     "delete_water": "Đã xoá lần uống nước khỏi Google Health",
+    "delete_sleep": "Đã xoá giấc ngủ ghi tay khỏi Google Health",
 }
 # Google chưa trả điểm vừa ghi (Operation chưa xong): lần đồng bộ sau mang nó về.
 ARRIVES_LATER = " (Google đã nhận; số liệu hiện sau lần đồng bộ tới)"
@@ -58,9 +59,7 @@ def executed_writes(state) -> list[dict]:
 
 
 # Lệnh ghi catalog (món/bài tập mới) thường mở đường cho một lệnh ghi nhật ký: sau nó router vẫn quyết định bước tiếp.
-CATALOG_WRITES = frozenset(
-    {"create_foods", "finalize_foods", "create_exercises", "finalize_exercises"}
-)
+CATALOG_WRITES = frozenset({"create_foods", "create_exercises", "finalize_exercises"})
 # Mục tiêu (đã bỏ dấu) của router: bước ghi, bước chỉ chuẩn bị cho lệnh ghi, và bước cần đọc thêm sau khi ghi.
 WRITE_OBJECTIVE = re.compile(
     r"\b(?:ghi|tao|luu|ket thuc|cap nhat|sua|xoa|them|dat|thay|create|log|record|save|end|update|delete|add)\b"
@@ -281,6 +280,21 @@ def water_lines(record: dict) -> list[str]:
     ]
 
 
+def sleep_lines(record: dict) -> list[str]:
+    minutes = _number((record.get("derived") or {}).get("minutes_in_bed"))
+    span = " → ".join(filter(None, (when(record.get("start_at")), when(record.get("end_at")))))
+    length = (
+        f" {int(minutes) // 60} giờ {int(minutes) % 60:02d} phút" if minutes is not None else ""
+    )
+    return [
+        "✅ Đã ghi giấc ngủ"
+        + length
+        + " lên Google Health"
+        + (f" ({span})" if span else "")
+        + (ARRIVES_LATER if record.get("pending") else "")
+    ]
+
+
 def goal_lines(record: dict) -> list[str]:
     span = " → ".join(
         filter(
@@ -346,7 +360,9 @@ def lines_for(output: dict) -> list[str]:
         return sport_lines(record)
     if tool == "log_water":
         return water_lines(record)
-    if tool in {"create_foods", "finalize_foods", "create_exercises", "finalize_exercises"}:
+    if tool == "log_sleep":
+        return sleep_lines(record)
+    if tool in {"create_foods", "create_exercises", "finalize_exercises"}:
         return catalog_lines(tool, record)
     if tool in {"create_training_plans", "update_training_plans", "end_training_plan"}:
         return plan_lines(tool, record)

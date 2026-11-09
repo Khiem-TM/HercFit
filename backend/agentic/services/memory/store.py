@@ -1,10 +1,11 @@
 import asyncio
 import json
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import datetime, timezone
 from hashlib import sha256
 from time import monotonic
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
@@ -12,6 +13,12 @@ from psycopg.types.json import Jsonb
 from agentic.observability import durable_context
 from agentic.observability.persistence import set_psycopg_context
 from agentic.services.memory.turns import turn_record
+from domains.shared.schemas.tracking import DEFAULT_TIMEZONE
+
+
+def usage_day(now=None):
+    """Ngày hạn mức theo múi giờ ứng dụng, không phụ thuộc TZ của container."""
+    return (now or datetime.now(timezone.utc)).astimezone(ZoneInfo(DEFAULT_TIMEZONE)).date()
 
 
 def payload_hash(tool, payload):
@@ -157,7 +164,7 @@ class Store:
 
     async def consume_turn(self, user_id, *, turn_limit, token_limit, day=None):
         """Đếm nguyên tử một lượt mới; False khi đã hết ngân sách lượt hoặc token của hôm nay."""
-        day = day or date.today()
+        day = day or usage_day()
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 row = await (
@@ -183,7 +190,7 @@ class Store:
                 """INSERT INTO agent_usage_daily(user_id,day,input_tokens,output_tokens) VALUES (%s,%s,%s,%s)
                 ON CONFLICT (user_id,day) DO UPDATE SET input_tokens=agent_usage_daily.input_tokens+EXCLUDED.input_tokens,
                 output_tokens=agent_usage_daily.output_tokens+EXCLUDED.output_tokens, updated_at=now()""",
-                (user_id, day or date.today(), int(input_tokens or 0), int(output_tokens or 0)),
+                (user_id, day or usage_day(), int(input_tokens or 0), int(output_tokens or 0)),
             )
 
     async def user_session_ids(self, user_id):

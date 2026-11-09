@@ -44,6 +44,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hercfit_secret}
       POSTGRES_DB: ${POSTGRES_DB:-hercfit_db}
       POSTGRES_APPLICATION_NAME: ${POSTGRES_APPLICATION_NAME:-hercfit-backend}
+      # LLM viết lời thông báo (endpoint nội bộ của agentic, không qua Caddy).
+      AGENTIC_INTERNAL_URL: http://agentic:8081
     ports:
       - "${PORT:-8080}:8080"
     volumes:

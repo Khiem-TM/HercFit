@@ -105,34 +105,28 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <nav aria-label="Lịch sử hội thoại" :class="{ 'is-compact': compact }" class="history-scroll min-h-0 min-w-0 w-full flex-1 overflow-x-hidden overflow-y-auto px-2.5 py-3" @scroll="closeMenu()">
-    <p v-if="sessions.length === 0 && !compact" class="px-3 py-8 text-center text-xs text-outline">
-      Chưa có cuộc hội thoại nào
-    </p>
-    <ul class="w-full min-w-0 space-y-0.5">
+  <nav aria-label="Lịch sử hội thoại" :class="{ 'is-compact': compact }" class="history-scroll" @scroll="closeMenu()">
+    <p v-if="sessions.length === 0 && !compact" class="empty">Chưa có cuộc hội thoại nào</p>
+    <ul class="list">
       <li v-for="item in sortedSessions" :key="item.session_id" class="history-item">
-        <div
-          class="history-row group relative w-full min-w-0 rounded-lg transition-colors"
-          :class="item.session_id === activeSessionId || item.session_id === openSessionId
-            ? 'bg-ink/[0.09] text-primary' : 'text-on-surface-variant hover:bg-ink/[0.05] hover:text-primary'"
-        >
+        <div class="history-row" :class="{ on: item.session_id === activeSessionId || item.session_id === openSessionId }">
           <button
             type="button"
-            class="block h-10 w-full min-w-0 truncate rounded-lg text-left text-[13px] font-medium focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink/60 disabled:cursor-wait"
-            :class="compact ? 'flex items-center justify-center' : ['px-3', { 'pr-11': item.session_id === openSessionId }]"
+            class="conv"
+            :class="{ 'is-compact': compact, 'menu-open': item.session_id === openSessionId }"
             :title="item.title || 'Cuộc trò chuyện mới'"
             :aria-label="compact ? item.title || 'Cuộc trò chuyện mới' : undefined"
             :aria-current="item.session_id === activeSessionId ? 'page' : undefined"
             :disabled="isStreaming"
             @click="emit('select-session', item.session_id)"
           >
-            <MessageSquare v-if="compact" class="h-4 w-4" aria-hidden="true" />
+            <MessageSquare v-if="compact" :size="16" aria-hidden="true" />
             <template v-else>{{ item.title || 'Cuộc trò chuyện mới' }}</template>
           </button>
           <button
             v-if="!compact"
             type="button"
-            class="history-actions absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-md text-outline hover:bg-ink/10 hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-ink/60"
+            class="history-actions"
             :class="{ 'is-open': item.session_id === openSessionId }"
             :aria-label="`Tùy chọn: ${item.title || 'Cuộc trò chuyện mới'}`"
             aria-haspopup="dialog"
@@ -140,7 +134,7 @@ onUnmounted(() => {
             :aria-controls="item.session_id === openSessionId ? menuId : undefined"
             @click="toggleMenu(item.session_id, $event)"
           >
-            <Ellipsis class="h-4 w-4" aria-hidden="true" />
+            <Ellipsis :size="16" aria-hidden="true" />
           </button>
         </div>
       </li>
@@ -155,29 +149,21 @@ onUnmounted(() => {
       role="dialog"
       aria-label="Tùy chọn hội thoại"
       tabindex="-1"
-      class="fixed z-50 w-60 max-w-[calc(100vw-16px)] rounded-xl border border-ink/10 bg-panel-hover p-1.5 font-body-md text-on-surface shadow-xl shadow-black/40 outline-none"
+      class="hf history-menu"
       :style="position"
       @keydown.down.prevent="deleteButton?.focus()"
       @keydown.up.prevent="deleteButton?.focus()"
     >
-      <div class="flex items-start gap-2.5 border-b border-ink/[0.08] px-2.5 pb-3 pt-2">
-        <Clock3 class="mt-0.5 h-4 w-4 shrink-0 text-outline" aria-hidden="true" />
+      <div class="menu-head">
+        <Clock3 :size="16" class="menu-icon" aria-hidden="true" />
         <div>
-          <p class="text-[11px] text-outline">Tương tác cuối</p>
-          <time v-if="lastInteraction" :datetime="lastInteraction.iso" class="mt-1 block text-xs leading-5">
-            {{ lastInteraction.label }}
-          </time>
-          <p v-else class="mt-1 text-xs leading-5">Chưa có thông tin</p>
+          <p class="menu-label">Tương tác cuối</p>
+          <time v-if="lastInteraction" :datetime="lastInteraction.iso" class="menu-time">{{ lastInteraction.label }}</time>
+          <p v-else class="menu-time">Chưa có thông tin</p>
         </div>
       </div>
-      <button
-        ref="deleteButton"
-        type="button"
-        :disabled="isStreaming"
-        class="mt-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-xs text-error hover:bg-error/10 focus-visible:outline focus-visible:outline-1 focus-visible:outline-error disabled:opacity-40"
-        @click="deleteSession"
-      >
-        <Trash2 class="h-4 w-4" aria-hidden="true" />
+      <button ref="deleteButton" type="button" class="menu-delete" :disabled="isStreaming" @click="deleteSession">
+        <Trash2 :size="16" aria-hidden="true" />
         Xóa hội thoại
       </button>
     </div>
@@ -185,39 +171,47 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.history-scroll {
-  scrollbar-width: none;
+.history-scroll { flex: 1; min-height: 0; min-width: 0; width: 100%; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
+.history-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.empty { padding: 24px 12px; text-align: center; font-size: 12px; color: var(--hf-muted); margin: 0; }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.history-item { width: 100%; min-width: 0; content-visibility: auto; contain-intrinsic-block-size: auto 38px; }
+.history-row { position: relative; width: 100%; min-width: 0; border-radius: 10px; }
+.history-row:hover { background: var(--hf-hover); }
+.history-row.on { background: var(--hf-press); }
+.conv {
+  display: block; width: 100%; min-width: 0; min-height: 38px; padding: 0 12px; border: 0; background: transparent;
+  border-radius: 10px; text-align: left; font-size: 14px; color: var(--hf-sub);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.history-scroll::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-.history-item {
-  width: 100%;
-  min-width: 0;
-  content-visibility: auto;
-  contain-intrinsic-block-size: auto 40px;
-}
+.history-row.on .conv { color: var(--hf-ink); font-weight: 500; }
+.conv.is-compact { display: flex; align-items: center; justify-content: center; padding: 0; }
+.conv:disabled { cursor: wait; }
+.conv.menu-open { padding-right: 44px; }
 .history-actions {
-  opacity: 0;
-  pointer-events: none;
+  position: absolute; right: 3px; top: 3px; width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent;
+  display: flex; align-items: center; justify-content: center; color: var(--hf-muted); opacity: 0; pointer-events: none;
 }
-.history-scroll:not(.is-compact) .history-row:hover > :first-child,
-.history-scroll:not(.is-compact) .history-row:focus-within > :first-child {
-  padding-right: 2.75rem;
-}
-.history-row:hover .history-actions,
-.history-row:focus-within .history-actions,
-.history-actions.is-open {
-  opacity: 1;
-  pointer-events: auto;
-}
+.history-actions:hover { background: var(--hf-line); color: var(--hf-ink); }
+.history-scroll:not(.is-compact) .history-row:hover > .conv,
+.history-scroll:not(.is-compact) .history-row:focus-within > .conv { padding-right: 44px; }
+.history-row:hover .history-actions, .history-row:focus-within .history-actions, .history-actions.is-open { opacity: 1; pointer-events: auto; }
 @media (hover: none) {
   .history-actions { opacity: 1; pointer-events: auto; }
-  .history-scroll:not(.is-compact) .history-row > :first-child { padding-right: 2.75rem; }
+  .history-scroll:not(.is-compact) .history-row > .conv { padding-right: 44px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .history-row { transition: none; }
+.history-menu {
+  position: fixed; z-index: 70; width: 240px; max-width: calc(100vw - 16px); padding: 6px; outline: none;
+  background: var(--hf-card); border: 1px solid var(--hf-line); border-radius: 16px; box-shadow: 0 14px 36px rgba(0, 0, 0, .14);
 }
+.menu-head { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px 12px; border-bottom: 1px solid var(--hf-line-2); }
+.menu-icon { margin-top: 2px; color: var(--hf-muted); flex: none; }
+.menu-label { margin: 0; font-size: 12px; color: var(--hf-muted); }
+.menu-time { display: block; margin: 4px 0 0; font-size: 13px; color: var(--hf-ink); }
+.menu-delete {
+  margin-top: 4px; display: flex; width: 100%; align-items: center; gap: 10px; border: 0; background: transparent;
+  border-radius: 10px; padding: 0 10px; min-height: 40px; font-size: 13px; font-weight: 500; color: var(--hf-bad); text-align: left;
+}
+.menu-delete:hover:not(:disabled) { background: var(--hf-err-bg); }
+.menu-delete:disabled { opacity: .4; }
 </style>

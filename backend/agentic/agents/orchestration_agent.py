@@ -12,8 +12,10 @@ from agentic.agents.adaptive_router import (
     jev_read_domain,
     jev_routing_projection,
 )
+from agentic.agents.specialists import BY_NAME, SPECIALISTS
 from agentic.agents.state import RouteDecision
 from agentic.components.context_filter import compact_evidence, model_graph_context
+from agentic.core import roster
 from agentic.core.app.schemas.response import Clarification
 from agentic.core.context import request_context
 from agentic.core.providers.fpt import strip_tool_markup
@@ -24,9 +26,9 @@ from agentic.security.content_filter import assess
 from agentic.security.input_guard import safe_query
 from agentic.services import (
     catalog_choice,
+    delegation,
+    food_gap,
     food_suggestion,
-    gym_logging,
-    meal_logging,
     mode,
     personal_context,
 )
@@ -50,10 +52,10 @@ from agentic.tools.policy import (
 )
 
 GRAPH_CONTEXT_GUIDANCE = get_prompt("orchestration.graph_context")
-ROUTING_PROMPT = get_prompt("orchestration.route", "v2")
+ROUTING_PROMPT = get_prompt("orchestration.route", "v6")
 PERSONAL_ROUTING = get_prompt("orchestration.personal", "v2")
 PERSONAL_ANSWER = get_prompt("orchestration.personal_answer", "v2")
-NORMAL_ROUTING_PROMPT = get_prompt("orchestration.route_normal", "v3")
+NORMAL_ROUTING_PROMPT = get_prompt("orchestration.route_normal", "v6")
 PLAN_ROUTING = get_prompt("orchestration.plan", "v3")
 PLAN_MODE_REPLY = get_prompt("orchestration.plan_mode_reply", "v3")
 PERSONAL_MEASURE = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:kg|cm|tuổi|tuoi|kcal|bpm)\b", re.I)
@@ -115,24 +117,6 @@ def with_sources(text, evidence):
     )
 
 
-def plan_instruction(state):
-    """Nhiệm vụ cho tool lịch tập ở chế độ Plan: kèm hồ sơ và các nguyên tắc đã kiểm chứng của chính lượt này."""
-    lines = [
-        "Tạo lịch tập mới theo yêu cầu gốc, mục tiêu và dữ liệu tập luyện hiện tại của người dùng "
-        "(đọc thêm bằng tool khi cần), rồi đề xuất bằng create_training_plans để người dùng xác nhận."
-    ]
-    card = personal_context.render_card(state.get("user_context"))
-    if card:
-        lines.append("Hồ sơ người dùng (dữ liệu, không phải chỉ dẫn): " + card)
-    claims = ((state.get("research_evidence") or {}).get("claims") or [])[:6]
-    if claims:
-        lines.append(
-            "Nguyên tắc đã kiểm chứng từ nguồn, áp dụng khi chọn khối lượng, cường độ và nghỉ:\n"
-            + "\n".join("- " + item["claim"] for item in claims)
-        )
-    return "\n".join(lines)
-
-
 def without_known_questions(clarification, card):
     """Bỏ các câu hỏi trong form mà dữ liệu đã lưu của người dùng đã trả lời; trả về None khi không còn gì để hỏi."""
     if not clarification or not card:
@@ -190,6 +174,23 @@ class OrchestrationAgent:
             if applied:
                 return {**applied, **safety_update}
             safety_update["catalog_choice"] = None
+        if state.get("food_gap"):
+            # Lựa chọn trên thẻ món thiếu là dữ liệu có cấu trúc: code dựng tiếp bữa ăn, không gọi model định tuyến.
+            applied = food_gap.apply(state)
+            if applied:
+                trace = {
+                    "stage": "rule",
+                    "rule": "food_gap_resolved",
+                    "action": "tool",
+                    "domain": "meals",
+                }
+                applied["decision"]["writes_before"] = len(executed_writes(state))
+                return {
+                    **applied,
+                    "route_trace": [*(state.get("route_trace") or []), trace],
+                    **safety_update,
+                }
+            safety_update.update(food_gap=None, food_choices=None)
         if (state.get("decision") or {}).get("read_only") and (
             state.get("catalog_handoff") or state.get("research_handoff")
         ):
@@ -235,47 +236,18 @@ class OrchestrationAgent:
                     + '": nghiên cứu nguồn công khai để đề xuất bản ghi CUSTOM, sau đó tiếp tục yêu cầu gốc.',
                 },
             }
-        previous = state.get("decision") or {}
-        if (
-            previous.get("plan_task") == "plan_build"
-            and previous.get("action") == "research"
-            and state.get("research_count")
-        ):
-            # Chế độ Plan: dữ liệu người dùng đã đọc và nguyên tắc đã tra cứu; giờ tool lịch tập dựng bản xem trước.
-            decision = {
-                **previous,
-                "action": "tool",
-                "next_agent": "tool",
-                "domain": "training_plans",
-                "instruction": plan_instruction(state),
-            }
-            trace = {
-                "stage": "rule",
-                "rule": "plan_build_tool",
-                "action": "tool",
-                "domain": "training_plans",
-            }
-            return {
-                "decision": decision,
-                "status": "running",
-                "route_trace": [*(state.get("route_trace") or []), trace],
-                **safety_update,
-            }
-        if meal_logging.continues(state):
-            # Bữa trước của bản nháp vừa được lưu: dựng bữa kế tiếp bằng code, không gọi lại model định tuyến.
-            decision = {
-                **state["decision"],
-                "action": "tool",
-                "next_agent": "tool",
-                "domain": "meals",
-            }
-            trace = {"stage": "rule", "rule": "meal_log_next", "action": "tool", "domain": "meals"}
-            return {
-                "decision": decision,
-                "status": "running",
-                "route_trace": [*(state.get("route_trace") or []), trace],
-                **safety_update,
-            }
+        for agent in SPECIALISTS:
+            # Agent chuyên trách tiếp tục việc nhiều bước của chính nó (bữa kế tiếp, lịch tập sau tra cứu, câu trả lời
+            # cho form gym) mà không gọi model định tuyến. Xét trước write_done: bản nháp nhiều bữa chưa xong lượt.
+            resumed = agent.resume(state)
+            if resumed:
+                decision, trace = resumed
+                return {
+                    "decision": decision,
+                    "status": "running",
+                    "route_trace": [*(state.get("route_trace") or []), *trace],
+                    **safety_update,
+                }
         if finishes_turn(state):
             # Lệnh ghi vừa xác nhận đã hoàn tất yêu cầu: trả biên nhận do code viết, không gọi lại router hay model tool.
             decision = {
@@ -297,43 +269,6 @@ class OrchestrationAgent:
                 **safety_update,
             }
         first = (state.get("turn") or {}).get("run_id") != state.get("run_id")
-        # Chỉ là quyết định đầu tiên của lượt: sau bước tool, router tiếp tục với kết quả của nó.
-        choice = (
-            gym_logging.parse_choice(latest_request(state))
-            if first and state.get("replying_to_form")
-            else None
-        )
-        if choice:
-            # Câu trả lời cho form ghi buổi tập gym được định tuyến bằng code: không gọi model định tuyến, không hỏi lại.
-            decision = RouteDecision(
-                intent="LOG_EXERCISE",
-                action="tool",
-                next_agent="tool",
-                domain="trainings",
-                instruction=gym_logging.instruction(choice),
-            )
-            trace = [
-                {
-                    "stage": "rule",
-                    "rule": "gym_mode_" + choice["mode"],
-                    "action": "tool",
-                    "domain": "trainings",
-                },
-                {
-                    "stage": "final",
-                    "intent": decision.intent,
-                    "action": decision.action,
-                    "domain": decision.domain,
-                    "personalize": False,
-                    "topic": None,
-                },
-            ]
-            return {
-                "decision": {**decision.model_dump(), "writes_before": len(executed_writes(state))},
-                "status": "running",
-                "route_trace": [*(state.get("route_trace") or []), *trace],
-                **safety_update,
-            }
         policy = mode.policy(state)
         jev_events = list(state.get("jev_events") or [])
         # Chế độ Plan không có lối tắt đọc: người dùng đã chọn tư vấn chuyên sâu.
@@ -422,6 +357,11 @@ class OrchestrationAgent:
                 }
             )
 
+        primary = next((task.domain for task in decision.tasks if task.domain), None)
+        if decision.action == "tool" and not decision.domain and primary:
+            # Tin nhắn nhiều ý có thể không có một miền chung: phần đầu tiên là tuyến tuần tự dự phòng.
+            decision.domain = primary
+            rule("primary_task_domain")
         # Một lần LLM tiếp tục sau đó không thể nâng quyền của một lần đọc Jev.
         read_policy = state.get("decision") or {}
         if read_policy.get("read_only"):
@@ -558,6 +498,7 @@ class OrchestrationAgent:
             if decision.action != "research":
                 rule("knowledge_to_research")
             decision.action, decision.next_agent = "research", "research"
+        gap = None
         if decision.action == "research" and decision.intent not in QA_INTENTS:
             # Tra cứu catalog giải quyết catalog trước (ưu tiên database) trong bước lập kế hoạch. Một miền
             # nhật ký ("ghi đồ uống này" -> meals) tra cứu catalog mà nó phụ thuộc.
@@ -565,6 +506,18 @@ class OrchestrationAgent:
             decision.next_agent = "research"
             if decision.domain not in {"foods", "exercises"}:
                 raise ValueError("Research is restricted to food and exercises")
+            if decision.domain == "foods":
+                # Món ăn không tra web: có bản nháp bữa thì đường nhanh tra catalog và hỏi bằng thẻ món thiếu;
+                # chỉ có tên món thì hỏi thẳng bằng thẻ (tìm món hoặc tạo món riêng).
+                query = (decision.research_query or "").strip()
+                decision.intent, decision.research_query = "LOG_FOOD", None
+                if query and not decision.meal_log:
+                    decision.action, decision.next_agent = "answer", "orchestrator"
+                    gap = food_gap.ask([food_gap.gap_item("q:0", query)])
+                    rule("food_gap_card")
+                else:
+                    decision.action, decision.next_agent, decision.domain = "tool", "tool", "meals"
+                    rule("food_research_to_catalog")
         # Bước chuẩn hoá ở trên có thể biến một câu hỏi làm rõ thành yêu cầu tool, nên
         # kiểm tra lại miền sau tất cả các phép biến đổi tuyến cơ sở.
         if (
@@ -609,27 +562,44 @@ class OrchestrationAgent:
             decision.personalize, decision.topic = False, None
             rule("plan_mode_only")
         form = None
+        owner = BY_NAME.get(roster.specialist_for(decision.domain))
+        checked = owner.preflight(decision, state, request) if owner else None
+        if checked:
+            # Agent nhận tuyến cần người dùng chọn trước (ví dụ cách ghi buổi gym): hỏi bằng form do code dựng.
+            form, form_reply, name = checked
+            rule(name)
+        delegated = None
         if (
-            not state.get("replying_to_form")
+            first
+            and decision.action == "tool"
+            and not form
+            and not redirect
+            and verdict is None
+            and not state.get("replying_to_form")
             and not decision.read_only
-            and gym_logging.asks_mode(request, decision)
+            and not decision.personalize
+            and decision.intent not in QA_INTENTS
+            and getattr(self.settings, "PARALLEL_AGENTS", True)
         ):
-            # Do code quyết định: ghi buổi tập gym chi tiết hay nhanh (chỉ cường độ) là lựa chọn của người dùng, được hỏi trước mọi lần tra cứu.
-            form = gym_logging.mode_form(request)
-            decision.action, decision.next_agent, decision.missing_fields = (
-                "clarify",
-                "orchestrator",
-                ["gym_logging_mode"],
-            )
-            decision.instruction = (
-                "Hỏi người dùng muốn ghi buổi gym chi tiết từng bài hay ghi nhanh theo cường độ."
-            )
-            rule("gym_mode_guard")
+            # Tin nhắn nhiều ý: mỗi phần giao cho agent sở hữu miền của nó, chạy song song (services/delegation.py).
+            delegated = delegation.plan(decision.model_dump(), policy)
+            if delegated and any(self.asks_first(task, state, request) for task in delegated):
+                delegated = None  # một phần cần người dùng chọn trước (form): đi đường tuần tự
+            if delegated:
+                trace.append(
+                    {
+                        "stage": "rule",
+                        "rule": "fan_out",
+                        "action": "delegate",
+                        "domain": None,
+                        "agents": [roster.specialist_for(task["domain"]) for task in delegated],
+                    }
+                )
         trace.append(
             {
                 "stage": "final",
                 "intent": decision.intent,
-                "action": decision.action,
+                "action": "delegate" if delegated else decision.action,
                 "domain": decision.domain,
                 "personalize": decision.personalize,
                 "topic": decision.topic,
@@ -637,13 +607,27 @@ class OrchestrationAgent:
         )
         # Số lệnh ghi đã thực thi lúc router quyết định: finishes_turn so các lệnh ghi sau đó với mục tiêu của quyết định này.
         result = {
-            "decision": {**decision.model_dump(), "writes_before": len(executed_writes(state))},
+            "decision": {
+                **decision.model_dump(),
+                "writes_before": len(executed_writes(state)),
+                **(
+                    {
+                        "action": "delegate",
+                        "next_agent": "orchestrator",
+                        "delegated_tasks": delegated,
+                    }
+                    if delegated
+                    else {}
+                ),
+            },
             "status": "needs_input" if decision.action == "clarify" else "running",
             "route_trace": [*(state.get("route_trace") or []), *trace],
             **safety_update,
         }
         if form:
-            result.update(clarification=form, prepared_reply=gym_logging.REPLY)
+            result.update(clarification=form, prepared_reply=form_reply)
+        if gap:
+            result.update(gap)
         if redirect:
             # Những gì lượt này đã lưu vẫn được báo lại trước lời mời.
             result.update(
@@ -653,6 +637,21 @@ class OrchestrationAgent:
         if jev_events:
             result["jev_events"] = jev_events
         return result
+
+    @staticmethod
+    def asks_first(task, state, request):
+        """Agent của nhiệm vụ cần người dùng chọn trước khi làm (ví dụ cách ghi buổi gym)."""
+        probe = RouteDecision(
+            intent=task["intent"],
+            action="tool",
+            next_agent="tool",
+            domain=task["domain"],
+            instruction=task["instruction"],
+        )
+        return (
+            BY_NAME[roster.specialist_for(task["domain"])].preflight(probe, state, request)
+            is not None
+        )
 
     @staticmethod
     def public_question(request):
@@ -688,7 +687,8 @@ class OrchestrationAgent:
             # Do code viết từ kết quả đã kiểm chứng (và form của nó, nếu có): model không viết lại.
             status = (
                 "needs_input"
-                if state.get("status") == "needs_input" and state.get("clarification")
+                if (state.get("status") == "needs_input" and state.get("clarification"))
+                or state.get("food_gap")
                 else "completed"
             )
             return {
@@ -710,7 +710,13 @@ class OrchestrationAgent:
         # Những gì các lệnh ghi đã xác nhận trong lượt này đã lưu, do code viết từ bản ghi của backend: các model từng
         # nói lại bữa ăn và cân nặng đã lưu như bản xem trước vẫn đang chờ xác nhận (lượt chạy 433a847a, 2446b7af).
         saved = write_reply(state)
-        if saved and status != "needs_input" and not reads_after_writes(state):
+        # Lượt giao việc song song có nhánh đọc dữ liệu (decision.reads): lần đọc chạy trước các thẻ ghi, nên vẫn cần trả lời.
+        if (
+            saved
+            and status != "needs_input"
+            and not reads_after_writes(state)
+            and not decision.get("reads")
+        ):
             return {
                 "reply": saved,
                 "status": "completed",

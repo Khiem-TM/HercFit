@@ -172,6 +172,17 @@ class Session(Interval):
         return {"dataSource": MANUAL, "exercise": value}
 
     @classmethod
+    def build_sleep(cls, *, start: datetime, end: datetime, zone: str) -> dict[str, Any]:
+        """Giấc ngủ ghi tay: chỉ giờ ngủ và giờ dậy người dùng khai, một đoạn ASLEEP (kiểu CLASSIC).
+
+        Không bịa giai đoạn hay lần thức giấc; summary là trường output-only do Google tự tính.
+        """
+        span = cls.interval(start, end, zone)
+        stage = {"type": "ASLEEP", "startTime": span["startTime"], "startUtcOffset": span["startUtcOffset"],
+                 "endTime": span["endTime"], "endUtcOffset": span["endUtcOffset"]}
+        return {"dataSource": MANUAL, "sleep": {"type": "CLASSIC", "interval": span, "stages": [stage]}}
+
+    @classmethod
     def build_hydration(cls, *, moment: datetime, zone: str, milliliters: float) -> dict[str, Any]:
         return {"dataSource": MANUAL, "hydrationLog": {
             "interval": cls.interval(moment, moment + timedelta(minutes=1), zone),

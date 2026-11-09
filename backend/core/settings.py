@@ -80,7 +80,18 @@ class Settings(BaseSettings):
     GOOGLE_HEALTH_ENABLED: bool = True
     GOOGLE_HEALTH_REDIRECT_URI: str | None = None
     GOOGLE_HEALTH_SYNC_LOOP: bool = True
-    GOOGLE_HEALTH_SYNC_INTERVAL_MINUTES: int = Field(default=360, ge=15, le=7 * 24 * 60)
+    # Nhịp của vòng đồng bộ nền; mỗi nhịp chỉ đồng bộ kết nối "hourly" đã quá một giờ (sync.due).
+    GOOGLE_HEALTH_SYNC_INTERVAL_MINUTES: int = Field(default=15, ge=5, le=7 * 24 * 60)
+    # Vòng thông báo chủ động (domains/notifications: cảnh báo chỉ số, đánh giá ngày, nhắc lịch tập): chỉ cho
+    # người dùng đã bật thông báo chủ động. Nhịp 5 phút để nhắc nhở đến gần đúng giờ người dùng chọn.
+    DAILY_BRIEFING_LOOP: bool = True
+    DAILY_BRIEFING_POLL_MINUTES: int = Field(default=5, ge=1, le=24 * 60)
+    # Đẩy thông báo tức thì qua WebSocket (/api/v2/notifications/stream, LISTEN/NOTIFY của PostgreSQL).
+    NOTIFICATION_STREAM: bool = True
+    # Service agentic viết lời thông báo bằng LLM (POST /internal/notifications/compose, ký HMAC bằng
+    # AGENT_SERVICE_SECRET). Trống, lỗi hoặc quá thời gian: dùng câu chữ do code viết.
+    AGENTIC_INTERNAL_URL: str | None = "http://localhost:8081"
+    NOTIFICATION_COMPOSE_TIMEOUT_SECONDS: float = Field(default=20.0, gt=0, le=120)
     # Gốc Google Health API. Chỉ ghi đè cho test hoặc emulator: https, hoặc http thường
     # trên localhost (access token của người dùng không bao giờ gửi qua http thường tới host khác).
     GOOGLE_HEALTH_API_ROOT: str = Field(

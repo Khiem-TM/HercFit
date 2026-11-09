@@ -25,6 +25,8 @@ from core import principal as principals
 from domains.identity.models.consent import ConsentEvent, UserConsent
 
 PURPOSE = "assistant"
+# Thông báo chủ động (briefing buổi sáng, insight): người dùng tự bật, độc lập với quyền của trợ lý.
+PROACTIVE = "proactive"
 POLICY_VERSION = "2026-11-01"
 CONSENT_REQUIRED = {"code": "consent_required",
                     "message": "Người dùng chưa cho phép trợ lý dùng dữ liệu sức khoẻ từ thiết bị. "
@@ -41,49 +43,62 @@ class ConsentState:
         return bool(getattr(self, data_group, False))
 
 
-async def load(session: AsyncSession, user_id: UUID) -> ConsentState:
+async def load(session: AsyncSession, user_id: UUID, purpose: str = PURPOSE) -> ConsentState:
     rows = (await session.execute(select(UserConsent).where(
-        UserConsent.user_id == user_id, UserConsent.purpose == PURPOSE))).scalars().all()
+        UserConsent.user_id == user_id, UserConsent.purpose == purpose))).scalars().all()
     granted = {row.data_group: row.granted for row in rows}
     return ConsentState(device=granted.get("device", False), sensitive=granted.get("sensitive", False),
                         version=max((row.version for row in rows), default=0))
 
 
-async def _set(session: AsyncSession, user_id: UUID, data_group: str, granted: bool, actor: str) -> ConsentState:
+async def _set(session: AsyncSession, user_id: UUID, data_group: str, granted: bool, actor: str,
+               purpose: str = PURPOSE) -> ConsentState:
     # Tuần tự hoá thay đổi consent theo từng người dùng để phiên bản luôn tăng nghiêm ngặt.
     await session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
                           {"key": f"consent:{user_id}"})
-    state = await load(session, user_id)
-    row = await session.get(UserConsent, (user_id, PURPOSE, data_group))
+    state = await load(session, user_id, purpose)
+    row = await session.get(UserConsent, (user_id, purpose, data_group))
     if row is not None and row.granted == granted:
         return state
     version = state.version + 1
     if row is None:
-        session.add(UserConsent(user_id=user_id, purpose=PURPOSE, data_group=data_group, granted=granted,
+        session.add(UserConsent(user_id=user_id, purpose=purpose, data_group=data_group, granted=granted,
                                 version=version, policy_version=POLICY_VERSION))
     else:
         row.granted, row.version, row.policy_version = granted, version, POLICY_VERSION
         row.changed_at = text("now()")
-    session.add(ConsentEvent(user_id=user_id, purpose=PURPOSE, data_group=data_group, granted=granted,
+    session.add(ConsentEvent(user_id=user_id, purpose=purpose, data_group=data_group, granted=granted,
                              version=version, policy_version=POLICY_VERSION, actor=actor))
     await session.flush()
-    if data_group == "device" and granted:
+    if purpose == PURPOSE and data_group == "device" and granted:
         # Thu hồi: trigger kg_user_consent đổi dữ kiện thiết bị trong graph thành tombstone.
         # Cấp: dữ kiện hiện tại được dựng lại từ health_points và phát lên graph.
         from domains.health_records import views
         await views.publish_all_kg(session, user_id)
     from domains.shared.events import publish
     await publish(session, "consent.changed", user_id,
-                  {"purpose": PURPOSE, "data_group": data_group, "granted": granted, "version": version})
-    return await load(session, user_id)
+                  {"purpose": purpose, "data_group": data_group, "granted": granted, "version": version})
+    return await load(session, user_id, purpose)
 
 
-async def grant(session: AsyncSession, user_id: UUID, data_group: str = "device", *, actor: str = "USER") -> ConsentState:
-    return await _set(session, user_id, data_group, True, actor)
+async def grant(session: AsyncSession, user_id: UUID, data_group: str = "device", *, actor: str = "USER",
+                purpose: str = PURPOSE) -> ConsentState:
+    return await _set(session, user_id, data_group, True, actor, purpose)
 
 
-async def revoke(session: AsyncSession, user_id: UUID, data_group: str = "device", *, actor: str = "USER") -> ConsentState:
-    return await _set(session, user_id, data_group, False, actor)
+async def revoke(session: AsyncSession, user_id: UUID, data_group: str = "device", *, actor: str = "USER",
+                 purpose: str = PURPOSE) -> ConsentState:
+    return await _set(session, user_id, data_group, False, actor, purpose)
+
+
+async def proactive_enabled(session: AsyncSession, user_id: UUID) -> bool:
+    """Người dùng đã bật thông báo chủ động dựa trên dữ liệu thiết bị chưa."""
+    return (await load(session, user_id, PROACTIVE)).device
+
+
+async def set_proactive(session: AsyncSession, user_id: UUID, enabled: bool, *, actor: str = "USER") -> bool:
+    state = await (grant if enabled else revoke)(session, user_id, "device", actor=actor, purpose=PROACTIVE)
+    return state.device
 
 
 async def set_device(session: AsyncSession, user_id: UUID, allowed: bool, *, actor: str = "USER") -> ConsentState:

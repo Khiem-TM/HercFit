@@ -1,4 +1,4 @@
-import type { HealthConnection, HealthRecordKind, HealthRecordRead } from '@/types/api'
+import type { HealthConnection, HealthRecordKind, HealthRecordRead, SyncFrequency, SyncGroup } from '@/types/api'
 
 const GH = '/api/integrations/google-health'
 const RECORDS = '/api/v2/health/records'
@@ -44,6 +44,10 @@ export function createHealthApi(fetcher: Fetcher) {
     connection: () => call<HealthConnection>(GH, undefined, 'Không đọc được trạng thái kết nối Google Health.'),
     sync: () => call<{ status: string; detail: string }>(`${GH}/sync`, { method: 'POST' },
       'Không bắt đầu được đồng bộ.'),
+    /** Bật/tắt nhóm dữ liệu và đổi tần suất đồng bộ; chỉ khoá được gửi mới đổi. */
+    updateSettings: (settings: { groups?: Partial<Record<SyncGroup, boolean>>; frequency?: SyncFrequency }) =>
+      call<HealthConnection>(`${GH}/settings`, { method: 'PATCH', body: JSON.stringify(settings),
+        headers: { 'Content-Type': 'application/json' } }, 'Không lưu được cài đặt đồng bộ.'),
     createRecord: (kind: HealthRecordKind, payload: Record<string, unknown>, key: string = crypto.randomUUID()) =>
       call<HealthRecordRead>(`${RECORDS}/${kind}`, write('POST', payload, key), 'Không ghi được lên Google Health.'),
     updateRecord: (kind: HealthRecordKind, id: string, payload: Record<string, unknown>,

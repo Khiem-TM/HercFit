@@ -9,13 +9,14 @@ from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from pydantic import ValidationError
 
 from agentic.components.context_filter import model_graph_context
+from agentic.core import roster
 from agentic.core.context import request_context
 from agentic.core.providers.fpt import strip_tool_markup
 from agentic.observability import annotate, observed
 from agentic.prompts.layout import layout
 from agentic.prompts.registry import get_prompt
 from agentic.research.sources import rate
-from agentic.services import catalog_choice, meal_logging, mode
+from agentic.services import catalog_choice, food_gap, meal_logging, mode
 from agentic.services.routing import (
     fast_reads_enabled,
     latest_request,
@@ -53,12 +54,10 @@ NO_TEXT_PREVIEW = (
 
 
 def research_handoff(state, domain):
-    """Ưu tiên database: tìm catalog rỗng cho món của lượt này thì chuyển sang tra cứu (một lần)."""
-    if (
-        domain not in {"foods", "exercises"}
-        or state.get("research_count")
-        or state.get("candidate")
-    ):
+    """Ưu tiên database: tìm catalog bài tập rỗng của lượt này thì chuyển sang tra cứu (một lần).
+
+    Món ăn không tra web: catalog chưa có món thì thẻ món thiếu hỏi người dùng (services/food_gap.py)."""
+    if domain != "exercises" or state.get("research_count") or state.get("candidate"):
         return None
     empty = [
         o
@@ -74,7 +73,6 @@ NOT_FOUND_IS_EMPTY = {"current_goal", "latest_metrics", "current_training_plan"}
 
 CATALOG_WRITES = {
     "create_foods": "foods",
-    "finalize_foods": "foods",
     "create_exercises": "exercises",
     "finalize_exercises": "exercises",
 }
@@ -90,22 +88,6 @@ class ToolAgent:
             return {"status": "needs_input", "error": "Đã đạt giới hạn công cụ của lượt này."}
         decision = state["decision"]
         candidate = state.get("candidate") or {}
-        draft = state.get("catalog_draft") or {}
-        if (
-            not decision.get("read_only")
-            and decision.get("intent") == "catalog_estimate"
-            and draft.get("domain") == decision["domain"]
-        ):
-            # Người dùng đã chọn một ước tính có nguồn: xem trước đúng bản ghi CUSTOM đó, không gọi model.
-            name = "create_" + draft["domain"]
-            call = {
-                "name": name,
-                "args": draft["payload"],
-                "id": str(uuid5(NAMESPACE_URL, state["run_id"] + ":" + name + ":estimate")),
-            }
-            return await self.execute_calls(
-                state, [call], [AIMessage(content="", tool_calls=[call])]
-            )
         if (
             not decision.get("read_only")
             and candidate.get("research_id")
@@ -162,6 +144,12 @@ class ToolAgent:
         result = await bound.ainvoke(layout(prompt, state.get("messages", []), tail))
         if not result.tool_calls and self.text_preview(state, result.content):
             annotate(tool_text_preview=True)
+            if roster.assigned_model(self.settings, "tool"):
+                # Model riêng (nhỏ) của agent viết văn bản thay vì gọi lệnh ghi: lần thử lại nâng lên model của vai trò.
+                with roster.escalate():
+                    bound = self.models.get("tool").bind_tools(
+                        [s.as_tool() for s in allowed.values()], parallel_tool_calls=False
+                    )
             result = await bound.ainvoke(
                 layout(prompt, state.get("messages", []), [*tail, NO_TEXT_PREVIEW])
             )
@@ -203,28 +191,82 @@ class ToolAgent:
     async def invoke_meal(self, state):
         """Đường nhanh của LOG_FOOD: một lần list_foods rồi create_meals do code dựng, không gọi model.
 
-        Trả về None khi không áp dụng. Khi có món chưa khớp chắc chắn, trả về kết quả tra cứu không kèm
-        pending_action; node tool chuyển nó cho model (model không phải tra lại)."""
-        plan = meal_logging.next_meal(state)
-        if plan is None:
-            return None
-        index, meal = plan
+        Trả về None khi không áp dụng. Món không trùng tên bản ghi nào thì dừng lại hỏi bằng thẻ món thiếu (tìm món
+        hoặc tạo món riêng). Lựa chọn trên thẻ (`food_resolved`) được đọc lại bằng get_foods và kiểm tra đơn vị. Khi
+        còn món chưa khớp chắc chắn, trả về kết quả tra cứu không kèm pending_action; node tool chuyển nó cho model
+        (model không phải tra lại)."""
         decision = {**state["decision"], "domain": "meals"}
-        allowed = {name: REGISTRY[name] for name in ("list_foods", "create_meals")}
+        resolved = decision.get("food_resolved") or {}
+        plan = meal_logging.next_meal(state)
+        if plan is None and not food_gap.picks_only(state):
+            return None
+        index, meal = plan if plan else (0, None)
+        picks = {k: v for k, v in resolved.items() if not meal or k.startswith(f"{index}:")}
+        names = meal_logging.names(meal, resolved, index) if meal else []
+        allowed = {name: REGISTRY[name] for name in ("list_foods", "get_foods", "create_meals")}
         key = state["run_id"] + ":meal-log:" + str(index)
-        lookup = {
-            "name": "list_foods",
-            "args": {"names": meal_logging.names(meal), "limit": CATALOG_LIMIT},
-            "id": str(uuid5(NAMESPACE_URL, key + ":lookup")),
-        }
+        calls = (
+            [
+                {
+                    "name": "list_foods",
+                    "args": {"names": names, "limit": CATALOG_LIMIT},
+                    "id": str(uuid5(NAMESPACE_URL, key + ":lookup")),
+                }
+            ]
+            if names
+            else []
+        )
+        calls += [
+            {
+                "name": "get_foods",
+                "args": {"resource_id": pick["food_id"]},
+                "id": str(uuid5(NAMESPACE_URL, key + ":pick:" + k + ":" + pick["food_id"])),
+            }
+            for k, pick in picks.items()
+        ]
+        if not calls:
+            return None
         looked = await self.execute_calls(
             {**state, "decision": decision},
-            [lookup],
-            [AIMessage(content="", tool_calls=[lookup])],
+            calls,
+            [AIMessage(content="", tool_calls=calls)],
             allowed=allowed,
         )
-        found = looked["tool_outputs"][-1]
-        items = meal_logging.match(meal, found.get("output")) if found.get("ok") else None
+        outputs = looked["tool_outputs"][len(looked["tool_outputs"]) - len(calls) :]
+        found = outputs[0] if names else {"ok": True, "output": []}
+        rejected = [
+            food_gap.gap_item(k, pick["query"], pick["quantity"], pick["unit"])
+            for (k, pick), out in zip(picks.items(), outputs[len(calls) - len(picks) :])
+            if not out.get("ok") or not food_gap.usable(out.get("output"), pick["unit"])
+        ]
+        valid = {k: v for k, v in resolved.items() if k not in {item["key"] for item in rejected}}
+        # Món đã chọn không đọc được hoặc sai đơn vị và món catalog chưa có: hỏi lại bằng thẻ, không đoán món gần giống.
+        gaps = [
+            *rejected,
+            *(
+                food_gap.missing(meal, index, found.get("output"), resolved)
+                if meal and found.get("ok")
+                else []
+            ),
+        ]
+        if gaps:
+            annotate(meal_fast="food_gap", food_gap_items=len(gaps))
+            draft = {
+                "meal_log": decision.get("meal_log"),
+                "index": index,
+                "instruction": decision.get("instruction"),
+                "resolved": valid,
+            }
+            return {
+                **looked,
+                **food_gap.ask(gaps, retry=bool(rejected) and len(rejected) == len(gaps), **draft),
+                "decision": {**decision, "meal_log_next": index},
+            }
+        items = (
+            meal_logging.match(meal, found.get("output"), valid, index)
+            if meal and found.get("ok") and meal_logging.complete(meal, valid, index)
+            else None
+        )
         if items:
             call = {
                 "name": "create_meals",
@@ -246,6 +288,18 @@ class ToolAgent:
                 }
             # Backend từ chối bản xem trước (đơn vị, khẩu phần): model đọc kết quả tra cứu và tự dựng lại.
         annotate(meal_fast="fallback")
+        instruction = (
+            decision["instruction"] if index == 0 or not meal else meal_logging.instruction(meal)
+        )
+        if meal and valid:
+            instruction += (
+                " Món người dùng đã chọn trên thẻ (dùng đúng bản ghi get_foods của lượt này): "
+                + "; ".join(
+                    f'"{pick["query"]}": {pick["quantity"]:g} {pick["unit"]}'
+                    for pick in valid.values()
+                )
+                + "."
+            )
         # Bữa này (và các bữa sau) do model dựng: tắt đường nhanh để không đề xuất trùng.
         return {
             **looked,
@@ -254,9 +308,8 @@ class ToolAgent:
             "decision": {
                 **decision,
                 "meal_log": [],
-                "instruction": decision["instruction"]
-                if index == 0
-                else meal_logging.instruction(meal),
+                "food_resolved": {},
+                "instruction": instruction,
             },
         }
 
@@ -582,9 +635,6 @@ class ToolAgent:
         if name in CATALOG_WRITES:
             # Thẻ catalog tuỳ chỉnh: bản ghi cùng ảnh từ tra cứu mà người dùng có thể giữ (nhập lên Cloudinary).
             if not name.startswith("finalize_"):
-                # Bản ghi dựng từ một ước tính người dùng đã chọn mang theo nguồn của ước tính đó.
-                draft = state.get("catalog_draft") or {}
-                chosen = draft.get("payload") == normalized
                 return {
                     "kind": "catalog_candidate",
                     "domain": CATALOG_WRITES[name],
@@ -594,25 +644,20 @@ class ToolAgent:
                         for k, v in normalized.items()
                         if k not in {"resource_id", "data_quality"}
                     },
-                    "estimate": draft.get("estimate") if chosen else None,
-                    "unverified_fields": normalized.get("data_quality", {})
-                    .get("research", {})
-                    .get("unverified_fields", [])
-                    if chosen
-                    else [],
+                    "estimate": None,
+                    "unverified_fields": [],
                     "image_candidates": [],
-                    "sources": draft.get("sources", []) if chosen else [],
+                    "sources": [],
                 }
             candidate = state.get("candidate") or {}
             reuse = normalized["resolution"] == "reuse"
             # Bằng chứng trích nguồn theo id; URL và tiêu đề nằm trong danh sách nguồn của lệnh.
             cited = {e["source_id"] for e in normalized["evidence"]}
-            product = normalized["query"] if CATALOG_WRITES[name] == "foods" else None
             sources = [
                 {
                     "url": s["url"],
                     "title": s["title"],
-                    "authority": rate(s["source_id"], s["url"], product).tier,
+                    "authority": rate(s["source_id"], s["url"]).tier,
                 }
                 for s in normalized["sources"]
                 if s["source_id"] in cited and public_url(s["url"])
@@ -716,9 +761,6 @@ class ToolAgent:
             "error": None,
             "execution_records": records,
             "candidate": None if saved.get("research_id") else state.get("candidate"),
-            "catalog_draft": None
-            if saved["tool"] in {"create_foods", "create_exercises"}
-            else state.get("catalog_draft"),
             "tool_outputs": [
                 *(
                     o

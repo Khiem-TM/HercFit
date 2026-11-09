@@ -20,13 +20,14 @@ from domains.nutrition.models.meals import Meal, MealItem
 from domains.training.models.trainings import Training, TrainingItem
 from domains.media.models.media import ImageCleanup
 from domains.health_records.models.health_points import HealthPoint
+from domains.notifications.models.notification import UserNotification
 from integrations.google_health.models import GooglePush, HealthConnection
 from core.graph_outbox import register_metadata_hooks
 
 register_metadata_hooks(Base.metadata)
 
 __all__ = [
-    "HealthPoint", "GooglePush",
+    "HealthPoint", "GooglePush", "UserNotification",
     "UserConsent", "ConsentEvent",
     "Base",
     "BaseModel",

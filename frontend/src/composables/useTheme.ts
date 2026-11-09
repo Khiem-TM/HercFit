@@ -1,8 +1,9 @@
 import { computed, ref } from 'vue'
 
 /**
- * Tối là giao diện mặc định của HercFit; sáng và "theo hệ thống" là tuỳ chọn. Lựa chọn được lưu trong
- * localStorage, và index.html áp dụng nó trước lần vẽ đầu tiên nên không bị nháy.
+ * Chưa chọn thì mỗi bề mặt có giao diện mặc định riêng: trang giới thiệu tối, ứng dụng (/chat) sáng theo
+ * thiết kế Dashboard. Lựa chọn tường minh (tối / sáng / theo hệ thống) được lưu trong localStorage và áp
+ * cho mọi trang; index.html áp dụng nó trước lần vẽ đầu tiên nên không bị nháy.
  */
 export type ThemeMode = 'dark' | 'light' | 'system'
 
@@ -10,16 +11,19 @@ const KEY = 'hercfit:theme'
 const BAR_COLOR = { dark: '#131313', light: '#f4f3f0' } as const
 const media = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null
 
-function saved(): ThemeMode {
+function saved(): ThemeMode | null {
   try {
     const value = localStorage.getItem(KEY)
-    return value === 'light' || value === 'system' ? value : 'dark'
+    return value === 'light' || value === 'system' || value === 'dark' ? value : null
   } catch {
-    return 'dark'
+    return null
   }
 }
 
-const mode = ref<ThemeMode>(saved())
+const chosen = ref<ThemeMode | null>(saved())
+// Giao diện khi người dùng chưa chọn; ChatPage đặt 'light' khi vào ứng dụng.
+const fallback = ref<'dark' | 'light'>(typeof location !== 'undefined' && location.pathname.startsWith('/chat') ? 'light' : 'dark')
+const mode = computed<ThemeMode>(() => chosen.value ?? fallback.value)
 const systemLight = ref(media?.matches ?? false)
 const resolved = computed<'dark' | 'light'>(() => (mode.value === 'system' ? (systemLight.value ? 'light' : 'dark') : mode.value))
 
@@ -41,9 +45,15 @@ export function initTheme(): void {
   apply()
 }
 
+/** Giao diện mặc định của bề mặt đang hiển thị (chỉ có tác dụng khi người dùng chưa tự chọn). */
+export function useThemeDefault(next: 'dark' | 'light'): void {
+  fallback.value = next
+  apply()
+}
+
 export function useTheme() {
   function setMode(next: ThemeMode): void {
-    mode.value = next
+    chosen.value = next
     try {
       localStorage.setItem(KEY, next)
     } catch {

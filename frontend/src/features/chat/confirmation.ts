@@ -12,7 +12,6 @@ const TOOL_KIND: Record<string, CardKind> = {
   update_training_plans: 'plan',
   log_sport_session: 'sport',
   create_foods: 'catalog',
-  finalize_foods: 'catalog',
   create_exercises: 'catalog',
   finalize_exercises: 'catalog',
 }
@@ -22,7 +21,6 @@ export const MEDIA_TARGET: Record<string, MediaKind> = {
   create_meals: 'meals',
   create_trainings: 'trainings',
   create_foods: 'foods',
-  finalize_foods: 'foods',
   create_exercises: 'exercises',
   finalize_exercises: 'exercises',
 }
@@ -38,7 +36,6 @@ export const TOOL_TITLES: Record<string, string> = {
   update_training_plans: 'Thay lịch tập',
   end_training_plan: 'Kết thúc lịch tập',
   create_foods: 'Thêm món vào catalog của bạn',
-  finalize_foods: 'Thêm món vào catalog của bạn',
   create_exercises: 'Thêm bài tập vào catalog của bạn',
   finalize_exercises: 'Thêm bài tập vào catalog của bạn',
   create_metrics: 'Ghi số đo cơ thể',
@@ -58,6 +55,8 @@ export const TOOL_TITLES: Record<string, string> = {
   delete_sport_session: 'Xoá buổi thể thao',
   log_water: 'Ghi nước uống',
   delete_water: 'Xoá lần uống nước',
+  log_sleep: 'Ghi giấc ngủ',
+  delete_sleep: 'Xoá giấc ngủ ghi tay',
 }
 
 /** Một lệnh ghi không có chạy thử làm gì, được nói trên thẻ của nó. */
@@ -76,6 +75,8 @@ export const ACTION_NOTES: Record<string, string> = {
   delete_sport_session: 'Buổi thể thao sẽ bị xoá khỏi Google Health.',
   log_water: 'Ghi thẳng lên Google Health; Google giữ bản gốc.',
   delete_water: 'Lần uống nước sẽ bị xoá khỏi Google Health.',
+  log_sleep: 'Ghi thẳng lên Google Health giờ đi ngủ và giờ thức dậy bạn khai; không có giai đoạn ngủ.',
+  delete_sleep: 'Giấc ngủ ghi tay sẽ bị xoá khỏi Google Health.',
 }
 
 /** Tiêu đề thẻ cho lệnh ghi catalog; bản ghi được dùng lại không phải mục catalog mới. */
@@ -157,7 +158,10 @@ const FIELD_NAMES: Record<string, string> = {
   amount_ml: 'Lượng nước', performance: 'Thực hiện', distance_meters: 'Quãng đường', intensity: 'Cường độ',
 }
 // Cùng một trường mang nghĩa khác theo lệnh ghi (nước uống không phải bữa ăn).
-const TOOL_FIELD_NAMES: Record<string, Record<string, string>> = { log_water: { consumed_at: 'Thời điểm uống' } }
+const TOOL_FIELD_NAMES: Record<string, Record<string, string>> = {
+  log_water: { consumed_at: 'Thời điểm uống' },
+  log_sleep: { started_at: 'Giờ đi ngủ', ended_at: 'Giờ thức dậy', minutes_in_bed: 'Thời gian trên giường' },
+}
 const FIELD_UNITS: Record<string, string> = {
   weight_kg: 'kg', height_cm: 'cm', body_fat_pct: '%', muscle_mass_kg: 'kg', energy_kcal: 'kcal', protein_g: 'g',
   resting_hr: 'bpm', max_hr: 'bpm', amount_ml: 'ml', distance_meters: 'm',

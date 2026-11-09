@@ -12,6 +12,7 @@ import DailyTable from './health/DailyTable.vue'
 import EnergyCard from './health/EnergyCard.vue'
 import HeartCard from './health/HeartCard.vue'
 import ProfileCard from './health/ProfileCard.vue'
+import ReadinessCard from './health/ReadinessCard.vue'
 import RecordsCard from './health/RecordsCard.vue'
 import SleepCard from './health/SleepCard.vue'
 import SourceCard from './health/SourceCard.vue'
@@ -25,7 +26,7 @@ import { useHealthData } from './health/useHealthData'
  * Health nằm cạnh nhau theo từng mảng, mỗi thẻ ghi rõ nguồn của nó.
  */
 const props = defineProps<{ graph: KnowledgeGraph; revision?: number }>()
-const emit = defineEmits<{ explore: [id: string]; connect: []; 'edit-profile': [] }>()
+const emit = defineEmits<{ explore: [id: string]; connect: []; 'edit-profile': []; ask: [text: string] }>()
 
 const RANGES = [7, 14, 28, 90]
 const windowDays = shallowRef(28)
@@ -41,6 +42,7 @@ const device = computed(() => !!data.value && (hasDeviceData.value || connected.
 const FAILED: Record<string, string> = {
   connection: 'trạng thái kết nối', profile: 'hồ sơ', overview: 'phân tích', daily: 'số liệu ngày', sleep: 'giấc ngủ',
   workouts: 'buổi vận động', samples: 'chỉ số sinh tồn', progress: 'tiến độ', measurements: 'số đo',
+  assessment: 'đánh giá hôm nay',
 }
 
 const traits = computed(() => {
@@ -57,6 +59,7 @@ const selectedInsight = computed(() => props.graph.insights.find(item => item.id
 const maxIntent = computed(() => Math.max(1, ...props.graph.intents.map(intent => intent.count)))
 
 const sections = computed(() => [
+  { id: 'readiness', label: 'Sẵn sàng' },
   { id: 'profile', label: 'Hồ sơ' },
   { id: 'vitals', label: 'Nhịp sống' },
   { id: 'energy', label: 'Năng lượng' },
@@ -104,6 +107,12 @@ function jump(id: string) {
     <ul v-if="data?.overview?.notes.length && hasDeviceData" class="notes">
       <li v-for="note in data.overview.notes" :key="note"><Info :size="12" />{{ note }}</li>
     </ul>
+
+    <section data-section="readiness" class="block" aria-label="Sẵn sàng hôm nay">
+      <div :class="{ refetching: loading }">
+        <ReadinessCard v-if="data" :assessment="data.assessment" :connected="connected" @ask="emit('ask', $event)" @logged="refresh" />
+      </div>
+    </section>
 
     <section data-section="profile" class="block" aria-label="Hồ sơ">
       <ProfileCard :profile="data?.profile ?? null" :traits="traits" @edit="emit('edit-profile')" @map="emit('explore', 'me')" />

@@ -5,7 +5,7 @@ Model sở hữu luật lưu trữ; transaction của request sở hữu commit/
 
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -43,6 +43,7 @@ class UserDataService(UserService):
 
     # Số đo Google có (ghi xuyên qua khi đã kết nối): cột HercFit → loại bản ghi Google.
     GOOGLE_FIELDS = (("weight_kg", "weight"), ("height_cm", "height"), ("body_fat_pct", "body-fat"))
+    LOCAL_FIELDS = ("muscle_mass_kg", "chest_cm", "waist_cm", "hip_cm")
 
     async def create_metric(self, payload: BodyMetricCreate) -> Any:
         """Đã kết nối Google: cân nặng / chiều cao / mỡ được ghi thẳng lên Google (nguồn sự thật);
@@ -61,16 +62,21 @@ class UserDataService(UserService):
             if result is None:  # chưa kết nối Google
                 return await BodyMetric.create_snapshot(self.session, user_id=self.user_id, payload=data)
             written[column] = result
-        if data.muscle_mass_kg is not None:  # Google không có khối cơ: giữ trong HercFit
-            await BodyMetric.create(self.session, {"user_id": self.user_id, "recorded_at": data.recorded_at,
-                                                   "muscle_mass_kg": data.muscle_mass_kg,
-                                                   "additional_metrics": data.additional_metrics})
+        # Google không có khối cơ và vòng đo: giữ trong HercFit.
+        local = {field: getattr(data, field) for field in self.LOCAL_FIELDS if getattr(data, field) is not None}
+        row = None
+        if local:
+            row = await BodyMetric.create(self.session, {"user_id": self.user_id, "recorded_at": data.recorded_at,
+                                                         **local, "additional_metrics": data.additional_metrics})
+        # id luôn là của một bản ghi có thật (điểm Google đầu tiên đã ghi, hoặc dòng HercFit), không bao giờ ngẫu nhiên.
+        record_id = next((written[column].get("id") for column, _kind in self.GOOGLE_FIELDS
+                          if (written.get(column) or {}).get("id")), None) or (row.id if row is not None else None)
         now = datetime.now(timezone.utc)
-        return Reading(id=(written.get("weight_kg") or {}).get("id") or uuid4(), user_id=self.user_id,
+        return Reading(id=record_id, user_id=self.user_id,
                        recorded_at=data.recorded_at, created_at=now, updated_at=now, source="MANUAL",
                        weight_kg=data.weight_kg, height_cm=data.height_cm, body_fat_pct=data.body_fat_pct,
-                       muscle_mass_kg=data.muscle_mass_kg, additional_metrics=data.additional_metrics,
-                       written_by_hercfit=True)
+                       muscle_mass_kg=data.muscle_mass_kg, chest_cm=data.chest_cm, waist_cm=data.waist_cm,
+                       hip_cm=data.hip_cm, additional_metrics=data.additional_metrics, written_by_hercfit=True)
 
     async def list_metrics(self, options: BodyMetricQuery) -> list[Any]:
         return await BodyMetric.list_for_user(

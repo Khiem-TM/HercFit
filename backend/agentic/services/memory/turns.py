@@ -56,6 +56,8 @@ def route_summary(state):
     return {
         "router": labels(next((step for step in trace if step.get("stage") == "router"), None)),
         "rules": [step["rule"] for step in trace if step.get("stage") == "rule"][:12],
+        # Các agent chuyên trách supervisor đã giao việc, theo thứ tự.
+        "agents": [step["agent"] for step in trace if step.get("stage") == "agent"][:8],
         "final": labels(last("final")),
         "user_context": {
             "loaded": bool(card),

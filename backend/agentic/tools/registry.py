@@ -1,11 +1,12 @@
 """Các tool API trong danh sách cho phép. Kiểu đầu vào và đầu ra là hợp đồng thật của backend."""
 
+from datetime import date as _date
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import Field, create_model
 
-from agentic.research.contracts import ExerciseFinalization, FoodFinalization, ResolveQuery
+from agentic.research.contracts import ExerciseFinalization, ResolveQuery
 from agentic.tools.definitions.base import ToolSpec
 from agentic.tools.schemas.common import (
     Empty,
@@ -16,6 +17,7 @@ from agentic.tools.schemas.common import (
     TimezoneQuery,
     VersionedResource,
 )
+from domains.analytics.schemas.daily_health import DailyAssessmentRead
 from domains.analytics.schemas.progress import ProgressRead
 from domains.body.schemas.body_metrics import BodyMetricCreate, BodyMetricQuery, BodyMetricRead
 from domains.catalog.schemas.exercises import ExerciseCreate, ExerciseQuery, ExerciseRead
@@ -58,7 +60,7 @@ from domains.training.schemas.training import (
     TrainingSummaryRead,
 )
 from domains.training.schemas.trainings import TrainingCreate, TrainingRead, TrainingReplace
-from integrations.google_health.records import HydrationInput, SportInput
+from integrations.google_health.records import HydrationInput, SleepInput, SportInput
 from integrations.google_health.schemas import HealthConnectionRead, HealthRecordRead
 
 REGISTRY: dict[str, ToolSpec] = {}
@@ -207,8 +209,9 @@ add(
     "Read daily progress for explicit start_date/end_date and timezone.",
 )
 
-# Finalize tra cứu dùng cùng adapter xem trước/băm/phê duyệt như các lệnh ghi khác.
-for domain, schema in [("foods", FoodFinalization), ("exercises", ExerciseFinalization)]:
+# Finalize tra cứu dùng cùng adapter xem trước/băm/phê duyệt như các lệnh ghi khác. Chỉ bài tập được tra cứu web;
+# món ăn chưa có trong catalog thì hỏi bằng thẻ món thiếu (services/food_gap.py).
+for domain, schema in [("exercises", ExerciseFinalization)]:
     add(
         "resolve_" + domain,
         domain,
@@ -501,6 +504,27 @@ add(
     "Deeper context for several topics within a token budget (default 4000). vitals needs separate consent; "
     "ECG is the device classification only: report it, never diagnose.",
 )
+
+# Daily Health Intelligence (backend domains/analytics/services/daily_health): chỉ số hôm nay so với nền cá nhân,
+# xu hướng 7 ngày, tải tập và trạng thái sẵn sàng tất định kèm lý do có số liệu và độ tin cậy.
+
+
+class DailyAssessmentQuery(TimezoneQuery):
+    date: _date | None = Field(default=None, description="Local day to assess; omit for today")
+
+
+add(
+    "get_health_assessment",
+    "health",
+    "GET",
+    "/v2/health/daily-assessment",
+    DailyAssessmentQuery,
+    DailyAssessmentRead,
+    "Deterministic daily assessment: last night sleep, HRV, resting HR, SpO2, breathing and skin temperature against "
+    "the user's own 28-day baseline, 7-day trends, training load, and a readiness state (ready, steady, ease_off, "
+    "recover, needs_review, insufficient_data) with numeric reasons and confidence. Start questions about today, "
+    "recovery or whether to train hard here. Report it as given; never recompute, never diagnose.",
+)
 HEALTH_TOOL_KINDS = {
     "list_daily_health": "DailyHealth",
     "list_sleep_sessions": "SleepSession",
@@ -508,7 +532,7 @@ HEALTH_TOOL_KINDS = {
 }
 
 # Ghi xuyên qua lên Google Health (Google là nguồn sự thật, HercFit không giữ bản riêng):
-# buổi thể thao (mọi môn không phải gym) và nước uống. Gym vẫn là create_trainings.
+# buổi thể thao (mọi môn không phải gym), nước uống và giấc ngủ ghi tay. Gym vẫn là create_trainings.
 
 add(
     "log_sport_session",
@@ -561,6 +585,28 @@ add(
     None,
     "Delete a water log HercFit wrote to Google after confirmation.",
 )
+# Giấc ngủ ghi tay thuộc metrics (body_health ghi); domain health giữ nguyên chỉ đọc.
+add(
+    "log_sleep",
+    "metrics",
+    "POST",
+    "/v2/health/records/sleep",
+    SleepInput,
+    HealthRecordRead,
+    "Propose logging a night of sleep the user reports (bedtime started_at, wake time ended_at, timezone) to Google "
+    "Health, for nights the device did not record. Only what the user said: no stages or awakenings. A night the "
+    "device already recorded is refused (409). Must await human confirmation.",
+    True,
+)
+add(
+    "delete_sleep",
+    "metrics",
+    "DELETE",
+    "/v2/health/records/sleep/{resource_id}",
+    Resource,
+    None,
+    "Delete a sleep entry HercFit wrote to Google (ids from list_sleep_sessions) after confirmation.",
+)
 
 
 # Các lệnh ghi mà thẻ xác nhận cần tổng do server tính, ảnh chụp dữ liệu và hình ảnh.
@@ -571,4 +617,5 @@ PREVIEW_PATHS = {
     "update_training_plans": "/api/training-plans/{resource_id}/preview",
     "log_sport_session": "/api/v2/health/records/exercise:preview",
     "log_water": "/api/v2/health/records/hydration:preview",
+    "log_sleep": "/api/v2/health/records/sleep:preview",
 }

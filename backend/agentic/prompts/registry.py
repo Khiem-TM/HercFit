@@ -12,6 +12,8 @@ from agentic.prompts.v1.clarification import PROMPT as CLARIFICATION_PROMPT
 from agentic.prompts.v1.domains import CAPABILITY_GUIDANCE, COACH_GUIDANCE
 from agentic.prompts.v1.jev import RESEARCH_QUESTIONS
 from agentic.prompts.v1.memory import SUMMARY_PROMPT
+from agentic.prompts.v1.notifications import ALERT_PROMPT, REVIEW_PROMPT
+from agentic.prompts.v1.nutrition import NUTRITION_LOOKUP_PROMPT
 from agentic.prompts.v1.research import PROMPT as RESEARCH_PROMPT
 from agentic.prompts.v1.routing import GRAPH_CONTEXT_GUIDANCE, JEV_ROUTING_QUESTIONS, ROUTING_PROMPT
 from agentic.prompts.v1.tool import PROMPT as TOOL_PROMPT
@@ -27,6 +29,9 @@ from agentic.prompts.v3.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V3
 from agentic.prompts.v4.domains import COACH_GUIDANCE as COACH_GUIDANCE_V4
 from agentic.prompts.v4.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V4
 from agentic.prompts.v5.domains import COACH_GUIDANCE as COACH_GUIDANCE_V5
+from agentic.prompts.v5.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V5
+from agentic.prompts.v6 import routing as v6_routing
+from agentic.prompts.v6.domains import CAPABILITY_GUIDANCE as CAPABILITY_GUIDANCE_V6
 
 TEMPLATES = MappingProxyType(
     {
@@ -59,10 +64,21 @@ TEMPLATES = MappingProxyType(
         ("health.guidance", "v4"): HEALTH_GUIDANCE_V4,
         # v5: lịch tập lưu bằng một lệnh, sửa trên thẻ xác nhận; không còn lịch bữa ăn.
         ("training.coach", "v5"): COACH_GUIDANCE_V5,
+        # v5: Daily Health Intelligence: hôm nay/hồi phục/độ sẵn sàng đọc đánh giá tất định get_health_assessment.
+        ("health.guidance", "v5"): HEALTH_GUIDANCE_V5,
         # v3: định tuyến theo chế độ trò chuyện: bản rút gọn cho ghi nhanh, khối hướng dẫn cho chế độ Plan.
         ("orchestration.route_normal", "v3"): v3_routing.NORMAL_ROUTING_PROMPT,
         ("orchestration.plan", "v3"): v3_routing.PLAN_ROUTING,
         ("orchestration.plan_mode_reply", "v3"): v3_routing.PLAN_MODE_REPLY,
+        # v1: thông báo chủ động (cảnh báo chỉ số, đánh giá ngày) viết từ feature và nhãn tất định của backend.
+        ("notifications.alert", "v1"): ALERT_PROMPT,
+        ("notifications.review", "v1"): REVIEW_PROMPT,
+        # v6: món ăn không tra cứu web; catalog chưa có món thì hỏi bằng thẻ tìm món/tạo món riêng.
+        ("orchestration.route", "v6"): v6_routing.ROUTING_PROMPT,
+        ("orchestration.route_normal", "v6"): v6_routing.NORMAL_ROUTING_PROMPT,
+        ("nutrition.capabilities", "v6"): CAPABILITY_GUIDANCE_V6,
+        # v1: gợi ý 4 chỉ số dinh dưỡng (trên 100 g) cho món riêng tạo trên thẻ món thiếu, chép nguyên văn từ một nguồn.
+        ("nutrition.lookup", "v1"): NUTRITION_LOOKUP_PROMPT,
     }
 )
 
