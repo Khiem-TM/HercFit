@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from agentic.core.app.api.v1.chat_router import router
+from agentic.core.app.api.internal.notify_router import router as internal_notify_router
 from agentic.core.app.config import agent_settings
 from agentic.core.llm import Models
 from agentic.tools.integrations.backend_client import BackendClient
@@ -46,6 +47,7 @@ def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=No
             if jev is not None:
                 resources.push_async_callback(jev.close)
             agent_models = models if models is not None else Models(settings)
+            app.state.models, app.state.settings = agent_models, settings
             memory = None
             if getattr(settings, 'SESSION_MEMORY_MODE', 'off') != 'off':
                 # Lỗi Redis (tuỳ chọn) quay về dùng checkpoint có thẩm quyền.
@@ -84,6 +86,7 @@ def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=No
                        allow_methods=['GET','POST','DELETE'],allow_headers=['Authorization','Content-Type'],
                        expose_headers=['X-Request-ID','X-Trace-ID','Retry-After'])
     app.include_router(router,prefix='/api/v1')
+    app.include_router(internal_notify_router)
     @app.get('/health')
     async def health(): return {'status':'ok','service':'hercfit-agentic'}
     @app.get('/health/ready')

@@ -11,6 +11,7 @@ from agentic.prompts.v1.clarification import PROMPT as CLARIFICATION_PROMPT
 from agentic.prompts.v1.domains import CAPABILITY_GUIDANCE, COACH_GUIDANCE
 from agentic.prompts.v1.jev import RESEARCH_QUESTIONS
 from agentic.prompts.v1.memory import SUMMARY_PROMPT
+from agentic.prompts.v1.notifications import ALERT_PROMPT, REVIEW_PROMPT
 from agentic.prompts.v1.research import PROMPT as RESEARCH_PROMPT
 from agentic.prompts.v1.routing import GRAPH_CONTEXT_GUIDANCE, JEV_ROUTING_QUESTIONS, ROUTING_PROMPT
 from agentic.prompts.v1.tool import PROMPT as TOOL_PROMPT
@@ -64,6 +65,9 @@ TEMPLATES = MappingProxyType({
     ('orchestration.route_normal', 'v3'): v3_routing.NORMAL_ROUTING_PROMPT,
     ('orchestration.plan', 'v3'): v3_routing.PLAN_ROUTING,
     ('orchestration.plan_mode_reply', 'v3'): v3_routing.PLAN_MODE_REPLY,
+    # v1: thông báo chủ động (cảnh báo chỉ số, đánh giá ngày) viết từ feature và nhãn tất định của backend.
+    ('notifications.alert', 'v1'): ALERT_PROMPT,
+    ('notifications.review', 'v1'): REVIEW_PROMPT,
 })
 
 _QUESTIONS = {

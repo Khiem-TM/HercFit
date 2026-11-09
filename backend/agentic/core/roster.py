@@ -13,6 +13,8 @@ from contextvars import ContextVar
 SUPERVISOR, RESEARCH, SYNTHESIZER = 'supervisor', 'research', 'synthesizer'
 NUTRITION, TRAINING_LOG, BODY_HEALTH, COACH = 'nutrition', 'training_log', 'body_health', 'coach'
 DAILY_HEALTH = 'daily_health'
+# Viết lời thông báo chủ động (cảnh báo chỉ số, đánh giá ngày) từ dữ liệu backend đã tính; không ở trong đồ thị chat.
+NOTIFIER = 'notifier'
 
 # Miền nghiệp vụ mỗi agent chuyên trách sở hữu: tool của miền, đường nhanh và luật tiếp nối của nó.
 SPECIALIST_DOMAINS = {
@@ -25,7 +27,7 @@ SPECIALIST_DOMAINS = {
 }
 # Vai trò model là agent tiện ích của riêng nó, dù node nào gọi.
 ROLE_AGENTS = {'clarify': 'clarify', 'summary': 'memory'}
-AGENTS = frozenset({SUPERVISOR, *SPECIALIST_DOMAINS, RESEARCH, SYNTHESIZER, *ROLE_AGENTS.values()})
+AGENTS = frozenset({SUPERVISOR, *SPECIALIST_DOMAINS, RESEARCH, SYNTHESIZER, NOTIFIER, *ROLE_AGENTS.values()})
 
 active: ContextVar[str | None] = ContextVar('active_agent', default=None)
 # Lần thử lại đã nâng cấp: bỏ qua model riêng của agent, dùng model của vai trò.
