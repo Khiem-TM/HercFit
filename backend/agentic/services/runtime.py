@@ -7,12 +7,12 @@ from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
 from langgraph.types import Command
 from agentic.core.providers.fpt import ToolMarkupFilter, strip_tool_markup
 # 'modes', không phải 'mode': _run_stream có biến cục bộ mode (kiểu sự kiện stream).
-from agentic.services import catalog_choice, mode as modes
+from agentic.services import catalog_choice, food_gap, mode as modes
 from agentic.tools.output import carry_over
 from agentic.services.clarification import catalog_groups, fallback_clarification, logs_training
 from agentic.services.failure_reply import NODE_ERROR, failure_reply
 from agentic.services.memory.transcript import visible
-from agentic.core.app.schemas.response import ChatResponse, Clarification
+from agentic.core.app.schemas.response import ChatResponse, Clarification, FoodGap
 
 from agentic.observability import annotate, graph_config, identify, observed, outcome, durable_context
 from time import monotonic
@@ -125,6 +125,7 @@ class Runtime:
             status=state.get('status','failed') if state.get('status') in {'completed','needs_input','pending_confirmation','failed'} else 'failed',
             intent=state.get('decision',{}).get('intent'),pending_action=pending if is_pending else None,
             clarification=self.clarification(state,reply),
+            food_gap=self.food_gap(state),
             illustrations=state.get('illustrations') or [],
             sources=state.get('sources',[]),tool_outputs=state.get('tool_outputs',[]),
             mode=state.get('mode') if state.get('mode') in modes.MODES else None,
@@ -134,11 +135,17 @@ class Runtime:
     def clarification(state,reply):
         # Câu trả lời needs_input nhận khung thẻ kể cả khi một nhánh bỏ qua node trả lời; câu hỏi không khung nào
         # vừa thì ở lại trong câu trả lời cho ô chat. Checkpoint cũ có thể chứa câu hỏi văn bản tự do: bị bỏ.
-        if state.get('status')!='needs_input': return None
+        if state.get('status')!='needs_input' or state.get('food_gap'): return None
         form=state.get('clarification')
         if form is None:
             form=fallback_clarification(reply, catalog_groups(state), logs_training(state))
         return Clarification.sanitize(form)
+
+    @staticmethod
+    def food_gap(state):
+        # Thẻ món thiếu chỉ hiển thị khi lượt đang dừng lại hỏi bằng nó; phần nháp nội bộ (bản nháp bữa) không ra ngoài.
+        gap=state.get('food_gap') if state.get('status')=='needs_input' else None
+        return FoodGap.model_validate(gap).model_dump(mode='json') if gap else None
 
     async def run(self,input,thread_id,emit=None,chat_mode=modes.FULL):
         annotate(business_run_id=thread_id, graph_thread_id=thread_id, chat_mode=chat_mode)
@@ -255,7 +262,9 @@ class Runtime:
                      'session_id':payload.session_id,'run_id':thread_id,'tool_outputs':[], 'tool_count':0,
                      'session_generation':session['generation'],
                      'research_answer':None,'research_count':0,'sources':[],'candidate':None,'pending_action':None,'clarification':None,'illustrations':[],'research_handoff':None,'status':'running','error':None,
-                     'catalog_choice':catalog_choice.carried(previous),'catalog_draft':None,'prepared_reply':None,
+                     'catalog_choice':catalog_choice.carried(previous),'prepared_reply':None,
+                     'food_gap':food_gap.carried(previous),
+                     'food_choices':[c.model_dump(mode='json') for c in payload.food_choices] if payload.food_choices else None,
                      'replying_to_form':previous.get('status')=='needs_input',
                      'graph_context':None,'graph_retrieval_attempted':False,'graph_context_run_id':None,'graph_context_domains':[],'turn':None,
                      'fast_read_plan':None,'fast_read_complete':False,'telemetry':{},'execution_records':[],
@@ -358,6 +367,7 @@ class Runtime:
             return {'session_id':session_id,'message_count':len(msgs),'messages':msgs,
                     'status':status,'pending_action':pending,'sources':values.get('sources',[]),
                     'clarification':self.clarification(values,values.get('reply') or values.get('error') or ''),
+                    'food_gap':self.food_gap(values),
                     'illustrations':values.get('illustrations') or []}
 
     async def sessions(self,user_id):

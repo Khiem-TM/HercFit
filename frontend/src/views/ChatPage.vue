@@ -227,6 +227,7 @@ onUnmounted(() => {
           :pending-action="pendingAction"
           @confirm="handleConfirm"
           @send="sendMessage"
+          @resolve-foods="(choices, text) => sendMessage(text, { food_choices: choices })"
           @ask-in-plan="askInPlan"
         />
         <div class="composer-wrap">

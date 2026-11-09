@@ -10,7 +10,7 @@ import re
 from agentic.agents.state import RouteDecision
 
 INTENT = 'FOOD_SUGGESTION'
-CATALOG_READS = frozenset({'list_foods', 'get_foods', 'resolve_foods'})
+CATALOG_READS = frozenset({'list_foods', 'get_foods'})
 
 _SUGGEST = re.compile(r'\b(?:gợi ý|đề xuất|tư vấn|nên ăn|ăn gì|món gì|món nào|thực đơn|recommend|suggest)\b')
 _FOOD = re.compile(r'\b(?:món|bữa|ăn|thực đơn|thức ăn|đồ ăn|protein|đạm|calo|kcal|breakfast|lunch|dinner|meal|food)\b')

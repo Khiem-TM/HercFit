@@ -4,7 +4,7 @@ from domains.catalog.models.foods import normalize_food_text
 from agentic.tools.registry import REGISTRY
 
 COACH_GUIDANCE = get_prompt('training.coach', 'v5')
-CAPABILITY_GUIDANCE = get_prompt('nutrition.capabilities')
+CAPABILITY_GUIDANCE = get_prompt('nutrition.capabilities', 'v6')
 HEALTH_GUIDANCE = get_prompt('health.guidance', 'v5')
 
 CATALOG_DEPENDENCIES = {'meals': 'foods', 'trainings': 'exercises', 'training_plans': 'exercises'}
@@ -57,7 +57,8 @@ def needs_catalog_handoff(domain, text):
 
 def continue_catalog_lookup(state):
     dependency = CATALOG_DEPENDENCIES.get(state.get('decision', {}).get('domain'))
-    if not dependency or state.get('status') != 'running' or state.get('catalog_handoff'):
+    # Câu trả lời do code viết (thẻ món thiếu, biên nhận sau khi ghi) kết thúc phần việc của agent.
+    if not dependency or state.get('status') != 'running' or state.get('catalog_handoff') or state.get('prepared_reply'):
         return False
     outputs = state.get('tool_outputs') or []
     if not outputs:

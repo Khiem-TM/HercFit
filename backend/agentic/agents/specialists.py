@@ -11,7 +11,7 @@ nhật ký thực thi, nên quyền đọc/ghi không phụ thuộc agent nào t
 from agentic.agents.state import RouteDecision
 from agentic.agents.tool_agent import ToolAgent
 from agentic.core import roster
-from agentic.services import food_suggestion, gym_logging, meal_logging, personal_context
+from agentic.services import food_gap, food_suggestion, gym_logging, meal_logging, personal_context
 from agentic.services.routing import FastReadPlan, fast_answer_instruction, latest_request
 from agentic.services.write_reply import executed_writes
 
@@ -96,6 +96,11 @@ class Nutrition(Specialist):
             result.update(status='running', fast_read_complete=True,
                           decision={**state['decision'], 'action': 'answer', 'next_agent': 'orchestrator',
                                     'instruction': food_suggestion.ANSWER_INSTRUCTION})
+            return
+        gap = food_gap.from_empty_search(state, result)
+        if gap:
+            # Model vừa tìm món cần ghi mà catalog rỗng: hỏi bằng thẻ món thiếu, không tra web, không gọi model thêm.
+            result.update(gap)
 
 
 class TrainingLog(Specialist):

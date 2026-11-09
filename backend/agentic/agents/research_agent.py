@@ -5,14 +5,13 @@ from agentic.security.output_validation import parse_draft, check_claims, verify
 from agentic.security.input_guard import ClinicalQuestion, clinical_topic, injury_prevention, public_queries
 from agentic.embedding.core import is_english
 from agentic.services.routing import latest_request
-from agentic.components.reranker import NUTRITION_FIELDS, relevance, target_words, topical, rank_sources
+from agentic.components.reranker import relevance, target_words, topical, rank_sources
 from agentic.prompts.registry import get_questions
 from agentic.prompts.registry import get_prompt
 from agentic.observability import annotate
 import asyncio
 import hashlib
 import json
-import re
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from langgraph.graph import StateGraph, START, END
@@ -112,25 +111,17 @@ def partial_answer(target,claims,documents,weak=False):
                       *findings(claims,documents,'Các nguồn có nói:',outside=True)])
 
 
-def catalog_followup(domain,target,claims,documents,product):
-    """(câu trả lời, form, lựa chọn ước tính) sau khi tra cứu catalog không dựng được bản ghi lưu được."""
+def catalog_followup(target,claims,documents):
+    """(câu trả lời, form) sau khi tra cứu catalog bài tập không dựng được bản ghi lưu được.
+
+    Món ăn không còn tra cứu web: catalog chưa có món thì thẻ món thiếu hỏi người dùng (services/food_gap.py)."""
     searched=f'Mình đã tìm {len(documents)} nguồn trên web cho "{target}"'
-    # Chỉ những dữ kiện bản ghi cần, về chính món đó ("đó là đồ uống từ bơ và dừa", hay
-    # calo của một nguyên liệu, không giúp ghi nó); dữ kiện về thực phẩm là các con số.
-    claims=[c for c in claims if relevance(target,c.quote)>=.5 and not catalog_choice.QUESTION.search(normalize_food_text(c.quote)) and (
-        c.field in NUTRITION_FIELDS and re.search(r'\d',c.quote) if domain=='foods' else c.field.startswith(('configuration','muscle')))]
-    if domain=='foods':
-        clarification,choice=catalog_choice.estimate_form(target,claims,documents,product)
-        if choice:
-            reply=[f'{searched} nhưng chưa có bảng dinh dưỡng chính thức đủ căn cứ để lưu vào catalog.','',
-                   *findings(claims,documents,'Các ước tính tìm được:')]
-            return '\n'.join(reply),clarification,choice
-        reply=[f'{searched} nhưng không thấy số liệu dinh dưỡng đủ căn cứ.','',
-               *(findings(claims,documents,'Các nguồn có nói:') if claims else consulted(documents))]
-        return '\n'.join(reply).strip(),clarification,None
+    # Chỉ những dữ kiện bản ghi cần, về chính bài tập đó.
+    claims=[c for c in claims if relevance(target,c.quote)>=.5 and not catalog_choice.QUESTION.search(normalize_food_text(c.quote))
+            and c.field.startswith(('configuration','muscle'))]
     reply=[f'{searched} nhưng chưa đủ căn cứ để lưu bài tập vào catalog.','',
            *(findings(claims,documents,'Các nguồn có nói:') if claims else consulted(documents))]
-    return '\n'.join(reply).strip(),catalog_choice.manual_form(domain,target),None
+    return '\n'.join(reply).strip(),catalog_choice.manual_form(target)
 
 
 class ResearchV2:
@@ -229,7 +220,8 @@ class ResearchV2:
         if qa and any(clinical_topic(q) for q in [query,*queries,latest_request(state)]):
             raise ClinicalQuestion('Clinical question requires professional evaluation')
         domain=d.get('domain')
-        if not qa and domain not in {'foods','exercises'}: raise ValueError('Invalid research domain')
+        # Tra cứu catalog chỉ cho bài tập; món ăn chưa có thì hỏi bằng thẻ món thiếu (services/food_gap.py).
+        if not qa and domain!='exercises': raise ValueError('Invalid research domain')
         # Kho sách chủ yếu bằng tiếng Anh; router được dặn luôn có một bản tiếng Anh nhưng code không tự dịch được.
         english=any(is_english(q) for q in [query,*queries])
         annotate(research_queries=len(queries),dropped_queries=dropped,english_query=english)
@@ -538,12 +530,12 @@ class ResearchV2:
             update.update(status='running',error=None,research_answer=partial_answer(
                 work['plan']['target'],[] if rejected else [*checked,*related],work['documents'],weak=bool(conflicts)))
         elif candidate is not None and not complete and not choice:
-            # Con người tham gia quyết định với những gì tra cứu tìm được: chọn một ước tính có nguồn hoặc nhập giá trị trên nhãn.
+            # Con người tham gia quyết định với những gì tra cứu tìm được: chọn thông tin bài tập trên form.
             # Khi các nguồn bất đồng chính là lúc người dùng nên chọn, nên các con số còn tranh cãi được giữ lại.
             material=[c.model_copy(update={'authority':rate(c.source_id,url_of(c.source_id),product).tier})
                       for c in verified_claims(draft.claims,work['documents'])]
-            reply,form,estimates=catalog_followup(domain,work['plan']['target'],material,work['documents'],product)
-            update.update(prepared_reply=reply,clarification=form,catalog_choice=estimates)
+            reply,form=catalog_followup(work['plan']['target'],material,work['documents'])
+            update.update(prepared_reply=reply,clarification=form)
         if choice:
             update.update(clarification=clarification,catalog_choice=choice,
                           prepared_reply=f'Kết quả nghiên cứu "{payload["name_vi"]}" trùng hoặc gần giống bản đã có trong catalog. '

@@ -12,7 +12,6 @@ const TOOL_KIND: Record<string, CardKind> = {
   update_training_plans: 'plan',
   log_sport_session: 'sport',
   create_foods: 'catalog',
-  finalize_foods: 'catalog',
   create_exercises: 'catalog',
   finalize_exercises: 'catalog',
 }
@@ -22,7 +21,6 @@ export const MEDIA_TARGET: Record<string, MediaKind> = {
   create_meals: 'meals',
   create_trainings: 'trainings',
   create_foods: 'foods',
-  finalize_foods: 'foods',
   create_exercises: 'exercises',
   finalize_exercises: 'exercises',
 }
@@ -38,7 +36,6 @@ export const TOOL_TITLES: Record<string, string> = {
   update_training_plans: 'Thay lịch tập',
   end_training_plan: 'Kết thúc lịch tập',
   create_foods: 'Thêm món vào catalog của bạn',
-  finalize_foods: 'Thêm món vào catalog của bạn',
   create_exercises: 'Thêm bài tập vào catalog của bạn',
   finalize_exercises: 'Thêm bài tập vào catalog của bạn',
   create_metrics: 'Ghi số đo cơ thể',

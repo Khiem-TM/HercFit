@@ -41,7 +41,8 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         current={**state,**update}
         policy=mode.policy(state)
         # Chế độ Plan không có lối tắt đọc theo mẫu: người dùng đã chọn tư vấn chuyên sâu.
-        shortcuts=policy.shortcuts and assess(latest_request(current)) is None
+        # Lựa chọn trên thẻ món thiếu đi thẳng tới bước dựng bữa của orchestrator, không qua lối tắt đọc theo mẫu.
+        shortcuts=policy.shortcuts and assess(latest_request(current)) is None and not current.get('food_choices')
         routed=fast_route(current) if fast_reads_enabled(settings) and shortcuts else None
         if routed and not policy.allows(routed[0]['domain']):
             # Mẫu đọc nhanh của miền ngoài chế độ (vd. dữ liệu sức khoẻ ở chế độ thường) đi qua router để được mời sang Plan.

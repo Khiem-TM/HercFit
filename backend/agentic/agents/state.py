@@ -101,7 +101,9 @@ class AgentState(TypedDict, total=False):
     clarification: dict[str, Any] | None
     research_handoff: dict[str, Any] | None
     catalog_choice: dict[str, Any] | None
-    catalog_draft: dict[str, Any] | None
+    # Thẻ món thiếu (services/food_gap.py) và lựa chọn người dùng gửi lại cho nó ở lượt kế tiếp.
+    food_gap: dict[str, Any] | None
+    food_choices: list[dict[str, Any]] | None
     prepared_reply: str | None
     # Lượt trước đã hỏi qua một form, nên tin nhắn này là câu trả lời cho form đó chứ không mở yêu cầu mới.
     replying_to_form: bool

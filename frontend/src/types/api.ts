@@ -333,6 +333,55 @@ export interface Clarification {
   questions: ClarifyQuestion[]
 }
 
+/** Món người dùng nói mà catalog không có món nào trùng tên: thẻ cho tìm món trong catalog hoặc tạo món riêng. */
+export interface FoodGapItem {
+  key: string
+  query: string
+  /** Lượng trong bản nháp của router (điền sẵn); null khi người dùng chưa nói. */
+  quantity?: number | null
+  unit?: FoodUnit | null
+}
+
+export type FoodUnit = 'G' | 'ML' | 'SERVING'
+
+export interface FoodGap {
+  items: FoodGapItem[]
+  meal?: { name?: string | null; consumed_at?: string | null } | null
+}
+
+/** Lựa chọn trên thẻ món thiếu, gửi kèm tin nhắn tiếp theo (ChatRequest.food_choices). */
+export interface FoodChoice {
+  key: string
+  food_id: string
+  quantity: number
+  unit: FoodUnit
+}
+
+/** Gợi ý AI cho món riêng: đúng 4 chỉ số trên 100 g. */
+export interface FoodNutrition {
+  energy_kcal: number
+  carbohydrate_g: number
+  fat_g: number
+  protein_g: number
+}
+
+/** Một bản ghi catalog trả về từ GET /api/foods (các trường thẻ dùng). */
+export interface FoodRecord {
+  id: string
+  version_id: number
+  name_vi: string
+  name_en?: string | null
+  serving_size?: string | number | null
+  serving_unit: 'G' | 'ML' | 'PORTION'
+  energy_kcal?: string | number | null
+  protein_g?: string | number | null
+  carbohydrate_g?: string | number | null
+  fat_g?: string | number | null
+  portion_weight_g?: string | number | null
+  image_url?: string | null
+  source_type: 'SYSTEM' | 'CUSTOM'
+}
+
 /** Ảnh tra cứu từ web: chỉ hiển thị cho đến khi được nhập lên Cloudinary. */
 export interface Illustration {
   url: string
@@ -353,6 +402,7 @@ export interface ChatResponse {
   intent?: string | null
   pending_action?: PendingAction | null
   clarification?: Clarification | null
+  food_gap?: FoodGap | null
   illustrations?: Illustration[]
   sources: SourceItem[]
   tool_outputs: Record<string, unknown>[]
@@ -372,6 +422,8 @@ export interface ChatMessage {
   sources?: SourceItem[]
   pending_action?: PendingAction | null
   clarification?: Clarification | null
+  /** Thẻ món thiếu (tìm món / tạo món riêng), chỉ trả lời được ở lượt needs_input mới nhất. */
+  food_gap?: FoodGap | null
   illustrations?: Illustration[]
   /** Trợ lý mời hỏi lại câu trước ở chế độ Plan (chế độ thường không tư vấn). */
   suggested_mode?: 'plan' | null

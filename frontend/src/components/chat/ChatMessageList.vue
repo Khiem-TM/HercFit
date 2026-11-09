@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { AlertCircle, Check, ImageIcon, Sparkles } from 'lucide-vue-next'
-import type { ChatMessage, PendingAction } from '@/types/api'
+import type { ChatMessage, FoodChoice, PendingAction } from '@/types/api'
 import HfLogo from '@/components/app/HfLogo.vue'
 import CatalogImage from '@/components/chat/cards/CatalogImage.vue'
 import ClarificationCard from '@/components/chat/cards/ClarificationCard.vue'
 import ConfirmationCard, { type ConfirmExtras } from '@/components/chat/cards/ConfirmationCard.vue'
+import FoodGapCard from '@/components/chat/cards/FoodGapCard.vue'
 import { renderMarkdown } from '@/features/chat/markdown'
 
 const props = defineProps<{
@@ -19,6 +20,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'confirm', decision: 'approve' | 'reject', extras: ConfirmExtras): void
   (e: 'send', text: string): void
+  (e: 'resolve-foods', choices: FoodChoice[], text: string): void
   (e: 'ask-in-plan', text: string): void
 }>()
 
@@ -54,6 +56,11 @@ const lastMessageId = computed(() => props.messages[props.messages.length - 1]?.
 // Khi form đang mở, bong bóng chat hiển thị lời dẫn của nó; các câu hỏi nằm trong form.
 function asksForm(msg: ChatMessage): boolean {
   return Boolean(msg.clarification?.questions.length) && msg.status === 'needs_input' && msg.id === lastMessageId.value
+}
+
+// Thẻ món thiếu (tìm món / tạo món riêng) chỉ trả lời được ở lượt needs_input mới nhất.
+function asksFoods(msg: ChatMessage): boolean {
+  return Boolean(msg.food_gap?.items.length) && msg.status === 'needs_input' && msg.id === lastMessageId.value
 }
 
 function hidesReply(msg: ChatMessage): boolean {
@@ -115,6 +122,14 @@ function badge(url: string): string {
                 :clarification="msg.clarification"
                 :disabled="isStreaming || isConfirming"
                 @send="text => emit('send', text)"
+              />
+            </Transition>
+            <Transition appear enter-active-class="transition duration-base ease-out motion-reduce:transition-none" enter-from-class="translate-y-2 opacity-0">
+              <FoodGapCard
+                v-if="asksFoods(msg) && msg.food_gap"
+                :gap="msg.food_gap"
+                :disabled="isStreaming || isConfirming"
+                @resolve="(choices, text) => emit('resolve-foods', choices, text)"
               />
             </Transition>
 

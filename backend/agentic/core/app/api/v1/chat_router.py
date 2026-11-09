@@ -4,8 +4,10 @@ from datetime import date
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from agentic.core.app.dependencies import authenticated
-from agentic.core.app.schemas.request import ChatRequest, ConfirmationRequest
-from agentic.core.app.schemas.response import ChatResponse
+from agentic.core.app.schemas.request import ChatRequest, ConfirmationRequest, FoodNutritionRequest
+from agentic.core.app.schemas.response import ChatResponse, FoodNutrition
+from agentic.security.input_guard import safe_query
+from agentic.services import nutrition_lookup
 from agentic.core.context import request_context
 from core.rate_limit import SlidingWindowLimiter
 
@@ -54,6 +56,21 @@ async def chat(payload:ChatRequest,request:Request,ctx=Depends(new_turn)):
 @router.post('/confirm',response_model=ChatResponse)
 async def confirm(payload:ConfirmationRequest,request:Request,ctx=Depends(rate_limited)):
     return await request.app.state.runtime.confirm(payload,ctx.user_id)
+
+@router.post('/food-nutrition', response_model=FoodNutrition, responses={404: {}, 422: {}, 503: {}})
+async def food_nutrition(payload: FoodNutritionRequest, request: Request, ctx=Depends(rate_limited)):
+    """Nút gợi ý trên thẻ tạo món riêng: 4 chỉ số trên 100 g từ một truy vấn web, hoặc 404 để người dùng tự nhập."""
+    try:
+        name = safe_query(payload.name)
+    except ValueError:
+        raise HTTPException(422, 'Chỉ nhập tên món ăn.')
+    try:
+        facts = await nutrition_lookup.suggest(request.app.state.models, request.app.state.tavily, name)
+    except nutrition_lookup.NutritionUnavailable:
+        raise HTTPException(503, 'Gợi ý dinh dưỡng tạm thời không khả dụng; bạn nhập số liệu giúp nhé.')
+    if facts is None:
+        raise HTTPException(404, 'Chưa tìm được số liệu đáng tin cho món này; bạn nhập số liệu giúp nhé.')
+    return facts
 
 @router.post('/stream')
 async def stream(payload:ChatRequest,request:Request,ctx=Depends(new_turn)):

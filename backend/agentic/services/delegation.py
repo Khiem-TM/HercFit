@@ -20,7 +20,7 @@ ANSWER_INSTRUCTION = ('Trả lời từng phần của yêu cầu theo kết qu�
 BRANCH_RESET = {'tool_outputs': [], 'execution_records': [], 'route_trace': [], 'telemetry': {}, 'pending_action': None,
                 'pending_queue': [], 'prepared_reply': None, 'status': 'running', 'error': None, 'fast_read_plan': None,
                 'fast_read_complete': False, 'catalog_handoff': None, 'research_handoff': None, 'clarification': None,
-                'catalog_choice': None}
+                'catalog_choice': None, 'food_gap': None}
 
 
 def plan(decision, policy):
@@ -56,7 +56,7 @@ def outcome(agent, start, result):
     pending = result.get('pending_action')
     resolved = (result.get('status') in {'running', 'pending_confirmation'} and not meals_left
                 and not result.get('catalog_handoff') and not result.get('research_handoff')
-                and not result.get('candidate'))
+                and not result.get('candidate') and not result.get('food_gap'))
     outputs = result.get('tool_outputs') or []
     reads = resolved and not pending and any(
         o.get('ok') and not getattr(REGISTRY.get(o.get('tool') or ''), 'write', False) for o in outputs)

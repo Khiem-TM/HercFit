@@ -48,6 +48,8 @@ def create_agentic_app(settings=agent_settings, *, models=None, tavily_client=No
                 resources.push_async_callback(jev.close)
             agent_models = models if models is not None else Models(settings)
             app.state.models, app.state.settings = agent_models, settings
+            # Gợi ý dinh dưỡng của thẻ món thiếu dùng chung client Tavily (và bộ đệm) với tra cứu.
+            app.state.tavily = tavily
             memory = None
             if getattr(settings, 'SESSION_MEMORY_MODE', 'off') != 'off':
                 # Lỗi Redis (tuỳ chọn) quay về dùng checkpoint có thẩm quyền.

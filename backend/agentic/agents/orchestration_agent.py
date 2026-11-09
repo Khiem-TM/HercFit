@@ -13,7 +13,7 @@ from agentic.agents.state import RouteDecision
 from agentic.agents.specialists import BY_NAME, SPECIALISTS
 from agentic.core import roster
 from agentic.research.contracts import QA_INTENTS
-from agentic.services import catalog_choice, delegation, food_suggestion
+from agentic.services import catalog_choice, delegation, food_gap, food_suggestion
 from agentic.prompts.layout import layout
 from agentic.tools.policy import CAPABILITY_GUIDANCE, CATALOG_DEPENDENCIES, COACH_GUIDANCE, TRAINING_DOMAINS, needs_catalog_handoff
 from agentic.components.context_filter import compact_evidence, model_graph_context
@@ -30,10 +30,10 @@ from agentic.services import personal_context
 from agentic.services import mode
 
 GRAPH_CONTEXT_GUIDANCE = get_prompt("orchestration.graph_context")
-ROUTING_PROMPT = get_prompt("orchestration.route", "v2")
+ROUTING_PROMPT = get_prompt("orchestration.route", "v6")
 PERSONAL_ROUTING = get_prompt("orchestration.personal", "v2")
 PERSONAL_ANSWER = get_prompt("orchestration.personal_answer", "v2")
-NORMAL_ROUTING_PROMPT = get_prompt('orchestration.route_normal', 'v3')
+NORMAL_ROUTING_PROMPT = get_prompt('orchestration.route_normal', 'v6')
 PLAN_ROUTING = get_prompt('orchestration.plan', 'v3')
 PLAN_MODE_REPLY = get_prompt('orchestration.plan_mode_reply', 'v3')
 PERSONAL_MEASURE = re.compile(r'\b\d+(?:[.,]\d+)?\s*(?:kg|cm|tuổi|tuoi|kcal|bpm)\b', re.I)
@@ -111,6 +111,14 @@ class OrchestrationAgent:
             if applied:
                 return {**applied, **safety_update}
             safety_update['catalog_choice'] = None
+        if state.get('food_gap'):
+            # Lựa chọn trên thẻ món thiếu là dữ liệu có cấu trúc: code dựng tiếp bữa ăn, không gọi model định tuyến.
+            applied = food_gap.apply(state)
+            if applied:
+                trace = {'stage': 'rule', 'rule': 'food_gap_resolved', 'action': 'tool', 'domain': 'meals'}
+                applied['decision']['writes_before'] = len(executed_writes(state))
+                return {**applied, 'route_trace': [*(state.get('route_trace') or []), trace], **safety_update}
+            safety_update.update(food_gap=None, food_choices=None)
         if (state.get('decision') or {}).get('read_only') and (state.get('catalog_handoff') or state.get('research_handoff')):
             return {'catalog_handoff': None, 'research_handoff': None, 'status': 'running', 'decision': {
                 'intent': 'READ', 'action': 'answer', 'next_agent': 'orchestrator', 'read_only': True,
@@ -274,6 +282,7 @@ class OrchestrationAgent:
             if decision.action != 'research':
                 rule('knowledge_to_research')
             decision.action,decision.next_agent='research','research'
+        gap = None
         if decision.action == 'research' and decision.intent not in QA_INTENTS:
             # Tra cứu catalog giải quyết catalog trước (ưu tiên database) trong bước lập kế hoạch. Một miền
             # nhật ký ("ghi đồ uống này" -> meals) tra cứu catalog mà nó phụ thuộc.
@@ -281,6 +290,18 @@ class OrchestrationAgent:
             decision.next_agent = 'research'
             if decision.domain not in {'foods','exercises'}:
                 raise ValueError('Research is restricted to food and exercises')
+            if decision.domain == 'foods':
+                # Món ăn không tra web: có bản nháp bữa thì đường nhanh tra catalog và hỏi bằng thẻ món thiếu;
+                # chỉ có tên món thì hỏi thẳng bằng thẻ (tìm món hoặc tạo món riêng).
+                query = (decision.research_query or '').strip()
+                decision.intent, decision.research_query = 'LOG_FOOD', None
+                if query and not decision.meal_log:
+                    decision.action, decision.next_agent = 'answer', 'orchestrator'
+                    gap = food_gap.ask([food_gap.gap_item('q:0', query)])
+                    rule('food_gap_card')
+                else:
+                    decision.action, decision.next_agent, decision.domain = 'tool', 'tool', 'meals'
+                    rule('food_research_to_catalog')
         # Bước chuẩn hoá ở trên có thể biến một câu hỏi làm rõ thành yêu cầu tool, nên
         # kiểm tra lại miền sau tất cả các phép biến đổi tuyến cơ sở.
         if read_policy.get('read_only') and decision.action == 'tool' and decision.domain != read_policy.get('domain'):
@@ -328,6 +349,8 @@ class OrchestrationAgent:
                   'route_trace': [*(state.get('route_trace') or []), *trace], **safety_update}
         if form:
             result.update(clarification=form, prepared_reply=form_reply)
+        if gap:
+            result.update(gap)
         if redirect:
             # Những gì lượt này đã lưu vẫn được báo lại trước lời mời.
             result.update(prepared_reply='\n\n'.join(p for p in (write_reply(state), PLAN_MODE_REPLY) if p),
@@ -375,7 +398,8 @@ class OrchestrationAgent:
         prepared = state.get('research_answer') or state.get('prepared_reply')
         if prepared:
             # Do code viết từ kết quả đã kiểm chứng (và form của nó, nếu có): model không viết lại.
-            status = 'needs_input' if state.get('status') == 'needs_input' and state.get('clarification') else 'completed'
+            status = ('needs_input' if (state.get('status') == 'needs_input' and state.get('clarification'))
+                      or state.get('food_gap') else 'completed')
             return {'reply':prepared,'status':status,'messages':[AIMessage(content=prepared,name='orchestration_agent')]}
         decision = state.get('decision') or {}
         instruction = decision.get('instruction','')

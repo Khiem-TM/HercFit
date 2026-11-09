@@ -49,9 +49,10 @@ for action in ['complete','cancel']:
     add(action+'_goal','goals','POST','/goals/{resource_id}/'+action,Resource,GoalRead,action+' the active goal after confirmation.')
 add('get_progress','progress','GET','/progress',DateRangeQuery,ProgressRead,'Read daily progress for explicit start_date/end_date and timezone.')
 
-# Finalize tra cứu dùng cùng adapter xem trước/băm/phê duyệt như các lệnh ghi khác.
-from agentic.research.contracts import ResolveQuery, FoodFinalization, ExerciseFinalization
-for domain, schema in [('foods', FoodFinalization), ('exercises', ExerciseFinalization)]:
+# Finalize tra cứu dùng cùng adapter xem trước/băm/phê duyệt như các lệnh ghi khác. Chỉ bài tập được tra cứu web;
+# món ăn chưa có trong catalog thì hỏi bằng thẻ món thiếu (services/food_gap.py).
+from agentic.research.contracts import ResolveQuery, ExerciseFinalization
+for domain, schema in [('exercises', ExerciseFinalization)]:
     add('resolve_'+domain, domain, 'GET', '/'+domain+'/resolve', ResolveQuery, dict,
         'Resolve exact catalog identities, aliases and possible variants before research.')
     add('finalize_'+domain, domain, 'POST', '/'+domain+'/research-finalizations', schema, dict,

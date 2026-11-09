@@ -44,7 +44,7 @@ def executed_writes(state) -> list[dict]:
 
 
 # Lệnh ghi catalog (món/bài tập mới) thường mở đường cho một lệnh ghi nhật ký: sau nó router vẫn quyết định bước tiếp.
-CATALOG_WRITES = frozenset({'create_foods', 'finalize_foods', 'create_exercises', 'finalize_exercises'})
+CATALOG_WRITES = frozenset({'create_foods', 'create_exercises', 'finalize_exercises'})
 # Mục tiêu (đã bỏ dấu) của router: bước ghi, bước chỉ chuẩn bị cho lệnh ghi, và bước cần đọc thêm sau khi ghi.
 WRITE_OBJECTIVE = re.compile(r'\b(?:ghi|tao|luu|ket thuc|cap nhat|sua|xoa|them|dat|thay|create|log|record|save|end|update|delete|add)\b')
 PREPARE_OBJECTIVE = re.compile(r'^(?:tra|tim|xem truoc|preview|xac nhan|chuan bi|kiem tra|lookup|search|find|resolve)\b')
@@ -259,7 +259,7 @@ def lines_for(output: dict) -> list[str]:
         return water_lines(record)
     if tool == 'log_sleep':
         return sleep_lines(record)
-    if tool in {'create_foods', 'finalize_foods', 'create_exercises', 'finalize_exercises'}:
+    if tool in {'create_foods', 'create_exercises', 'finalize_exercises'}:
         return catalog_lines(tool, record)
     if tool in {'create_training_plans', 'update_training_plans', 'end_training_plan'}:
         return plan_lines(tool, record)

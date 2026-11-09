@@ -8,7 +8,7 @@ câu trả lời của nó chỉ được dựng từ các lệnh ghi đã thự
 
 # Các lệnh ghi đã thực thi, theo cách người dùng sẽ gọi tên chúng.
 WRITES = {
-    'create_foods': 'Món mới trong danh mục thực phẩm', 'finalize_foods': 'Món trong danh mục thực phẩm',
+    'create_foods': 'Món mới trong danh mục thực phẩm',
     'create_exercises': 'Bài tập mới trong danh mục', 'finalize_exercises': 'Bài tập trong danh mục',
     'create_meals': 'Bữa ăn trong nhật ký', 'update_meals': 'Bữa ăn đã sửa', 'delete_meals': 'Đã xoá bữa ăn',
     'create_trainings': 'Buổi tập trong nhật ký', 'update_trainings': 'Buổi tập đã sửa', 'delete_trainings': 'Đã xoá buổi tập',
