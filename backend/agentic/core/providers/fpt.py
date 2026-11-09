@@ -1,11 +1,11 @@
 """Adapter chat/tool/stream tương thích OpenAI cho FPT Marketplace."""
 import json
 import re
-from typing import Any
+from typing import Any, AsyncIterator, Iterator
 from uuid import uuid4
 
-from langchain_core.messages import AIMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_openai import ChatOpenAI
 
 # DeepSeek có thể sinh lời gọi tool dưới dạng văn bản DSML thô khi endpoint bỏ qua bước phân tích.
@@ -72,12 +72,39 @@ class ToolMarkupFilter:
         return out
 
 
+def _usage_delta(current: dict, previous: dict) -> dict:
+    """FPT gửi usage lũy kế mỗi chunk; LangChain cộng các chunk nên cần phần tăng thêm."""
+    delta = {}
+    for key, value in current.items():
+        if isinstance(value, dict):
+            delta[key] = _usage_delta(value, previous.setdefault(key, {}))
+        else:
+            old = previous.get(key, 0)
+            delta[key] = max(0, value - old)
+            previous[key] = max(old, value)
+    return delta
+
+
 class FPTChatOpenAI(ChatOpenAI):
     """Giữ đầu ra Pydantic đã kiểm tra qua function calling, không dùng chế độ JSON-schema.
 
     FPT dùng endpoint gốc (không tự nối thêm /v1). Thông tin xác thực API
     được factory của model tiêm vào dưới dạng SecretStr, không bao giờ nhúng vào prompt.
     """
+
+    def _stream(self, *args: Any, **kwargs: Any) -> Iterator[ChatGenerationChunk]:
+        previous = {}  # riêng mỗi request, kể cả khi cùng client được dùng song song
+        for chunk in super()._stream(*args, **kwargs):
+            if isinstance(chunk.message, AIMessageChunk) and chunk.message.usage_metadata:
+                chunk.message.usage_metadata = _usage_delta(chunk.message.usage_metadata, previous)
+            yield chunk
+
+    async def _astream(self, *args: Any, **kwargs: Any) -> AsyncIterator[ChatGenerationChunk]:
+        previous = {}
+        async for chunk in super()._astream(*args, **kwargs):
+            if isinstance(chunk.message, AIMessageChunk) and chunk.message.usage_metadata:
+                chunk.message.usage_metadata = _usage_delta(chunk.message.usage_metadata, previous)
+            yield chunk
 
     def _get_request_payload(
         self, input_: Any, *, stop: list[str] | None = None, **kwargs: Any

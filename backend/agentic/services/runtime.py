@@ -62,7 +62,7 @@ class Runtime:
         except Exception as exc:
             logger.warning('kg_journal_deferred error_type=%s', type(exc).__name__)
 
-    async def record_session(self, snapshot):
+    async def record_session(self, snapshot, previous_telemetry):
         """Metadata thanh bên và số token đã dùng trong ngày; lỗi không bao giờ ảnh hưởng câu trả lời."""
         values = getattr(snapshot, 'values', None) or {}
         if not values.get('session_id'):
@@ -79,8 +79,15 @@ class Runtime:
             telemetry = values.get('telemetry') or {}
             add_usage = getattr(self.store, 'add_usage', None)
             if add_usage and values.get('user_id') and telemetry.get('run_id') == values.get('run_id'):
-                await add_usage(values['user_id'], telemetry.get('total_input_tokens', telemetry.get('input_tokens', 0)),
-                                telemetry.get('total_output_tokens', telemetry.get('output_tokens', 0)))
+                # Telemetry trong checkpoint là tổng của cả lượt, gồm phần trước xác nhận.
+                # Chỉ tính token mới của lần chạy này, cả khi tiếp tục sau lỗi/timeout.
+                previous = previous_telemetry if previous_telemetry.get('run_id') == values['run_id'] else {}
+                def added(key):
+                    return max(0, telemetry.get('total_' + key, telemetry.get(key, 0))
+                               - previous.get('total_' + key, previous.get(key, 0)))
+                input_tokens, output_tokens = added('input_tokens'), added('output_tokens')
+                if input_tokens or output_tokens:
+                    await add_usage(values['user_id'], input_tokens, output_tokens)
         except Exception as exc:
             logger.warning('session_meta_deferred error_type=%s', type(exc).__name__)
 
@@ -154,6 +161,8 @@ class Runtime:
 
     async def _run_stream(self,input,thread_id,config,emit):
         from agentic.observability.tracing import current
+        before = await self.state(thread_id)
+        previous_telemetry = dict(((before.values if before else {}).get('telemetry')) or {})
         observation = current.get()
         started = observation.started if observation else monotonic()
         first_progress = False
@@ -196,14 +205,14 @@ class Runtime:
             snapshot=await self.state(thread_id)
             await self.journal_snapshot(snapshot)
             await self.remember(snapshot)
-            await self.record_session(snapshot)
+            await self.record_session(snapshot, previous_telemetry)
             state=dict(snapshot.values) if snapshot else {}
             state.update(status='failed',reply=interrupted_reply(state,exc))
             return self.response(state)
         snapshot=await self.state(thread_id)
         await self.journal_snapshot(snapshot)
         await self.remember(snapshot)
-        await self.record_session(snapshot)
+        await self.record_session(snapshot, previous_telemetry)
         telemetry = snapshot.values.get('telemetry',{})
         logger.info('agent_run_metrics',extra={'run_id':thread_id,'llm_calls':telemetry.get('llm_calls',0),
                     'input_tokens':telemetry.get('input_tokens',0),'output_tokens':telemetry.get('output_tokens',0)})
