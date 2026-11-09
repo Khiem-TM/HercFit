@@ -34,6 +34,6 @@ export function createNotificationApi(fetcher: Fetcher) {
       const { timezone: _zone, ...body } = prefs
       return call<NotificationPreferences>(`${BASE}/preferences`, post(body, 'PUT'), 'Không lưu được tuỳ chọn thông báo.')
     },
-    runBriefing: () => call<NotificationList>(`${BASE}/briefing:run`, post(), 'Chưa tạo được bản tóm tắt.'),
+    runReview: () => call<NotificationList>(`${BASE}/review:run`, post(), 'Chưa tạo được đánh giá hôm nay.'),
   }
 }

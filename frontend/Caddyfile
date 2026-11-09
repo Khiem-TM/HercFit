@@ -9,7 +9,7 @@
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' wss://{$HERCFIT_DOMAIN:localhost}; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com"
 		-Server
 	}
 
@@ -23,6 +23,7 @@
 		}
 	}
 
+	# Gồm cả WebSocket thông báo (/api/v2/notifications/stream): Caddy tự chuyển tiếp Upgrade.
 	handle /api/* {
 		reverse_proxy backend:8080
 	}
