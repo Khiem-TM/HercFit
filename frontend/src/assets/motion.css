@@ -1,0 +1,71 @@
+/*
+ * Tương tác CSS của hệ thống chuyển động. Thời lượng và easing là biến do src/motion/tokens.ts ghi lên :root
+ * (--hf-dur-*, --hf-ease-*), cùng nguồn với variants của motion-v. Chỉ transform, opacity và màu; giảm chuyển
+ * động thì khối @media cuối file (và khối chung trong main.css) tắt transform và animation.
+ */
+
+/* ---------- nút, nút biểu tượng, chip chọn ---------- */
+.hf-btn, .hf-ib, .hf-tog, .hf-lnk {
+  transition: background-color var(--hf-dur-fast) var(--hf-ease-out), color var(--hf-dur-fast) var(--hf-ease-out),
+    border-color var(--hf-dur-fast) var(--hf-ease-out), box-shadow var(--hf-dur-fast) var(--hf-ease-out),
+    opacity var(--hf-dur-fast) var(--hf-ease-out), transform var(--hf-dur-instant) var(--hf-ease-out);
+}
+.hf-btn:active:not(:disabled), .hf-ib:active:not(:disabled), .hf-tog:active:not(:disabled) { transform: scale(.97); }
+.hf-btn:disabled, .hf-ib:disabled, .hf-tog:disabled { cursor: not-allowed; }
+.hf-btn[aria-busy="true"] { cursor: progress; opacity: .8; }
+
+/* ---------- nhóm nút chuyển có chỉ báo trượt (motion layoutId) ---------- */
+.hf-seg.live button { position: relative; transition: color var(--hf-dur-fast) var(--hf-ease-out); }
+.hf-seg.live button[aria-pressed="true"] { background: transparent; }
+.hf-seg.live button > span:last-child { position: relative; }
+.hf-seg-ind { position: absolute; inset: 0; border-radius: 999px; background: var(--hf-ink); }
+
+/* ---------- thẻ bấm được: nổi nhẹ khi hover ---------- */
+.hf-card.lift {
+  transition: transform var(--hf-dur-base) var(--hf-ease-out), box-shadow var(--hf-dur-base) var(--hf-ease-out);
+}
+@media (hover: hover) {
+  .hf-card.lift:hover { transform: translateY(-2px); box-shadow: 0 12px 28px var(--hf-shadow); }
+}
+
+/* ---------- ô nhập: focus và báo lỗi ---------- */
+.hf-inp, .hf-nsel {
+  transition: border-color var(--hf-dur-fast) var(--hf-ease-out), box-shadow var(--hf-dur-fast) var(--hf-ease-out),
+    background-color var(--hf-dur-fast) var(--hf-ease-out);
+}
+.hf-inp:focus, .hf-nsel:focus-visible { box-shadow: 0 0 0 4px var(--hf-fill); }
+.hf-inp[aria-invalid="true"] { animation: hf-nudge var(--hf-dur-slow) var(--hf-ease-out) 1; }
+@keyframes hf-nudge { 25% { transform: translateX(-3px); } 50% { transform: translateX(3px); } 75% { transform: translateX(-1px); } }
+
+/* ---------- công tắc ---------- */
+.hf-sw i, .hf-sw i::after { transition-duration: var(--hf-dur-base); transition-timing-function: var(--hf-ease-out); }
+
+/* ---------- <Transition name="hf-fade">: tab dạng v-show, nội dung thay skeleton ---------- */
+.hf-fade-enter-active { transition: opacity var(--hf-dur-base) var(--hf-ease-out), transform var(--hf-dur-base) var(--hf-ease-out); }
+.hf-fade-enter-from { opacity: 0; transform: translateY(4px); }
+.hf-appear { animation: hf-appear var(--hf-dur-slow) var(--hf-ease-out) both; }
+@keyframes hf-appear { from { opacity: 0; transform: translateY(6px); } }
+
+/* ---------- <Transition name="hf-sheet">: lớp chi tiết trượt từ phải ---------- */
+.hf-sheet-enter-active, .hf-sheet-leave-active {
+  transition: opacity var(--hf-dur-slow) var(--hf-ease-out), transform var(--hf-dur-slow) var(--hf-ease-out);
+}
+.hf-sheet-leave-active { transition-duration: var(--hf-dur-fast); transition-timing-function: var(--hf-ease-in); }
+.hf-sheet-enter-from { opacity: 0; transform: translateX(24px); }
+.hf-sheet-leave-to { opacity: 0; transform: translateX(16px); }
+
+/* ---------- lưới thẻ: hiện so le khi vừa gắn vào trang (không chạy lại khi dữ liệu cập nhật) ---------- */
+.hf-stagger > * { animation: hf-appear var(--hf-dur-slow) var(--hf-ease-out) both; }
+.hf-stagger > :nth-child(2) { animation-delay: calc(var(--hf-stagger) * 1); }
+.hf-stagger > :nth-child(3) { animation-delay: calc(var(--hf-stagger) * 2); }
+.hf-stagger > :nth-child(4) { animation-delay: calc(var(--hf-stagger) * 3); }
+.hf-stagger > :nth-child(5) { animation-delay: calc(var(--hf-stagger) * 4); }
+.hf-stagger > :nth-child(6) { animation-delay: calc(var(--hf-stagger) * 5); }
+.hf-stagger > :nth-child(n+7) { animation-delay: calc(var(--hf-stagger) * 6); }
+
+@media (prefers-reduced-motion: reduce) {
+  .hf-stagger > *, .hf-sheet-enter-active, .hf-sheet-leave-active { animation: none; transition: none; }
+  .hf-btn:active:not(:disabled), .hf-ib:active:not(:disabled), .hf-tog:active:not(:disabled),
+  .hf-card.lift:hover, .hf-fade-enter-from { transform: none; }
+  .hf-inp[aria-invalid="true"], .hf-appear { animation: none; }
+}

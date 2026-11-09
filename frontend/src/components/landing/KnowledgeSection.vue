@@ -45,7 +45,7 @@ import { Network } from "lucide-vue-next";
             >// OBSERVATORY KNOWLEDGE MAPPING</span
           >
           <h2
-            class="font-headline-lg text-primary uppercase font-normal tracking-tight mb-space-md text-headline-lg-mobile md:text-headline-lg"
+            class="font-headline-lg text-primary uppercase font-bold tracking-tight mb-space-md text-headline-lg-mobile md:text-headline-lg"
           >
             SINH THÁI ĐỒ THỊ ĐA CHIỀU
           </h2>

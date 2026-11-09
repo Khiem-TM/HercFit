@@ -11,7 +11,7 @@
         >// THE LOOP OF CONTINUOUS TRANSCENDENCE</span
       >
       <h2
-        class="font-headline-lg text-primary uppercase font-normal tracking-tight text-headline-lg-mobile md:text-headline-lg"
+        class="font-headline-lg text-primary uppercase font-bold tracking-tight text-headline-lg-mobile md:text-headline-lg"
       >
         QUY TRÌNH TỰ ĐỘNG HÓA VÔ TẬN
       </h2>
