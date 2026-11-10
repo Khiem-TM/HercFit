@@ -24,7 +24,7 @@ class NutritionTotals(InputSchema):
 class FoodPortionInput(InputSchema):
     food_id: UUID
     quantity: ServingSize
-    unit: Literal["G", "ML", "SERVING"]
+    unit: Literal["G", "ML"]
     note: str | None = None
 
 
@@ -32,7 +32,7 @@ class FoodPortionRead(NutritionTotals, EntityRead):
     food_id: UUID | None
     position: int
     quantity: Decimal
-    unit: Literal["G", "ML", "SERVING"]
+    unit: Literal["G", "ML"]
     food_snapshot: JsonObject
     nutrition_information: JsonObject
     nutrition_incomplete: bool

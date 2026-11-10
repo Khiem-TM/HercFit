@@ -21,14 +21,13 @@ FoodName = Annotated[NonBlank, Field(max_length=512)]
 Category = Annotated[str, Field(max_length=255)]
 Nutrient = Annotated[Decimal, Field(ge=0, lt=1000000000000, max_digits=18, decimal_places=6, allow_inf_nan=False)]
 ServingSize = Annotated[Decimal, Field(gt=0, lt=100000000, max_digits=12, decimal_places=4, allow_inf_nan=False)]
-PortionWeight = Annotated[Decimal, Field(gt=0, lt=100000, max_digits=12, decimal_places=4, allow_inf_nan=False)]
 
 
 class HouseholdPortion(InputSchema):
-    """A household measure of this food, e.g. "1 tô lớn" = 650 G or "1 suất" = 1 SERVING."""
+    """A household measure of this food in its serving unit, e.g. "1 tô" = 500 G or "1 cốc" = 300 ML."""
     label: Annotated[NonBlank, Field(max_length=100)]
     quantity: ServingSize
-    unit: Literal["G", "ML", "SERVING"]
+    unit: Literal["G", "ML"]
     source: Annotated[str, Field(max_length=200)] | None = None
 
 
@@ -50,7 +49,6 @@ class FoodCreate(PartialSchema):
     data_quality: JsonObject | None = None
     image_url: ImageUrl | None = None
     portions: list[HouseholdPortion] = Field(default_factory=list, max_length=20)
-    portion_weight_g: PortionWeight | None = None
 
     @field_serializer("portions")
     def _portions_as_json(self, portions: list[HouseholdPortion]) -> list[dict]:
@@ -58,13 +56,12 @@ class FoodCreate(PartialSchema):
         return [portion.model_dump(mode="json", exclude_none=True) for portion in portions]
 
     @model_validator(mode="after")
-    def portion_basis(self):
-        # Chỉ kiểm tra những gì payload (có thể không đầy đủ) này cung cấp.
-        if "serving_unit" in self.model_fields_set and self.serving_unit == FoodServingUnit.PORTION:
-            if self.serving_size is not None and self.serving_size != 1:
-                raise ValueError("PORTION foods describe exactly one serving; serving_size must be 1 or omitted")
-        if self.serving_unit != FoodServingUnit.PORTION and self.portion_weight_g is not None and "serving_unit" in self.model_fields_set:
-            raise ValueError("portion_weight_g applies only to PORTION foods")
+    def portion_units(self):
+        # Khẩu phần hộ gia đình đo bằng đúng đơn vị căn cứ của món, để quy "1 tô" ra lượng ghi được.
+        # Bản cập nhật một phần không mang serving_unit thì không biết đơn vị của món ở đây.
+        partial = isinstance(self, FoodUpdate) and "serving_unit" not in self.model_fields_set
+        if not partial and any(portion.unit != self.serving_unit for portion in self.portions):
+            raise ValueError("portions must use the food serving_unit")
         return self
 
 
@@ -96,7 +93,7 @@ class FoodQuery(Pagination):
     item_type: FoodItemType | None = None
     sort: Literal["relevance", "protein_density"] = Field(
         default="relevance",
-        description="protein_density: most protein per 100 kcal first (independent of per-100 g or per-portion basis); "
+        description="protein_density: most protein per 100 kcal first (independent of the serving basis); "
                     "skips condiments, fats and physically implausible records. Use it to suggest high-protein foods.",
     )
     names: Annotated[list[Annotated[str, Field(min_length=1, max_length=80)]], Field(max_length=5)] | None = Field(

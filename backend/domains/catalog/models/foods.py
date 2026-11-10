@@ -60,10 +60,6 @@ class FoodItem(CatalogMixin, BaseModel):
         ),
         Index("ix_foods_browse", "normalized_name_vi", "id"),
         CheckConstraint("jsonb_typeof(portions) = 'array'", name="ck_foods_portions"),
-        CheckConstraint(
-            "portion_weight_g IS NULL OR (portion_weight_g > 0 AND portion_weight_g < 100000)",
-            name="ck_foods_portion_weight",
-        ),
     )
 
     code: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -103,12 +99,11 @@ class FoodItem(CatalogMixin, BaseModel):
     )
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_public_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Đơn vị đo gia dụng ([{label, quantity, unit, source}]) và, với thực phẩm
-    # PORTION, khối lượng gam của một khẩu phần khi nguồn công bố.
+    # Đơn vị đo gia dụng ([{label, quantity, unit, source}]) theo đúng serving_unit của món,
+    # ví dụ "1 tô" = 500 G: quy lượng người dùng nói theo tô/suất ra gam/ml.
     portions: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB(none_as_null=True), default=list, server_default=text("'[]'::jsonb"), nullable=False,
     )
-    portion_weight_g: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
     normalized_name_vi: Mapped[str] = mapped_column(Text, nullable=False)
     normalized_name_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     normalized_search_text: Mapped[str] = mapped_column(Text, nullable=False)

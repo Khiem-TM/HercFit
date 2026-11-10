@@ -86,7 +86,7 @@ def food_item_constraints(prefix: str):
         *nutrient_constraints(prefix),
         CheckConstraint("position >= 0", name=f"ck_{prefix}_position"),
         CheckConstraint("quantity > 0 AND quantity < 100000000", name=f"ck_{prefix}_quantity"),
-        CheckConstraint("unit IN ('G', 'ML', 'SERVING')", name=f"ck_{prefix}_unit"),
+        CheckConstraint("unit IN ('G', 'ML')", name=f"ck_{prefix}_unit"),
         CheckConstraint("jsonb_typeof(food_snapshot) = 'object'", name=f"ck_{prefix}_snapshot"),
         CheckConstraint("jsonb_typeof(nutrition_information) = 'object'", name=f"ck_{prefix}_nutrition"),
     )
@@ -136,26 +136,15 @@ async def build_food_item(session: AsyncSession, user_id: PyUUID, payload) -> di
 def portion_factor(food, unit: str, quantity: Decimal) -> Decimal | None:
     """Hệ số từ căn cứ dinh dưỡng đã lưu sang lượng đã ghi.
 
-    Thực phẩm G/ML lưu giá trị theo serving_size gam/mililít. Thực phẩm PORTION
-    lưu giá trị theo khẩu phần (suất); chỉ nhận gam khi đã biết khối lượng gam
-    của khẩu phần, vì nhân tỉ lệ giá trị theo suất như thể
-    tính theo 100 g sẽ âm thầm nhân năng lượng lên nhiều lần.
+    Mọi thực phẩm lưu giá trị theo serving_size gam hoặc mililít, và lượng ăn được ghi
+    bằng chính đơn vị đó; "1 tô", "1 suất" được quy ra gam/ml (theo portions) trước khi ghi.
     """
-    from domains.shared.schemas.enums import FoodServingUnit
-
     known = any(getattr(food, field) is not None for field in NUTRIENT_FIELDS)
-    if food.serving_unit == FoodServingUnit.PORTION:
-        if unit == "SERVING":
-            return quantity / (food.serving_size or Decimal(1))
-        if unit == "G" and food.portion_weight_g:
-            return quantity / food.portion_weight_g
-        raise HTTPException(422, "This dish has nutrition per serving only; log it in SERVING units "
-                                 "or record the serving's gram weight first")
-    if unit != "SERVING" and unit != food.serving_unit:
+    if unit != food.serving_unit:
         raise HTTPException(422, "Portion unit must match the food serving unit; density is not inferred")
     if known and food.serving_size is None:
         raise HTTPException(422, "Nutrition requires a known serving basis")
-    return quantity if unit == "SERVING" else (quantity / food.serving_size if food.serving_size else None)
+    return quantity / food.serving_size if food.serving_size else None
 
 
 async def _visible_exercise(session: AsyncSession, user_id: PyUUID, exercise_id, kind):
