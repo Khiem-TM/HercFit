@@ -20,9 +20,33 @@ from domains.shared.models.catalog import normalize_food_text
 INTENT = "LOG_FOOD"
 DOMAINS = {"meals", "foods"}
 DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh"
-# Đơn vị người dùng nói → đơn vị gốc của món mà backend tính được không cần quy đổi khẩu phần.
-# "1 bát" cho món tính theo 100 g cần bảng khẩu phần của món đó: để model đọc `portions`.
-COMPATIBLE = {"SERVING": {"PORTION"}, "G": {"G"}, "ML": {"ML"}}
+# Đơn vị trong bản nháp của router: G/ML như người dùng nói, SERVING cho số đếm (tô, bát, đĩa, cái, suất).
+DRAFT_UNITS = {"SERVING", "G", "ML"}
+
+
+def measure(row: Any, quantity: Any, unit: str | None) -> tuple[float, str] | None:
+    """(lượng, đơn vị) theo căn cứ g/ml của bản ghi, hoặc None khi không quy đổi được.
+
+    Catalog chỉ tính theo gam hoặc mililít. SERVING ("1 tô", "2 cái") được quy ra bằng khẩu phần hộ gia đình đầu tiên
+    của món (portions, cùng đơn vị căn cứ); món không có khẩu phần thì cần người dùng nói gam/ml."""
+    if not isinstance(row, dict):
+        return None
+    base = row.get("serving_unit")
+    try:
+        amount = float(quantity)
+    except (TypeError, ValueError):
+        return None
+    if unit == base:
+        return amount, base
+    if unit != "SERVING":
+        return None
+    for portion in row.get("portions") or []:
+        if isinstance(portion, dict) and portion.get("unit") == base:
+            try:
+                return round(amount * float(portion["quantity"]), 1), base
+            except (KeyError, TypeError, ValueError):
+                return None
+    return None
 
 
 def _moment(value: Any) -> datetime | None:
@@ -51,7 +75,7 @@ def complete(meal: dict, resolved: dict | None = None, index: int = 0) -> bool:
             or (
                 (item.get("food") or "").strip()
                 and (item.get("quantity") or 0) > 0
-                and item.get("unit") in COMPATIBLE
+                and item.get("unit") in DRAFT_UNITS
             )
             for position, item in enumerate(items)
         )
@@ -113,8 +137,9 @@ def names(meal: dict, resolved: dict | None = None, index: int = 0) -> list[str]
 def _exact(query: str, unit: str, rows: list[dict]) -> dict | None:
     """Bản ghi duy nhất trùng tên chuẩn hoá mà đơn vị người dùng nói dùng được.
 
-    Catalog có tên trùng (124/1.587 tên SYSTEM, 02/11): "Phở bò tái" có một bản theo suất và một bản theo 100 g,
-    nên "1 tô" chỉ có một cách hiểu. Hai bản cùng đơn vị vẫn là mơ hồ và để model hoặc người dùng chọn."""
+    Catalog có tên trùng: "Phở bò tái" có một bản có khẩu phần "1 tô" (món) và một bản không có (thực phẩm), cùng
+    tính theo 100 g. "1 tô" chỉ quy đổi được bằng bản có khẩu phần; gam/ml thì ưu tiên bản không có khẩu phần như
+    trước khi mọi món chuyển về 100 g. Còn lại nhiều bản dùng được là mơ hồ và để model hoặc người dùng chọn."""
     key = normalize_food_text(query)
     hits = [
         row
@@ -126,8 +151,10 @@ def _exact(query: str, unit: str, rows: list[dict]) -> dict | None:
             normalize_food_text(row.get("name_vi") or ""),
             normalize_food_text(row.get("name_en") or ""),
         }
-        and row.get("serving_unit") in COMPATIBLE[unit]
+        and measure(row, 1, unit) is not None
     ]
+    if len(hits) > 1 and unit != "SERVING":
+        hits = [row for row in hits if not row.get("portions")]
     return hits[0] if len(hits) == 1 else None
 
 
@@ -155,9 +182,8 @@ def match(meal: dict, rows: Any, resolved: dict | None = None, index: int = 0) -
         row = _exact(item["food"], item["unit"], rows)
         if row is None:
             return None
-        items.append(
-            {"food_id": str(row["id"]), "quantity": item["quantity"], "unit": item["unit"]}
-        )
+        quantity, unit = measure(row, item["quantity"], item["unit"])
+        items.append({"food_id": str(row["id"]), "quantity": quantity, "unit": unit})
     return items
 
 

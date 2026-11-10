@@ -45,8 +45,8 @@ def gap_item(key: str, query: Any, quantity: Any = None, unit: Any = None) -> di
 
 
 def usable(row: Any, unit: str) -> bool:
-    """Bản ghi người dùng chọn tính được với đơn vị thẻ gửi (cùng bảng COMPATIBLE của đường nhanh)."""
-    return isinstance(row, dict) and bool(row.get('id')) and row.get('serving_unit') in meal_logging.COMPATIBLE.get(unit, ())
+    """Bản ghi người dùng chọn tính được với đơn vị thẻ gửi (đúng đơn vị g/ml của bản ghi)."""
+    return isinstance(row, dict) and bool(row.get('id')) and row.get('serving_unit') == unit
 
 
 def card(items: list[dict], *, meal_log: list | None = None, index: int = 0, instruction: str | None = None,

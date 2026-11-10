@@ -316,11 +316,7 @@ def catalog_lines(tool: str, record: dict) -> list[str]:
     if tool.endswith("_exercises"):
         return [f"✅ Đã thêm bài tập **{name}** vào catalog của bạn"]
     energy = _number(record.get("energy_kcal"))
-    basis = (
-        "suất"
-        if record.get("serving_unit") == "PORTION"
-        else f"{vn(record.get('serving_size'), 0)} {UNITS.get(record.get('serving_unit'), 'g')}"
-    )
+    basis = f"{vn(record.get('serving_size'), 0)} {UNITS.get(record.get('serving_unit'), 'g')}"
     return [
         f"✅ Đã thêm món **{name}** vào catalog của bạn"
         + (f" ({vn(energy)} kcal / {basis})" if energy is not None else "")

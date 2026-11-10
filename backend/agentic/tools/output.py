@@ -16,7 +16,6 @@ FOOD_FIELDS = (
     "fat_g",
     "fiber_g",
     "portions",
-    "portion_weight_g",
     "image_url",
 )
 EXERCISE_FIELDS = (
@@ -38,8 +37,6 @@ CARRY_TOTAL_CHARS = 16000
 
 def nutrition_basis(unit, size):
     """Nói rõ giá trị dinh dưỡng tính theo cái gì, để câu trả lời không bao giờ đoán theo 100 g hay theo khẩu phần."""
-    if unit == "PORTION":
-        return "mỗi suất"
     try:
         amount = f"{float(size):g}"
     except (TypeError, ValueError):

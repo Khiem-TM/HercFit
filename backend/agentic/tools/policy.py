@@ -5,7 +5,7 @@ from agentic.tools.registry import REGISTRY
 from domains.catalog.models.foods import normalize_food_text
 
 COACH_GUIDANCE = get_prompt("training.coach", "v5")
-CAPABILITY_GUIDANCE = get_prompt("nutrition.capabilities", "v6")
+CAPABILITY_GUIDANCE = get_prompt("nutrition.capabilities", "v7")
 HEALTH_GUIDANCE = get_prompt("health.guidance", "v5")
 
 CATALOG_DEPENDENCIES = {"meals": "foods", "trainings": "exercises", "training_plans": "exercises"}

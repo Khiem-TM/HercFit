@@ -42,7 +42,7 @@ from agentic.tools.policy import (
 from agentic.tools.registry import HEALTH_TOOL_KINDS, PREVIEW_PATHS, REGISTRY
 from domains.shared.models.catalog import normalize_food_text
 
-PROMPT = get_prompt("tool.call")
+PROMPT = get_prompt("tool.call", "v7")
 # Model đôi khi trả "Xem trước bữa ăn… bạn xác nhận để tôi ghi nhé?" bằng văn bản thay vì gọi lệnh ghi: frontend không có
 # thẻ xác nhận, và "đồng ý" trong chat không phải là phê duyệt (lượt 955777c0, 02/11). Nhắc một lần trước khi trả văn bản.
 JOURNAL_INTENTS = {"LOG_FOOD", "LOG_EXERCISE"}

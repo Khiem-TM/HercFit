@@ -74,7 +74,6 @@ NUTRITION_FIELDS = frozenset(
         "fiber_g",
         "serving_size",
         "portions",
-        "portion_weight_g",
     }
 )
 

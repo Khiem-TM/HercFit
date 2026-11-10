@@ -32,6 +32,8 @@ from agentic.prompts.v5.domains import COACH_GUIDANCE as COACH_GUIDANCE_V5
 from agentic.prompts.v5.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V5
 from agentic.prompts.v6 import routing as v6_routing
 from agentic.prompts.v6.domains import CAPABILITY_GUIDANCE as CAPABILITY_GUIDANCE_V6
+from agentic.prompts.v7.domains import CAPABILITY_GUIDANCE as CAPABILITY_GUIDANCE_V7
+from agentic.prompts.v7.tool import PROMPT as TOOL_PROMPT_V7
 
 TEMPLATES = MappingProxyType(
     {
@@ -79,6 +81,9 @@ TEMPLATES = MappingProxyType(
         ("nutrition.capabilities", "v6"): CAPABILITY_GUIDANCE_V6,
         # v1: gợi ý 4 chỉ số dinh dưỡng (trên 100 g) cho món riêng tạo trên thẻ món thiếu, chép nguyên văn từ một nguồn.
         ("nutrition.lookup", "v1"): NUTRITION_LOOKUP_PROMPT,
+        # v7: mọi món tính theo 100 g/100 ml; tô/suất quy ra gam/ml bằng portions, không còn PORTION.
+        ("nutrition.capabilities", "v7"): CAPABILITY_GUIDANCE_V7,
+        ("tool.call", "v7"): TOOL_PROMPT_V7,
     }
 )
 
