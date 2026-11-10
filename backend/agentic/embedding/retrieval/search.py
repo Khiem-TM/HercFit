@@ -35,6 +35,8 @@ class SearchOptions(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     multi: bool = True
+    # False: chỉ danh sách từ khoá (biến thể BM25/full-text của eval); production luôn dùng cả hai.
+    dense: bool = True
     keyword: bool = True
     rerank: bool = True
     diversify: bool = True
@@ -145,6 +147,8 @@ async def search(session, request, settings, client, reranker=None, options=None
     lists = defaultdict(list)
     similarity = {}
     for row in sorted(rows, key=lambda r: (r["kind"], r["ord"], -r["score"], str(r["id"]))):
+        if row["kind"] == "dense" and not options.dense:
+            continue
         lists[row["kind"], row["ord"]].append(row["id"])
         if row["kind"] == "dense":
             similarity[row["id"]] = max(similarity.get(row["id"], -1.0), float(row["score"]))
@@ -174,11 +178,16 @@ async def search(session, request, settings, client, reranker=None, options=None
         if english * 2 > len(candidates)
         else request.query
     )
+    if options.debug:
+        # Giai đoạn cho eval: ứng viên sau hợp nhất RRF, trước rerank và chọn lọc.
+        diagnostics["fused"] = [_stage(c, similarity.get(c["id"])) for c in candidates]
     status, scores = await rerank(reranker, rerank_query, candidates, options, timings)
     if scores is not None:
         order = sorted(range(len(candidates)), key=lambda i: (-scores[i], i))
         candidates = [{**candidates[i], "score": round(scores[i], 4)} for i in order]
         diagnostics["top_score"] = candidates[0]["score"] if candidates else None
+        if options.debug:
+            diagnostics["reranked"] = [_stage(c, c["score"]) for c in candidates]
     selected = select(
         candidates,
         similarity,
@@ -194,6 +203,16 @@ async def search(session, request, settings, client, reranker=None, options=None
     if selected and options.thresholds and not relevant(selected, status, settings, options):
         result.update(chunks=[], status="low_relevance")
     return finish(result, diagnostics, timings, started, options)
+
+
+def _stage(chunk, score):
+    return {
+        "id": str(chunk.get("id")),
+        "page": chunk.get("page"),
+        "page_end": chunk.get("page_end"),
+        "heading": chunk.get("heading"),
+        "score": score,
+    }
 
 
 def select(candidates, similarity, limit, max_per_page):
@@ -263,7 +282,9 @@ def finish(result, diagnostics, timings, started, options):
         result_count=len(result["chunks"]),
         status=result["status"],
         rerank=result["rerank"],
-        **{k: v for k, v in diagnostics.items() if v is not None},
+        **{
+            k: v for k, v in diagnostics.items() if v is not None and k not in {"fused", "reranked"}
+        },
         **timings,
     )
     if options.debug:
