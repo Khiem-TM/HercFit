@@ -92,7 +92,7 @@ export const AUTHORITY: Record<string, string> = {
 
 const FIELD_LABELS: Record<string, string> = {
   energy_kcal: 'năng lượng', protein_g: 'protein', carbohydrate_g: 'carb', fat_g: 'fat', fiber_g: 'chất xơ',
-  serving_size: 'khẩu phần', portion_weight_g: 'khối lượng suất', portions: 'khẩu phần hộ gia đình',
+  serving_size: 'khẩu phần', portions: 'khẩu phần hộ gia đình',
   nutrition_information: 'vi chất', muscle_groups: 'nhóm cơ', equipment: 'dụng cụ', instructions: 'hướng dẫn',
   'configuration.category': 'loại bài (đa khớp/đơn khớp)', 'configuration.equipment_type': 'loại dụng cụ',
   'configuration.secondary_muscles': 'cơ phụ', 'configuration.unilateral': 'tập một bên',

@@ -19,7 +19,7 @@ export interface MealRow {
   items: {
     id: string
     quantity: number | string
-    unit: 'G' | 'ML' | 'SERVING'
+    unit: 'G' | 'ML'
     food_snapshot: Record<string, unknown>
     energy_kcal: number | string | null
     protein_g: number | string | null

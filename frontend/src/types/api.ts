@@ -342,7 +342,17 @@ export interface FoodGapItem {
   unit?: FoodUnit | null
 }
 
+/** Đơn vị trong bản nháp của router: SERVING là số đếm (tô, cái, suất), quy ra g/ml theo portions của món. */
 export type FoodUnit = 'G' | 'ML' | 'SERVING'
+/** Đơn vị catalog tính dinh dưỡng và đơn vị ghi lượng ăn. */
+export type MeasureUnit = 'G' | 'ML'
+
+/** Khẩu phần hộ gia đình của món, đo bằng đơn vị của món, ví dụ "1 tô" = 500 G. */
+export interface HouseholdPortion {
+  label: string
+  quantity: number | string
+  unit: MeasureUnit
+}
 
 export interface FoodGap {
   items: FoodGapItem[]
@@ -354,7 +364,7 @@ export interface FoodChoice {
   key: string
   food_id: string
   quantity: number
-  unit: FoodUnit
+  unit: MeasureUnit
 }
 
 /** Gợi ý AI cho món riêng: đúng 4 chỉ số trên 100 g. */
@@ -372,12 +382,12 @@ export interface FoodRecord {
   name_vi: string
   name_en?: string | null
   serving_size?: string | number | null
-  serving_unit: 'G' | 'ML' | 'PORTION'
+  serving_unit: MeasureUnit
   energy_kcal?: string | number | null
   protein_g?: string | number | null
   carbohydrate_g?: string | number | null
   fat_g?: string | number | null
-  portion_weight_g?: string | number | null
+  portions?: HouseholdPortion[] | null
   image_url?: string | null
   source_type: 'SYSTEM' | 'CUSTOM'
 }
