@@ -65,6 +65,8 @@ env/
 ENV/
 .uv/
 .python-version
+# Isolated tool environments (e.g. .venv-ragas for Ragas scoring).
+.venv-*/
 
 # Testing, Linting & Type Checking
 .pytest_cache/
@@ -84,7 +86,7 @@ coverage.xml
 *.py,cover
 .hypothesis/
 
-# Test suites and fixtures at any directory level
+# Test suites and fixtures at any directory level (kept locally, not versioned)
 test/
 tests/
 __tests__/
@@ -135,14 +137,18 @@ pids/
 
 design/
 
-# Documentation at every directory level (kept locally).
+# Documentation at every directory level (kept locally): the root docs/ holds scraped third-party
+# receipts and thesis drafts. The agent's engineering and operations docs are versioned, except
+# incident investigations, which may quote development conversations.
 docs/
+!backend/agentic/docs/
+backend/agentic/docs/investigations/
 
-# Local analysis tools and outputs; runtime adapters remain versioned.
-evaluation/
+# Evaluation code, golden datasets, quality gates and baselines are versioned; run outputs are not.
 eval_results/
 reports/
 traces/
+**/evaluation/**/ragas-*.jsonl
 
 # RAG ingestion: code is versioned; source books, prepared bundles and the
 # tokenizer cache are not.
