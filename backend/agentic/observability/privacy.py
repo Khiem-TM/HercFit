@@ -82,6 +82,9 @@ HEALTH_KEY = re.compile(
     r"|(?:^|_)(?:resting|max|avg|min)_hr(?:_|$)|heart_rate|hr_zone|blood_pressure|vo2"
     # Chỉ số thiết bị (Google Health): tổng hợp nhịp tim, HRV, SpO2, nhịp thở, đường huyết, nhiệt độ.
     r"|(?:^|_)hr_(?:avg|min|max)(?:_|$)|(?:^|_)hrv(?:_|$)|spo2|oxygen|respiratory|glucose|temperature|skin_temp"
+    # Giấc ngủ, mức sẵn sàng, ECG và chu kỳ: dữ liệu sức khoẻ từ thiết bị (audit 11/2026).
+    r"|(?:^|_)sleep_(?:minutes|duration|score|efficiency|debt)|minutes_asleep|asleep_minutes"
+    r"|(?:^|_)(?:deep|light|rem|awake)_minutes|readiness_score|(?:^|_)ecg(?:_|$)|menstrua"
 )
 _NUM = r"\d{1,3}(?:[.,]\d{1,2})?"
 _LONG_NUM = r"\d+(?:[.,]\d+)*(?!\d)"

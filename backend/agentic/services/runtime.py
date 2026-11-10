@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from time import monotonic
+from time import monotonic, time
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -19,6 +19,8 @@ from agentic.observability import (
     observed,
     outcome,
 )
+from agentic.observability import metrics as ops
+from agentic.observability.outcomes import note_error
 
 # 'modes', không phải 'mode': _run_stream có biến cục bộ mode (kiểu sự kiện stream).
 from agentic.services import catalog_choice, food_gap
@@ -145,6 +147,9 @@ class Runtime:
                 )
             except Exception as exc:
                 logger.warning("kg_reconcile_deferred error_type=%s", type(exc).__name__)
+                ops.incr("worker_failures_total", worker="kg_reconcile", error=type(exc).__name__)
+            else:
+                ops.gauge("worker_last_success_ts", time(), worker="kg_reconcile")
             if self.memory and (
                 purged_at is None or monotonic() - purged_at >= MEMORY_PURGE_SECONDS
             ):
@@ -154,6 +159,9 @@ class Runtime:
                 except Exception as exc:
                     logger.warning(
                         "session_memory_purge_deferred error_type=%s", type(exc).__name__
+                    )
+                    ops.incr(
+                        "worker_failures_total", worker="memory_purge", error=type(exc).__name__
                     )
             await asyncio.sleep(self.settings.KG_RECONCILE_SECONDS)
 
@@ -212,6 +220,7 @@ class Runtime:
             with span("agent_run", thread_id):
                 return await self._run_stream(input, thread_id, config, emit)
         except Exception as exc:
+            note_error(exc)
             outcome(
                 "timeout" if isinstance(exc, TimeoutError) else "failed",
                 error_code=type(exc).__name__,
@@ -289,6 +298,7 @@ class Runtime:
                         if emit:
                             await emit({"type": "progress", "node": node})
         except Exception as exc:
+            note_error(exc)
             outcome(
                 "timeout" if isinstance(exc, TimeoutError) else "failed",
                 error_code=type(exc).__name__,

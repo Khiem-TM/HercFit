@@ -35,6 +35,8 @@ services:
         required: false
     environment:
       MODE: ${MODE:-dev}
+      # Release của trace và lần chạy eval (dev_up.sh xuất commit hiện tại).
+      GIT_COMMIT_SHA: ${GIT_COMMIT_SHA:-}
       HOST: 0.0.0.0
       PORT: ${PORT:-8080}
       DATABASE_TYPE: postgres
@@ -77,6 +79,8 @@ services:
         required: false
     environment:
       MODE: ${MODE:-dev}
+      # Release của trace và lần chạy eval (dev_up.sh xuất commit hiện tại).
+      GIT_COMMIT_SHA: ${GIT_COMMIT_SHA:-}
       AGENT_PORT: ${AGENT_PORT:-8081}
       BACKEND_BASE_URL: http://backend:8080
       AGENT_DATABASE_URL: postgresql://${POSTGRES_USER:-hercfit}:${POSTGRES_PASSWORD:-hercfit_secret}@postgres:5432/${POSTGRES_DB:-hercfit_db}

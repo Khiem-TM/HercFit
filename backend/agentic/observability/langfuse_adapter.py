@@ -21,6 +21,7 @@ from langfuse import Langfuse, LangfuseOtelSpanAttributes, propagate_attributes
 from langfuse.types import MaskOtelSpansResult, OtelSpanPatch
 from opentelemetry import trace as otel_trace
 
+from agentic.observability import metrics
 from agentic.observability.privacy import bounded, pseudonym
 from agentic.observability.settings import ObservabilitySettings
 
@@ -109,6 +110,25 @@ META_KEYS.update(
 )
 META_KEYS.update(
     {
+        # Phiên chat: chế độ, độ trễ token đầu và kết cục cấp ứng dụng (SSE có thể lỗi sau HTTP 200).
+        "chat_mode",
+        "first_token_ms",
+        "chat_outcome",
+        "failure_class",
+        "chat_duration_ms",
+        # Lần gọi model: logic (lời gọi của agent) khác lần thử vật lý (dự phòng, retry của SDK).
+        "llm_calls",
+        "llm_attempts",
+        "llm_attempt_errors",
+        "llm_sdk_retries",
+        "llm_fallbacks",
+        "llm_rate_limited",
+        "llm_timeouts",
+        "tool_outcome",
+    }
+)
+META_KEYS.update(
+    {
         "memory_mode",
         "memory_summary_chars",
         "memory_entity_count",
@@ -131,6 +151,11 @@ STATE_KEYS = {
     "confirmation_wait_ms",
     "decision",
     "budget_exceeded",
+    "chat_mode",
+    "first_token_ms",
+    "chat_outcome",
+    "failure_class",
+    "chat_duration_ms",
 }
 # Kiểu span cũ (run_type) → kiểu observation của Langfuse.
 OBSERVATION_TYPES = {
@@ -236,6 +261,28 @@ class _ExportErrors(logging.Handler):
     def emit(self, record):
         self.owner.export_errors += 1
         self.owner.last_error = record.levelname + ":" + record.module
+        metrics.incr("telemetry_export_errors_total", source="langfuse")
+
+
+# Logger của bộ xuất OTLP và hàng đợi BatchSpanProcessor: lỗi gửi lô và span bị bỏ khi hàng đợi đầy không đi qua
+# logger `langfuse`, nên trước đây "export_errors = 0" vẫn có thể đi kèm mất span.
+OTEL_EXPORT_LOGGERS = ("opentelemetry.exporter.otlp", "opentelemetry.sdk._shared_internal")
+
+
+class _OtelExportProblems(logging.Handler):
+    def __init__(self, owner):
+        super().__init__(logging.WARNING)
+        self.owner = owner
+
+    def emit(self, record):
+        message = str(record.msg)
+        if "dropping" in message.lower() or "Dropping" in message:
+            self.owner.spans_dropped += 1
+            metrics.incr("telemetry_spans_dropped_total", source="otel")
+        else:
+            self.owner.export_failures += 1
+            metrics.incr("telemetry_export_errors_total", source="otel")
+        self.owner.last_error = record.levelname + ":" + record.module
 
 
 class Observer:
@@ -244,6 +291,8 @@ class Observer:
         self.client = None
         self.closed = False
         self.export_errors = 0
+        self.export_failures = 0
+        self.spans_dropped = 0
         self.last_error = None
         if self.config.enabled and self.config.configured:
             try:
@@ -263,6 +312,8 @@ class Observer:
                     **client_options,
                 )
                 logging.getLogger("langfuse").addHandler(_ExportErrors(self))
+                for name in OTEL_EXPORT_LOGGERS:
+                    logging.getLogger(name).addHandler(_OtelExportProblems(self))
             except Exception as exc:
                 self.client = None
                 self.export_error(exc)
@@ -303,7 +354,13 @@ class Observer:
             "propagation_configured": bool(self.config.LANGFUSE_PROPAGATION_SECRET),
             "capture_mode": self.config.LANGFUSE_CAPTURE_MODE,
             "export_errors": self.export_errors,
+            "export_failures": self.export_failures,
+            "spans_dropped": self.spans_dropped,
             "last_export_error": self.last_error,
+            "environment": self.config.LANGFUSE_TRACING_ENVIRONMENT,
+            "release": self.config.LANGFUSE_RELEASE,
+            # Không có lỗi xuất không chứng minh mọi span đã tới Langfuse; xác minh bằng bootstrap --smoke.
+            "delivery_verified": False,
         }
 
     @contextmanager

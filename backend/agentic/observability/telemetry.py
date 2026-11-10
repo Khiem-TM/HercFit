@@ -1,5 +1,6 @@
 """Số đo model/node không chứa nội dung; không có prompt, completion hay thông tin xác thực."""
 
+import logging
 import math
 from contextvars import ContextVar
 from time import perf_counter
@@ -8,6 +9,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from agentic.core import roster
 from agentic.observability import graph_config
+from agentic.observability import metrics as ops
 
 active_metrics = ContextVar("agent_node_metrics", default=None)
 
@@ -146,6 +148,12 @@ BRANCH_COUNTERS = (
     "llm_cost",
     "llm_cost_unknown_calls",
     "llm_usage_unknown_calls",
+    "llm_attempts",
+    "llm_attempt_errors",
+    "llm_sdk_retries",
+    "llm_fallbacks",
+    "llm_rate_limited",
+    "llm_timeouts",
 )
 
 
@@ -183,11 +191,20 @@ class _Usage(BaseCallbackHandler):
         self.available = False
         # (provider, model) của lần gọi chat cuối: model thật sự trả lời khi model chính lỗi và dự phòng chạy.
         self.served = None
+        # Lần thử vật lý ở tầng LangChain (model chính + từng model dự phòng) và lỗi của chúng theo loại.
+        self.attempts = 0
+        self.errors = []
 
     def on_chat_model_start(self, serialized, messages, *, metadata=None, **kwargs):
         metadata = metadata or {}
+        self.attempts += 1
         if metadata.get("hercfit_model"):
             self.served = (metadata.get("hercfit_provider"), metadata["hercfit_model"])
+
+    def on_llm_error(self, error, **kwargs):
+        from agentic.observability.outcomes import provider_kind
+
+        self.errors.append(provider_kind(error))
 
     def on_llm_end(self, response, **kwargs):
         usage = (response.llm_output or {}).get("token_usage", {})
@@ -247,10 +264,18 @@ class _MeasuredModel:
         started = perf_counter()
         metrics["llm_calls"] = metrics.get("llm_calls", 0) + 1
         result = None
+        retries = sdk_retries.set([0])
         try:
             result = await self.model.ainvoke(messages, config=graph_config(config), **kwargs)
             return result
+        except Exception as exc:
+            from agentic.observability.outcomes import note_error
+
+            note_error(exc)
+            raise
         finally:
+            _record_attempts(metrics, usage, sdk_retries.get()[0], self.agent, result is not None)
+            sdk_retries.reset(retries)
             metadata = getattr(result, "usage_metadata", None) or {}
             available = usage.available or {"input_tokens", "output_tokens"} <= metadata.keys()
             input_tokens = usage.input_tokens or metadata.get("input_tokens", 0) or 0
@@ -291,6 +316,59 @@ class _MeasuredModel:
                 metrics["llm_cost"] = metrics.get("llm_cost", 0) + cost
             else:
                 metrics["llm_cost_unknown_calls"] = metrics.get("llm_cost_unknown_calls", 0) + 1
+
+
+# Retry nội bộ của SDK OpenAI (max_retries) không đi qua callback LangChain; SDK chỉ ghi log INFO
+# "Retrying request ..." trên logger `openai._base_client`. Bộ đếm theo lời gọi logic nằm trong biến ngữ cảnh.
+sdk_retries = ContextVar("hercfit_sdk_retries", default=None)
+
+
+class _SdkRetries(logging.Handler):
+    def emit(self, record):
+        if str(record.msg).startswith("Retrying request"):
+            counter = sdk_retries.get()
+            if counter is not None:
+                counter[0] += 1
+            ops.incr("llm_sdk_retries_total")
+
+
+def install_sdk_retry_counter():
+    logger = logging.getLogger("openai._base_client")
+    if not any(isinstance(h, _SdkRetries) for h in logger.handlers):
+        logger.addHandler(_SdkRetries(logging.INFO))
+    # Cấu hình logging khác (hoặc test) có thể nâng mức sau khi cài: luôn bảo đảm dòng INFO "Retrying" được phát.
+    if logger.getEffectiveLevel() > logging.INFO:
+        logger.setLevel(logging.INFO)
+
+
+ATTEMPT_COUNTERS = (
+    "llm_attempts",
+    "llm_attempt_errors",
+    "llm_sdk_retries",
+    "llm_fallbacks",
+    "llm_rate_limited",
+    "llm_timeouts",
+)
+
+
+def _record_attempts(metrics, usage, retries, agent, succeeded):
+    """Lời gọi logic → lần thử vật lý: số lần model được gọi, lỗi theo loại, retry SDK và lần dùng dự phòng."""
+    attempts = max(usage.attempts, 1)
+    metrics["llm_attempts"] = metrics.get("llm_attempts", 0) + attempts
+    metrics["llm_attempt_errors"] = metrics.get("llm_attempt_errors", 0) + len(usage.errors)
+    metrics["llm_sdk_retries"] = metrics.get("llm_sdk_retries", 0) + retries
+    if attempts > 1:
+        metrics["llm_fallbacks"] = metrics.get("llm_fallbacks", 0) + attempts - 1
+    for kind in usage.errors:
+        if kind == "rate_limit":
+            metrics["llm_rate_limited"] = metrics.get("llm_rate_limited", 0) + 1
+        elif kind == "timeout":
+            metrics["llm_timeouts"] = metrics.get("llm_timeouts", 0) + 1
+        ops.incr("llm_attempt_errors_total", kind=kind, agent=agent or "none")
+    ops.incr("llm_calls_total", agent=agent or "none", outcome="ok" if succeeded else "failed")
+    ops.incr("llm_attempts_total", value=attempts, agent=agent or "none")
+    if not succeeded:
+        ops.incr("llm_retry_exhausted_total", agent=agent or "none")
 
 
 class MeasuredModels:

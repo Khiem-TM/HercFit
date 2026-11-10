@@ -7,7 +7,8 @@ import httpx
 import jwt
 from pydantic import TypeAdapter
 
-from agentic.observability import observed, span
+from agentic.observability import annotate, observed, span
+from agentic.observability import metrics as ops
 from agentic.observability.propagation import outbound_headers
 from agentic.tools.registry import REGISTRY
 from core import service_auth
@@ -97,7 +98,16 @@ class BackendClient:
                         )
                         if response.is_error:
                             run.error = f"HTTP{response.status_code}"
+                ops.incr(
+                    "backend_http_attempts_total",
+                    method=method,
+                    outcome="server_error"
+                    if response.status_code >= 500
+                    else ("client_error" if response.is_error else "ok"),
+                )
                 if response.status_code >= 500 and attempt + 1 < attempts:
+                    ops.incr("backend_http_retries_total", method=method, reason="server_error")
+                    annotate(retry_count=attempt + 1)
                     await asyncio.sleep(0.1 * 2**attempt)
                     continue
                 if response.is_error:
@@ -108,11 +118,15 @@ class BackendClient:
                         detail = "Backend request failed"
                     raise BackendError(response.status_code, detail)
                 return response.json() if response.content else None
-            except httpx.TransportError:
+            except httpx.TransportError as exc:
+                ops.incr("backend_http_attempts_total", method=method, outcome="transport_error")
                 if attempt + 1 == attempts:
+                    ops.incr("backend_http_retry_exhausted_total", method=method)
                     raise BackendError(
                         503, "Backend unavailable; write outcome may be unknown"
                     ) from None
+                ops.incr("backend_http_retries_total", method=method, reason=type(exc).__name__)
+                annotate(retry_count=attempt + 1)
                 await asyncio.sleep(0.1 * 2**attempt)
 
     async def identity(self, token):

@@ -148,6 +148,8 @@ if [[ "${FRONTEND_ONLY}" == true ]] && { [[ "${DB_ONLY}" == true ]] || [[ "${LOC
 fi
 
 COMPOSE_CMD=""
+# Commit hiện tại làm release cho trace Langfuse và kết quả eval (LANGFUSE_RELEASE ưu tiên nếu đã đặt).
+export GIT_COMMIT_SHA="${GIT_COMMIT_SHA:-$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || true)}"
 if [[ "${FRONTEND_ONLY}" == false ]]; then
     COMPOSE_CMD="$(get_compose_cmd)"
 fi

@@ -16,7 +16,8 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
-from agentic.observability import observer, outcome
+from agentic.observability import metrics, observer, outcome
+from agentic.observability.logs import configure_logging
 from agentic.observability.persistence import worker_context
 
 from .driver import create_driver, value
@@ -165,6 +166,9 @@ class Worker:
                 refreshed += bool(await self.projector.refresh_model(owner))
             except Exception as exc:
                 log.warning("kg_model_refresh_failed error_type=%s", type(exc).__name__)
+                metrics.incr(
+                    "worker_failures_total", worker="kg_model_refresh", error=type(exc).__name__
+                )
         return refreshed
 
     @asynccontextmanager
@@ -271,6 +275,7 @@ class Worker:
                 with worker_context("worker.kg_poll_failed"):
                     outcome("failed", error_code=type(exc).__name__)
                 log.warning("kg_worker_failed error_type=%s", type(exc).__name__)
+                metrics.incr("worker_failures_total", worker="kg_worker", error=type(exc).__name__)
                 if once:
                     raise
             if once:
@@ -309,5 +314,5 @@ async def main(args=None):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    configure_logging("INFO")
     asyncio.run(main())

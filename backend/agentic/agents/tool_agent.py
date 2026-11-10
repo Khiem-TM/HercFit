@@ -13,6 +13,7 @@ from agentic.core import roster
 from agentic.core.context import request_context
 from agentic.core.providers.fpt import strip_tool_markup
 from agentic.observability import annotate, observed
+from agentic.observability import metrics as ops
 from agentic.prompts.layout import layout
 from agentic.prompts.registry import get_prompt
 from agentic.research.sources import rate
@@ -76,6 +77,26 @@ CATALOG_WRITES = {
     "create_exercises": "exercises",
     "finalize_exercises": "exercises",
 }
+
+
+def tool_outcome(out):
+    """Kết cục của một lời gọi tool cho số đo (nhãn hữu hạn, không nội dung)."""
+    if out.get("pending"):
+        return "pending_confirmation"
+    if out.get("ok"):
+        return "not_found" if out.get("not_found") else "ok"
+    error = str(out.get("error") or "")
+    if error.startswith("Deferred"):
+        return "deferred"
+    if error == "Tool call limit reached":
+        return "budget_exceeded"
+    if error.startswith("Tool is not allowed"):
+        return "not_allowed"
+    if "status_code" in out:
+        return "backend_error"
+    if error.startswith("Backend operation failed"):
+        return "error"
+    return "invalid_arguments"
 
 
 class ToolAgent:
@@ -611,6 +632,11 @@ class ToolAgent:
                     out["error"] = "Backend operation failed (" + type(exc).__name__ + ")."
                     error = "Backend không hoàn tất thao tác; cần xử lý lỗi trước khi tiếp tục."
             outputs.append(out)
+            ops.incr(
+                "tool_calls_total",
+                tool=name if name in REGISTRY else "unknown",
+                outcome=tool_outcome(out),
+            )
             # State giữ bản đầy đủ (ảnh cho thẻ chọn món); model chỉ đọc bản gọn.
             seen = {**out, "output": model_view(name, out["output"])} if "output" in out else out
             messages.append(

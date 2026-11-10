@@ -8,7 +8,11 @@ from openai import AuthenticationError
 from agentic.core import roster
 from agentic.core.app.config import AgentSettings
 from agentic.observability import annotate
+from agentic.observability import metrics as ops
+from agentic.observability.outcomes import classify, note_error
 from agentic.observability.telemetry import (
+    ATTEMPT_COUNTERS,
+    BRANCH_COUNTERS,
     active_metrics,
     merge_agents,
     merge_jev_metrics,
@@ -31,6 +35,8 @@ async def run_node(fn, state, node, settings: AgentSettings):
         # Exception có thể chứa body request phía trên. Chỉ lộ ra tên lớp;
         # không bao giờ ghi nội dung exception thô vào log vận hành.
         logger.warning("agent_node_failed node=%s error_type=%s", node, type(exc).__name__)
+        note_error(exc)
+        ops.incr("agent_node_failures_total", node=node, error_class=classify(exc))
         annotate(status="failed", error_code=type(exc).__name__)
         result = {
             "status": "failed",
@@ -63,16 +69,10 @@ async def run_node(fn, state, node, settings: AgentSettings):
             telemetry.get("llm_usage_unknown_calls", 0) + telemetry["llm_calls"]
         )
     telemetry["billing_version"] = 1
-    for key in (
-        "llm_calls",
-        "input_tokens",
-        "output_tokens",
-        "model_ms",
-        "llm_cost",
-        "llm_cost_unknown_calls",
-        "llm_usage_unknown_calls",
-    ):
-        telemetry[key] = telemetry.get(key, 0) + metrics.get(key, 0)
+    for key in BRANCH_COUNTERS:
+        # Số đo lần thử vật lý chỉ có khi node gọi model; các khoá tính phí cũ luôn có mặt như trước.
+        if key not in ATTEMPT_COUNTERS or key in metrics or key in telemetry:
+            telemetry[key] = telemetry.get(key, 0) + metrics.get(key, 0)
     merge_jev_metrics(telemetry, metrics.get("jev_events", []))
     agent = roster.active.get()
     if metrics.get("agents"):
@@ -90,7 +90,13 @@ async def run_node(fn, state, node, settings: AgentSettings):
         telemetry["retrieval"] = merge_retrieval(telemetry.get("retrieval"), metrics["retrieval"])
     result["telemetry"] = telemetry
     decision = result.get("decision") or {}
+    attempts = {
+        k: metrics[k]
+        for k in ("llm_attempts", "llm_sdk_retries", "llm_fallbacks")
+        if metrics.get(k)
+    }
     annotate(
+        **attempts,
         node=node,
         agent=agent,
         domain=decision.get("domain") or (state.get("decision") or {}).get("domain"),

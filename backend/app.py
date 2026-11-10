@@ -18,6 +18,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from core.database import get_async_engine, close_crud_db_pool
 from core.settings import settings
 from agentic.observability import observer
+from agentic.observability.logs import configure_from_settings
 from agentic.observability.middleware import ObservabilityMiddleware
 from core.media_limits import ImageUploadLimit
 from core.route_metrics import RouteMetricsMiddleware
@@ -29,6 +30,7 @@ from domains.shared.services.common import request_validation_error
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.jwt_secret_value  # Xác thực phải được cấu hình kể cả khi không có nhà cung cấp AI.
+    configure_from_settings()  # Áp dụng LOG_LEVEL; log request_finished có mức riêng (REQUEST_LOG_LEVEL).
     get_async_engine()
     observer()
     from agentic.embedding.core import EmbeddingClient, RerankClient, settings as embedding_settings
