@@ -16,7 +16,6 @@ qua `agentic/components/hybrid_retriever.py`. Schema PostgreSQL nằm ở `alemb
 
 Git theo dõi code, spec trong `ingestion/manifests/` và SQL kiểm tra trong `ingestion/sql/`.
 Sách nguồn, bundle đã chuẩn bị và cache tokenizer nằm trong `ingestion/data/` (bị ignore).
-`tests/` cũng bị ignore theo quy ước chung của repo.
 
 ```
 ingestion/data/
@@ -123,11 +122,3 @@ docker compose -f backend/docker-compose.yml --profile rag run --rm embedding-wo
 Image dùng target `ingestion` của `backend/Dockerfile`; `ingestion/data/input` và `ingestion/data/.cache` được
 mount read-only. Chạy `fetch-tokenizer` và `prepare` trên host trước.
 
-## Kiểm thử
-
-```sh
-LANGFUSE_TRACING=false PYTHONPATH=backend .venv/bin/python -m pytest backend/agentic/embedding/ingestion/tests backend/tests/test_knowledge_retrieval.py -q
-LANGFUSE_TRACING=false .venv/bin/python backend/agentic/embedding/ingestion/tests/run_isolated_database.py
-```
-
-Test DB tạo một database tạm `hercfit_ingest_test_*`, chạy kiểm tra rồi xoá đúng database đó.

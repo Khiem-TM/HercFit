@@ -19,6 +19,8 @@ uvx --from ruff==0.17.4 ruff check backend/agentic
 ```
 
 - [Architecture, module ownership and workflow](docs/architecture.md)
+- [Evaluation: golden datasets, quality gates, Ragas, Langfuse experiments, CI](docs/evaluation.md)
+- [Observability: traces, chat outcomes, metrics, alerts, privacy](docs/observability.md)
 - [Audit and prioritized refactoring plan](docs/refactoring-plan.md)
 - [Exact old-to-new module map](docs/module-map.json)
 - [Deployment and verification](docs/deployment.md)
@@ -29,7 +31,6 @@ From the repository root, using the existing virtual environment:
 
 ```sh
 PYTHONPATH=backend .venv/bin/python -m uvicorn agentic.core.app.main:app --port 8081
-.venv/bin/python -m pytest -c backend/agentic/pytest.ini backend/agentic/tests
 ```
 
 Apply database migrations before production startup:
@@ -60,18 +61,16 @@ Legacy module/CLI aliases have been removed. Use `agentic.core.app.main:app` for
 the server and `agentic.scripts.*` / `agentic.evaluation.*` for commands. Docker,
 Compose, the development script and the Knowledge Graph worker use these paths.
 
-`docs/` and `tests/` are retained locally and ignored by Git throughout the
-repository. The linked local documentation and test commands require those local
-files; a fresh checkout does not include them.
+Test suites, the evaluation package (`evaluation/`: code, golden datasets, quality gates, baselines) and
+the engineering docs under `docs/` are versioned; evaluation outputs (`eval_results/`) and incident
+investigations stay local. Docker images do not include the evaluation tooling (`requirements-eval.txt`).
 
-## Development-only tracing and evaluation
+## Tracing and evaluation
 
-Offline evaluation (`evaluation/`), test suites, architecture notes under `docs/`,
-trace output and analysis reports are local assets excluded from Git and Docker.
 Tracing exports to Langfuse through `backend/agentic/observability/langfuse_adapter.py`
 when `LANGFUSE_TRACING=true` and both Langfuse keys are set (dev or prod). Otherwise
 `agentic/observability/runtime.py` keeps request correlation and exports nothing.
 Check the setup with `python -m agentic.observability.bootstrap --check` (or `--smoke`)
-from `backend/`; see `docs/observability/README.md`.
+from `backend/`; see [docs/observability.md](docs/observability.md) and
+[docs/evaluation.md](docs/evaluation.md) (`python -m agentic.evaluation --help`).
 Node guards, token/cost accounting and JEV runtime decisions remain versioned.
-The local evaluation commands above require the developer's evaluation files.
