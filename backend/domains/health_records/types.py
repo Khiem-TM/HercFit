@@ -1,7 +1,7 @@
 """Các loại dữ liệu Google Health mà HercFit dùng, xếp theo 5 dạng bản ghi.
 
 Nguồn: developers.google.com/health/data-types (đọc ngày 2026-11-02) và ảnh chụp discovery v4
-(integrations/google_health/contract/discovery/v4.json, dùng trong test).
+(tests/fixtures/google_health/discovery/v4.json, ngoài git).
 
 Mỗi loại khai báo dạng bản ghi (`kind`), cách đọc (`read`) và ai sở hữu dữ liệu (`owner`):
 

@@ -1,7 +1,0 @@
-{
-  "_about": "Synthetic weight sample carrying a field and an enum value newer than the snapshot.",
-  "name": "users/me/dataTypes/weight/dataPoints/w-1",
-  "dataSource": {"recordingMethod": "QUANTUM_SCALE", "device": {"formFactor": "SCALE"}},
-  "weight": {"weightGrams": 70500.0, "notes": "sau khi chạy", "bodyWaterPercent": 55.1,
-             "sampleTime": {"physicalTime": "2026-10-30T23:15:00.123456789Z", "utcOffset": "25200s"}}
-}

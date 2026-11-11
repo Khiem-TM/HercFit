@@ -1,4 +1,0 @@
-# Evaluation tooling (CI and local); runtime images do not install it.
-# Ragas runs in an isolated environment (.venv-ragas, requirements-ragas.txt): ragas 0.4.x needs openai<3.4,
-# which conflicts with the agent runtime (openai 3.33 via langchain-openai).
-pydantic-evals==2.66.0

@@ -86,7 +86,7 @@ coverage.xml
 *.py,cover
 .hypothesis/
 
-# Test suites and fixtures at any directory level (kept locally, not versioned)
+# Test suites, evaluation and fixtures at any directory level (kept locally in tests/, not versioned)
 test/
 tests/
 __tests__/
@@ -140,11 +140,10 @@ design/
 # Local documentation drafts at every directory level (not versioned).
 docs/
 
-# Evaluation code, golden datasets, quality gates and baselines are versioned; run outputs are not.
+# Evaluation run outputs.
 eval_results/
 reports/
 traces/
-**/evaluation/**/ragas-*.jsonl
 
 # RAG ingestion: code is versioned; source books, prepared bundles and the
 # tokenizer cache are not.

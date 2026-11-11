@@ -46,7 +46,7 @@ class EmbeddingSettings(BaseSettings):
     # Số chunk giữ lại cho mỗi trang nguồn, để các cửa sổ chồng nhau của một trang không chèn ép bằng chứng khác.
     RAG_MAX_PER_PAGE: int = Field(default=1, ge=1, le=10)
     # Dưới các ngưỡng này, cơ sở tri thức được coi là không bao quát câu hỏi (hiệu chỉnh bằng
-    # agentic.evaluation.rag_eval); điểm rerank áp dụng khi rerank thành công, nếu không thì dùng cosine.
+    # tests/evaluation/rag_eval.py); điểm rerank áp dụng khi rerank thành công, nếu không thì dùng cosine.
     RAG_MIN_RERANK_SCORE: float | None = Field(default=None, ge=0, le=1)
     RAG_MIN_DENSE_SIMILARITY: float | None = Field(default=None, ge=-1, le=1)
 

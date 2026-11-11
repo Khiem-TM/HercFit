@@ -1,4 +1,3 @@
-/// <reference types="vitest/config" />
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
@@ -13,10 +12,6 @@ export default defineConfig({
         manualChunks: (id) => (id.includes("node_modules/cytoscape") ? "cytoscape" : undefined),
       },
     },
-  },
-  test: {
-    environment: "node",
-    include: ["tests/**/*.test.ts"],
   },
   server: {
     host: "0.0.0.0",

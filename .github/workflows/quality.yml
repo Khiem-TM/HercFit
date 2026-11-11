@@ -1,21 +1,11 @@
-# Quality gates for HercFit. Exit codes of `python -m agentic.evaluation`: 0 pass, 1 quality/regression fail,
-# 2 hard safety fail, 3 runner error, 4 blocked (missing credential/service). See backend/agentic/docs/evaluation.md.
+# Static checks for HercFit. The evaluation suites live in tests/ outside version control and run locally
+# (make -C tests eval-agent ...), so CI checks only what is versioned: lint, imports and frontend types.
 name: quality
 
 on:
   pull_request:
   push:
     branches: [main]
-    tags: ["v*"]
-  workflow_dispatch:
-    inputs:
-      gate:
-        description: "pre-release (paid live benchmark) or scheduled (full + judge + stability)"
-        type: choice
-        options: [pre-release, scheduled]
-        default: pre-release
-  schedule:
-    - cron: "0 19 * * 0" # Sunday 02:00 Asia/Ho_Chi_Minh
 
 permissions:
   contents: read
@@ -30,26 +20,14 @@ env:
   GIT_COMMIT_SHA: ${{ github.sha }}
 
 jobs:
-  # ---------------------------------------------------------------- PR / commit gate (no paid calls)
-  pr-gate:
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/'))
+  backend:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: hercfit
-          POSTGRES_PASSWORD: hercfit_ci
-          POSTGRES_DB: hercfit_ci
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U hercfit" --health-interval 5s --health-timeout 5s --health-retries 10
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
     env:
-      # CI-only signing key for the ephemeral CI database; never a deployed secret.
+      # CI-only signing key for the import check; never a deployed secret.
       JWT_SECRET_KEY: hercfit-ci-test-only-signing-key-0000000000
     steps:
       - uses: actions/checkout@v4
@@ -57,39 +35,15 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: |
-            backend/requirements-dev.txt
-            backend/agentic/requirements-eval.txt
+          cache-dependency-path: backend/requirements.txt
       - name: Install
-        run: pip install -r requirements-dev.txt -r agentic/requirements-eval.txt ruff==0.17.4
-      - name: Lint (pinned ruff, agentic application and evaluation pipeline)
-        # The pre-existing evaluation scripts were never linted (they were git-ignored);
-        # they are excluded until cleaned up separately.
-        run: >-
-          ruff check agentic --extend-exclude
-          "agentic/evaluation/jev_*.py,agentic/evaluation/kg_eval.py,agentic/evaluation/rag_eval.py,agentic/evaluation/memory_eval.py,agentic/evaluation/personalization_eval.py,agentic/evaluation/agent_model_eval.py,agentic/evaluation/system_benchmark.py"
-      - name: Import and schema contracts
-        run: python -c "import agentic.core.app.main, app; from agentic.evaluation import contracts; print('imports ok')"
-      - name: eval:agent + eval:safety (deterministic regression on the real graph)
-        run: |
-          python -m agentic.evaluation agent --out eval_results/quality
-          python -m agentic.evaluation safety --out eval_results/quality
-      - name: Daily Health backtest and load smoke
-        run: |
-          python -m agentic.evaluation daily-health --out eval_results/quality
-          python -m agentic.evaluation performance --out eval_results/quality
-      - name: eval:report
-        if: always()
-        run: python -m agentic.evaluation report --out eval_results/quality
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: eval-reports-${{ github.sha }}
-          path: backend/eval_results/quality
-          retention-days: 30
+        run: pip install -r requirements.txt ruff==0.17.4
+      - name: Lint (pinned ruff, agentic application)
+        run: ruff check agentic
+      - name: Import check
+        run: python -c "import agentic.core.app.main, app; print('imports ok')"
 
   frontend:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -104,86 +58,3 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run type-check
-
-  # ---------------------------------------------------------------- pre-release gate (paid live benchmark)
-  pre-release:
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.gate == 'pre-release')
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    environment: release # holds the provider/Langfuse secrets and requires approval
-    defaults:
-      run:
-        working-directory: backend
-    env:
-      FPT_API_KEY: ${{ secrets.FPT_API_KEY }}
-      DEFAULT_PROVIDER: fpt
-      DEFAULT_MODEL: ${{ vars.DEFAULT_MODEL || 'DeepSeek-V4-Flash' }}
-      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
-      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
-      LANGFUSE_BASE_URL: ${{ vars.LANGFUSE_BASE_URL }}
-      LANGFUSE_TRACING: "true"
-      LANGFUSE_TRACING_ENVIRONMENT: ci
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-      - run: pip install -r requirements-dev.txt -r agentic/requirements-eval.txt
-      - name: Deterministic gates first (cheap, must pass)
-        run: |
-          python -m agentic.evaluation agent --out eval_results/quality
-          python -m agentic.evaluation safety --out eval_results/quality
-      - name: Live agent and safety benchmark (paid; regression vs committed baseline)
-        run: |
-          python -m agentic.evaluation agent --mode live --allow-paid --trace --langfuse --out eval_results/quality
-          python -m agentic.evaluation safety --mode live --allow-paid --trace --langfuse --out eval_results/quality
-      - name: JEV holdout (imports reviewed results; blocked until reviews exist)
-        run: python -m agentic.evaluation jev --split holdout --out eval_results/quality || test $? -eq 4
-      - name: eval:report
-        if: always()
-        run: python -m agentic.evaluation report --out eval_results/quality
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: pre-release-reports-${{ github.sha }}
-          path: backend/eval_results/quality
-
-  # ---------------------------------------------------------------- scheduled full evaluation
-  scheduled:
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.gate == 'scheduled')
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    environment: release
-    defaults:
-      run:
-        working-directory: backend
-    env:
-      FPT_API_KEY: ${{ secrets.FPT_API_KEY }}
-      DEFAULT_PROVIDER: fpt
-      DEFAULT_MODEL: ${{ vars.DEFAULT_MODEL || 'DeepSeek-V4-Flash' }}
-      JUDGE_MODEL: ${{ vars.JUDGE_MODEL }}
-      JUDGE_BASE_URL: ${{ vars.JUDGE_BASE_URL }}
-      JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
-      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
-      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
-      LANGFUSE_BASE_URL: ${{ vars.LANGFUSE_BASE_URL }}
-      LANGFUSE_TRACING: "true"
-      LANGFUSE_TRACING_ENVIRONMENT: ci-scheduled
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-      - run: pip install -r requirements-dev.txt -r agentic/requirements-eval.txt
-      - name: Multi-run stability with LLM-as-judge (paid)
-        run: python -m agentic.evaluation full --live --allow-paid --judge --trace --langfuse --repeat 3 --out eval_results/quality
-      - name: Alert check on the latest reports
-        if: always()
-        run: python -m agentic.observability.alerts --reports eval_results/quality
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: scheduled-reports-${{ github.sha }}
-          path: backend/eval_results/quality
