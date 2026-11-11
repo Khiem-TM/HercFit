@@ -137,12 +137,8 @@ pids/
 
 design/
 
-# Documentation at every directory level (kept locally): the root docs/ holds scraped third-party
-# receipts and thesis drafts. The agent's engineering and operations docs are versioned, except
-# incident investigations, which may quote development conversations.
+# Local documentation drafts at every directory level (not versioned).
 docs/
-!backend/agentic/docs/
-backend/agentic/docs/investigations/
 
 # Evaluation code, golden datasets, quality gates and baselines are versioned; run outputs are not.
 eval_results/
