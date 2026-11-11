@@ -18,6 +18,7 @@ from agentic.prompts.layout import layout
 from agentic.prompts.registry import get_prompt
 from agentic.research.sources import rate
 from agentic.services import catalog_choice, food_gap, meal_logging, mode
+from agentic.services.memory import decisions
 from agentic.services.routing import (
     fast_reads_enabled,
     latest_request,
@@ -490,6 +491,9 @@ class ToolAgent:
             "resource_refs": [],
             "template_id": plan.template_id if plan else None,
             "template_version": plan.template_version if plan else None,
+            # Bộ nhớ quyết định: chỉ tham số có cấu trúc (services/memory/decisions.py), không văn bản tự do hay ID.
+            "args": decisions.remembered_args(args),
+            "outcome": None,
         }
         labels = {
             "goals": "Goal",
@@ -515,6 +519,7 @@ class ToolAgent:
                 record["resource_refs"] = [
                     {"kind": kind, "source_id": ident} for ident in sorted(ids)[:12]
                 ]
+            record["outcome"] = decisions.outcome(data)
             return data
         except Exception as exc:
             record["error_code"] = (

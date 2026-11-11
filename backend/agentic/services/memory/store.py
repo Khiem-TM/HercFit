@@ -432,6 +432,38 @@ class Store:
                 await conn.execute("DELETE FROM agent_threads WHERE session_id=%s", (session_id,))
                 await conn.execute("DELETE FROM agent_sessions WHERE session_id=%s", (session_id,))
 
+    async def decision_trace(self, session_id, generation, limit=6):
+        """Các lượt gần nhất của phiên cùng các lần gọi tool của chúng, từ nhật ký SQL (mới trước)."""
+        async with self.pool.connection() as conn:
+            return await (
+                await conn.execute(
+                    """SELECT t.run_id, t.occurred_at, t.data,
+                        COALESCE(json_agg(e.data ORDER BY e.occurred_at)
+                                 FILTER (WHERE e.execution_id IS NOT NULL), '[]') AS executions
+                    FROM agent_turn_records t
+                    LEFT JOIN agent_execution_records e ON e.session_id = t.session_id AND e.run_id = t.run_id
+                    WHERE t.session_id=%s AND t.session_generation=%s
+                    GROUP BY t.run_id, t.occurred_at, t.data
+                    ORDER BY t.occurred_at DESC LIMIT %s""",
+                    (session_id, generation, limit),
+                )
+            ).fetchall()
+
+    async def kg_pending(self, user_id):
+        """Số lệnh ghi nghiệp vụ của người dùng chưa được chiếu lên graph (cổng read-your-writes của context graph).
+
+        Chỉ thấy outbox của database này: với database backend tách riêng (KG_BACKEND_DATABASE_URL), sự kiện của
+        backend nằm ở database kia và cổng này luôn báo 0."""
+        async with self.pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """SELECT count(*) AS n FROM kg_outbox
+                    WHERE owner_id=%s AND delivered_at IS NULL AND source='backend'""",
+                    (str(user_id),),
+                )
+            ).fetchone()
+        return row["n"]
+
     async def kg_retrieval_gate(self, user_id):
         """Quyền sở hữu/thế hệ SQL hiện tại chặn ngay các episode graph đã cũ."""
         async with self.pool.connection() as conn:
@@ -518,6 +550,8 @@ class Store:
                             "error_code",
                             "template_id",
                             "template_version",
+                            "args",
+                            "outcome",
                         )
                     }
                     data.update(

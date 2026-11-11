@@ -51,11 +51,12 @@ from agentic.tools.policy import (
     needs_catalog_handoff,
 )
 
-GRAPH_CONTEXT_GUIDANCE = get_prompt("orchestration.graph_context")
-ROUTING_PROMPT = get_prompt("orchestration.route", "v6")
+GRAPH_CONTEXT_GUIDANCE = get_prompt("orchestration.graph_context", "v2")
+ANSWER_GRAPH_GUIDANCE = get_prompt("orchestration.graph_answer")
+ROUTING_PROMPT = get_prompt("orchestration.route", "v8")
 PERSONAL_ROUTING = get_prompt("orchestration.personal", "v2")
 PERSONAL_ANSWER = get_prompt("orchestration.personal_answer", "v2")
-NORMAL_ROUTING_PROMPT = get_prompt("orchestration.route_normal", "v6")
+NORMAL_ROUTING_PROMPT = get_prompt("orchestration.route_normal", "v8")
 PLAN_ROUTING = get_prompt("orchestration.plan", "v3")
 PLAN_MODE_REPLY = get_prompt("orchestration.plan_mode_reply", "v3")
 PERSONAL_MEASURE = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:kg|cm|tuổi|tuoi|kcal|bpm)\b", re.I)
@@ -755,9 +756,7 @@ class OrchestrationAgent:
         graph_context = model_graph_context(state)
         if graph_context:
             evidence["knowledge_graph"] = graph_context
-            tail.append(
-                "knowledge_graph là hồ sơ tri thức tổng hợp từ dữ liệu đã lưu (có thể trễ vài giây): dùng để trả lời và cá nhân hoá khi tool output không có, nêu mốc thời gian; tool output luôn được ưu tiên."
-            )
+            tail.append(ANSWER_GRAPH_GUIDANCE)
         safety = state.get("safety") or {}
         if safety.get("guidance"):
             tail.append("Lưu ý an toàn (bắt buộc tuân theo): " + safety["guidance"])

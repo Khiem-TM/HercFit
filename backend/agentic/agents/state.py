@@ -78,10 +78,31 @@ class AgentTask(BaseModel):
         return value if value in get_args(Domain) else None
 
 
+class ContextNeed(BaseModel):
+    """Câu hỏi cần dữ liệu đã lưu của người dùng: HercFit truy vấn context graph (knowledge_graph/context)."""
+
+    model_config = ConfigDict(extra="forbid")
+    focus: Literal["summary", "list", "top", "trend", "latest", "relation", "followup"] = Field(
+        description="summary totals · list records · top most frequent/largest · trend change over time · latest most "
+        "recent/current · relation across areas (e.g. sleep vs training) · followup about earlier turns of this chat"
+    )
+    entities: list[str] = Field(
+        default_factory=list,
+        max_length=5,
+        description="Food or exercise names the question is about, as the user wrote them; empty otherwise",
+    )
+    start: str | None = Field(
+        default=None,
+        description="YYYY-MM-DD only when the user gives a concrete date; null for relative words",
+    )
+    end: str | None = Field(default=None, description="YYYY-MM-DD, same rule as start")
+
+
 # Điều phối response model trả về --> Hỗ trợ orschestration
 class RouteDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
     intent: str
+
     next_agent: Literal["tool", "research", "orchestrator"]
     domain: Domain | None = None
     action: Literal["answer", "clarify", "tool", "research", "finish"]
@@ -138,6 +159,11 @@ class RouteDecision(BaseModel):
             "a follow-up or form answer, or when any part is a knowledge/advice question."
         ),
     )
+    context: ContextNeed | None = Field(
+        default=None,
+        description="Set when answering needs this user's stored records (meals, trainings, body, sleep, goals, daily or "
+        "weekly totals, earlier turns); null for knowledge questions, chat and plain writes",
+    )
     create_distinct: SkipJsonSchema[bool] = False
     read_only: SkipJsonSchema[bool] = False
 
@@ -185,6 +211,13 @@ class AgentState(TypedDict, total=False):
     candidate: dict[str, Any] | None
     error: str | None
     graph_context: dict[str, Any] | None
+    # G_C của lượt chạy (knowledge_graph/context/graph.ContextGraph), một lần mỗi lượt.
+    context_graph: dict[str, Any] | None
+    context_graph_run_id: str | None
+    # Bộ nhớ quyết định: lượt trước của phiên và người dùng làm gì với thẻ xác nhận của lượt này.
+    prev_run_id: str | None
+    action_decision: str | None
+    edited_fields: list[str]
     graph_retrieval_attempted: bool
     graph_context_domains: list[str]
     graph_context_run_id: str | None

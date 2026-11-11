@@ -6,6 +6,7 @@ nhãn. Tin nhắn, câu trả lời, tham số tool và văn bản ý định t�
 không bao giờ ra ngoài. Knowledge graph chỉ chiếu các trường Run của riêng nó.
 """
 
+from agentic.knowledge_graph.context.graph import summary as context_summary
 from agentic.knowledge_graph.intents import classify
 from agentic.knowledge_graph.service import render_lines
 from agentic.research.contracts import Intent
@@ -74,6 +75,10 @@ def route_summary(state):
         if research
         else None,
         "kg": graph_summary(state),
+        # Context graph của lượt: nguồn truy vấn, mẫu, số hàng, trạng thái đồng bộ; không có giá trị dữ liệu.
+        "context_graph": context_summary(state.get("context_graph"))
+        if state.get("context_graph_run_id") == state.get("run_id")
+        else None,
     }
 
 
@@ -142,5 +147,10 @@ def turn_record(state):
         "status": status,
         "tools": sorted({record["tool"] for record in records})[:8],
         "resource_refs": refs[:10],
+        # Bộ nhớ quyết định (P4): lượt trước của phiên và người dùng làm gì với thẻ xác nhận (chỉ tên trường đã sửa).
+        "prev_run_id": state.get("prev_run_id"),
+        "decision": state.get("action_decision")
+        or ("pending" if status == "pending_confirmation" else None),
+        "edited_fields": list(state.get("edited_fields") or [])[:10],
         "route": route_summary(state),
     }

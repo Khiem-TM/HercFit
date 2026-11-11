@@ -34,6 +34,8 @@ from agentic.prompts.v6 import routing as v6_routing
 from agentic.prompts.v6.domains import CAPABILITY_GUIDANCE as CAPABILITY_GUIDANCE_V6
 from agentic.prompts.v7.domains import CAPABILITY_GUIDANCE as CAPABILITY_GUIDANCE_V7
 from agentic.prompts.v7.tool import PROMPT as TOOL_PROMPT_V7
+from agentic.prompts.v8 import context as v8_context
+from agentic.prompts.v8 import routing as v8_routing
 
 TEMPLATES = MappingProxyType(
     {
@@ -84,6 +86,13 @@ TEMPLATES = MappingProxyType(
         # v7: mọi món tính theo 100 g/100 ml; tô/suất quy ra gam/ml bằng portions, không còn PORTION.
         ("nutrition.capabilities", "v7"): CAPABILITY_GUIDANCE_V7,
         ("tool.call", "v7"): TOOL_PROMPT_V7,
+        # v8: Context Graph (text-to-Cypher). Câu hỏi đọc dữ liệu đã lưu đi qua context graph, không bắt buộc đọc
+        # backend; Context Agent viết Cypher theo lược đồ knowledge_graph.schema.
+        ("orchestration.route", "v8"): v8_routing.ROUTING_PROMPT,
+        ("orchestration.route_normal", "v8"): v8_routing.NORMAL_ROUTING_PROMPT,
+        ("orchestration.graph_context", "v2"): v8_context.GRAPH_CONTEXT_GUIDANCE,
+        ("orchestration.graph_answer", "v1"): v8_context.ANSWER_GRAPH_GUIDANCE,
+        ("context.cypher", "v1"): v8_context.CYPHER_PROMPT,
     }
 )
 

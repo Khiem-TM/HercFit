@@ -48,6 +48,7 @@ async def manage_background_tasks(runtime, graph_context, store, settings: Agent
             tasks.append(asyncio.create_task(purge_forever(runtime)))
         if graph_context is not None:
             tasks.append(asyncio.create_task(graph_context.warm_up()))
+            tasks.append(asyncio.create_task(graph_context.keep_warm()))
         yield
     finally:
         for task in tasks:
