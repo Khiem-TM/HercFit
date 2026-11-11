@@ -32,6 +32,7 @@ class Read(StrEnum):
     RECONCILE = "reconcile"        # luồng đã gộp mọi nguồn và khử trùng lặp
     LIST = "list"                  # loại không có reconcile (ECG, IRN)
     DAILY_ROLLUP = "dailyRollUp"   # tổng theo ngày địa phương
+    HOURLY_ROLLUP = "rollUp"       # tổng theo từng giờ (rollUp, cửa sổ 3600 s theo thời gian thực)
     NONE = "none"                  # không đọc về
 
 
@@ -60,17 +61,23 @@ class DataType:
     read: Read = Read.RECONCILE
     owner: Owner = Owner.GOOGLE
     sensitive: bool = False
+    # Loại Google được đọc khi khác tên loại lưu trong health_points (nhịp tim theo giờ đọc từ heart-rate).
+    source: str | None = None
+
+    @property
+    def google_id(self) -> str:
+        return self.source or self.id
 
     @property
     def field(self) -> str:
         """Tên trường giá trị trong DataPoint (camelCase của id kebab-case)."""
-        head, *rest = self.id.split("-")
+        head, *rest = self.google_id.split("-")
         return head + "".join(part.title() for part in rest)
 
     @property
     def path(self) -> str:
         """Filter AIP-160 dùng snake_case."""
-        return self.id.replace("-", "_")
+        return self.google_id.replace("-", "_")
 
     @property
     def stored_kind(self) -> Kind:
@@ -80,11 +87,13 @@ class DataType:
     def page_size(self) -> int:
         if self.read is Read.DAILY_ROLLUP:
             return self.chunk_days
+        if self.read is Read.HOURLY_ROLLUP:
+            return self.chunk_days * 24
         return SESSION_PAGE if self.id in ("exercise", "sleep") else PAGE
 
     @property
     def chunk_days(self) -> int:
-        return 14 if self.id in SHORT_ROLLUP else 90
+        return 14 if self.google_id in SHORT_ROLLUP else 90
 
     @property
     def read_scope(self) -> str:
@@ -103,6 +112,8 @@ TYPES: dict[str, DataType] = {item.id: item for item in (
     DataType("active-minutes", I, ACT, ROLLUP), DataType("active-zone-minutes", I, ACT, ROLLUP),
     DataType("active-energy-burned", I, ACT, ROLLUP), DataType("total-calories", I, ACT, ROLLUP),
     DataType("heart-rate", S, MET, ROLLUP),
+    # Cùng nhịp tim, gộp theo từng giờ (TB/thấp nhất/cao nhất) để xem phân bố trong ngày.
+    DataType("heart-rate-hourly", I, MET, Read.HOURLY_ROLLUP, source="heart-rate"),
     DataType("sedentary-period", I, ACT),
     # --- chỉ số theo ngày của thiết bị ---
     DataType("daily-resting-heart-rate", D, MET), DataType("daily-heart-rate-variability", D, MET),
@@ -124,7 +135,7 @@ TYPES: dict[str, DataType] = {item.id: item for item in (
 # (SpO2, nhịp thở, VO2 max, buổi vận động, nước uống...) luôn được đọc như trước.
 SYNC_GROUPS: dict[str, tuple[str, ...]] = {
     "sleep": ("sleep", "daily-sleep-temperature-derivations", "respiratory-rate-sleep-summary"),
-    "rhr": ("daily-resting-heart-rate", "heart-rate"),
+    "rhr": ("daily-resting-heart-rate", "heart-rate", "heart-rate-hourly"),
     "hrv": ("daily-heart-rate-variability",),
     "steps": ("steps", "distance", "floors", "active-minutes", "active-zone-minutes", "active-energy-burned",
               "total-calories", "sedentary-period"),

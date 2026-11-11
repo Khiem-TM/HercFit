@@ -21,7 +21,7 @@ import logging
 import random
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 
 import httpx
@@ -104,6 +104,10 @@ def classify(status: int, reason: str | None) -> tuple[str, str]:
 
 def civil_date(day: date) -> dict[str, Any]:
     return {"date": {"year": day.year, "month": day.month, "day": day.day}}
+
+
+def _utc(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def field_path(data_type: str) -> str:
@@ -195,6 +199,31 @@ class GoogleHealthClient:
             body["pageToken"] = page_token
         page = await self._request("POST", f"users/me/dataTypes/{data_type}/dataPoints:dailyRollUp", body=body)
         return Page(page.get("rollupDataPoints") or [], page.get("nextPageToken") or None)
+
+    async def rollup_page(self, data_type: str, start: datetime, end: datetime, *, window_seconds: int,
+                          page_size: int = 1440, page_token: str | None = None) -> Page:
+        """Gộp theo cửa sổ thời gian thực [start, end); cửa sổ không có dữ liệu không được trả về."""
+        body: dict[str, Any] = {"range": {"startTime": _utc(start), "endTime": _utc(end)},
+                                "windowSize": f"{window_seconds}s", "pageSize": page_size}
+        if page_token:
+            body["pageToken"] = page_token
+        page = await self._request("POST", f"users/me/dataTypes/{data_type}/dataPoints:rollUp", body=body)
+        return Page(page.get("rollupDataPoints") or [], page.get("nextPageToken") or None)
+
+    async def rollup_all(self, data_type: str, start: datetime, end: datetime, *, window_seconds: int,
+                         page_size: int = 1440, max_pages: int = 50) -> Fetch:
+        result = Fetch()
+        while result.pages < max_pages:
+            page = await self.rollup_page(data_type, start, end, window_seconds=window_seconds, page_size=page_size,
+                                          page_token=result.next_token)
+            result.points.extend(page.points)
+            result.pages += 1
+            result.next_token = page.next_token
+            if not page.next_token:
+                return result
+        result.complete = False
+        logger.warning("google_health_page_budget type=%s pages=%s", data_type, result.pages)
+        return result
 
     async def list_all(self, data_type: str, *, filter: str | None = None, page_size: int = 1000,
                        max_pages: int = 50, page_token: str | None = None, reconcile: bool = False,

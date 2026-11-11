@@ -152,6 +152,16 @@ class HealthSampleRead(EntityRead):
     unit: str
     details: dict[str, Any]
 
+class HeartRateHourRead(BaseModel):
+    """Nhịp tim trong một giờ (rollUp của Google): giờ không có mẫu thì không có dòng."""
+    start_at: AwareDatetime
+    end_at: AwareDatetime
+    hour: int = Field(ge=0, le=23, description="Giờ địa phương bắt đầu cửa sổ")
+    bpm_avg: Decimal
+    bpm_min: int | None
+    bpm_max: int | None
+
+
 class HealthSampleQuery(DateRangeQuery):
     sample_type: SampleType | None = None
 

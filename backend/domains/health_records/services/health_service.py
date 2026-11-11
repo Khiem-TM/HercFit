@@ -119,6 +119,9 @@ class HealthService(UserService):
         rows = await views.workouts(self.session, self.user_id, query.start_date, query.end_date)
         return rows[query.offset:query.offset + query.limit]
 
+    async def heart_rate_hours(self, day: date, timezone: str = DEFAULT_TIMEZONE):
+        return await views.heart_rate_hours(self.session, self.user_id, day, timezone)
+
     async def samples(self, query: HealthSampleQuery):
         # Mẫu nhạy cảm (đường huyết) cần consent `sensitive` riêng của trợ lý, như context API (topic vitals).
         hidden = set() if await consent.device_access(self.session, self.user_id, "sensitive") else SENSITIVE_SAMPLES

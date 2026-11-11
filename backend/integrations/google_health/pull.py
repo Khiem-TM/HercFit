@@ -15,9 +15,10 @@ Với mỗi loại đã được cấp quyền đọc (domains/health_records/ty
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any, Iterator
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 
@@ -30,6 +31,7 @@ from integrations.google_health.client import PERMISSION, GoogleHealthClient, Go
 
 logger = logging.getLogger(__name__)
 LIST_WINDOW_DAYS = 90
+HOUR_SECONDS = 3600
 
 
 def chunks(start: date, end: date, days: int) -> Iterator[tuple[date, date]]:
@@ -44,12 +46,18 @@ async def fetch(client: GoogleHealthClient, t: DataType, start: date, end: date,
     """(các điểm có ngày địa phương trong [start, end), đã đọc trọn mọi trang hay chưa)."""
     points: list[kinds.HealthPoint] = []
     complete = True
-    rollup = t.read is Read.DAILY_ROLLUP
+    rollup = t.read in (Read.DAILY_ROLLUP, Read.HOURLY_ROLLUP)
     for low, high in chunks(start, end, t.chunk_days if rollup else LIST_WINDOW_DAYS):
-        if rollup:
-            result = await client.daily_rollup_all(t.id, low, high, page_size=t.page_size)
+        if t.read is Read.HOURLY_ROLLUP:
+            # Nửa đêm địa phương → nửa đêm địa phương: mỗi cửa sổ giờ nằm trọn trong một ngày.
+            local = ZoneInfo(zone)
+            result = await client.rollup_all(t.google_id, datetime.combine(low, time.min, local),
+                                             datetime.combine(high, time.min, local),
+                                             window_seconds=HOUR_SECONDS, page_size=t.page_size)
+        elif rollup:
+            result = await client.daily_rollup_all(t.google_id, low, high, page_size=t.page_size)
         else:
-            result = await client.list_all(t.id, filter=kinds.filter_for(t, low, high), page_size=t.page_size,
+            result = await client.list_all(t.google_id, filter=kinds.filter_for(t, low, high), page_size=t.page_size,
                                            reconcile=t.read is Read.RECONCILE, family=family)
         complete = complete and result.complete
         for raw in result.points:
