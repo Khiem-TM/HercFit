@@ -79,6 +79,16 @@ export interface HealthProfile {
   conflicts: string[]
 }
 
+/** Nhịp tim trong một giờ (GET /api/health/heart-rate/hourly); giờ không có mẫu thì không có dòng. */
+export interface HeartRateHour {
+  start_at: string
+  end_at: string
+  hour: number
+  bpm_avg: Numeric
+  bpm_min: number | null
+  bpm_max: number | null
+}
+
 export interface DailyHealth {
   id: string
   local_date: string

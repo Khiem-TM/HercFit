@@ -91,7 +91,7 @@ export async function syncAndWait(api: HealthApi, {
 export const TYPE_LABELS: Record<string, string> = {
   steps: 'Bước chân', distance: 'Quãng đường', floors: 'Số tầng', 'active-minutes': 'Phút vận động',
   'active-zone-minutes': 'Phút vùng tim', 'active-energy-burned': 'Năng lượng vận động',
-  'total-calories': 'Tổng năng lượng tiêu hao', 'heart-rate': 'Nhịp tim', 'sedentary-period': 'Thời gian ít vận động',
+  'total-calories': 'Tổng năng lượng tiêu hao', 'heart-rate': 'Nhịp tim', 'heart-rate-hourly': 'Nhịp tim theo giờ', 'sedentary-period': 'Thời gian ít vận động',
   'daily-resting-heart-rate': 'Nhịp tim nghỉ', 'daily-heart-rate-variability': 'HRV',
   'daily-oxygen-saturation': 'SpO₂', 'daily-respiratory-rate': 'Nhịp thở',
   'daily-sleep-temperature-derivations': 'Nhiệt độ da ban đêm', 'daily-vo2-max': 'VO₂ max theo ngày',

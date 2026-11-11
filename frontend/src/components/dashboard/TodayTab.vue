@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { AlertCircle, Clock, TriangleAlert } from 'lucide-vue-next'
+import { AlertCircle, Clock, HeartPulse, TriangleAlert } from 'lucide-vue-next'
 import type { BodyMetricRead, GoalRead, UserProfile } from '@/types/api'
 import { useAuth } from '@/composables/useAuth'
 import ProfileAside from './ProfileAside.vue'
@@ -10,7 +10,7 @@ import type { DashboardData } from './useDashboardData'
 
 const props = defineProps<{ data: DashboardData }>()
 const emit = defineEmits<{
-  detail: [kind: 'ready' | 'workout' | 'nutrition']
+  detail: [kind: 'ready' | 'workout' | 'nutrition' | 'heart']
   settings: [tab: 'profile' | 'integrations' | 'notifications']
   ask: [text: string]
   prefill: [text: string]
@@ -35,6 +35,8 @@ const shortWeekday = (iso: string) => `${WEEKDAY_LONG[weekday(iso)]} ${iso.slice
 const typedUser = computed(() => user.value as UserProfile | null)
 const goal = computed(() => currentGoal.value as GoalRead | null)
 const latest = computed(() => latestBodyMetric.value as BodyMetricRead | null)
+// Nhịp tim hôm nay theo bản gộp ngày của Google; chi tiết từng giờ ở trang Nhịp tim.
+const heart = computed(() => health.value?.daily.find(day => day.local_date === props.data.today) ?? null)
 </script>
 
 <template>
@@ -217,6 +219,20 @@ const latest = computed(() => latestBodyMetric.value as BodyMetricRead | null)
             <div class="hf-acts"><button type="button" class="hf-btn pri" @click="emit('create-plan')">Lập lịch với trợ lý</button></div>
           </template>
         </section>
+
+        <!-- Khối 5: Nhịp tim -->
+        <section v-if="connection?.status === 'ACTIVE'" class="hf-card hf-c12" aria-labelledby="b5">
+          <div class="hf-hd">
+            <h2 id="b5" class="hf-lbl"><HeartPulse :size="14" aria-hidden="true" /> Nhịp tim hôm nay</h2>
+          </div>
+          <div v-if="heart?.hr_avg_bpm != null" class="hr-row">
+            <div class="baseline-row"><span class="hf-dg" style="font-size: 56px">{{ vn(heart.hr_avg_bpm) }}</span>
+              <span class="unit-strong">bpm trung bình</span></div>
+            <div class="hf-mut small">Thấp nhất {{ heart.hr_min_bpm ?? '—' }} · cao nhất {{ heart.hr_max_bpm ?? '—' }} bpm</div>
+          </div>
+          <p v-else class="hf-mut para">Chưa có nhịp tim hôm nay từ thiết bị.</p>
+          <div class="hf-acts"><button type="button" class="hf-btn pri" @click="emit('detail', 'heart')">Xem theo giờ</button></div>
+        </section>
       </div>
 
       <ProfileAside :user="typedUser" :profile="health?.profile ?? null" :latest="latest" :metrics="data.metrics.value"
@@ -227,6 +243,7 @@ const latest = computed(() => latestBodyMetric.value as BodyMetricRead | null)
 
 <style scoped>
 .today { display: flex; flex-direction: column; gap: 16px; }
+.hr-row { display: flex; align-items: flex-end; gap: 12px 28px; flex-wrap: wrap; }
 .err-text { display: flex; gap: 10px; align-items: center; }
 .dash { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 16px; align-items: start; }
 .headline { display: flex; align-items: center; gap: 18px; }
