@@ -13,7 +13,7 @@ from agentic.agents.adaptive_router import (
     jev_routing_projection,
 )
 from agentic.agents.specialists import BY_NAME, SPECIALISTS
-from agentic.agents.state import RouteDecision
+from agentic.agents.state import GOAL_INTENTS, RouteDecision
 from agentic.components.context_filter import compact_evidence, model_graph_context
 from agentic.core import roster
 from agentic.core.app.schemas.response import Clarification
@@ -59,9 +59,17 @@ PERSONAL_ANSWER = get_prompt("orchestration.personal_answer", "v2")
 NORMAL_ROUTING_PROMPT = get_prompt("orchestration.route_normal", "v8")
 PLAN_ROUTING = get_prompt("orchestration.plan", "v3")
 PLAN_MODE_REPLY = get_prompt("orchestration.plan_mode_reply", "v3")
+# Lệnh ghi thuộc miền chỉ có ở chế độ Plan (mục tiêu): lời mời nói đúng việc người dùng yêu cầu, không gọi nó là tư vấn.
+PLAN_MODE_WRITE_REPLY = get_prompt("orchestration.plan_mode_write_reply", "v1")
 PERSONAL_MEASURE = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:kg|cm|tuổi|tuoi|kcal|bpm)\b", re.I)
 # Yêu cầu cá nhân hoá vẫn tra cứu tri thức: mỗi chủ đề một ý định QA cho kế hoạch tra cứu.
 TOPIC_INTENTS = {"nutrition": "FOOD_KNOWLEDGE_QA", "body": "FOOD_KNOWLEDGE_QA"}
+
+
+def hitl_requested(decision):
+    """Router hỏi lại có cấu trúc: action clarify kèm thông tin còn thiếu. Đây là hợp đồng HITL của lượt: trạng thái
+    needs_input và một thẻ hỏi; không luật tư vấn, cá nhân hoá hay tra cứu nào được đổi nó thành câu trả lời."""
+    return decision.action == "clarify" and bool(decision.missing_fields)
 
 
 def local_now_minute():
@@ -632,7 +640,16 @@ class OrchestrationAgent:
         if redirect:
             # Những gì lượt này đã lưu vẫn được báo lại trước lời mời.
             result.update(
-                prepared_reply="\n\n".join(p for p in (write_reply(state), PLAN_MODE_REPLY) if p),
+                prepared_reply="\n\n".join(
+                    p
+                    for p in (
+                        write_reply(state),
+                        PLAN_MODE_WRITE_REPLY
+                        if decision.intent in GOAL_INTENTS
+                        else PLAN_MODE_REPLY,
+                    )
+                    if p
+                ),
                 suggested_mode=mode.PLAN,
             )
         if jev_events:
@@ -668,6 +685,9 @@ class OrchestrationAgent:
     def research_plan(decision, request, *, researched=False, deep=False):
         """Yêu cầu cá nhân hoá tra cứu câu hỏi công khai của nó (một lần mỗi lượt) khi câu hỏi đó có thể
         diễn đạt mà không cần chi tiết cá nhân; nếu không, chỉ trả lời từ dữ liệu của người dùng."""
+        if hitl_requested(decision):
+            # Hợp đồng HITL: router đã nêu thông tin cần hỏi lại; tư vấn hay tra cứu không bao giờ thay câu hỏi đó.
+            return
         # Không có gì cụ thể để tra cứu (chủ đề "general"): trả lời từ thẻ ngữ cảnh và cuộc trò chuyện.
         # Chủ đề "general" chỉ được tra cứu ở chế độ Plan (deep), nơi mọi câu tư vấn đều cần nguồn.
         researched = researched or (decision.topic == "general" and not deep)

@@ -1,3 +1,4 @@
+import re
 from typing import Annotated, Any, Literal, get_args
 
 from langchain_core.messages import AnyMessage
@@ -78,6 +79,30 @@ class AgentTask(BaseModel):
         return value if value in get_args(Domain) else None
 
 
+# Lệnh ghi mục tiêu: đặt mục tiêu mới, hoặc sửa/kết thúc sớm/hoàn thành/huỷ mục tiêu đang theo.
+GOAL_INTENTS = frozenset({"GOAL_SET", "GOAL_UPDATE"})
+INTENT_ALIASES = {
+    **dict.fromkeys(("SET_GOAL", "CREATE_GOAL", "NEW_GOAL", "GOAL_CREATE", "ADD_GOAL"), "GOAL_SET"),
+    **dict.fromkeys(
+        (
+            "UPDATE_GOAL",
+            "EDIT_GOAL",
+            "GOAL_EDIT",
+            "END_GOAL",
+            "GOAL_END",
+            "CANCEL_GOAL",
+            "GOAL_CANCEL",
+            "COMPLETE_GOAL",
+            "GOAL_COMPLETE",
+            "FINISH_GOAL",
+            "GOAL_CHANGE",
+            "CHANGE_GOAL",
+        ),
+        "GOAL_UPDATE",
+    ),
+}
+
+
 class ContextNeed(BaseModel):
     """Câu hỏi cần dữ liệu đã lưu của người dùng: HercFit truy vấn context graph (knowledge_graph/context)."""
 
@@ -102,6 +127,15 @@ class ContextNeed(BaseModel):
 class RouteDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
     intent: str
+
+    @field_validator("intent", mode="before")
+    @classmethod
+    def canonical_intent(cls, value):
+        """Nhãn router tự đặt ("SET_GOAL", "cancel goal") về nhãn chuẩn mà các luật code dựa vào. Không bao giờ từ chối:
+        nhãn lạ giữ nguyên để lượt chạy không hỏng, nhưng luật code chỉ nhận ra nhãn chuẩn (lượt 36cfc463: GOAL_UPDATE
+        không được nhận là lệnh ghi nên luật tư vấn đổi câu hỏi lại thành tra cứu)."""
+        text = re.sub(r"[\s\-]+", "_", str(value or "").strip()).upper()
+        return INTENT_ALIASES.get(text, text)
 
     next_agent: Literal["tool", "research", "orchestrator"]
     domain: Domain | None = None

@@ -27,5 +27,20 @@ CONTEXT_RULES = (
     ),
 )
 
-ROUTING_PROMPT = _revise(_V6_ROUTING, CONTEXT_RULES)
-NORMAL_ROUTING_PROMPT = _revise(_V6_NORMAL, CONTEXT_RULES)
+# Đặt/sửa/kết thúc mục tiêu là lệnh ghi có xác nhận: router v6 không có nhãn cho chúng nên model tự đặt (SET_GOAL,
+# GOAL_UPDATE) và luật tư vấn coi chúng là câu hỏi cần tra cứu (lượt 36cfc463).
+GOAL_RULES = (
+    "Mục tiêu: đặt mục tiêu mới là intent GOAL_SET; sửa, kết thúc sớm, hoàn thành hay huỷ mục tiêu đang theo là\n"
+    "GOAL_UPDATE (yêu cầu gồm cả hai việc dùng GOAL_UPDATE). Đây là lệnh ghi domain goals, không phải câu hỏi tư vấn,\n"
+    "không research. Đủ thông tin thì action tool. Thiếu thì action clarify và liệt kê missing_fields, mỗi thông tin một\n"
+    "mục ngắn (vd. loại mục tiêu, hạn hoàn thành, cân nặng mục tiêu); HercFit hỏi chúng bằng thẻ, không hỏi bằng văn bản.\n"
+)
+
+ROUTING_PROMPT = _revise(_V6_ROUTING, CONTEXT_RULES) + GOAL_RULES
+NORMAL_ROUTING_PROMPT = _revise(_V6_NORMAL, CONTEXT_RULES) + GOAL_RULES
+
+# Chế độ ghi nhanh không có miền goals: lời mời nói đúng việc người dùng muốn làm thay vì gọi nó là tư vấn.
+PLAN_MODE_WRITE_REPLY = (
+    "Đặt hoặc thay đổi mục tiêu được thực hiện ở chế độ Plan, nơi HercFit đọc mục tiêu hiện tại của bạn và hỏi các "
+    'thông tin còn thiếu bằng thẻ. Bấm "Hỏi ở chế độ Plan" bên dưới để gửi lại yêu cầu này.'
+)

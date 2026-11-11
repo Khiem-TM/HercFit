@@ -21,6 +21,8 @@ ROUTE_INTENTS = {i.value for i in Intent} | {
     "ENERGY_BALANCE",
     "PROFILE_REVIEW",
     "PROFILE_UPDATE",
+    "GOAL_SET",
+    "GOAL_UPDATE",
     "READ",
     "SAFETY",
     "clarification",

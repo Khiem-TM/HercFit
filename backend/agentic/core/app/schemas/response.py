@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
@@ -125,20 +125,50 @@ class NumberFrame(BaseModel):
         return self
 
 
+class DatePreset(BaseModel):
+    label: str = Field(max_length=40)
+    value: date
+
+
+class DateFrame(BaseModel):
+    """One calendar day picked from a date picker or a preset ("3 tháng nữa"), never typed as free text."""
+
+    min: date
+    max: date
+    # Hiển thị sẵn đã chọn; None nghĩa là để người dùng tự chọn.
+    default: date | None = None
+    presets: list[DatePreset] = Field(default_factory=list, max_length=6)
+
+    @model_validator(mode="after")
+    def _within(self):
+        if not self.min <= self.max:
+            raise ValueError("date range is empty")
+        if (self.max - self.min).days > 366 * 5:
+            raise ValueError("date range longer than five years")
+        if self.default is not None and not self.min <= self.default <= self.max:
+            raise ValueError("default outside the range")
+        values = [preset.value for preset in self.presets]
+        if any(not self.min <= value <= self.max for value in values) or len(set(values)) != len(
+            values
+        ):
+            raise ValueError("presets must be distinct days inside the range")
+        return self
+
+
 class ClarifyQuestion(BaseModel):
     """One missing piece of information as a standard card frame; the client asks these one step at a time.
 
     Every frame is answered on the card itself (no typed free text):
     'single'/'quick_reply' pick one option, 'multiple' picks min_select..max_select options, 'number' picks a
-    value of `number` (stepper and presets), 'sets' edits sets × reps × kg per exercise: the exercises picked in
-    for_questions, or its own options as rows.
+    value of `number` (stepper and presets), 'date' picks a day of `date_frame` (calendar and presets), 'sets' edits
+    sets × reps × kg per exercise: the exercises picked in for_questions, or its own options as rows.
     """
 
     id: str
     # Chủ đề ngắn ("Mục tiêu chính") dùng làm nhãn cho câu trả lời trong tin nhắn được soạn.
     label: str = Field(max_length=60)
     question: str = Field(max_length=300)
-    mode: Literal["single", "multiple", "quick_reply", "number", "sets"] = "single"
+    mode: Literal["single", "multiple", "quick_reply", "number", "date", "sets"] = "single"
     # Catalog picks list every record the reply showed ("những bài nào trong danh sách?").
     options: list[ClarifyOption] = Field(default_factory=list, max_length=12)
     # Câu hỏi tuỳ chọn có thể bỏ qua trong trình hướng dẫn.
@@ -148,6 +178,7 @@ class ClarifyQuestion(BaseModel):
     for_questions: list[str] = Field(default_factory=list)
     show_if: ShowIf | None = None
     number: NumberFrame | None = None
+    date_frame: DateFrame | None = None
 
     @model_validator(mode="after")
     def _frame(self):
@@ -156,8 +187,10 @@ class ClarifyQuestion(BaseModel):
             raise ValueError("option ids must be unique")
         if (self.mode == "number") != (self.number is not None):
             raise ValueError("a number frame, and only it, carries a number range")
-        if self.mode == "number" and self.options:
-            raise ValueError("a number frame has presets, not options")
+        if (self.mode == "date") != (self.date_frame is not None):
+            raise ValueError("a date frame, and only it, carries a date range")
+        if self.mode in {"number", "date"} and self.options:
+            raise ValueError("a number or date frame has presets, not options")
         if self.mode in {"single", "quick_reply"} and (not self.options or self.max_select != 1):
             raise ValueError("a single choice needs options and picks one")
         if self.mode == "multiple" and not (

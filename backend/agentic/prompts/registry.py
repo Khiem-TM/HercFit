@@ -34,6 +34,7 @@ from agentic.prompts.v6 import routing as v6_routing
 from agentic.prompts.v6.domains import CAPABILITY_GUIDANCE as CAPABILITY_GUIDANCE_V6
 from agentic.prompts.v7.domains import CAPABILITY_GUIDANCE as CAPABILITY_GUIDANCE_V7
 from agentic.prompts.v7.tool import PROMPT as TOOL_PROMPT_V7
+from agentic.prompts.v8 import clarification as v8_clarification
 from agentic.prompts.v8 import context as v8_context
 from agentic.prompts.v8 import routing as v8_routing
 
@@ -93,6 +94,9 @@ TEMPLATES = MappingProxyType(
         ("orchestration.graph_context", "v2"): v8_context.GRAPH_CONTEXT_GUIDANCE,
         ("orchestration.graph_answer", "v1"): v8_context.ANSWER_GRAPH_GUIDANCE,
         ("context.cypher", "v1"): v8_context.CYPHER_PROMPT,
+        # v8: lệnh ghi mục tiêu (GOAL_SET/GOAL_UPDATE) hỏi lại bằng thẻ; lời mời sang Plan cho lệnh ghi; khung ngày.
+        ("orchestration.plan_mode_write_reply", "v1"): v8_routing.PLAN_MODE_WRITE_REPLY,
+        ("clarification.form", "v4"): v8_clarification.PROMPT,
     }
 )
 
