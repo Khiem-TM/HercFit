@@ -7,6 +7,7 @@ tách riêng. Một sự kiện chỉ được xác nhận sau khi graph đã co
 
 import argparse
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -259,11 +260,44 @@ class Worker:
             await self.refresh_models(await self.projector.stale_model_owners(limit=100000))
             await self.projector.query("MATCH (s:KGState {key:'main'}) SET s.ready=true")
 
+    async def listen(self):
+        """Một kết nối LISTEN kg_outbox cho mỗi database nguồn (trigger kg_outbox_notify, đánh thức khi commit)."""
+        connections = []
+        for dsn in self.dsns:
+            conn = await AsyncConnection.connect(dsn, autocommit=True)
+            await conn.execute("LISTEN kg_outbox")
+            connections.append(conn)
+        return connections
+
+    @staticmethod
+    async def _notified(conn, timeout):
+        async for _ in conn.notifies(timeout=timeout, stop_after=1):
+            # Một lô ghi có thể sinh nhiều thông báo: gom hết để chỉ chạy một vòng chiếu.
+            async for _ in conn.notifies(timeout=0.02):
+                pass
+            return True
+        return False
+
+    async def wait(self, listeners, timeout):
+        if not listeners:
+            await asyncio.sleep(timeout)
+            return
+        tasks = [asyncio.create_task(self._notified(conn, timeout)) for conn in listeners]
+        try:
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     async def run(self, *, once=False):
         await self.projector.initialize()
         next_maintenance = 0
+        listeners = []
         while True:
             try:
+                if not listeners and not once:
+                    listeners = await self.listen()
                 if monotonic() >= next_maintenance:
                     await self.reconcile()
                     await self.projector.prune()
@@ -278,17 +312,130 @@ class Worker:
                 metrics.incr("worker_failures_total", worker="kg_worker", error=type(exc).__name__)
                 if once:
                     raise
+                for conn in listeners:
+                    await conn.close()
+                listeners = []  # kết nối lại ở vòng sau; poll vẫn là dự phòng
             if once:
                 return
-            await asyncio.sleep(value(self.settings, "KG_WORKER_POLL_SECONDS", 1))
+            # Poll định kỳ vẫn chạy: sự kiện đến lại sau backoff không sinh thông báo mới.
+            await self.wait(listeners, value(self.settings, "KG_WORKER_POLL_SECONDS", 1))
+
+    async def verify(self, repair=False):
+        """So graph với nguồn: phiên bản aggregate (kg_source_versions), cấu trúc (ON_DAY, REFERS_TO) và tổng hợp Day.
+
+        repair: phát lại aggregate lệch từ bảng nguồn và tính lại Day lệch. Dữ liệu thiết bị không có bảng nguồn riêng
+        (backend dựng từ health_points), nên chỉ được báo cáo, không phát lại ở đây."""
+        from core.graph_outbox import SOURCE_TABLES
+
+        from .projection import DAY_KINDS
+
+        source = {}
+        for dsn in self.dsns:
+            async with await AsyncConnection.connect(
+                dsn, autocommit=True, row_factory=dict_row
+            ) as conn:
+                pending = {
+                    (row["aggregate_type"], row["aggregate_id"])
+                    for row in await (
+                        await conn.execute(
+                            "SELECT aggregate_type, aggregate_id FROM kg_outbox WHERE delivered_at IS NULL"
+                        )
+                    ).fetchall()
+                }
+                for row in await (
+                    await conn.execute(
+                        """SELECT aggregate_type, aggregate_id, version, operation FROM kg_source_versions
+                        WHERE source='backend'"""
+                    )
+                ).fetchall():
+                    key = (row["aggregate_type"], row["aggregate_id"])
+                    if key not in pending:  # còn sự kiện chưa giao: chưa thể so
+                        source[key] = row
+        graph = {
+            (row["kind"], row["id"]): row
+            for row in await self.projector.query(
+                """MATCH (n:KGEntity) WHERE n.source='backend' AND n.source_id IS NOT NULL
+                RETURN n.kind AS kind, n.source_id AS id, n.source_version AS version, n.deleted AS deleted"""
+            )
+        }
+        stale, visible = [], []
+        for key, row in source.items():
+            node = graph.get(key)
+            if row["operation"] == "upsert" and (
+                node is None or (node["version"] or 0) < row["version"]
+            ):
+                stale.append(key)
+            elif row["operation"] == "delete" and node is not None and node["deleted"] is False:
+                visible.append(key)
+        structure = (
+            await self.projector.query(
+                """
+            CALL () { MATCH (n:KGEntity) WHERE n.kind IN $kinds AND n.deleted = false AND n.local_date IS NOT NULL
+                      AND NOT (n)-[:ON_DAY]->(:Day) RETURN count(n) AS unlinked }
+            CALL () { MATCH (i:MealItem) WHERE NOT (i)-[:REFERS_TO]->(:Food) RETURN count(i) AS items_without_food }
+            CALL () { MATCH (d:Day)
+                      OPTIONAL MATCH (m:Meal {owner_id: d.owner_id, local_date: d.date})
+                      WHERE m.deleted = false OR m.pruned = true
+                      WITH d, count(m) AS meals WHERE meals <> d.meals
+                      RETURN collect(d.key) AS days }
+            RETURN unlinked, items_without_food, days
+        """,
+                kinds=list(DAY_KINDS),
+            )
+        )[0]
+        report = {
+            "aggregates_checked": len(source),
+            "stale_or_missing": len(stale),
+            "deleted_but_visible": len(visible),
+            "records_without_day": structure["unlinked"],
+            "meal_items_without_food": structure["items_without_food"],
+            "days_out_of_sync": len(structure["days"]),
+        }
+        if repair:
+            requeued = 0
+            async with await AsyncConnection.connect(self.coordinator_dsn, autocommit=True) as conn:
+                for kind, ident in stale + visible:
+                    if kind in SOURCE_TABLES:
+                        await conn.execute(
+                            f"SELECT kg_publish_backend(%s, to_jsonb(t)) FROM {SOURCE_TABLES[kind]} t WHERE t.id=%s",
+                            (kind, ident),
+                        )
+                        requeued += 1
+            for day_key in structure["days"]:
+                _, owner, day = day_key.split(":", 2)
+                probe = ProjectionEvent(
+                    event_id="00000000-0000-0000-0000-000000000000",
+                    source="backend",
+                    aggregate_type="Meal",
+                    aggregate_id="verify",
+                    owner_id=owner,
+                    aggregate_version=1,
+                    operation="upsert",
+                    occurred_at=datetime.now(timezone.utc),
+                )
+                async with self.driver.session(
+                    database=value(self.settings, "NEO4J_DATABASE", "neo4j")
+                ) as session:
+                    await session.execute_write(
+                        self.projector._roll_up, probe, {datetime.fromisoformat(day).date()}
+                    )
+            report.update(requeued=requeued, days_recomputed=len(structure["days"]))
+        return report
 
 
 async def main(args=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["run", "backfill", "rebuild", "retry", "reconcile"])
+    parser.add_argument(
+        "command", choices=["run", "backfill", "rebuild", "retry", "reconcile", "verify"]
+    )
     parser.add_argument("--once", action="store_true", help="Process a single batch (run only)")
     parser.add_argument(
         "--confirm-rebuild", action="store_true", help="Acknowledge deletion of derived graph data"
+    )
+    parser.add_argument(
+        "--repair",
+        action="store_true",
+        help="verify: requeue drifted aggregates and recompute drifted days",
     )
     options = parser.parse_args(args)
     if options.command == "rebuild" and not options.confirm_rebuild:
@@ -307,6 +454,8 @@ async def main(args=None):
                 if not acquired:
                     raise RuntimeError("Another projection worker is active; retry the command")
                 await worker.retry()
+        elif options.command == "verify":
+            print(json.dumps(await worker.verify(repair=options.repair), ensure_ascii=False))
         else:
             await worker.reconcile(limit=100000)
     finally:

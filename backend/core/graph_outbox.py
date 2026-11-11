@@ -104,6 +104,19 @@ ALTER TABLE kg_outbox ALTER COLUMN occurred_at SET DEFAULT clock_timestamp();
 CREATE INDEX IF NOT EXISTS ix_kg_outbox_pending
     ON kg_outbox (available_at, occurred_at) WHERE delivered_at IS NULL;
 CREATE INDEX IF NOT EXISTS ix_kg_outbox_owner ON kg_outbox (owner_id);
+-- Read-your-writes gate: does this owner still have undelivered events?
+CREATE INDEX IF NOT EXISTS ix_kg_outbox_owner_pending
+    ON kg_outbox (owner_id) WHERE delivered_at IS NULL;
+-- Delivered at commit only: the projection worker LISTENs and projects at once instead of on its next poll.
+-- Shared with the agent migration (009): whichever service creates the envelope first installs it.
+CREATE OR REPLACE FUNCTION kg_outbox_notify() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM pg_notify('kg_outbox', '');
+    RETURN NULL;
+END $$;
+DROP TRIGGER IF EXISTS kg_outbox_notify ON kg_outbox;
+CREATE TRIGGER kg_outbox_notify AFTER INSERT ON kg_outbox
+    FOR EACH STATEMENT EXECUTE FUNCTION kg_outbox_notify();
 CREATE TABLE IF NOT EXISTS kg_source_versions (
     source text NOT NULL DEFAULT 'backend',
     aggregate_type text NOT NULL,
@@ -202,8 +215,8 @@ BEGIN
         WHEN 'User' THEN entity_id
         WHEN 'Food' THEN data->>'owner_user_id'
         ELSE data->>'user_id' END;
+    -- A finished goal stays in the graph with its status (goal history); only removal is a delete.
     action := CASE WHEN force_delete OR NOT COALESCE((data->>'is_active')::boolean, true)
-                   OR (kind = 'Goal' AND data->>'status' <> 'IN_PROGRESS')
                    THEN 'delete' ELSE 'upsert' END;
     -- Device data reaches the assistant only with the user's consent; without it
     -- the record is published as a tombstone (kg_device_consent).

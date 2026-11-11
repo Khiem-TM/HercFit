@@ -1139,12 +1139,14 @@ def nutrition_line(model, today):
         if nutrition.get("likely_incomplete_logging")
         else None
     )
-    return "Dinh dưỡng: " + _join(
+    body = _join(
         average,
         *days,
         partial,
         "một số món thiếu dữ liệu dinh dưỡng" if nutrition.get("incomplete") else None,
     )
+    # Không có bữa nào trong cửa sổ 7 ngày: không in một dòng rỗng "Dinh dưỡng: ".
+    return "Dinh dưỡng: " + body if body else None
 
 
 def foods_line(model):
