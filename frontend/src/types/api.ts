@@ -313,8 +313,16 @@ export interface NumberFrame {
   presets?: number[]
 }
 
+/** Một ngày (ISO 'YYYY-MM-DD') chọn trên lịch hoặc từ mốc gợi ý trong [min, max]; khoảng và mốc do agent dựng. */
+export interface DateFrame {
+  min: string
+  max: string
+  default?: string | null
+  presets?: { label: string; value: string }[]
+}
+
 /** Khung trên thẻ; mọi khung đều trả lời trên thẻ, không bao giờ bằng văn bản tự do gõ tay. */
-export type ClarifyMode = 'single' | 'multiple' | 'quick_reply' | 'number' | 'sets'
+export type ClarifyMode = 'single' | 'multiple' | 'quick_reply' | 'number' | 'date' | 'sets'
 
 export interface ClarifyQuestion {
   id: string
@@ -322,8 +330,8 @@ export interface ClarifyQuestion {
   label: string
   question: string
   /**
-   * 'number' chọn một giá trị theo `number`. 'sets' sửa sets × reps × kg theo từng bài tập: các bài đã chọn trong
-   * `for_questions`, hoặc các lựa chọn riêng của nó.
+   * 'number' chọn một giá trị theo `number`, 'date' chọn một ngày theo `date_frame`. 'sets' sửa sets × reps × kg theo
+   * từng bài tập: các bài đã chọn trong `for_questions`, hoặc các lựa chọn riêng của nó.
    */
   mode: ClarifyMode
   options: ClarifyOption[]
@@ -335,6 +343,7 @@ export interface ClarifyQuestion {
   /** Chỉ hỏi khi câu hỏi trước đó được trả lời bằng một trong các lựa chọn này. */
   show_if?: { question: string; option_ids: string[] } | null
   number?: NumberFrame | null
+  date_frame?: DateFrame | null
 }
 
 /** Form để con người quyết định, hỏi từng câu một và trả lời gộp thành một tin nhắn. */
