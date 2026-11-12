@@ -1,0 +1,5 @@
+# Test tooling (local). Runtime dependencies stay in backend/requirements.txt.
+-r ../backend/requirements.txt
+pytest==9.1.1
+pytest-asyncio==1.4.0
+fakeredis==2.40.0

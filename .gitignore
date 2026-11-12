@@ -86,9 +86,8 @@ coverage.xml
 *.py,cover
 .hypothesis/
 
-# Test suites, evaluation and fixtures at any directory level (kept locally in tests/, not versioned)
+# Thư mục test lạc chỗ ở mọi cấp; bộ test chính nằm trong tests/ ở gốc repo và được theo dõi
 test/
-tests/
 __tests__/
 spec/
 specs/
@@ -98,6 +97,8 @@ test_*.py
 conftest.py
 *.test.*
 *.spec.*
+!/tests/**/test_*.py
+!/tests/**/conftest.py
 
 # --- Databases & Local Persistence ---
 *.db

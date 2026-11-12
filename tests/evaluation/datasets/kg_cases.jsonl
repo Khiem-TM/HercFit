@@ -1,0 +1,39 @@
+{"id": "meal-dinner", "group": "meals", "message": "Tối qua tôi ăn gì?", "tools": ["list_meals", "get_meals", "get_progress"], "keywords": [["phở"]]}
+{"id": "meal-lunch", "group": "meals", "message": "Bữa trưa hôm qua của tôi là món gì?", "tools": ["list_meals", "get_meals", "get_progress"], "keywords": [["cơm sườn"]]}
+{"id": "meal-breakfast", "group": "meals", "message": "Sáng nay tôi đã ăn gì rồi?", "tools": ["list_meals", "get_meals", "get_progress"], "keywords": [["bánh mì"]]}
+{"id": "meal-protein", "group": "meals", "message": "Món phở tối qua có bao nhiêu protein?", "tools": ["list_meals", "get_meals", "get_progress", "get_foods", "list_foods"], "keywords": [["protein"]]}
+{"id": "meal-buncha-when", "group": "meals", "message": "Lần gần nhất tôi ăn bún chả là khi nào?", "tools": ["list_meals", "get_meals"], "keywords": [["bún chả"]]}
+{"id": "meal-week", "group": "meals", "message": "Tuần này tôi đã ăn những món gì?", "tools": ["list_meals", "get_meals", "get_progress"], "keywords": [["phở"], ["bún chả"]]}
+{"id": "metric-latest", "group": "metrics", "message": "Cân nặng gần nhất của tôi là bao nhiêu?", "tools": ["latest_metrics", "list_metrics", "get_metrics"], "keywords": [["71.8", "71,8"]]}
+{"id": "metric-delta", "group": "metrics", "message": "Tôi đã giảm được bao nhiêu cân so với tháng trước?", "tools": ["latest_metrics", "list_metrics", "get_metrics"], "keywords": [["2.2", "2,2"]]}
+{"id": "metric-height", "group": "metrics", "message": "Chiều cao của tôi đang ghi nhận là bao nhiêu?", "tools": ["latest_metrics", "list_metrics", "get_metrics", "get_profile"], "keywords": [["172"]]}
+{"id": "metric-trend", "group": "metrics", "message": "Cân nặng của tôi đang tăng hay giảm?", "tools": ["latest_metrics", "list_metrics", "get_metrics"], "keywords": [["giảm"]]}
+{"id": "goal-current", "group": "goals", "message": "Mục tiêu hiện tại của tôi là gì?", "tools": ["current_goal", "list_goals", "get_goals"], "keywords": [["69"]]}
+{"id": "goal-gap", "group": "goals", "message": "Tôi còn cách mục tiêu cân nặng bao xa?", "tools": ["current_goal", "list_goals", "get_goals", "latest_metrics", "list_metrics"], "keywords": [["2.8", "2,8"]]}
+{"id": "goal-deadline", "group": "goals", "message": "Hạn chót mục tiêu của tôi là ngày nào?", "tools": ["current_goal", "list_goals", "get_goals"], "keywords": [["{target_iso}", "{target_vn}", "{target_vn0}"]]}
+{"id": "progress-today", "group": "progress", "message": "Xem tiến độ hôm nay", "tools": ["get_progress"], "keywords": [], "context": [["bánh mì"]]}
+{"id": "progress-yday", "group": "progress", "message": "tiến độ hôm qua", "tools": ["get_progress"], "keywords": [], "context": [["phở"], ["cơm sườn"]]}
+{"id": "progress-range", "group": "progress", "message": "Cho tôi xem tiến độ từ {d7} đến {d0}", "tools": ["get_progress"], "keywords": [], "context": [["phở"], ["bún chả"]]}
+{"id": "progress-protein", "group": "progress", "message": "Hôm qua tôi nạp bao nhiêu protein?", "tools": ["get_progress", "list_meals", "get_meals"], "keywords": [["protein"]]}
+{"id": "progress-summary", "group": "progress", "message": "Tổng hợp dinh dưỡng hôm qua giúp tôi", "tools": ["get_progress", "list_meals"], "keywords": [], "context": [["protein"]]}
+{"id": "train-latest", "group": "trainings", "message": "Buổi tập gần nhất của tôi là gì?", "tools": ["list_trainings", "get_trainings", "get_training_summary", "get_training_insights"], "keywords": [["ngực", "bench"]]}
+{"id": "train-exercise", "group": "trainings", "message": "Hôm kia tôi tập bài gì?", "tools": ["list_trainings", "get_trainings", "get_training_summary"], "keywords": [["đẩy ngực", "bench"]]}
+{"id": "train-run", "group": "trainings", "message": "Lần chạy bộ gần nhất tôi chạy bao xa?", "tools": ["list_trainings", "get_trainings", "get_running_summary", "get_training_summary"], "keywords": [["5 km", "5km", "5000", "5,0", "5.0"]]}
+{"id": "train-bench-load", "group": "trainings", "message": "Lần trước tôi đẩy ngực với mức tạ bao nhiêu?", "tools": ["list_trainings", "get_trainings", "get_strength_progress", "get_strength_records"], "keywords": [["60"]]}
+{"id": "train-count", "group": "trainings", "message": "Tuần này tôi tập mấy buổi?", "tools": ["list_trainings", "get_trainings", "get_training_summary", "get_training_load"], "keywords": [["2 buổi", "hai buổi"]]}
+{"id": "train-load", "group": "trainings", "message": "Phân tích tải tập gần đây của tôi", "tools": ["get_training_load", "get_training_insights", "get_training_summary", "list_trainings"], "keywords": [], "context": [["tải", "load"]]}
+{"id": "ref-meal-goal", "group": "reference", "message": "Món tối qua có phù hợp với mục tiêu của tôi không?", "tools": ["list_meals", "get_meals", "current_goal", "list_goals", "get_progress"], "keywords": [["phở"], ["69", "giảm"]]}
+{"id": "ref-weight-change", "group": "reference", "message": "So với lần cân trước thì tôi thay đổi thế nào?", "tools": ["latest_metrics", "list_metrics", "get_metrics"], "keywords": [["71.8", "71,8"], ["72.6", "72,6"]]}
+{"id": "ref-meal-again", "group": "reference", "message": "Món tôi ăn tối qua bao nhiêu calo?", "tools": ["list_meals", "get_meals", "get_progress"], "keywords": [["phở"]]}
+{"id": "chat-hello", "group": "control", "message": "Xin chào", "tools": [], "keywords": []}
+{"id": "chat-thanks", "group": "control", "message": "Cảm ơn bạn nhé", "tools": [], "keywords": []}
+{"id": "chat-help", "group": "control", "message": "Bạn có thể giúp tôi những gì?", "tools": [], "keywords": []}
+{"id": "profile-level", "group": "profile", "message": "Trình độ tập luyện của tôi đang được ghi nhận là gì?", "tools": ["get_training_profile", "get_profile"], "keywords": [["trung cấp", "intermediate"]]}
+{"id": "profile-days", "group": "profile", "message": "Mỗi tuần tôi có thể tập mấy buổi?", "tools": ["get_training_profile", "get_profile"], "keywords": [["4 buổi"]]}
+{"id": "profile-bmi", "group": "profile", "message": "Chỉ số BMI hiện tại của tôi là bao nhiêu?", "tools": ["latest_metrics", "list_metrics", "get_profile"], "keywords": [["24.3", "24,3"]]}
+{"id": "habit-food", "group": "habits", "message": "Tôi hay ăn món gì nhất?", "tools": ["list_meals", "get_meals"], "keywords": [["phở"]], "context": [["phở"], ["4 lần"]]}
+{"id": "habit-kcal", "group": "habits", "message": "7 ngày qua (không tính hôm nay) trung bình mỗi ngày tôi ăn bao nhiêu calo?", "tools": ["get_progress", "list_meals"], "keywords": [["805"]]}
+{"id": "train-pr", "group": "trainings", "message": "Kỷ lục đẩy ngực (e1RM) của tôi là bao nhiêu?", "tools": ["get_strength_records", "get_strength_progress", "list_trainings"], "keywords": [["76"]]}
+{"id": "train-progression", "group": "trainings", "message": "Sức mạnh đẩy ngực của tôi tiến bộ thế nào?", "tools": ["get_strength_progress", "get_strength_records", "list_trainings"], "keywords": [["69.7", "69,7"], ["76"]]}
+{"id": "train-distance", "group": "trainings", "message": "Tháng này tôi chạy tổng cộng bao nhiêu km?", "tools": ["get_running_summary", "get_training_summary", "list_trainings"], "keywords": [["19 km", "19km", "19,0", "19.0"]]}
+{"id": "chat-topics", "group": "conversation", "message": "Gần đây tôi thường hỏi bạn về điều gì?", "tools": [], "keywords": [["xem tiến độ", "ghi bữa ăn", "xem mục tiêu"]]}

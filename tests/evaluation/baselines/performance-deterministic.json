@@ -1,0 +1,27 @@
+{
+  "suite": "performance",
+  "mode": "deterministic",
+  "git_sha": "8c2205e90612c54dd18885476ec38a44f943021d",
+  "git_dirty": true,
+  "dataset_fingerprint": "6ec78e6d478bdbb29e4d8b382a03f5090f88d7ce44db50c6a51beb95079e0ff6",
+  "dataset_version": "perf-1.0",
+  "created_at": "2026-11-09T18:29:05.657305+00:00",
+  "aggregates": {
+    "load_error_free": 1.0,
+    "load_isolation": 1.0,
+    "safety_pass": 1.0,
+    "hard_safety_violations": 0,
+    "cases": 3,
+    "case_runs": 3,
+    "infrastructure_errors": 0,
+    "latency_p50_ms": 1066.6099170048255,
+    "latency_p95_ms": 4519.709916989086,
+    "latency_p99_ms": 4519.709916989086,
+    "latency_mean_ms": 1901.969,
+    "usage_llm_calls": 0,
+    "usage_llm_attempts": 0,
+    "usage_input_tokens": 0,
+    "usage_output_tokens": 0,
+    "usage_cost": null
+  }
+}
