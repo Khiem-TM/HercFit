@@ -36,6 +36,7 @@ from agentic.prompts.v7.domains import CAPABILITY_GUIDANCE as CAPABILITY_GUIDANC
 from agentic.prompts.v7.tool import PROMPT as TOOL_PROMPT_V7
 from agentic.prompts.v8 import clarification as v8_clarification
 from agentic.prompts.v8 import context as v8_context
+from agentic.prompts.v8 import domains as v8_domains
 from agentic.prompts.v8 import nutrition as v8_nutrition
 from agentic.prompts.v8 import routing as v8_routing
 
@@ -100,6 +101,9 @@ TEMPLATES = MappingProxyType(
         ("clarification.form", "v4"): v8_clarification.PROMPT,
         # v8: gợi ý dinh dưỡng chép số từ nguồn khi có, nếu không thì ước tính trên 100 g (được đánh dấu là ước tính).
         ("nutrition.lookup", "v2"): v8_nutrition.LOOKUP_PROMPT,
+        # v8: buổi thể thao, nước, giấc ngủ, số đo lưu trong HercFit trước; Google chỉ là đích đồng bộ khi đã kết nối.
+        ("training.coach", "v6"): v8_domains.COACH_GUIDANCE,
+        ("health.guidance", "v6"): v8_domains.HEALTH_GUIDANCE,
     }
 )
 
