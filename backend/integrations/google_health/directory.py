@@ -16,6 +16,8 @@ from integrations.google_health.models import HealthConnection
 
 logger = logging.getLogger(__name__)
 PUSHED = {"Training", "Meal"}
+# Loại chỉ ghi được qua Google trước đây; nay tạo mới luôn lưu trong HercFit dù chưa kết nối.
+LOCAL_FIRST = {"exercise", "hydration", "sleep"}
 
 
 def _day(value: Any) -> date | None:
@@ -58,16 +60,17 @@ class GoogleHealthDirectory:
         from integrations.google_health import records
 
         connection = await HealthConnection.for_user(session, user_id)
-        # Chưa kết nối hoặc chưa cấp quyền ghi loại này: miền lưu trong HercFit như trước.
-        if (connection is None or connection.status != "ACTIVE"
-                or not can_write(records.DATA_TYPE[kind], connection.granted_scopes or [])):
+        connected = (connection is not None and connection.status == "ACTIVE"
+                     and can_write(records.DATA_TYPE[kind], connection.granted_scopes or []))
+        if point_id is None and not delete and (connected or kind in LOCAL_FIRST):
+            return await records.create(session, user_id, kind, payload or {})
+        # Số đo khi chưa kết nối hoặc chưa cấp quyền ghi: miền lưu vào body_metrics như trước.
+        if not connected:
             return None
         if delete:
             await records.delete(session, user_id, kind, point_id)
             return {"deleted": True}
-        if point_id is not None:
-            return await records.update(session, user_id, kind, point_id, payload or {})
-        return await records.create(session, user_id, kind, payload or {})
+        return await records.update(session, user_id, kind, point_id, payload or {})
 
     async def refresh(self, user_id: UUID, days: int = 2) -> bool:
         """Đồng bộ ngay vài ngày gần nhất (trước briefing buổi sáng); False khi chưa kết nối hoặc người dùng

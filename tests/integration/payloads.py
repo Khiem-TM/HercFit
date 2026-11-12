@@ -50,3 +50,11 @@ async def scalar(query: str, **params):
     """Một giá trị đọc thẳng từ database test (để khẳng định số dòng)."""
     async with get_db_session() as session:
         return (await session.execute(text(query), params)).scalar()
+
+
+async def create_run_exercise(client, headers):
+    """Bài chạy riêng của user: catalog test chỉ có "gym tổng quát", mà buổi gym không ghi qua bản ghi sức khoẻ."""
+    response = await client.post("/api/exercises", headers=headers, json={
+        "name_vi": "Chạy bộ (test)", "kind": "ENDURANCE", "configuration": {"kind": "ENDURANCE", "activity": "RUN"}})
+    assert response.status_code == 201, response.text
+    return response.json()
