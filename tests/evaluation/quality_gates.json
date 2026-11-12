@@ -35,7 +35,7 @@
         },
         "code_rules": {
           "min": 1.0,
-          "justification": "Luật write_done/food_gap_resolved là hợp đồng của graph."
+          "justification": "Luật định tuyến do code (tên luật trong route_trace, intent của nhánh trả về sớm) là hợp đồng của graph; mỗi luật có ca kích hoạt và ca không kích hoạt (README)."
         },
         "reply_checks": {
           "min": 1.0,

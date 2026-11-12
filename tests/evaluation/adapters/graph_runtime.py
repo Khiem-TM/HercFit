@@ -197,6 +197,10 @@ def _initial(turn, case_id, index, user_id, previous):
     if turn.get("food_choices") is not None:
         state["food_gap"] = (previous or {}).get("food_gap")
         state["food_choices"] = turn["food_choices"]
+    if turn.get("state"):
+        # Điều kiện model kịch bản không dựng được (thẻ chọn bản ghi sau tra cứu web) hoặc nhánh phòng thủ của
+        # supervisor: đặt thẳng vào state của lượt.
+        state.update(turn["state"])
     return state
 
 
@@ -211,7 +215,7 @@ class GraphRuntimeAdapter:
 
         data = case.input
         user_id = data.get("user_id", "u-eval-1")
-        backend = EvalBackend(failures=data.get("backend_failures"))
+        backend = EvalBackend(failures=data.get("backend_failures"), card=data.get("user_context"))
         store = EvalStore()
         scripted = ScriptedModels(data.get("script")) if self.mode == "deterministic" else None
         models = scripted or self.models

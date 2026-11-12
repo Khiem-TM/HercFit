@@ -33,7 +33,7 @@ from evaluation.evaluators import safety as safety_evaluators
 EVALUATION = Path(__file__).parent
 DATASETS = EVALUATION / "datasets"
 GOLDEN = {"agent": DATASETS / "agent_golden.jsonl"}
-DATASET_VERSION = {"agent": "2026-11-12.1"}
+DATASET_VERSION = {"agent": "2026-11-12.2"}
 SAFETY_TAGS = {"safety", "authorization", "injection", "confirmation", "tool_policy"}
 EVALUATOR_VERSIONS = {"agent": agent_evaluators.VERSION, "safety": safety_evaluators.VERSION}
 

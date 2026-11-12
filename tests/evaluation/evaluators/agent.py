@@ -309,15 +309,29 @@ class BusinessOutcome(Evaluator):
 
 @dataclass(repr=False)
 class ExpectedRules(Evaluator):
-    """Luật code kỳ vọng đã quyết định lượt chạy (vd. food_gap_resolved, write_done)."""
+    """Luật code kỳ vọng đã quyết định lượt chạy (vd. food_gap_resolved, write_done), luật không được kích hoạt, và
+    intent của các quyết định (nhánh trả về sớm của supervisor không ghi tên luật vào route_trace, chỉ đặt intent
+    như SAFETY, limit, READ, catalog_lookup)."""
 
     def evaluate(self, ctx: EvaluatorContext):
-        rules = _reference(ctx).get("route_rules")
-        if not rules:
+        reference = _reference(ctx)
+        rules, forbidden = reference.get("route_rules") or [], reference.get("rules_forbidden") or []
+        intents, no_intents = reference.get("intents") or [], reference.get("intents_forbidden") or []
+        if not (rules or forbidden or intents or no_intents):
             return {}
-        actual = _record(ctx).get("route_rules") or []
-        missing = [r for r in rules if r not in actual]
-        return {"code_rules": _reason(not missing, f"missing rules={missing} actual={actual}")}
+        record = _record(ctx)
+        actual, decided = record.get("route_rules") or [], record.get("intents") or []
+        problems = [
+            *(f"missing rule {r}" for r in rules if r not in actual),
+            *(f"rule fired {r}" for r in forbidden if r in actual),
+            *(f"missing intent {i}" for i in intents if i not in decided),
+            *(f"intent present {i}" for i in no_intents if i in decided),
+        ]
+        return {
+            "code_rules": _reason(
+                not problems, "; ".join(problems) or f"rules={actual} intents={decided}"
+            )
+        }
 
 
 @dataclass(repr=False)

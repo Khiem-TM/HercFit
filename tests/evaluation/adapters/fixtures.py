@@ -10,6 +10,7 @@ from copy import deepcopy
 from uuid import NAMESPACE_URL, uuid5
 
 from agentic.services.memory.store import Store, payload_hash
+from agentic.services.personal_context import CONTEXT_PATH
 from agentic.tools.integrations.backend_client import BackendError
 from agentic.tools.registry import REGISTRY
 
@@ -173,9 +174,11 @@ class EvalStore(Store):
 class EvalBackend:
     """Backend giả có trạng thái, ghi nhận lời gọi theo người dùng mà token đại diện."""
 
-    def __init__(self, failures=None, foods=None):
+    def __init__(self, failures=None, foods=None, card=None):
         self.failures = dict(failures or {})
         self.foods = [*(foods or FOODS)]
+        # Thẻ ngữ cảnh cá nhân tổng hợp của ca (None: backend không dựng được thẻ, như trước).
+        self.card = card
         self.calls = []
         self.writes = []
         self.state = {}
@@ -254,6 +257,8 @@ class EvalBackend:
                 "write": False,
             }
         )
+        if method == "GET" and path == CONTEXT_PATH and self.card is not None:
+            return deepcopy(self.card)
         if path.endswith("/preview") and body is not None:
             self._fail("preview")
             return {
