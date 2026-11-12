@@ -12,25 +12,20 @@ from agentic.agents.adaptive_router import (
     jev_read_domain,
     jev_routing_projection,
 )
-from agentic.agents.specialists import BY_NAME, SPECIALISTS
+from agentic.agents.specialists import SPECIALISTS
 from agentic.agents.state import GOAL_INTENTS, RouteDecision
 from agentic.components.context_filter import compact_evidence, model_graph_context
-from agentic.core import roster
 from agentic.core.app.schemas.response import Clarification
-from agentic.core.context import request_context
 from agentic.core.providers.fpt import strip_tool_markup
 from agentic.prompts.layout import layout
 from agentic.prompts.registry import get_prompt
-from agentic.research.contracts import QA_INTENTS
 from agentic.security.content_filter import assess
-from agentic.security.input_guard import safe_query
 from agentic.services import (
     catalog_choice,
-    delegation,
     food_gap,
-    food_suggestion,
     mode,
     personal_context,
+    route_rules,
 )
 from agentic.services.clarification import build_clarification
 from agentic.services.failure_reply import failure_reply
@@ -45,10 +40,8 @@ from agentic.services.write_reply import (
 from agentic.tools.output import bounded_json
 from agentic.tools.policy import (
     CAPABILITY_GUIDANCE,
-    CATALOG_DEPENDENCIES,
     COACH_GUIDANCE,
     TRAINING_DOMAINS,
-    needs_catalog_handoff,
 )
 
 GRAPH_CONTEXT_GUIDANCE = get_prompt("orchestration.graph_context", "v2")
@@ -61,15 +54,6 @@ PLAN_ROUTING = get_prompt("orchestration.plan", "v3")
 PLAN_MODE_REPLY = get_prompt("orchestration.plan_mode_reply", "v3")
 # Lệnh ghi thuộc miền chỉ có ở chế độ Plan (mục tiêu): lời mời nói đúng việc người dùng yêu cầu, không gọi nó là tư vấn.
 PLAN_MODE_WRITE_REPLY = get_prompt("orchestration.plan_mode_write_reply", "v1")
-PERSONAL_MEASURE = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:kg|cm|tuổi|tuoi|kcal|bpm)\b", re.I)
-# Yêu cầu cá nhân hoá vẫn tra cứu tri thức: mỗi chủ đề một ý định QA cho kế hoạch tra cứu.
-TOPIC_INTENTS = {"nutrition": "FOOD_KNOWLEDGE_QA", "body": "FOOD_KNOWLEDGE_QA"}
-
-
-def hitl_requested(decision):
-    """Router hỏi lại có cấu trúc: action clarify kèm thông tin còn thiếu. Đây là hợp đồng HITL của lượt: trạng thái
-    needs_input và một thẻ hỏi; không luật tư vấn, cá nhân hoá hay tra cứu nào được đổi nó thành câu trả lời."""
-    return decision.action == "clarify" and bool(decision.missing_fields)
 
 
 def local_now_minute():
@@ -355,255 +339,20 @@ class OrchestrationAgent:
                 "topic": decision.topic,
             }
         ]
-
-        def rule(name):
-            trace.append(
-                {
-                    "stage": "rule",
-                    "rule": name,
-                    "action": decision.action,
-                    "domain": decision.domain,
-                }
-            )
-
-        primary = next((task.domain for task in decision.tasks if task.domain), None)
-        if decision.action == "tool" and not decision.domain and primary:
-            # Tin nhắn nhiều ý có thể không có một miền chung: phần đầu tiên là tuyến tuần tự dự phòng.
-            decision.domain = primary
-            rule("primary_task_domain")
-        # Một lần LLM tiếp tục sau đó không thể nâng quyền của một lần đọc Jev.
-        read_policy = state.get("decision") or {}
-        if read_policy.get("read_only"):
-            decision.read_only = True
-            if decision.action == "research" or (
-                decision.action == "tool" and decision.domain != read_policy.get("domain")
-            ):
-                decision.action, decision.next_agent = "answer", "orchestrator"
-                decision.domain = read_policy.get("domain")
-                decision.instruction = (
-                    "Trả lời theo dữ liệu backend đã đọc; nếu catalog trống, nêu chưa có kết quả."
-                )
-        if decision.action == "clarify" and needs_catalog_handoff(
-            decision.domain, " ".join(decision.missing_fields) + " " + decision.instruction
-        ):
-            decision.action, decision.next_agent = "tool", "tool"
-            decision.instruction = (
-                "Tự tra catalog theo tên; không yêu cầu ID người dùng. " + decision.instruction
-            )
-            rule("clarify_to_catalog_lookup")
-        if (
-            decision.action == "clarify"
-            and card
-            and decision.missing_fields
-            and all(
-                personal_context.answered_by_card(field, card) for field in decision.missing_fields
-            )
-        ):
-            # Hỏi những thông tin HercFit đã lưu thì không bao giờ là một câu hỏi làm rõ.
-            decision.action, decision.next_agent, decision.missing_fields = (
-                "answer",
-                "orchestrator",
-                [],
-            )
-            rule("clarify_known_facts")
-        request = latest_request(state)
-        personal = not decision.read_only and personal_context.wants_personal_context(
-            request, decision.model_dump()
+        ctx = route_rules.RouteContext(
+            state=state,
+            policy=policy,
+            request=latest_request(state),
+            card=card,
+            read_policy=state.get("decision") or {},
+            first=first,
+            verdict=verdict,
+            parallel=getattr(self.settings, "PARALLEL_AGENTS", True),
         )
-        if not policy.deep:
-            decision.plan_task = None
-        deep = (
-            policy.deep
-            and not decision.read_only
-            and decision.intent not in personal_context.NON_ADVICE_INTENTS
-            and (
-                personal
-                or decision.plan_task is not None
-                or decision.intent in QA_INTENTS
-                or (
-                    decision.intent == "GENERAL_CHAT"
-                    and personal_context.knowledge_question(request)
-                )
-            )
-        )
-        if deep:
-            # Chế độ Plan: tư vấn, phân tích và lập kế hoạch luôn đọc dữ liệu người dùng rồi tra cứu, không chờ model đoán.
-            decision.personalize = True
-            if decision.plan_task == "life_review":
-                decision.topic = "wellbeing"
-            elif decision.plan_task == "plan_build":
-                decision.intent, decision.domain = "TRAINING_PLAN", "training_plans"
-                if decision.topic not in {"running", "strength", "training"}:
-                    guess = personal_context.topic_for(request)
-                    decision.topic = guess if guess in {"running", "strength"} else "training"
-            decision.topic = decision.topic or personal_context.topic_for(request, decision.domain)
-            if decision.action in {"clarify", "tool"} and not decision.missing_fields:
-                decision.action, decision.next_agent = "answer", "orchestrator"
-            self.research_plan(
-                decision, request, researched=bool(state.get("research_count")), deep=True
-            )
-            rule("plan_deep")
-        elif personal:
-            # Tư vấn hoặc phân tích cho người dùng này: đọc dữ liệu của họ trước, rồi mới tra cứu tri thức.
-            decision.personalize = True
-            decision.topic = decision.topic or personal_context.topic_for(request, decision.domain)
-            if decision.action in {"clarify", "tool"} and not decision.missing_fields:
-                decision.action, decision.next_agent = "answer", "orchestrator"
-            self.research_plan(decision, request, researched=bool(state.get("research_count")))
-            rule("personalize")
-        else:
-            decision.personalize, decision.topic = False, None
-        if (
-            decision.intent == "GENERAL_CHAT"
-            and decision.action == "answer"
-            and first
-            and not decision.read_only
-            and not decision.personalize
-            and not state.get("research_count")
-            and personal_context.knowledge_question(request)
-        ):
-            # Lưới an toàn: câu hỏi kiến thức thể thao/dinh dưỡng bị gọi là trò chuyện vẫn phải trả lời từ nguồn đã
-            # kiểm chứng, không từ trí nhớ của model. Luật knowledge_to_research bên dưới chuyển nó sang research.
-            query = decision.research_query or self.public_question(request)
-            if query:
-                decision.intent = TOPIC_INTENTS.get(
-                    personal_context.topic_for(request), "SPORTS_KNOWLEDGE_QA"
-                )
-                decision.research_query = query
-                rule("chat_to_knowledge")
-        if (
-            decision.domain in TRAINING_DOMAINS
-            and not decision.personalize
-            and (
-                (decision.action == "clarify" and not decision.missing_fields)
-                or (decision.action == "research" and decision.intent not in QA_INTENTS)
-            )
-        ):
-            # Câu trả lời về tập luyện lấy từ phân tích của backend: đọc trước khi hỏi hoặc tìm trên web.
-            decision.action, decision.next_agent = "tool", "tool"
-            rule("training_read_first")
-        if decision.intent == "TRAINING_PLAN" and decision.domain == "exercises":
-            # Lịch tập chỉ dùng bài có sẵn trong catalog: miền lịch tập đọc catalog, không tạo bài mới hay tra web.
-            decision.domain = "training_plans"
-            if decision.action == "research":
-                decision.action, decision.next_agent = "tool", "tool"
-            rule("plan_catalog_only")
-        if decision.action == "tool" and decision.domain and decision.next_agent != "tool":
-            decision.next_agent = (
-                "tool"  # hành động quyết định; nhãn next_agent không khớp sẽ được chuẩn hoá
-            )
-            rule("tool_next_agent")
-        if decision.action == "tool" and not decision.domain:
-            raise ValueError("Invalid tool route")
-        if (
-            decision.intent in QA_INTENTS
-            and not decision.read_only
-            and not decision.personalize
-            and decision.action in {"answer", "research"}
-        ):
-            # Câu trả lời tri thức lấy từ nguồn đã kiểm chứng, không từ trí nhớ của model. Một tuyến tool
-            # (ví dụ tạo hoặc đọc lịch tập của người dùng) vẫn là tuyến tool.
-            # Yêu cầu cá nhân hoá đã được lập kế hoạch bởi research_plan ở trên.
-            if decision.action != "research":
-                rule("knowledge_to_research")
-            decision.action, decision.next_agent = "research", "research"
-        gap = None
-        if decision.action == "research" and decision.intent not in QA_INTENTS:
-            # Tra cứu catalog giải quyết catalog trước (ưu tiên database) trong bước lập kế hoạch. Một miền
-            # nhật ký ("ghi đồ uống này" -> meals) tra cứu catalog mà nó phụ thuộc.
-            decision.domain = CATALOG_DEPENDENCIES.get(decision.domain, decision.domain)
-            decision.next_agent = "research"
-            if decision.domain not in {"foods", "exercises"}:
-                raise ValueError("Research is restricted to food and exercises")
-            if decision.domain == "foods":
-                # Món ăn không tra web: có bản nháp bữa thì đường nhanh tra catalog và hỏi bằng thẻ món thiếu;
-                # chỉ có tên món thì hỏi thẳng bằng thẻ (tìm món hoặc tạo món riêng).
-                query = (decision.research_query or "").strip()
-                decision.intent, decision.research_query = "LOG_FOOD", None
-                if query and not decision.meal_log:
-                    decision.action, decision.next_agent = "answer", "orchestrator"
-                    gap = food_gap.ask([food_gap.gap_item("q:0", query)])
-                    rule("food_gap_card")
-                else:
-                    decision.action, decision.next_agent, decision.domain = "tool", "tool", "meals"
-                    rule("food_research_to_catalog")
-        # Bước chuẩn hoá ở trên có thể biến một câu hỏi làm rõ thành yêu cầu tool, nên
-        # kiểm tra lại miền sau tất cả các phép biến đổi tuyến cơ sở.
-        if (
-            read_policy.get("read_only")
-            and decision.action == "tool"
-            and decision.domain != read_policy.get("domain")
-        ):
-            decision.action, decision.next_agent = "answer", "orchestrator"
-            decision.domain = read_policy.get("domain")
-            decision.instruction = (
-                "Trả lời theo dữ liệu backend đã đọc; nếu catalog trống, nêu chưa có kết quả."
-            )
-        if (
-            decision.action == "answer"
-            and not decision.personalize
-            and food_suggestion.is_food_suggestion(latest_request(state))
-            and not food_suggestion.catalog_read_this_turn(state)
-            and (not read_policy.get("read_only") or read_policy.get("domain") == "foods")
-        ):
-            # Do code quyết định: gợi ý bữa ăn không bao giờ được trả lời trước khi tra catalog.
-            decision = RouteDecision.model_validate(food_suggestion.lookup_decision())
-        redirect = (
-            policy.name == mode.NORMAL
-            and not decision.read_only
-            and (
-                decision.personalize
-                or (decision.action == "research" and decision.intent in QA_INTENTS)
-                or (
-                    decision.action in {"tool", "clarify"}
-                    and bool(decision.domain)
-                    and not policy.allows(decision.domain)
-                )
-            )
-        )
-        if redirect:
-            # Chế độ ghi nhanh không tư vấn từ trí nhớ của model: mời người dùng hỏi lại ở chế độ Plan.
-            decision.action, decision.next_agent, decision.missing_fields = (
-                "answer",
-                "orchestrator",
-                [],
-            )
-            decision.personalize, decision.topic = False, None
-            rule("plan_mode_only")
-        form = None
-        owner = BY_NAME.get(roster.specialist_for(decision.domain))
-        checked = owner.preflight(decision, state, request) if owner else None
-        if checked:
-            # Agent nhận tuyến cần người dùng chọn trước (ví dụ cách ghi buổi gym): hỏi bằng form do code dựng.
-            form, form_reply, name = checked
-            rule(name)
-        delegated = None
-        if (
-            first
-            and decision.action == "tool"
-            and not form
-            and not redirect
-            and verdict is None
-            and not state.get("replying_to_form")
-            and not decision.read_only
-            and not decision.personalize
-            and decision.intent not in QA_INTENTS
-            and getattr(self.settings, "PARALLEL_AGENTS", True)
-        ):
-            # Tin nhắn nhiều ý: mỗi phần giao cho agent sở hữu miền của nó, chạy song song (services/delegation.py).
-            delegated = delegation.plan(decision.model_dump(), policy)
-            if delegated and any(self.asks_first(task, state, request) for task in delegated):
-                delegated = None  # một phần cần người dùng chọn trước (form): đi đường tuần tự
-            if delegated:
-                trace.append(
-                    {
-                        "stage": "rule",
-                        "rule": "fan_out",
-                        "action": "delegate",
-                        "domain": None,
-                        "agents": [roster.specialist_for(task["domain"]) for task in delegated],
-                    }
-                )
+        # Các luật code sau router, theo đúng thứ tự (services/route_rules.py); mỗi luật có tác dụng ghi một mục vết.
+        decision, steps, found = route_rules.run(route_rules.POST_ROUTER, decision, ctx)
+        trace.extend(steps)
+        delegated = found.get("delegated")
         trace.append(
             {
                 "stage": "final",
@@ -633,11 +382,12 @@ class OrchestrationAgent:
             "route_trace": [*(state.get("route_trace") or []), *trace],
             **safety_update,
         }
-        if form:
+        if found.get("form"):
+            form, form_reply = found["form"]
             result.update(clarification=form, prepared_reply=form_reply)
-        if gap:
-            result.update(gap)
-        if redirect:
+        if found.get("gap"):
+            result.update(found["gap"])
+        if found.get("redirect"):
             # Những gì lượt này đã lưu vẫn được báo lại trước lời mời.
             result.update(
                 prepared_reply="\n\n".join(
@@ -655,52 +405,6 @@ class OrchestrationAgent:
         if jev_events:
             result["jev_events"] = jev_events
         return result
-
-    @staticmethod
-    def asks_first(task, state, request):
-        """Agent của nhiệm vụ cần người dùng chọn trước khi làm (ví dụ cách ghi buổi gym)."""
-        probe = RouteDecision(
-            intent=task["intent"],
-            action="tool",
-            next_agent="tool",
-            domain=task["domain"],
-            instruction=task["instruction"],
-        )
-        return (
-            BY_NAME[roster.specialist_for(task["domain"])].preflight(probe, state, request)
-            is not None
-        )
-
-    @staticmethod
-    def public_question(request):
-        """Câu hỏi của người dùng dưới dạng truy vấn tra cứu công khai, hoặc None khi vẫn chứa dữ liệu riêng."""
-        # Số đo của chính người dùng ("giảm 3 kg", "nặng 70 kg") không bao giờ bị gửi đi thành truy vấn tra cứu.
-        public = PERSONAL_MEASURE.sub("", request).strip()[:180]
-        try:
-            return safe_query(public, request_context.get().private_values)
-        except (ValueError, LookupError):
-            return None
-
-    @staticmethod
-    def research_plan(decision, request, *, researched=False, deep=False):
-        """Yêu cầu cá nhân hoá tra cứu câu hỏi công khai của nó (một lần mỗi lượt) khi câu hỏi đó có thể
-        diễn đạt mà không cần chi tiết cá nhân; nếu không, chỉ trả lời từ dữ liệu của người dùng."""
-        if hitl_requested(decision):
-            # Hợp đồng HITL: router đã nêu thông tin cần hỏi lại; tư vấn hay tra cứu không bao giờ thay câu hỏi đó.
-            return
-        # Không có gì cụ thể để tra cứu (chủ đề "general"): trả lời từ thẻ ngữ cảnh và cuộc trò chuyện.
-        # Chủ đề "general" chỉ được tra cứu ở chế độ Plan (deep), nơi mọi câu tư vấn đều cần nguồn.
-        researched = researched or (decision.topic == "general" and not deep)
-        query = None if researched else decision.research_query
-        if not query and not researched:
-            query = OrchestrationAgent.public_question(request)
-        if not query:
-            decision.action, decision.next_agent = "answer", "orchestrator"
-            return
-        decision.research_query = query
-        if decision.intent not in QA_INTENTS:
-            decision.intent = TOPIC_INTENTS.get(decision.topic, "SPORTS_KNOWLEDGE_QA")
-        decision.action, decision.next_agent = "research", "research"
 
     async def answer(self, state):
         prepared = state.get("research_answer") or state.get("prepared_reply")
