@@ -2,14 +2,26 @@
 
 import json
 
+from agentic.knowledge_graph.context.graph import ContextGraph
+from agentic.knowledge_graph.context.graph import render as render_context
 from agentic.knowledge_graph.service import render_lines
 
 
 def model_graph_context(state):
-    if state.get("graph_context_run_id") != state.get("run_id") or not state.get("graph_context"):
-        return None
-    # Chỉ các dòng dễ đọc: không ID, phiên bản, khả năng tĩnh hay ảnh chụp thô.
-    return "\n".join(render_lines(state["graph_context"])) or None
+    """Context graph của câu hỏi (nếu có) rồi thẻ tri thức tĩnh; chỉ các dòng dễ đọc, không ID hay ảnh chụp thô."""
+    run = state.get("run_id")
+    lines = []
+    built = state.get("context_graph") if state.get("context_graph_run_id") == run else None
+    usable = bool(built) and ContextGraph.model_validate(built).usable
+    if built:
+        lines += render_context(built)
+    card = state.get("graph_context") if state.get("graph_context_run_id") == run else None
+    if card:
+        if usable:
+            # Bản ghi cụ thể đã có trong context graph: thẻ tĩnh chỉ còn hồ sơ suy ra và ghi chú (ít token hơn).
+            card = {**card, "facts": [], "episodes": []}
+        lines += render_lines(card)
+    return "\n".join(lines) or None
 
 
 def compact_evidence(state):

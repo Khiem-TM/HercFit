@@ -2,18 +2,19 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Response
+
+from api.dependencies import PlanServiceDep, ScheduleEntryQueryDep, ScheduleQueryDep, VersionQuery
+from api.responses import created, current_or_not_found
 from core.transaction import transaction
 from domains.goals_plans.models.plans import TrainingPlan
 from domains.goals_plans.schemas.plans import (
-    TrainingPlanCreate,
-    TrainingPlanReplace,
-    TrainingPlanRead,
-    TrainingPlanEntryRead,
     EntryCompletionRead,
     PlanEnd,
+    TrainingPlanCreate,
+    TrainingPlanEntryRead,
+    TrainingPlanRead,
+    TrainingPlanReplace,
 )
-from api.dependencies import PlanServiceDep, ScheduleQueryDep, ScheduleEntryQueryDep, VersionQuery
-from api.responses import created, current_or_not_found
 
 router = APIRouter(tags=["training-plans"])
 

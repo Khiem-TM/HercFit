@@ -13,11 +13,12 @@ from domains.health_records.schemas.health import (
     HealthProfileRead,
     HealthSampleQuery,
     HealthSampleRead,
+    HeartRateHourRead,
     SampleType,
     SleepSessionRead,
 )
-from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, DateRangeQuery, TimeZoneName
 from domains.health_records.services.health_service import HealthService
+from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, DateRangeQuery, TimeZoneName
 
 HealthServiceDep = Annotated[HealthService, service_dependency(HealthService)]
 
@@ -74,6 +75,13 @@ async def list_sleep(service: HealthServiceDep, query: RangeQueryDep):
 @router.get("/workouts", response_model=list[DeviceWorkoutRead], summary="Buổi vận động ghi bởi thiết bị")
 async def list_workouts(service: HealthServiceDep, query: RangeQueryDep):
     return await service.workouts(query)
+
+
+@router.get("/heart-rate/hourly", response_model=list[HeartRateHourRead], summary="Nhịp tim theo giờ của một ngày",
+            description="TB/thấp nhất/cao nhất mỗi giờ có dữ liệu (rollUp của Google Health); giờ không có mẫu bị bỏ.")
+async def heart_rate_hourly(service: HealthServiceDep, day: Annotated[date, Query(alias="date")],
+                            timezone: Annotated[TimeZoneName, Query()] = DEFAULT_TIMEZONE):
+    return await service.heart_rate_hours(day, timezone)
 
 
 @router.get("/samples", response_model=list[HealthSampleRead], summary="Chỉ số sinh tồn rời (đường huyết, nhiệt độ)")

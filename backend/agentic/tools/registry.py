@@ -531,7 +531,7 @@ HEALTH_TOOL_KINDS = {
     "list_device_workouts": "DeviceWorkout",
 }
 
-# Ghi xuyên qua lên Google Health (Google là nguồn sự thật, HercFit không giữ bản riêng):
+# Bản ghi sức khoẻ người dùng nhập, lưu trong HercFit trước rồi đồng bộ lên Google Health khi có kết nối:
 # buổi thể thao (mọi môn không phải gym), nước uống và giấc ngủ ghi tay. Gym vẫn là create_trainings.
 
 add(
@@ -541,8 +541,8 @@ add(
     "/v2/health/records/exercise",
     SportInput,
     HealthRecordRead,
-    "Propose logging a NON-gym sport or cardio session (running, football, badminton, swimming...) to Google Health. "
-    "exercise_id is a SPORT/ENDURANCE catalog exercise and performance has the same shape as a training item; "
+    "Propose logging a NON-gym sport or cardio session (running, football, badminton, swimming...). It is saved in "
+    "HercFit (no Google Health connection needed) and synced to Google Health when connected. exercise_id is a SPORT/ENDURANCE catalog exercise and performance has the same shape as a training item; "
     "kcal is estimated by the backend. Gym sessions use create_trainings. Must await human confirmation.",
     True,
 )
@@ -553,7 +553,7 @@ add(
     "/v2/health/records/exercise/{resource_id}",
     with_id(SportInput),
     HealthRecordRead,
-    "Replace a sport session HercFit wrote to Google (ids from list_device_workouts). "
+    "Replace a sport session HercFit recorded (ids from list_device_workouts). "
     "Sessions recorded by a device cannot be edited.",
     True,
 )
@@ -564,7 +564,7 @@ add(
     "/v2/health/records/exercise/{resource_id}",
     Resource,
     None,
-    "Delete a sport session HercFit wrote to Google after confirmation.",
+    "Delete a sport session HercFit recorded after confirmation.",
 )
 add(
     "log_water",
@@ -573,7 +573,8 @@ add(
     "/v2/health/records/hydration",
     HydrationInput,
     HealthRecordRead,
-    "Propose logging water intake in ml to Google Health. Must await human confirmation.",
+    "Propose logging water intake in ml. It is saved in HercFit (no Google Health connection needed) and synced to "
+    "Google Health when connected. Must await human confirmation.",
     True,
 )
 add(
@@ -583,7 +584,7 @@ add(
     "/v2/health/records/hydration/{resource_id}",
     Resource,
     None,
-    "Delete a water log HercFit wrote to Google after confirmation.",
+    "Delete a water log HercFit recorded after confirmation.",
 )
 # Giấc ngủ ghi tay thuộc metrics (body_health ghi); domain health giữ nguyên chỉ đọc.
 add(
@@ -593,9 +594,10 @@ add(
     "/v2/health/records/sleep",
     SleepInput,
     HealthRecordRead,
-    "Propose logging a night of sleep the user reports (bedtime started_at, wake time ended_at, timezone) to Google "
-    "Health, for nights the device did not record. Only what the user said: no stages or awakenings. A night the "
-    "device already recorded is refused (409). Must await human confirmation.",
+    "Propose logging a night of sleep the user reports (bedtime started_at, wake time ended_at, timezone), for nights "
+    "the device did not record. It is saved in HercFit (no Google Health connection needed) and synced to Google "
+    "Health when connected. Only what the user said: no stages or awakenings. A night the device already recorded "
+    "is refused (409). Must await human confirmation.",
     True,
 )
 add(
@@ -605,7 +607,7 @@ add(
     "/v2/health/records/sleep/{resource_id}",
     Resource,
     None,
-    "Delete a sleep entry HercFit wrote to Google (ids from list_sleep_sessions) after confirmation.",
+    "Delete a sleep entry HercFit recorded (ids from list_sleep_sessions) after confirmation.",
 )
 
 

@@ -4,10 +4,22 @@ Tách ra từ models.journals trong đợt tổ chức lại theo miền."""
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID as PyUUID
+
 from fastapi import HTTPException
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Numeric, String, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from domains.catalog.schemas.exercises import ExerciseKind
 from domains.shared.models.activity import (
     ExerciseActualMixin,
     build_exercise_item,
@@ -16,11 +28,10 @@ from domains.shared.models.activity import (
 )
 from domains.shared.models.basemodel import BaseModel
 from domains.shared.models.domain import guard_immutable
+from domains.shared.models.journal import Journal, journal_constraints
 from domains.shared.schemas.activity import NutritionTotals
-from domains.catalog.schemas.exercises import ExerciseKind
 from domains.training.schemas.trainings import GYM_GENERAL_CODE, TrainingCreate
 from domains.training.services.training_metrics import allocate_session_time, session_load
-from domains.shared.models.journal import Journal, journal_constraints
 
 
 class Training(Journal):

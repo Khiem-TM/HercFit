@@ -13,12 +13,15 @@ không có gì để dựng khung thì hoàn toàn không có form: một bản 
 433a847a: hai dòng tóm tắt dinh dưỡng thành hai câu hỏi "Tự nhập" sau khi bữa ăn đã được lưu).
 """
 
+import calendar
 import json
 import logging
 import math
 import re
 import unicodedata
+from datetime import date, datetime, timedelta
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,7 +31,7 @@ from agentic.prompts.registry import get_prompt
 from domains.catalog.models.foods import normalize_food_text
 
 logger = logging.getLogger(__name__)
-PROMPT = get_prompt("clarification.form", "v3")
+PROMPT = get_prompt("clarification.form", "v4")
 QUESTION_LIMIT = 8
 OPTION_LIMIT = 12  # ClarifyQuestion.options
 PRESET_LIMIT = 6  # NumberFrame.presets
@@ -52,7 +55,11 @@ class QuestionDraft(BaseModel):
     label: str
     question: str
     # 'text': câu trả lời là một cái tên hoặc mô tả tự do; nó được để lại trong câu trả lời cho ô chat, không bao giờ đưa lên thẻ.
-    mode: Literal["single", "multiple", "quick_reply", "number", "text"]
+    mode: Literal["single", "multiple", "quick_reply", "number", "date", "text"]
+    when: Literal["future", "past", "any"] = Field(
+        default="future",
+        description="date: future for deadlines and upcoming days, past for days that already happened, any otherwise",
+    )
     options: list[OptionDraft] = Field(default_factory=list, description=f"At most {OPTION_LIMIT}")
     unit: str | None = Field(default=None, description="number: one of " + ", ".join(NUMBER_UNITS))
     min: float | None = None
@@ -330,6 +337,18 @@ WEEKDAYS = re.compile(
     r"\b(?:ngay nao trong tuan|thu may|nhung ngay(?: cu the)? nao|ngay tap|t2\s*[-,/]\s*t)"
 )
 WEEKDAY_OPTIONS = ("Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật")
+# Câu hỏi một ngày cụ thể (không dấu): hạn hoàn thành, ngày bắt đầu, "đến ngày nào". "Ngày nào trong tuần" là WEEKDAYS.
+DATE_HINTS = re.compile(
+    r"\b(?:ngay nao|thoi han|han (?:hoan thanh|chot|cuoi)|den ngay|deadline|ngay (?:bat dau|ket thuc|muc tieu|hoan thanh)"
+    r"|(?:hoan thanh|ket thuc|dat) (?:vao|truoc) (?:ngay|khi nao)|khi nao (?:hoan thanh|ket thuc|bat dau))\b"
+)
+PAST_HINTS = re.compile(r"\b(?:da|vua|hom) \w+(?: \w+)? ngay nao|ngay nao .*\b(?:roi|da)\b")
+# Lời dẫn trước lựa chọn đầu tiên: "Bạn muốn Giảm mỡ, Tăng cơ hay Giữ dáng?" liệt kê ba lựa chọn, không phải câu.
+LEAD_IN = re.compile(
+    r"^(?:bạn|anh|chị|em)\s+(?:muốn|chọn|thích|định|ưu tiên|cần|sẽ)\s+(?:là\s+|chọn\s+|đặt\s+)?",
+    re.I,
+)
+LOCAL = ZoneInfo("Asia/Ho_Chi_Minh")
 # "nhẹ / vừa / mạnh", "tăng cơ, giảm mỡ hay kết hợp": the reply already names the choices.
 SLASHED = re.compile(r"^[^?/]{1,40}(?:\s*/\s*[^?/]{1,40}){1,5}$")
 OR_LIST = re.compile(r"\s*,\s*(?:hay|hoặc)\s+|\s*,\s*|\s+(?:hay|hoặc)\s+")
@@ -413,6 +432,50 @@ def number_frame(unit, low=None, high=None, step=None, default=None, presets=())
         "step": step,
         "default": default if default is not None and low <= default <= high else None,
         "presets": values,
+    }
+
+
+def _months_later(day: date, months: int) -> date:
+    month = day.month - 1 + months
+    year, month = day.year + month // 12, month % 12 + 1
+    return day.replace(
+        year=year, month=month, day=min(day.day, calendar.monthrange(year, month)[1])
+    )
+
+
+def date_frame(when: str = "future", today: date | None = None) -> dict:
+    """Một DateFrame do code dựng: model chỉ chọn hướng thời gian, khoảng ngày và các mốc luôn đúng lịch địa phương."""
+    today = today or datetime.now(LOCAL).date()
+    if when == "past":
+        low, high = today - timedelta(days=365), today
+        marks = [
+            ("Hôm nay", today),
+            ("Hôm qua", today - timedelta(days=1)),
+            ("7 ngày trước", today - timedelta(days=7)),
+        ]
+    elif when == "any":
+        low, high = today - timedelta(days=365), _months_later(today, 24)
+        marks = [
+            ("Hôm nay", today),
+            ("4 tuần nữa", today + timedelta(weeks=4)),
+            ("3 tháng nữa", _months_later(today, 3)),
+        ]
+    else:
+        low, high = today + timedelta(days=1), _months_later(today, 24)
+        marks = [
+            ("4 tuần nữa", today + timedelta(weeks=4)),
+            ("8 tuần nữa", today + timedelta(weeks=8)),
+            ("3 tháng nữa", _months_later(today, 3)),
+            ("6 tháng nữa", _months_later(today, 6)),
+        ]
+    return {
+        "min": low.isoformat(),
+        "max": high.isoformat(),
+        "default": None,
+        "presets": [
+            {"label": f"{label} · {value.strftime('%d/%m')}", "value": value.isoformat()}
+            for label, value in marks
+        ],
     }
 
 
@@ -647,6 +710,8 @@ def listed_choices(question_id: str, text: str) -> list[dict]:
     else:
         return []
     parts = [part for part in parts if part]
+    if parts:
+        parts[0] = LEAD_IN.sub("", parts[0]).strip()
     # Short worded choices only: "Bạn muốn ăn cơm/phở" is a sentence, "(01/11/2026)" a date, not options.
     if not 2 <= len(parts) <= 6 or not all(choice_like(part) for part in parts):
         return []
@@ -689,6 +754,9 @@ def framed(question: dict, reply: str = "") -> dict | None:
                 "mode": "number",
                 "number": number_frame(unit, low, high, step, None, presets),
             }
+    if DATE_HINTS.search(asked) and not WEEKDAYS.search(asked):
+        when = "any" if "bat dau" in asked else "past" if PAST_HINTS.search(asked) else "future"
+        return {**base, "mode": "date", "date_frame": date_frame(when)}
     if WEEKDAYS.search(asked):
         options = [
             text_option(question["id"], index + 1, day) for index, day in enumerate(WEEKDAY_OPTIONS)
@@ -848,6 +916,14 @@ def question_from_draft(number: int, draft: QuestionDraft, catalog: dict[str, di
         "max_select": draft.max_select,
         "number": None,
     }
+    if draft.mode == "date":
+        return {
+            **base,
+            "mode": "date",
+            "options": [],
+            "max_select": 1,
+            "date_frame": date_frame(draft.when),
+        }
     if draft.mode == "number":
         frame = number_frame(
             draft.unit, draft.min, draft.max, draft.step, draft.default, draft.presets

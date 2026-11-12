@@ -26,7 +26,11 @@ from domains.analytics.schemas.daily_health import (
     Trend,
 )
 from domains.analytics.services.daily_health.analytics import MIN_BASELINE_DAYS, SPECS
-from domains.health_records.schemas.health import HRV_DROP_PCT, RHR_ELEVATION_BPM, recommended_sleep_hours
+from domains.health_records.schemas.health import (
+    HRV_DROP_PCT,
+    RHR_ELEVATION_BPM,
+    recommended_sleep_hours,
+)
 
 # v2: thêm phân tích giấc ngủ (nợ ngủ 7 đêm, độ đều giờ ngủ, hiệu quả, ngủ ghi tay).
 # v3: thêm điểm sẵn sàng 0–100 (SCORE), suy ra từ cùng các độ lệch; trạng thái không đổi.

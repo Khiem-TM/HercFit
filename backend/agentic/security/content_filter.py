@@ -4,7 +4,7 @@ Chạy trước mọi lần gọi model. Kết luận "block" bỏ qua tool, tra
 kế hoạch, trả lời bằng hướng dẫn hỗ trợ, đặt an toàn lên đầu; kết luận "caution"
 giữ luồng bình thường nhưng ràng buộc câu trả lời cuối. Các kiểm tra là
 luật từ khoá/con số cố ý thận trọng trên văn bản không dấu, nên chúng
-rẻ, giải thích được và test được (xem tests/unit/test_safety.py). Chúng không
+rẻ, giải thích được và kiểm tra được. Chúng không
 chẩn đoán gì và không thay thế cho chăm sóc chuyên môn.
 """
 

@@ -22,8 +22,8 @@ import httpx
 from sqlalchemy import select, text
 
 from core.database import get_async_engine, get_db_session
-from domains.shared import events
 from domains.health_records.types import disabled_types
+from domains.shared import events
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE
 from integrations.google_health import tokens
 from integrations.google_health.client import GoogleHealthClient, GoogleHealthError, ReauthRequired
@@ -75,7 +75,7 @@ async def run(user_id: UUID, *, days: int | None = None, push_only: bool = False
               http: httpx.AsyncClient | None = None) -> dict[str, Any]:
     """Đồng bộ một người dùng; an toàn khi gọi chồng (lượt sau trả về "running").
 
-    `push_only`: chỉ đẩy gym / bữa ăn vừa đổi (hook ghi), không đọc lại Google."""
+    `push_only`: chỉ đẩy gym / bữa ăn / bản ghi sức khoẻ vừa đổi (hook ghi), không đọc lại Google."""
     async with get_db_session() as session:
         connection = await HealthConnection.for_user(session, user_id)
     if connection is None or connection.status != "ACTIVE":
@@ -105,7 +105,8 @@ async def _run(connection: HealthConnection, days: int | None, push_only: bool,
         today = datetime.now(ZoneInfo(zone)).date()
         end = today + timedelta(days=1)
         if push_only:
-            pushed = await push_pending(client, connection.user_id, today - timedelta(days=BACKFILL_DAYS - 1), end, zone)
+            pushed = await push_pending(client, connection.user_id, today - timedelta(days=BACKFILL_DAYS - 1), end, zone,
+                                        granted)
             return {"status": "ok", "push": pushed}
         profile, settings = await _profile(client)
         zone = provider_timezone(settings) or zone
@@ -113,7 +114,8 @@ async def _run(connection: HealthConnection, days: int | None, push_only: bool,
         start = today - timedelta(days=span - 1)
         status = await pull(client, connection.user_id, granted, start, end, zone,
                             skip=disabled_types(connection.sync_groups))
-        pushed = await push_pending(client, connection.user_id, today - timedelta(days=BACKFILL_DAYS - 1), end, zone)
+        pushed = await push_pending(client, connection.user_id, today - timedelta(days=BACKFILL_DAYS - 1), end, zone,
+                                    granted)
     except ReauthRequired:
         await tokens.mark_reauth(connection.id)
         return {"status": "needs_reauth"}

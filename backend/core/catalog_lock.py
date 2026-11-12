@@ -1,6 +1,8 @@
 """Lấy khoá catalog trước khoá dòng/người dùng, kể cả trong các hàm hỗ trợ model trực tiếp."""
 from functools import wraps
+
 from sqlalchemy import text
+
 
 def catalog_write(fn):
     @wraps(fn)

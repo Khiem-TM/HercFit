@@ -3,8 +3,8 @@ from typing import Annotated, Literal
 from pydantic import AwareDatetime, ConfigDict, EmailStr, Field, HttpUrl, PlainSerializer
 
 from domains.body.schemas.body_metrics import BodyMetricCreate
-from domains.shared.schemas.common import EntityRead, InputSchema, JsonObject, Name, PartialSchema
 from domains.goals_plans.schemas.goal import GoalCreate
+from domains.shared.schemas.common import EntityRead, InputSchema, JsonObject, Name, PartialSchema
 
 Email = Annotated[EmailStr, Field(max_length=255)]
 URL = Annotated[HttpUrl, PlainSerializer(str, return_type=str)]

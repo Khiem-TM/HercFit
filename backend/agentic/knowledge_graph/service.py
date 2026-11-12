@@ -139,6 +139,8 @@ STOPWORDS = {
     "phu",
     "hop",
 }
+# Tham số làm ấm có cùng kiểu với lượt thật: owner, map thế hệ phiên không rỗng (danh sách phiên suy từ nó).
+WARM_UP_ARGS = ("kg-warm-up", {"kg-warm-up": 1})
 # Lần đọc bị timeout vẫn chạy tiếp để giữ kết nối trong pool; quá số lượng này thì
 # graph chậm bị bỏ qua thay vì dồn thêm truy vấn vào pool của driver.
 MAX_PENDING_READS = 4
@@ -248,13 +250,15 @@ class GraphContextService:
     async def warm_up(self, attempts=40, delay=3.0):
         """Lập kế hoạch và chạy mỗi truy vấn miền vài lần lúc khởi động: lần đọc nguội (~0,15-0,9 s) vượt mức trần.
 
-        Neo4j không phải phụ thuộc khởi động của agent và có thể trả lời muộn, nên graph không
-        truy cập được sẽ được thử lại ở nền (khoảng hai phút) thay vì để nguội."""
+        Neo4j lưu kế hoạch theo văn bản truy vấn *và kiểu tham số*: danh sách/map rỗng có kiểu khác danh sách có phần tử,
+        nên tham số làm ấm phải có cùng hình dạng với lượt thật (đo 2026-11-10: owner giả + map rỗng làm ấm sai kế hoạch,
+        lần đọc thật đầu tiên vẫn tốn 140-730 ms). Neo4j không phải phụ thuộc khởi động của agent và có thể trả lời
+        muộn, nên graph không truy cập được sẽ được thử lại ở nền (khoảng hai phút) thay vì để nguội."""
         for attempt in range(attempts):
             try:
                 for _ in range(3):
                     for domain in sorted(PILOT_DOMAINS):
-                        await self._query("kg-warm-up", {}, [domain], "warm up query", {})
+                        await self._query(*WARM_UP_ARGS, [domain], "warm up query", {})
                 return True
             except Exception as exc:
                 if attempt == 0:
@@ -266,6 +270,20 @@ class GraphContextService:
                 if attempt + 1 < attempts:
                     await asyncio.sleep(delay)
         return False
+
+    async def keep_warm(self, interval=60.0):
+        """Neo4j lập lại kế hoạch khi thống kê dữ liệu đổi (worker ghi liên tục): chạy lại các truy vấn cố định định kỳ
+        ở nền, để lần lập lại đó không rơi vào lượt chat của người dùng."""
+        from .context.pipeline import warm_templates
+
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                for domain in sorted(PILOT_DOMAINS):
+                    await self._query(*WARM_UP_ARGS, [domain], "warm up query", {})
+                await warm_templates(self)
+            except Exception as exc:
+                log.warning("kg_keep_warm_failed error_type=%s", type(exc).__name__)
 
     @observed("kg.retrieve", "retriever", capture=("message", "domain_hint"))
     async def retrieve(

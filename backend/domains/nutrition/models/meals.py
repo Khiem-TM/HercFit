@@ -3,9 +3,12 @@
 Tách ra từ models.journals trong đợt tổ chức lại theo miền."""
 from datetime import datetime
 from uuid import UUID as PyUUID
+
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from domains.nutrition.schemas.meals import MealCreate
 from domains.shared.models.activity import (
     FoodPortionMixin,
     NutrientColumns,
@@ -16,9 +19,8 @@ from domains.shared.models.activity import (
 )
 from domains.shared.models.basemodel import BaseModel
 from domains.shared.models.domain import guard_immutable
-from domains.shared.schemas.activity import NutritionTotals
-from domains.nutrition.schemas.meals import MealCreate
 from domains.shared.models.journal import Journal, journal_constraints
+from domains.shared.schemas.activity import NutritionTotals
 
 
 class Meal(NutrientColumns, Journal):

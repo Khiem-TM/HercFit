@@ -4,8 +4,9 @@ Một lượt ghi bữa ăn từng tốn 4–8 lần gọi model (tra món, đ�
 lệnh backend chỉ mất 20–190 ms (đo trên 26 lượt ngày 02/11). Bộ định tuyến đã gọi model một lần; nó tách
 luôn bản nháp `meal_log` (bữa, thời điểm, món, số lượng, đơn vị). Code tra mọi món trong một lần
 list_foods, và chỉ khi mỗi món có đúng một bản ghi trùng tên chuẩn hoá (cùng tiêu chí EXACT của
-/foods/resolve) với đơn vị dùng được thì mới tự dựng create_meals. Mọi trường hợp khác (món mơ hồ, thiếu
-số lượng, đơn vị cần quy đổi) đi đường model như cũ, với kết quả tra cứu đã có sẵn.
+/foods/resolve) với đơn vị dùng được thì mới tự dựng create_meals. Món còn lại (catalog chưa có, nhiều bản ghi
+trùng tên, thiếu số lượng, đơn vị không quy đổi được) được hỏi bằng thẻ chọn món do code dựng (food_gap.py); sau khi
+người dùng chọn, code dựng create_meals. Model không tham gia khi router đã tách được bản nháp bữa.
 
 Bản xem trước vẫn do backend dựng và người dùng vẫn phải xác nhận: đường nhanh chỉ bỏ bớt lời gọi model.
 """
@@ -14,48 +15,56 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from domains.shared.models.catalog import normalize_food_text
 
 INTENT = "LOG_FOOD"
 DOMAINS = {"meals", "foods"}
 DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh"
-# Đơn vị người dùng nói → đơn vị gốc của món mà backend tính được không cần quy đổi khẩu phần.
-# "1 bát" cho món tính theo 100 g cần bảng khẩu phần của món đó: để model đọc `portions`.
-COMPATIBLE = {"SERVING": {"PORTION"}, "G": {"G"}, "ML": {"ML"}}
+# Đơn vị trong bản nháp của router: G/ML như người dùng nói, SERVING cho số đếm (tô, bát, đĩa, cái, suất).
+DRAFT_UNITS = {"SERVING", "G", "ML"}
 
 
-def _moment(value: Any) -> datetime | None:
+def measure(row: Any, quantity: Any, unit: str | None) -> tuple[float, str] | None:
+    """(lượng, đơn vị) theo căn cứ g/ml của bản ghi, hoặc None khi không quy đổi được.
+
+    Catalog chỉ tính theo gam hoặc mililít. SERVING ("1 tô", "2 cái") được quy ra bằng khẩu phần hộ gia đình đầu tiên
+    của món (portions, cùng đơn vị căn cứ); món không có khẩu phần thì cần người dùng nói gam/ml."""
+    if not isinstance(row, dict):
+        return None
+    base = row.get("serving_unit")
+    try:
+        amount = float(quantity)
+    except (TypeError, ValueError):
+        return None
+    if unit == base:
+        return amount, base
+    if unit != "SERVING":
+        return None
+    for portion in row.get("portions") or []:
+        if isinstance(portion, dict) and portion.get("unit") == base:
+            try:
+                return round(amount * float(portion["quantity"]), 1), base
+            except (KeyError, TypeError, ValueError):
+                return None
+    return None
+
+
+def _moment(value: Any, zone: str | None = None) -> datetime | None:
+    """Thời điểm có múi giờ; giờ không kèm offset được hiểu theo múi giờ của bữa."""
+    if not value:
+        return None
     try:
         moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except (TypeError, ValueError):
         return None
-    return moment if moment.tzinfo is not None else None
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=ZoneInfo(zone or DEFAULT_TIMEZONE))
 
 
 def item_key(index: int, position: int) -> str:
     """Khoá của một món trong bản nháp (bữa thứ index, món thứ position): thẻ món thiếu trả lựa chọn theo khoá này."""
     return f"{index}:{position}"
-
-
-def complete(meal: dict, resolved: dict | None = None, index: int = 0) -> bool:
-    """Bữa có đủ dữ kiện để code dựng: thời điểm có múi giờ và mỗi món có tên, số lượng, đơn vị
-    (món người dùng đã chọn trên thẻ món thiếu mang lượng và đơn vị của thẻ)."""
-    items = meal.get("items") or []
-    resolved = resolved or {}
-    return (
-        bool(items)
-        and _moment(meal.get("consumed_at")) is not None
-        and all(
-            item_key(index, position) in resolved
-            or (
-                (item.get("food") or "").strip()
-                and (item.get("quantity") or 0) > 0
-                and item.get("unit") in COMPATIBLE
-            )
-            for position, item in enumerate(items)
-        )
-    )
 
 
 def eligible(state: dict) -> bool:
@@ -113,8 +122,9 @@ def names(meal: dict, resolved: dict | None = None, index: int = 0) -> list[str]
 def _exact(query: str, unit: str, rows: list[dict]) -> dict | None:
     """Bản ghi duy nhất trùng tên chuẩn hoá mà đơn vị người dùng nói dùng được.
 
-    Catalog có tên trùng (124/1.587 tên SYSTEM, 02/11): "Phở bò tái" có một bản theo suất và một bản theo 100 g,
-    nên "1 tô" chỉ có một cách hiểu. Hai bản cùng đơn vị vẫn là mơ hồ và để model hoặc người dùng chọn."""
+    Catalog có tên trùng: "Phở bò tái" có một bản có khẩu phần "1 tô" (món) và một bản không có (thực phẩm), cùng
+    tính theo 100 g. "1 tô" chỉ quy đổi được bằng bản có khẩu phần; gam/ml thì ưu tiên bản không có khẩu phần như
+    trước khi mọi món chuyển về 100 g. Còn lại nhiều bản dùng được là mơ hồ và để model hoặc người dùng chọn."""
     key = normalize_food_text(query)
     hits = [
         row
@@ -126,9 +136,28 @@ def _exact(query: str, unit: str, rows: list[dict]) -> dict | None:
             normalize_food_text(row.get("name_vi") or ""),
             normalize_food_text(row.get("name_en") or ""),
         }
-        and row.get("serving_unit") in COMPATIBLE[unit]
+        and measure(row, 1, unit) is not None
     ]
+    if len(hits) > 1 and unit != "SERVING":
+        hits = [row for row in hits if not row.get("portions")]
     return hits[0] if len(hits) == 1 else None
+
+
+def unmatched(meal: dict, rows: Any, resolved: dict | None = None, index: int = 0) -> list[tuple[int, dict]]:
+    """(vị trí, món) mà code không tự dựng được: chưa chọn trên thẻ và thiếu lượng/đơn vị, hoặc không có đúng một bản
+    ghi trùng tên dùng được với đơn vị đó (catalog chưa có, nhiều bản trùng tên, "1 tô" mà món không có khẩu phần)."""
+    resolved = resolved or {}
+    rows = rows if isinstance(rows, list) else []
+    return [
+        (position, item)
+        for position, item in enumerate(meal["items"])
+        if item_key(index, position) not in resolved
+        and (
+            item.get("unit") not in DRAFT_UNITS
+            or not (item.get("quantity") or 0) > 0
+            or _exact(item.get("food") or "", item["unit"], rows) is None
+        )
+    ]
 
 
 def match(meal: dict, rows: Any, resolved: dict | None = None, index: int = 0) -> list[dict] | None:
@@ -155,20 +184,22 @@ def match(meal: dict, rows: Any, resolved: dict | None = None, index: int = 0) -
         row = _exact(item["food"], item["unit"], rows)
         if row is None:
             return None
-        items.append(
-            {"food_id": str(row["id"]), "quantity": item["quantity"], "unit": item["unit"]}
-        )
+        quantity, unit = measure(row, item["quantity"], item["unit"])
+        items.append({"food_id": str(row["id"]), "quantity": quantity, "unit": unit})
     return items
 
 
 def payload(meal: dict, items: list[dict]) -> dict:
+    """Lệnh create_meals; bữa không rõ giờ thì bỏ consumed_at để backend lấy thời điểm ghi (như khi model dựng)."""
     name = (meal.get("name") or "").strip() or ", ".join(
         item["food"].strip() for item in meal["items"]
     )
+    zone = meal.get("timezone") or DEFAULT_TIMEZONE
+    moment = _moment(meal.get("consumed_at"), zone)
     return {
         "name": name[:120],
-        "consumed_at": _moment(meal["consumed_at"]).isoformat(),
-        "timezone": meal.get("timezone") or DEFAULT_TIMEZONE,
+        **({"consumed_at": moment.isoformat()} if moment else {}),
+        "timezone": zone,
         "items": items,
     }
 

@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { AlertCircle, Clock, TriangleAlert } from 'lucide-vue-next'
+import { computed, shallowRef } from 'vue'
+import { AlertCircle, Clock, HeartPulse, TriangleAlert } from 'lucide-vue-next'
 import type { BodyMetricRead, GoalRead, UserProfile } from '@/types/api'
 import { useAuth } from '@/composables/useAuth'
 import ProfileAside from './ProfileAside.vue'
-import { longDate, stamp, vn, WEEKDAY_LONG, weekday } from './format'
-import { nutritionView, readinessView, weekView, workoutView } from './today'
-import type { DashboardData } from './useDashboardData'
+import { clockTime, longDate, stamp, vn, WEEKDAY_LONG, weekday } from './format'
+import { canRepeatMeal, nutritionView, readinessView, weekView, workoutView } from './today'
+import type { DashboardData, MealRow } from './useDashboardData'
 
 const props = defineProps<{ data: DashboardData }>()
 const emit = defineEmits<{
-  detail: [kind: 'ready' | 'workout' | 'nutrition']
+  detail: [kind: 'ready' | 'workout' | 'nutrition' | 'heart']
   settings: [tab: 'profile' | 'integrations' | 'notifications']
   ask: [text: string]
   prefill: [text: string]
@@ -35,6 +35,34 @@ const shortWeekday = (iso: string) => `${WEEKDAY_LONG[weekday(iso)]} ${iso.slice
 const typedUser = computed(() => user.value as UserProfile | null)
 const goal = computed(() => currentGoal.value as GoalRead | null)
 const latest = computed(() => latestBodyMetric.value as BodyMetricRead | null)
+// Nhịp tim hôm nay theo bản gộp ngày của Google; chi tiết từng giờ ở trang Nhịp tim.
+const heart = computed(() => health.value?.daily.find(day => day.local_date === props.data.today) ?? null)
+
+// Ghi nhanh không qua trợ lý. Mỗi lúc chỉ một lệnh đang gửi: các nút bị vô hiệu cho tới khi xong.
+const WATER_ML = 250
+const meals = computed(() => props.data.mealsToday.value)
+const water = computed(() => heart.value?.hydration_ml ?? null)
+const sending = shallowRef<string | null>(null)
+const quickMessage = shallowRef<{ tone: 'ok' | 'error'; text: string } | null>(null)
+
+async function quick(id: string, action: () => Promise<void>, done: string, failed: string) {
+  if (sending.value) return
+  sending.value = id
+  quickMessage.value = null
+  try {
+    await action()
+    quickMessage.value = { tone: 'ok', text: done }
+  } catch {
+    quickMessage.value = { tone: 'error', text: failed }
+  } finally {
+    sending.value = null
+  }
+}
+
+const repeatMeal = (meal: MealRow) => quick(meal.id, () => props.data.logMealAgain(meal), `Đã ghi lại "${meal.name}".`,
+  'Chưa ghi lại được bữa ăn. Kiểm tra kết nối mạng rồi thử lại.')
+const addWater = () => quick('water', () => props.data.logWater(WATER_ML), `Đã ghi ${WATER_ML} ml nước.`,
+  'Chưa ghi được nước uống. Kiểm tra kết nối mạng rồi thử lại.')
 </script>
 
 <template>
@@ -180,6 +208,21 @@ const latest = computed(() => latestBodyMetric.value as BodyMetricRead | null)
               <button v-else type="button" class="hf-btn" @click="emit('detail', 'nutrition')">Xem mục tiêu</button>
             </div>
           </template>
+          <ul v-if="meals.length" class="quick-meals" aria-label="Bữa đã ghi hôm nay">
+            <li v-for="meal in meals" :key="meal.id">
+              <span class="quick-name"><b>{{ meal.name }}</b>
+                <span class="hf-mut">{{ clockTime(meal.consumed_at) }}<template v-if="meal.energy_kcal != null"> · {{ vn(meal.energy_kcal) }} kcal</template></span></span>
+              <button type="button" class="hf-btn" :disabled="sending !== null || !canRepeatMeal(meal)"
+                      :title="canRepeatMeal(meal) ? undefined : 'Có món không còn trong danh mục'" @click="repeatMeal(meal)">
+                {{ sending === meal.id ? 'Đang ghi…' : 'Ghi lại bữa này' }}</button>
+            </li>
+          </ul>
+          <div class="quick-water">
+            <span>Nước hôm nay: <b>{{ water != null ? `${vn(water)} ml` : 'chưa ghi' }}</b></span>
+            <button type="button" class="hf-btn" :disabled="sending !== null" @click="addWater">
+              {{ sending === 'water' ? 'Đang ghi…' : `+ ${WATER_ML} ml nước` }}</button>
+          </div>
+          <p v-if="quickMessage" class="quick-msg" :class="quickMessage.tone" role="status">{{ quickMessage.text }}</p>
         </section>
 
         <!-- Khối 4: Nhịp tập tuần -->
@@ -217,6 +260,20 @@ const latest = computed(() => latestBodyMetric.value as BodyMetricRead | null)
             <div class="hf-acts"><button type="button" class="hf-btn pri" @click="emit('create-plan')">Lập lịch với trợ lý</button></div>
           </template>
         </section>
+
+        <!-- Khối 5: Nhịp tim -->
+        <section v-if="connection?.status === 'ACTIVE'" class="hf-card hf-c12" aria-labelledby="b5">
+          <div class="hf-hd">
+            <h2 id="b5" class="hf-lbl"><HeartPulse :size="14" aria-hidden="true" /> Nhịp tim hôm nay</h2>
+          </div>
+          <div v-if="heart?.hr_avg_bpm != null" class="hr-row">
+            <div class="baseline-row"><span class="hf-dg" style="font-size: 56px">{{ vn(heart.hr_avg_bpm) }}</span>
+              <span class="unit-strong">bpm trung bình</span></div>
+            <div class="hf-mut small">Thấp nhất {{ heart.hr_min_bpm ?? '—' }} · cao nhất {{ heart.hr_max_bpm ?? '—' }} bpm</div>
+          </div>
+          <p v-else class="hf-mut para">Chưa có nhịp tim hôm nay từ thiết bị.</p>
+          <div class="hf-acts"><button type="button" class="hf-btn pri" @click="emit('detail', 'heart')">Xem theo giờ</button></div>
+        </section>
       </div>
 
       <ProfileAside :user="typedUser" :profile="health?.profile ?? null" :latest="latest" :metrics="data.metrics.value"
@@ -227,6 +284,7 @@ const latest = computed(() => latestBodyMetric.value as BodyMetricRead | null)
 
 <style scoped>
 .today { display: flex; flex-direction: column; gap: 16px; }
+.hr-row { display: flex; align-items: flex-end; gap: 12px 28px; flex-wrap: wrap; }
 .err-text { display: flex; gap: 10px; align-items: center; }
 .dash { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 16px; align-items: start; }
 .headline { display: flex; align-items: center; gap: 18px; }
@@ -278,4 +336,10 @@ const latest = computed(() => latestBodyMetric.value as BodyMetricRead | null)
 .dc.rest { background: var(--hf-fill); color: var(--hf-faint); }
 @media (max-width: 1180px) { .dash { grid-template-columns: minmax(0, 1fr); } .dash > .pcard { order: -1; } }
 @media (max-width: 760px) { .sigs { grid-template-columns: minmax(0, 1fr); } .macro { grid-template-columns: minmax(0, 1fr); } }
+.quick-meals { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
+.quick-meals li, .quick-water { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.quick-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.quick-water { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hf-line); }
+.quick-msg { margin: 8px 0 0; font-size: 13px; }
+.quick-msg.error { color: var(--hf-err-text); }
 </style>

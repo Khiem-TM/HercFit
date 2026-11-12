@@ -4,10 +4,11 @@ import { Check } from 'lucide-vue-next'
 import type { ClarifyQuestion } from '@/types/api'
 import { answerError, choosesOnce, groupError, groupsFor, type Answer, type SetGroup, type SetRow } from '@/features/chat/clarification'
 import CatalogImage from './CatalogImage.vue'
+import DateField from './DateField.vue'
 import NumberField from './NumberField.vue'
 import SetsEditor from './SetsEditor.vue'
 
-/** Một khung trên thẻ. Mọi câu trả lời đều được chọn trên thẻ (lựa chọn, một con số, các set); không gõ văn bản tự do. */
+/** Một khung trên thẻ. Mọi câu trả lời đều được chọn trên thẻ (lựa chọn, một con số, một ngày, các set); không gõ văn bản tự do. */
 const props = defineProps<{ question: ClarifyQuestion; rows?: SetRow[]; disabled?: boolean; showLabel?: boolean }>()
 /** Phát ra khi người dùng xong câu hỏi này (chạm một lựa chọn, hoặc Enter trong ô nhập số). */
 const emit = defineEmits<{ commit: [] }>()
@@ -22,6 +23,7 @@ const hint = computed(() => {
     case 'multiple': return least > 1 ? `Chọn ${least}–${most}` : `Chọn tối đa ${most}`
     case 'quick_reply': return 'Trả lời nhanh'
     case 'number': return `Chọn số · ${props.question.number?.unit ?? ''}`
+    case 'date': return 'Chọn ngày'
     case 'sets': return 'Hiệp × reps × kg'
     default: return 'Chọn một'
   }
@@ -52,6 +54,10 @@ function editValue(value: number | null) {
   answer.value = { ...answer.value, value, skipped: false }
 }
 
+function editDate(date: string | null) {
+  answer.value = { ...answer.value, date, skipped: false }
+}
+
 defineExpose({ focus: () => heading.value?.focus(), error: () => answerError(props.question, answer.value, props.rows ?? []) })
 </script>
 
@@ -71,6 +77,17 @@ defineExpose({ focus: () => heading.value?.focus(), error: () => answerError(pro
       :label="question.label"
       :disabled="disabled"
       @change="editValue"
+      @commit="emit('commit')"
+    />
+
+    <!-- Một ngày: mốc gợi ý hoặc lịch -->
+    <DateField
+      v-else-if="question.mode === 'date' && question.date_frame"
+      :frame="question.date_frame"
+      :value="answer.date"
+      :label="question.label"
+      :disabled="disabled"
+      @change="editDate"
       @commit="emit('commit')"
     />
 

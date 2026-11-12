@@ -6,21 +6,38 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID as PyUUID
 
 from sqlalchemy import (
-    CheckConstraint, Enum, ForeignKey, Index, Numeric, Select, String, Text,
-    column, event, func, or_, table, text,
+    CheckConstraint,
+    Enum,
+    ForeignKey,
+    Index,
+    Numeric,
+    Select,
+    String,
+    Text,
+    column,
+    event,
+    func,
+    or_,
+    table,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
-from domains.shared.models.basemodel import BaseModel, uuid7
-from domains.shared.models.catalog import SEARCH_CANDIDATES, CatalogMixin, apply_search_text, normalize_food_text
 from core.catalog_lock import catalog_write
+from domains.catalog.schemas.foods import FoodCreate, FoodQuery, FoodUpdate, SystemFoodCreate
+from domains.shared.models.basemodel import BaseModel, uuid7
+from domains.shared.models.catalog import (
+    SEARCH_CANDIDATES,
+    CatalogMixin,
+    apply_search_text,
+    normalize_food_text,
+)
 from domains.shared.models.domain import require_version
 from domains.shared.schemas.common import UserScope
 from domains.shared.schemas.enums import FoodItemType, FoodServingUnit, FoodSourceType
-from domains.catalog.schemas.foods import FoodCreate, FoodQuery, FoodUpdate, SystemFoodCreate
 
 if TYPE_CHECKING:
     from domains.identity.models.user import User
@@ -60,10 +77,6 @@ class FoodItem(CatalogMixin, BaseModel):
         ),
         Index("ix_foods_browse", "normalized_name_vi", "id"),
         CheckConstraint("jsonb_typeof(portions) = 'array'", name="ck_foods_portions"),
-        CheckConstraint(
-            "portion_weight_g IS NULL OR (portion_weight_g > 0 AND portion_weight_g < 100000)",
-            name="ck_foods_portion_weight",
-        ),
     )
 
     code: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -103,12 +116,11 @@ class FoodItem(CatalogMixin, BaseModel):
     )
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_public_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Đơn vị đo gia dụng ([{label, quantity, unit, source}]) và, với thực phẩm
-    # PORTION, khối lượng gam của một khẩu phần khi nguồn công bố.
+    # Đơn vị đo gia dụng ([{label, quantity, unit, source}]) theo đúng serving_unit của món,
+    # ví dụ "1 tô" = 500 G: quy lượng người dùng nói theo tô/suất ra gam/ml.
     portions: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB(none_as_null=True), default=list, server_default=text("'[]'::jsonb"), nullable=False,
     )
-    portion_weight_g: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
     normalized_name_vi: Mapped[str] = mapped_column(Text, nullable=False)
     normalized_name_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     normalized_search_text: Mapped[str] = mapped_column(Text, nullable=False)

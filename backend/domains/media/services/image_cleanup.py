@@ -4,7 +4,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
-from core.database import get_db_session, close_crud_db_pool
+
+from core.database import close_crud_db_pool, get_db_session
 from domains.media.models.media import ImageCleanup
 from domains.media.services.cloudinary_images import CloudinaryImages
 from domains.media.services.media_service import MODELS

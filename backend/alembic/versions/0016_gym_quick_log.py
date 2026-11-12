@@ -8,8 +8,9 @@ Compendium 02054 / 02061 / 02050), chọn theo môn thể thao "resistance_train
 import json
 import unicodedata
 
-from alembic import op
 from sqlalchemy import text
+
+from alembic import op
 
 revision = "0016_gym_quick_log"
 down_revision = "0015_knowledge_retrieval"

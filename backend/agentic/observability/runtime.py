@@ -46,7 +46,13 @@ class Observer:
             "configured": self.config.configured,
             "propagation_configured": False,
             "capture_mode": self.config.LANGFUSE_CAPTURE_MODE,
+            "export_errors": 0,
+            "export_failures": 0,
+            "spans_dropped": 0,
             "last_export_error": None,
+            "environment": self.config.LANGFUSE_TRACING_ENVIRONMENT,
+            "release": self.config.LANGFUSE_RELEASE,
+            "delivery_verified": False,
         }
 
     @contextmanager

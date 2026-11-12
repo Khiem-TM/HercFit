@@ -1,0 +1,6 @@
+{"id": "diet", "scope": "outside", "facts": ["Mình ăn chay trường, không ăn thịt cá nhé."], "probe": "Theo những gì mình kể từ đầu cuộc trò chuyện, mình có ăn thịt bò được không?", "keywords": [["chay"]]}
+{"id": "allergy", "scope": "outside", "facts": ["Lưu ý giúp mình: mình bị dị ứng đậu phộng."], "probe": "Lúc đầu mình đã kể mình bị dị ứng với món gì?", "keywords": [["đậu phộng", "lạc"]]}
+{"id": "race-goal", "scope": "outside", "facts": ["Mục tiêu lớn nhất của mình năm nay là chạy xong cự ly 21km ở giải Hà Nội tháng 12."], "probe": "Giải chạy mình đang chuẩn bị là cự ly bao nhiêu km?", "keywords": [["21"]]}
+{"id": "injury", "scope": "outside", "facts": ["Đầu gối trái của mình hay đau khi squat sâu."], "probe": "Mình đã nói bộ phận nào hay bị đau khi tập?", "keywords": [["gối"]]}
+{"id": "schedule", "scope": "outside", "facts": ["Mình chỉ tập được vào buổi sáng sớm trước giờ làm, khoảng 45 phút."], "probe": "Mình thường tập được vào buổi nào và bao lâu?", "keywords": [["sáng"], ["45"]]}
+{"id": "in-window", "scope": "inside", "facts": ["Mình rất thích ăn phở bò."], "probe": "Món mình vừa nói là thích nhất là món gì?", "keywords": [["phở"]]}

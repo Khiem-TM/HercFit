@@ -17,7 +17,7 @@ import re
 import time
 from contextlib import suppress
 from datetime import date, datetime, timezone
-from typing import Any, Awaitable, Callable
+from typing import Any, Callable
 
 from sqlalchemy import text
 

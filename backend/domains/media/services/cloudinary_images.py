@@ -1,14 +1,14 @@
 """Giải mã ảnh có giới hạn và request Cloudinary đã xác thực, chỉ phía server."""
-from agentic.observability import observed
+import warnings
 from dataclasses import dataclass
 from io import BytesIO
-import warnings
 
 import httpx
 from fastapi import HTTPException, UploadFile
 from PIL import Image, ImageOps, UnidentifiedImageError
 from starlette.concurrency import run_in_threadpool
 
+from agentic.observability import observed
 from core.settings import settings
 
 

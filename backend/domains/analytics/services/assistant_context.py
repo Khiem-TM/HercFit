@@ -5,7 +5,8 @@ mục tiêu, hồ sơ vận động viên, chạy bộ và tập luyện gần �
 cá nhân hoá câu trả lời và đọc chi tiết bằng tool thay vì hỏi. Mọi giá trị đều được
 tính tại đây từ bản ghi đã lưu; trợ lý không bao giờ tính lại hay bịa ra chúng.
 """
-from datetime import date, datetime, timedelta, timezone as dt_timezone
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -13,12 +14,12 @@ from sqlalchemy import func, select
 from domains.body.models.body_metrics import BodyMetric
 from domains.goals_plans.models.goal import Goal
 from domains.health_records import ports
+from domains.health_records.services.health_service import measured_resting_hr
 from domains.identity import consent
 from domains.nutrition.models.meals import Meal
 from domains.training.models.trainings import Training
 from domains.training.schemas.training import AnalyticsQuery
 from domains.training.services import training_analytics as analytics
-from domains.health_records.services.health_service import measured_resting_hr
 
 RUN_WEEKS = 8
 RECENT_WEEKS = 4

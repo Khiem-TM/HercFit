@@ -1,5 +1,6 @@
 """Dòng dõi quan sát bền vững cho phép chiếu và tiếp nhận bất đồng bộ."""
 from alembic import op
+
 revision = '0010_observability'
 down_revision = '0009_cloudinary_images'
 branch_labels = depends_on = None

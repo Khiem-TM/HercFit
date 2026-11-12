@@ -8,16 +8,16 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
 from core.settings import settings
-from domains.shared.models.domain import require_version
 from domains.catalog.models.exercises import Exercise
 from domains.catalog.models.foods import FoodItem
-from domains.nutrition.models.meals import Meal
-from domains.training.models.trainings import Training
 from domains.media.models.media import ImageCleanup
 from domains.media.schemas.media import ImageRead
 from domains.media.services.cloudinary_images import CloudinaryImages, read_image
 from domains.media.services.remote_image import fetch_remote_image
+from domains.nutrition.models.meals import Meal
+from domains.shared.models.domain import require_version
 from domains.shared.services.common import UserService
+from domains.training.models.trainings import Training
 
 MODELS = {"foods": FoodItem, "exercises": Exercise, "meals": Meal, "trainings": Training}
 

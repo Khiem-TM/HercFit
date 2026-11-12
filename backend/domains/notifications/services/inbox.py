@@ -17,8 +17,10 @@ from fastapi import HTTPException
 
 from domains.analytics.services import day_review
 from domains.analytics.services.daily_health import service as daily_health
-from domains.analytics.services.health_rules import catalog, features as rule_features
-from domains.analytics.services.health_rules.evaluate import Signal, evaluate as evaluate_rules
+from domains.analytics.services.health_rules import catalog
+from domains.analytics.services.health_rules import features as rule_features
+from domains.analytics.services.health_rules.evaluate import Signal
+from domains.analytics.services.health_rules.evaluate import evaluate as evaluate_rules
 from domains.health_records import ports
 from domains.identity import consent
 from domains.identity.models.user import User

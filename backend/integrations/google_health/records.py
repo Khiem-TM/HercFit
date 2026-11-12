@@ -1,8 +1,15 @@
-"""Ghi xuyên qua (write-through) cho dữ liệu Google sở hữu: buổi thể thao, cân nặng, chiều cao, % mỡ, nước, giấc ngủ.
+"""Bản ghi người dùng nhập cho các loại dữ liệu sức khoẻ: buổi thể thao, cân nặng, chiều cao, % mỡ, nước, giấc ngủ.
 
-HercFit không giữ bản riêng của các dữ liệu này: lệnh ghi đi thẳng lên Google, điểm Google trả về
-được lưu ngay vào health_points (đọc lại thấy ngay), và lần reconcile sau thay thế nó bằng bản của
-Google. Chỉ sửa / xoá được điểm do HercFit ghi; điểm của thiết bị thuộc về thiết bị.
+Tạo mới lưu vào health_points trước (HercFit là nguồn sự thật), với written_by_hercfit = true và
+remote_name = "local/<uuid7>" nghĩa là "chưa có trên Google"; không cần kết nối Google và không gọi
+mạng trong transaction. Chỉ sửa / xoá được điểm do HercFit ghi; điểm của thiết bị thuộc về thiết bị.
+
+Sửa / xoá một điểm do HercFit ghi:
+* còn "local/...": sửa / xoá dòng cục bộ (job đẩy sẽ tạo bản mới nhất trên Google);
+* đã có tên Google và kết nối còn quyền ghi: gọi Google rồi cập nhật dòng như trước;
+* đã có tên Google nhưng không còn kết nối: sửa dòng cục bộ và đổi remote_name thành "local/<uuid7>" mới
+  (lần kết nối sau đẩy như một bản mới), xoá thì chỉ xoá dòng cục bộ.
+  Giới hạn đã biết: bản trên Google không đổi; nếu kết nối lại, bản cũ đó được đọc về như một bản ghi riêng.
 
 Buổi thể thao nhận đúng đầu vào của một mục buổi tập (bài trong catalog + performance), nên ước
 tính kcal và quãng đường dùng lại đúng công thức MET / ACSM của buổi tập (build_exercise_item).
@@ -22,16 +29,25 @@ from domains.catalog.schemas.exercises import ExercisePerformance
 from domains.health_records.models.health_points import HealthPoint
 from domains.health_records.types import can_write, spec
 from domains.shared.models.activity import build_exercise_item
-from domains.training.schemas.trainings import GYM_GENERAL_CODE
+from domains.shared.models.basemodel import uuid7
 from domains.shared.schemas.common import InputSchema
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName
+from domains.training.schemas.trainings import GYM_GENERAL_CODE
 from integrations.google_health import kinds, tokens
-from integrations.google_health.client import PERMISSION, GoogleHealthClient, GoogleHealthError, ReauthRequired
+from integrations.google_health.client import (
+    PERMISSION,
+    GoogleHealthClient,
+    GoogleHealthError,
+    ReauthRequired,
+)
 from integrations.google_health.models import HealthConnection
 
 Kind = Literal["exercise", "weight", "height", "body-fat", "hydration", "sleep"]
+# Tiền tố remote_name của điểm chỉ có trong HercFit (chưa có trên Google).
+LOCAL_PREFIX = "local/"
 DATA_TYPE = {"exercise": "exercise", "weight": "weight", "height": "height", "body-fat": "body-fat",
              "hydration": "hydration-log", "sleep": "sleep"}
+LOCAL_TYPES = tuple(DATA_TYPE.values())
 # Giấc ngủ ghi tay: một đêm hợp lý và gần đây (đồng hồ vẫn là nguồn chính khi có).
 SLEEP_MIN, SLEEP_MAX, SLEEP_MAX_AGE = timedelta(hours=1), timedelta(hours=16), timedelta(days=30)
 # Môn trong catalog (configuration.sport / activity) → ExerciseType của Google; không khớp thì SPORT.
@@ -168,6 +184,13 @@ async def _client(session, user_id: UUID, data_type: str, http: httpx.AsyncClien
     return GoogleHealthClient(token, http)
 
 
+async def _connected(session, user_id: UUID, data_type: str) -> bool:
+    """Kết nối còn hiệu lực và có quyền ghi loại này (không gọi Google)."""
+    connection = await HealthConnection.for_user(session, user_id)
+    return (connection is not None and connection.status == "ACTIVE"
+            and can_write(data_type, connection.granted_scopes or []))
+
+
 def view(point: HealthPoint) -> dict[str, Any]:
     return {"id": point.id, "data_type": point.data_type, "local_date": point.local_date, "start_at": point.start_at,
             "end_at": point.end_at, "value": point.value, "written_by_hercfit": point.written_by_hercfit}
@@ -181,6 +204,25 @@ async def _store(session, user_id: UUID, data_type: str, operation: dict[str, An
         return None
     [point_id] = await HealthPoint.upsert(session, [point.row(user_id, written_by_hercfit=True)])
     return await session.get(HealthPoint, point_id, populate_existing=True)
+
+
+async def _store_local(session, user_id: UUID, data_type: str, point: dict[str, Any], zone: str) -> HealthPoint:
+    """Lưu điểm vừa dựng vào health_points như bản của HercFit, chưa có trên Google."""
+    parsed = kinds.parse(spec(data_type), point, zone)
+    row = {**parsed.row(user_id, written_by_hercfit=True), "remote_name": LOCAL_PREFIX + str(uuid7())}
+    [point_id] = await HealthPoint.upsert(session, [row])
+    return await session.get(HealthPoint, point_id, populate_existing=True)
+
+
+async def _replace_local(session, current: HealthPoint, data_type: str, point: dict[str, Any], zone: str) -> HealthPoint:
+    """Ghi đè dòng bằng điểm mới dựng; dòng đã có tên Google thì thành bản cục bộ mới (chưa có trên Google)."""
+    parsed = kinds.parse(spec(data_type), point, zone)
+    current.kind, current.start_at, current.end_at = parsed.kind, parsed.start_at, parsed.end_at
+    current.local_date, current.value = parsed.local_date, parsed.value
+    if not current.remote_name.startswith(LOCAL_PREFIX):
+        current.remote_name = LOCAL_PREFIX + str(uuid7())
+    await session.flush()
+    return current
 
 
 async def _owned(session, user_id: UUID, kind: str, point_id: UUID) -> HealthPoint:
@@ -202,33 +244,36 @@ def _google_error(exc: GoogleHealthError) -> HTTPException:
 async def create(session, user_id: UUID, kind: str, payload: dict[str, Any]) -> dict[str, Any]:
     data_type = DATA_TYPE[kind]
     point, derived = await build(session, user_id, kind, payload)
-    async with http_client() as http:
-        client = await _client(session, user_id, data_type, http)
-        try:
-            operation = await client.create_point(data_type, point)
-        except GoogleHealthError as exc:
-            raise _google_error(exc) from None
-    stored = await _store(session, user_id, data_type, operation, payload.get("timezone") or DEFAULT_TIMEZONE)
-    return {**(view(stored) if stored else {"data_type": data_type, "pending": True}), "derived": derived}
+    stored = await _store_local(session, user_id, data_type, point, payload.get("timezone") or DEFAULT_TIMEZONE)
+    from integrations.google_health.directory import schedule_push
+
+    schedule_push(session, user_id)  # đẩy lên Google sau commit khi có kết nối (không gọi mạng trong transaction)
+    return {**view(stored), "derived": derived}
 
 
 async def update(session, user_id: UUID, kind: str, point_id: UUID, payload: dict[str, Any]) -> dict[str, Any]:
     data_type = DATA_TYPE[kind]
     current = await _owned(session, user_id, kind, point_id)
     point, derived = await build(session, user_id, kind, payload, exclude=current.id)
+    zone = payload.get("timezone") or DEFAULT_TIMEZONE
+    if current.remote_name.startswith(LOCAL_PREFIX) or not await _connected(session, user_id, data_type):
+        return {**view(await _replace_local(session, current, data_type, point, zone)), "derived": derived}
     async with http_client() as http:
         client = await _client(session, user_id, data_type, http)
         try:
             operation = await client.patch_point(current.remote_name, point)
         except GoogleHealthError as exc:
             raise _google_error(exc) from None
-    stored = await _store(session, user_id, data_type, operation, payload.get("timezone") or DEFAULT_TIMEZONE)
+    stored = await _store(session, user_id, data_type, operation, zone)
     return {**view(stored or current), "derived": derived}
 
 
 async def delete(session, user_id: UUID, kind: str, point_id: UUID) -> None:
     data_type = DATA_TYPE[kind]
     current = await _owned(session, user_id, kind, point_id)
+    if current.remote_name.startswith(LOCAL_PREFIX) or not await _connected(session, user_id, data_type):
+        await HealthPoint.remove(session, user_id, data_type, current.remote_name)
+        return
     async with http_client() as http:
         client = await _client(session, user_id, data_type, http)
         try:

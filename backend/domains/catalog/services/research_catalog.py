@@ -2,14 +2,16 @@
 import hashlib
 import json
 from datetime import timedelta
+
 from fastapi import HTTPException
 from sqlalchemy import text
-from core.settings import settings
-from domains.catalog.models.foods import FoodItem, normalize_food_text
-from domains.catalog.models.exercises import Exercise
-from domains.catalog.schemas.foods import FoodRead
-from domains.catalog.schemas.exercises import ExerciseRead
+
 from agentic.research.attestation import key_id, verify
+from core.settings import settings
+from domains.catalog.models.exercises import Exercise
+from domains.catalog.models.foods import FoodItem, normalize_food_text
+from domains.catalog.schemas.exercises import ExerciseRead
+from domains.catalog.schemas.foods import FoodRead
 
 MODELS = {'foods': (FoodItem, FoodRead), 'exercises': (Exercise, ExerciseRead)}
 

@@ -26,6 +26,8 @@ const error = ref<string | null>(null)
 /** Chế độ của phiên đang mở; được nhớ theo từng phiên cho tới khi người dùng tắt. */
 const chatMode = ref<ChatMode>('normal')
 let streamController: AbortController | null = null
+// run_id của lượt đang stream (sự kiện "run" đầu tiên), để nút dừng huỷ được lượt ở server.
+let streamRunId: string | null = null
 
 const MODE_KEY = 'hercfit.chatMode.'
 
@@ -250,7 +252,9 @@ export function useChat() {
 
           try {
             const event = JSON.parse(payloadStr)
-            if (event.type === 'progress') {
+            if (event.type === 'run' && typeof event.run_id === 'string') {
+              if (streamController === controller) streamRunId = event.run_id
+            } else if (event.type === 'progress') {
               activeNode.value = event.node || null
             } else if (event.type === 'token' && typeof event.text === 'string') {
               if (streamingIndex < 0) {
@@ -322,15 +326,24 @@ export function useChat() {
         if (streamingIndex >= 0) messages.value[streamingIndex].status = 'failed'
       }
     } finally {
-      if (streamController === controller) streamController = null
+      if (streamController === controller) {
+        streamController = null
+        streamRunId = null
+      }
       isStreaming.value = false
       activeNode.value = null
     }
   }
 
-  /** Huỷ câu trả lời đang chạy; server dừng lượt chạy khi stream đóng. */
-  function stopStreaming(): void {
-    streamController?.abort()
+  /** Huỷ câu trả lời đang chạy: báo server dừng lượt (nếu đã biết run_id) rồi đóng stream. Lỗi khi huỷ (lượt vừa
+   *  xong, đang lưu thao tác đã xác nhận) không chặn việc đóng stream; server vẫn dừng khi thấy client rời đi. */
+  async function stopStreaming(): Promise<void> {
+    const controller = streamController
+    const runId = streamRunId
+    if (runId) {
+      await authFetch(`/api/v1/chat/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => undefined)
+    }
+    controller?.abort()
   }
 
   /** Bản ghi đã lưu của hành động đã duyệt (output của lệnh ghi mang action_id của nó). */

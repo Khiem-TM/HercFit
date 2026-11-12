@@ -72,7 +72,7 @@ const reading = (value: number | undefined, unit: string) =>
           <template v-if="week.debt_minutes != null"> · nợ ngủ {{ duration(week.debt_minutes) }}</template>
           <template v-if="week.bedtime_sd_minutes != null"> · giờ ngủ lệch ±{{ fmt(week.bedtime_sd_minutes) }} phút</template></p>
       </div>
-      <SleepLogForm v-if="connected && !night" :day="a.date" @saved="emit('logged')" />
+      <SleepLogForm v-if="!night" :day="a.date" @saved="emit('logged')" />
       <footer>
         <p class="note">{{ a.disclaimer }} <small>({{ a.algorithm_version }})</small></p>
         <button type="button" class="ask" @click="emit('ask', QUESTION)"><MessageCircle :size="12" /> Hỏi trợ lý</button>

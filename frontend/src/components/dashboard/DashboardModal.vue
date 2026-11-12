@@ -9,6 +9,7 @@ import { syncOnOpen } from '@/features/health-integration/openSync'
 import { goalChoices } from '@/features/onboarding/model'
 import HfLogo from '@/components/app/HfLogo.vue'
 import HfToast from '@/components/app/HfToast.vue'
+import HeartDetail from './HeartDetail.vue'
 import NutritionDetail from './NutritionDetail.vue'
 import PlanTab from './PlanTab.vue'
 import ProgressTab from './ProgressTab.vue'
@@ -36,7 +37,7 @@ const tab = defineModel<DashboardTab>('tab', { default: 'today' })
 
 const data = useDashboardData()
 const { currentGoal, authFetch } = useAuth()
-const detail = shallowRef<'' | 'ready' | 'workout' | 'nutrition'>('')
+const detail = shallowRef<'' | 'ready' | 'workout' | 'nutrition' | 'heart'>('')
 const mapOpened = shallowRef(tab.value === 'map')
 const toast = shallowRef('')
 // Đóng = chạy hiệu ứng ra trước (AnimatePresence), xong mới báo cho trang cha gỡ Dashboard.
@@ -188,6 +189,8 @@ onUnmounted(() => {
                          @back="detail = ''" @done="say" @changed="data.refresh()" /></Transition>
           <Transition name="hf-sheet"><NutritionDetail v-if="tab === 'today' && detail === 'nutrition'" :meals="data.mealsToday.value"
                            :targets="data.targets.value" @back="detail = ''" @prefill="chat" /></Transition>
+          <Transition name="hf-sheet"><HeartDetail v-if="tab === 'today' && detail === 'heart'"
+                           @back="detail = ''; data.refresh()" /></Transition>
         </div>
       </motion.div>
       </div>

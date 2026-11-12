@@ -7,8 +7,8 @@ lời hợp lệ thì 422 để backend dùng câu chữ do code viết.
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import ValidationError
 
-from core import service_auth
 from agentic.services import notification_composer
+from core import service_auth
 
 router = APIRouter(prefix='/internal/notifications', include_in_schema=False)
 

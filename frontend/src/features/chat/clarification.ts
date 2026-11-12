@@ -1,5 +1,5 @@
 /** Khung trên thẻ của form làm rõ: kiểm tra, trạng thái câu trả lời và soạn câu trả lời. Không gõ văn bản tự do. */
-import type { Clarification, ClarifyMode, ClarifyQuestion, NumberFrame, NumberUnit } from '@/types/api'
+import type { Clarification, ClarifyMode, ClarifyQuestion, DateFrame, NumberFrame, NumberUnit } from '@/types/api'
 
 /** Một dòng của trình sửa set: `sets` set, mỗi set `reps` lần với `kg` (không có tạ ngoài khi null). */
 export interface SetGroup {
@@ -19,21 +19,26 @@ export interface Answer {
   optionIds: string[]
   /** Khung nhập số: giá trị đã chọn, null cho đến khi có. */
   value: number | null
+  /** Khung chọn ngày: ngày ISO 'YYYY-MM-DD' đã chọn, null cho đến khi có. */
+  date: string | null
   skipped: boolean
   /** Các nhóm của trình sửa set theo id dòng; dòng chưa có mục dùng nhóm mặc định. */
   sets: Record<string, SetGroup[]>
 }
 
-export const emptyAnswer = (): Answer => ({ optionIds: [], value: null, skipped: false, sets: {} })
-/** Khung nhập số bắt đầu ở giá trị mặc định (hiển thị sẵn đã chọn); mọi khung khác bắt đầu trống. */
-export const initialAnswer = (question: ClarifyQuestion): Answer =>
-  ({ ...emptyAnswer(), value: question.mode === 'number' ? question.number?.default ?? null : null })
+export const emptyAnswer = (): Answer => ({ optionIds: [], value: null, date: null, skipped: false, sets: {} })
+/** Khung nhập số và chọn ngày bắt đầu ở giá trị mặc định (hiển thị sẵn đã chọn); mọi khung khác bắt đầu trống. */
+export const initialAnswer = (question: ClarifyQuestion): Answer => ({
+  ...emptyAnswer(),
+  value: question.mode === 'number' ? question.number?.default ?? null : null,
+  date: question.mode === 'date' ? question.date_frame?.default ?? null : null,
+})
 
 export const SET_LIMITS = { sets: [1, 20], reps: [1, 100], kg: [0, 500] } as const
 export const defaultGroup = (): SetGroup => ({ sets: 3, reps: 10, kg: null })
 export const groupsFor = (answer: Answer, row: SetRow): SetGroup[] => answer.sets[row.id] ?? [defaultGroup()]
 
-const MODES: ClarifyMode[] = ['single', 'multiple', 'quick_reply', 'number', 'sets']
+const MODES: ClarifyMode[] = ['single', 'multiple', 'quick_reply', 'number', 'date', 'sets']
 /** Khoảng rộng nhất mỗi đơn vị cho phép (NUMBER_UNITS của agent): khung nằm ngoài nó không bao giờ được hiển thị. */
 export const UNIT_BOUNDS: Record<NumberUnit, [number, number]> = {
   kg: [0, 500], g: [0, 5000], ml: [0, 5000], kcal: [0, 10000], phút: [1, 1440], giờ: [0.25, 24], km: [0.1, 500],
@@ -55,6 +60,25 @@ export function numberFrameError(frame: NumberFrame | null | undefined): string 
   if (Math.ceil(Number((frame.min / frame.step).toFixed(9))) * frame.step > frame.max) return 'bước nhảy không khớp khoảng giá trị'
   if (frame.default != null && !(finite(frame.default) && frame.min <= frame.default && frame.default <= frame.max)) return 'giá trị mặc định ngoài khoảng'
   if ((frame.presets ?? []).some(value => !finite(value) || value < frame.min || value > frame.max)) return 'giá trị gợi ý ngoài khoảng'
+  return null
+}
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+/** Ngày ISO có thật trên lịch ('2026-02-30' thì không). */
+export const isDay = (value: unknown): value is string =>
+  typeof value === 'string' && ISO_DAY.test(value) && new Date(`${value}T00:00:00Z`).toISOString().startsWith(value)
+/** "08/12/2026" từ "2026-12-08". */
+export const formatDay = (iso: string) => iso.split('-').reverse().join('/')
+
+/** Lý do một khung chọn ngày không vẽ được, hoặc null. Ngày ISO so sánh được như chuỗi. */
+export function dateFrameError(frame: DateFrame | null | undefined): string | null {
+  if (!frame || typeof frame !== 'object') return 'thiếu khoảng ngày'
+  if (!isDay(frame.min) || !isDay(frame.max) || frame.min > frame.max) return 'khoảng ngày không hợp lệ'
+  const inside = (day: unknown) => isDay(day) && frame.min <= day && day <= frame.max
+  if (frame.default != null && !inside(frame.default)) return 'ngày mặc định ngoài khoảng'
+  if ((frame.presets ?? []).some(preset => !preset || typeof preset.label !== 'string' || !inside(preset.value))) {
+    return 'mốc gợi ý ngoài khoảng'
+  }
   return null
 }
 
@@ -80,6 +104,9 @@ export function frameError(question: ClarifyQuestion, earlier: ClarifyQuestion[]
     case 'number':
       if (options.length) return 'khung số không có lựa chọn'
       return numberFrameError(question.number) ?? showIfError(question, earlier)
+    case 'date':
+      if (options.length) return 'khung ngày không có lựa chọn'
+      return dateFrameError(question.date_frame) ?? showIfError(question, earlier)
     case 'sets':
       if (!(question.for_questions ?? []).length && !options.length) return 'thiếu bài tập'
       break
@@ -124,6 +151,7 @@ export function normalizeClarification(raw: unknown): Clarification | null {
       for_questions: (Array.isArray(item.for_questions) ? item.for_questions : []).filter((id: string) => kept.some(q => q.id === id)),
       show_if: item.show_if ?? null,
       number: item.number ?? null,
+      date_frame: item.date_frame ?? null,
     }
     if (kept.some(q => q.id === question.id) || frameError(question, kept)) continue
     kept.push(question)
@@ -131,7 +159,7 @@ export function normalizeClarification(raw: unknown): Clarification | null {
   return kept.length ? { intro: typeof data.intro === 'string' ? data.intro : null, questions: kept.slice(0, 8) } : null
 }
 
-/** Lựa chọn được trả lời ngay; câu hỏi chọn nhiều, số và set cần nút "Tiếp" tường minh. */
+/** Lựa chọn được trả lời ngay; câu hỏi chọn nhiều, số, ngày và set cần nút "Tiếp" tường minh. */
 export const choosesOnce = (question: ClarifyQuestion) => question.mode === 'single' || question.mode === 'quick_reply'
 
 /** Chỉ số các câu hỏi cần hỏi, dựa trên câu trả lời đến lúc này (câu hỏi show_if đi sau câu kích hoạt nó). */
@@ -199,6 +227,14 @@ export function answerError(question: ClarifyQuestion, answer: Answer, rows: Set
       }
       return null
     }
+    case 'date': {
+      const frame = question.date_frame as DateFrame
+      if (answer.date === null) return 'Chọn một ngày'
+      if (!isDay(answer.date) || answer.date < frame.min || answer.date > frame.max) {
+        return `Ngày từ ${formatDay(frame.min)} đến ${formatDay(frame.max)}`
+      }
+      return null
+    }
     case 'sets':
       if (!rows.length) return 'Chưa có bài tập nào được chọn ở câu trước'
       return rows.flatMap(row => groupsFor(answer, row)).map(groupError).find(Boolean) ?? null
@@ -220,16 +256,20 @@ export const isAnswered = (question: ClarifyQuestion, answer: Answer, rows: SetR
 // được nói rõ: một chuỗi "3×12" trần từng bị ghi thành 0 kg (động tác không tạ) và làm khối lượng tập về 0.
 export const formatGroup = (group: SetGroup) => `${group.sets}×${group.reps}${group.kg === null ? ' (chưa ghi tạ)' : ` @ ${group.kg}kg`}`
 
-/** Văn bản một câu trả lời gửi đi: giá trị các lựa chọn đã chọn, "60 phút", hoặc các set của từng bài tập. */
-export function answerText(question: ClarifyQuestion, answer: Answer, rows: SetRow[] = []): string {
+/**
+ * Văn bản một câu trả lời: giá trị các lựa chọn đã chọn, "60 phút", một ngày, hoặc các set của từng bài tập.
+ * Tin nhắn gửi đi (`message`) kèm ngày ISO để router không đọc nhầm ngày/tháng.
+ */
+export function answerText(question: ClarifyQuestion, answer: Answer, rows: SetRow[] = [], message = false): string {
   if (question.mode === 'number') return answer.value === null ? '' : formatValue(answer.value, question.number!.unit)
+  if (question.mode === 'date') return answer.date === null ? '' : formatDay(answer.date) + (message ? ` (${answer.date})` : '')
   if (question.mode === 'sets') return rows.map(row => `${row.label}: ${groupsFor(answer, row).map(formatGroup).join(', ')}`).join('; ')
   return question.options.filter(option => answer.optionIds.includes(option.id)).map(option => option.value).join(', ')
 }
 
 export function composeReply(form: Clarification, answers: Answer[]): string {
   const visible = visibleIndexes(form, answers)
-  const text = (index: number) => answerText(form.questions[index], answers[index] ?? emptyAnswer(), setRows(form, answers, index))
+  const text = (index: number) => answerText(form.questions[index], answers[index] ?? emptyAnswer(), setRows(form, answers, index), true)
   if (visible.length === 1) return text(visible[0])
   return visible
     .map(index => {

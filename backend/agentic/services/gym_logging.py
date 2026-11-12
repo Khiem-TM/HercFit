@@ -136,8 +136,8 @@ def parse_choice(request: str) -> dict | None:
 
 def instruction(choice: dict) -> str:
     rest = (
-        " Các hoạt động khác trong yêu cầu gốc (môn thể thao, chạy...) ghi bằng log_sport_session (lưu trên "
-        "Google Health), hỏi thêm nếu thiếu."
+        " Các hoạt động khác trong yêu cầu gốc (môn thể thao, chạy...) ghi bằng log_sport_session (lưu trong "
+        "HercFit), hỏi thêm nếu thiếu."
     )
     if choice["mode"] == "detailed":
         return (

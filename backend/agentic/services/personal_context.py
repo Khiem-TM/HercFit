@@ -74,6 +74,9 @@ NON_ADVICE_INTENTS = {
     "catalog_research",
     "catalog_estimate",
     "PROFILE_UPDATE",
+    # Đặt, sửa, kết thúc mục tiêu là lệnh ghi có xác nhận, không phải câu hỏi tư vấn cần tra cứu.
+    "GOAL_SET",
+    "GOAL_UPDATE",
 }
 # Các tuyến xem lại chỉ đọc: một câu hỏi tư vấn ở đó ("cân nặng của tôi chạy marathon được không?") đi theo
 # đường ngữ cảnh cá nhân để câu trả lời cũng có tri thức. Các tuyến lập kế hoạch, ghi nhật ký và mục tiêu có thể

@@ -11,7 +11,18 @@ from datetime import date, datetime
 from typing import Any, Iterable
 from uuid import UUID as PyUUID
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, String, UniqueConstraint, delete, func, text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    delete,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID, insert
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,11 +72,12 @@ class HealthPoint(Base):
                              rows: list[dict[str, Any]]) -> tuple[int, int]:
         """Cửa sổ [start, end) của một loại khớp đúng những gì Google vừa trả về (đã đọc trọn vẹn).
 
+        Điểm chỉ có trong HercFit (remote_name "local/...", chưa đẩy lên Google) không bao giờ bị xoá ở đây.
         Trả về (số dòng ghi, số dòng bị xoá vì Google không còn giữ)."""
         kept = await cls.upsert(session, rows)
         removed = await session.execute(delete(cls).where(
             cls.user_id == user_id, cls.data_type == data_type, cls.local_date >= start, cls.local_date < end,
-            cls.id.not_in(kept) if kept else text("true")))
+            cls.remote_name.not_like("local/%"), cls.id.not_in(kept) if kept else text("true")))
         return len(kept), removed.rowcount or 0
 
     @classmethod

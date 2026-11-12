@@ -28,7 +28,8 @@ async function failure(response: Response, fallback: string): Promise<HealthApiE
  * Client mỏng cho Google Health; mọi lời gọi ném HealthApiError khi lỗi.
  *
  * Đồng bộ là một lượt đọc reconcile rồi đẩy gym và bữa ăn; không có job để theo dõi, nên tiến độ
- * được đọc qua `last_sync_at` của kết nối. Buổi thể thao, số đo và nước uống được ghi thẳng lên Google.
+ * được đọc qua `last_sync_at` của kết nối. Buổi thể thao, số đo, nước uống và giấc ngủ ghi tay được lưu trong HercFit
+ * rồi đẩy lên Google khi đã kết nối.
  */
 export function createHealthApi(fetcher: Fetcher) {
   async function call<T>(url: string, init: RequestInit | undefined, fallback: string): Promise<T> {
@@ -49,7 +50,7 @@ export function createHealthApi(fetcher: Fetcher) {
       call<HealthConnection>(`${GH}/settings`, { method: 'PATCH', body: JSON.stringify(settings),
         headers: { 'Content-Type': 'application/json' } }, 'Không lưu được cài đặt đồng bộ.'),
     createRecord: (kind: HealthRecordKind, payload: Record<string, unknown>, key: string = crypto.randomUUID()) =>
-      call<HealthRecordRead>(`${RECORDS}/${kind}`, write('POST', payload, key), 'Không ghi được lên Google Health.'),
+      call<HealthRecordRead>(`${RECORDS}/${kind}`, write('POST', payload, key), 'Không ghi được bản ghi.'),
     updateRecord: (kind: HealthRecordKind, id: string, payload: Record<string, unknown>,
                    key: string = crypto.randomUUID()) =>
       call<HealthRecordRead>(`${RECORDS}/${kind}/${id}`, write('PATCH', payload, key), 'Không sửa được bản ghi.'),
@@ -91,7 +92,7 @@ export async function syncAndWait(api: HealthApi, {
 export const TYPE_LABELS: Record<string, string> = {
   steps: 'Bước chân', distance: 'Quãng đường', floors: 'Số tầng', 'active-minutes': 'Phút vận động',
   'active-zone-minutes': 'Phút vùng tim', 'active-energy-burned': 'Năng lượng vận động',
-  'total-calories': 'Tổng năng lượng tiêu hao', 'heart-rate': 'Nhịp tim', 'sedentary-period': 'Thời gian ít vận động',
+  'total-calories': 'Tổng năng lượng tiêu hao', 'heart-rate': 'Nhịp tim', 'heart-rate-hourly': 'Nhịp tim theo giờ', 'sedentary-period': 'Thời gian ít vận động',
   'daily-resting-heart-rate': 'Nhịp tim nghỉ', 'daily-heart-rate-variability': 'HRV',
   'daily-oxygen-saturation': 'SpO₂', 'daily-respiratory-rate': 'Nhịp thở',
   'daily-sleep-temperature-derivations': 'Nhiệt độ da ban đêm', 'daily-vo2-max': 'VO₂ max theo ngày',
@@ -105,6 +106,5 @@ export const typeLabel = (type: string) => TYPE_LABELS[type] ?? type
 /** Ai giữ bản gốc của từng nhóm dữ liệu: cách HercFit và Google chia việc. */
 export const OWNERSHIP: { title: string; detail: string }[] = [
   { title: 'Chỉ đọc từ Google', detail: 'giấc ngủ, nhịp tim, HRV, SpO₂, nhịp thở, nhiệt độ da, bước chân, calo, ECG' },
-  { title: 'Ghi thẳng lên Google', detail: 'buổi thể thao (chạy, bóng đá, cầu lông...), cân nặng, chiều cao, % mỡ, nước uống' },
-  { title: 'HercFit lưu rồi đẩy lên Google', detail: 'buổi gym (một buổi STRENGTH_TRAINING) và bữa ăn (mỗi món một mục dinh dưỡng)' },
+  { title: 'HercFit lưu rồi đẩy lên Google', detail: 'buổi gym (một buổi STRENGTH_TRAINING), bữa ăn (mỗi món một mục dinh dưỡng), buổi thể thao (chạy, bóng đá, cầu lông...), cân nặng, chiều cao, % mỡ, nước uống, giấc ngủ ghi tay' },
 ]

@@ -2,11 +2,12 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Response
+
+from api.dependencies import PlanQueryDep, PlanServiceDep, VersionQuery
+from api.responses import created, current_or_not_found
 from core.transaction import transaction
 from domains.goals_plans.models.plans import Plan
-from domains.goals_plans.schemas.plans import PlanInput, ManualPlanReplace, PlanRead, PlanEnd
-from api.dependencies import PlanServiceDep, PlanQueryDep, VersionQuery
-from api.responses import created, current_or_not_found
+from domains.goals_plans.schemas.plans import ManualPlanReplace, PlanEnd, PlanInput, PlanRead
 
 router = APIRouter(prefix="/plans", tags=["plans"])
 

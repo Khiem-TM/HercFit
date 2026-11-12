@@ -14,8 +14,9 @@ hàm này, lúc tiếp nhận và lúc truy vấn, đúng như trước.
 """
 import unicodedata
 
-from alembic import op
 from sqlalchemy import text
+
+from alembic import op
 
 revision = "0015_knowledge_retrieval"
 down_revision = "0014_google_health"

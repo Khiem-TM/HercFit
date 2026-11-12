@@ -147,7 +147,8 @@ def energy_targets(inputs: EnergyInputs) -> EnergyTargets:
     if carbs == 0.0:
         warnings.append("protein_and_fat_exceed_target_energy")
     fiber = target / 1000 * FIBER_G_PER_1000_KCAL
-    r = lambda value, digits=0: round(value, digits)
+    def r(value, digits=0):
+        return round(value, digits)
     return EnergyTargets(
         status="ok", bmr_kcal=r(bmr), tdee_kcal=r(tdee), target_kcal=r(target), weekly_change_kg=r(weekly, 2),
         protein_g=r(protein), fat_g=r(fat), carbohydrate_g=r(carbs), fiber_g=r(fiber),

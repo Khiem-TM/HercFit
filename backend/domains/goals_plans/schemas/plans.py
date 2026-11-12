@@ -8,7 +8,16 @@ from uuid import UUID
 from pydantic import AwareDatetime, Field, model_validator
 
 from domains.catalog.schemas.exercises import ExercisePrescriptionInput, ExercisePrescriptionRead
-from domains.shared.schemas.common import EntityRead, InputSchema, JsonObject, Name, NonBlank, Pagination, ReadSchema, Version
+from domains.shared.schemas.common import (
+    EntityRead,
+    InputSchema,
+    JsonObject,
+    Name,
+    NonBlank,
+    Pagination,
+    ReadSchema,
+    Version,
+)
 from domains.shared.schemas.tracking import TimeZoneName, VersionedRequest
 
 PlanStatus = Literal["ACTIVE", "ENDED"]

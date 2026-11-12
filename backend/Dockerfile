@@ -36,6 +36,8 @@ USER app
 # Migrations run separately (`alembic upgrade head`, see docker-compose.prod.yml).
 # =============================================================================
 FROM base AS backend
+ARG GIT_COMMIT_SHA=
+ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:${PORT:-8080}/health || exit 1
@@ -46,6 +48,8 @@ CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"
 # Target: agentic (LangGraph service). Reload is a development-only override.
 # =============================================================================
 FROM base AS agentic
+ARG GIT_COMMIT_SHA=
+ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
 EXPOSE 8081
 HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:${AGENT_PORT:-8081}/health || exit 1

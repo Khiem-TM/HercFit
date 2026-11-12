@@ -4,9 +4,12 @@ from uuid import UUID
 
 from fastapi import APIRouter
 
+from api.dependencies import UserContextDep, UserDataServiceDep, validated_query
 from core.transaction import transaction
 from domains.body.models.body_metrics import BodyMetric
-from api.dependencies import UserContextDep, UserDataServiceDep, validated_query
+from domains.catalog.services.training_library import RUN_WORKOUTS, build_schedule, list_templates
+from domains.goals_plans.schemas.plans import TrainingPlanCreate
+from domains.health_records.services.health_service import measured_resting_hr
 from domains.shared.schemas.tracking import TimeZoneName
 from domains.training.schemas.training import (
     AnalyticsQuery,
@@ -23,10 +26,7 @@ from domains.training.schemas.training import (
     TrainingProfileRead,
     TrainingSummaryRead,
 )
-from domains.goals_plans.schemas.plans import TrainingPlanCreate
 from domains.training.services import training_analytics as analytics
-from domains.health_records.services.health_service import measured_resting_hr
-from domains.catalog.services.training_library import RUN_WORKOUTS, build_schedule, list_templates
 
 router = APIRouter(prefix="/training", tags=["training-analytics"])
 TZ = "Asia/Ho_Chi_Minh"

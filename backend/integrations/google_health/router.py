@@ -1,8 +1,8 @@
 """Google Health: kết nối (đồng ý OAuth, trạng thái, consent, đồng bộ, ngắt kết nối) và ghi xuyên qua.
 
 * /api/integrations/google-health ...: kết nối của người dùng.
-* /api/v2/health/records/{kind}: buổi thể thao, cân nặng, chiều cao, % mỡ, nước uống được ghi thẳng
-  lên Google (Google là nguồn sự thật) rồi lưu ngay bản sao vào health_points.
+* /api/v2/health/records/{kind}: buổi thể thao, cân nặng, chiều cao, % mỡ, nước uống, giấc ngủ được lưu trong
+  HercFit (health_points) trước, rồi đẩy lên Google sau commit khi có kết nối (records.py).
 """
 from typing import Annotated, Any
 from uuid import UUID
@@ -16,10 +16,19 @@ from core.rate_limit import SlidingWindowLimiter, enforce
 from core.settings import settings
 from core.transaction import transaction
 from integrations.google_health import oauth, records
-from integrations.google_health.connection import HealthConnectionService, complete_connect, frontend_result
+from integrations.google_health.connection import (
+    HealthConnectionService,
+    complete_connect,
+    frontend_result,
+)
 from integrations.google_health.schemas import (
-    HealthConnectionRead, HealthConnectRequest, HealthConnectResponse, HealthConsentUpdate, HealthRecordRead,
-    HealthSyncAccepted, HealthSyncSettingsUpdate,
+    HealthConnectionRead,
+    HealthConnectRequest,
+    HealthConnectResponse,
+    HealthConsentUpdate,
+    HealthRecordRead,
+    HealthSyncAccepted,
+    HealthSyncSettingsUpdate,
 )
 from integrations.google_health.sync import BACKFILL_DAYS, run
 
@@ -110,13 +119,13 @@ async def disconnect(service: HealthConnectionServiceDep, purge_data: bool = Fal
 
 
 # ------------------------------------------------------------------------------ ghi xuyên qua
-@records_router.post("/{kind}:preview", summary="Xem trước data point sẽ ghi lên Google (không gọi Google)")
+@records_router.post("/{kind}:preview", summary="Xem trước data point sẽ lưu (không gọi Google)")
 async def preview_record(kind: records.Kind, payload: dict[str, Any], service: UserContextDep):
     return await records.preview(service.session, service.user_id, kind, payload)
 
 
 @records_router.post("/{kind}", status_code=status.HTTP_201_CREATED, response_model=HealthRecordRead,
-                     summary="Ghi lên Google Health",
+                     summary="Lưu bản ghi sức khoẻ (đẩy lên Google Health khi có kết nối)",
                      description="exercise (buổi thể thao: exercise_id + performance như một mục buổi tập), weight (kg), "
                                  "height (cm), body-fat (%), hydration (ml).")
 @transaction
@@ -125,14 +134,14 @@ async def create_record(kind: records.Kind, payload: dict[str, Any], service: Us
 
 
 @records_router.patch("/{kind}/{record_id}", response_model=HealthRecordRead,
-                      summary="Sửa một bản ghi HercFit đã ghi lên Google")
+                      summary="Sửa một bản ghi do HercFit ghi")
 @transaction
 async def update_record(kind: records.Kind, record_id: UUID, payload: dict[str, Any], service: UserContextDep):
     return await records.update(service.session, service.user_id, kind, record_id, payload)
 
 
 @records_router.delete("/{kind}/{record_id}", status_code=status.HTTP_204_NO_CONTENT,
-                       summary="Xoá một bản ghi HercFit đã ghi lên Google")
+                       summary="Xoá một bản ghi do HercFit ghi")
 @transaction
 async def delete_record(kind: records.Kind, record_id: UUID, service: UserContextDep):
     await records.delete(service.session, service.user_id, kind, record_id)

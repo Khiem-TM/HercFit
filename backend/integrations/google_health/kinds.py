@@ -242,6 +242,20 @@ class Daily:
         return HealthPoint(t.id, Kind.DAILY, local, value, f"{t.id}:{local.isoformat()}")
 
 
+class Hourly:
+    """Cửa sổ rollUp theo giờ ({startTime, endTime, <giá trị>}): mỗi giờ một điểm, ngày địa phương theo múi giờ."""
+
+    @staticmethod
+    def parse(t: DataType, raw: dict[str, Any], zone: str) -> HealthPoint | None:
+        value = raw.get(t.field)
+        start, end = timestamp(raw.get("startTime")), timestamp(raw.get("endTime"))
+        if not isinstance(value, dict) or not value or start is None:
+            return None
+        # Khoá tất định theo giờ bắt đầu: đọc lại cùng giờ cập nhật đúng dòng đó.
+        return HealthPoint(t.id, Kind.INTERVAL, start.astimezone(ZoneInfo(zone)).date(), value,
+                           f"{t.id}:{stamp(start)}", start, end or start + timedelta(hours=1))
+
+
 class Food:
     """Thực phẩm, thành phần dinh dưỡng và đơn vị khẩu phần (nutrition-log, catalog đơn vị).
 
@@ -286,7 +300,9 @@ class Food:
 INTERFACES = {Kind.INTERVAL: Interval, Kind.SAMPLE: Sample, Kind.DAILY: Daily, Kind.SESSION: Session}
 
 
-def interface(t: DataType) -> type[Interval] | type[Sample] | type[Daily]:
+def interface(t: DataType) -> type[Interval] | type[Sample] | type[Daily] | type[Hourly]:
+    if t.read is Read.HOURLY_ROLLUP:
+        return Hourly
     return Daily if t.read is Read.DAILY_ROLLUP else INTERFACES[t.kind]
 
 

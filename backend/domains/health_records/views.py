@@ -24,10 +24,15 @@ from uuid import UUID, uuid5
 from sqlalchemy import select, text
 
 from domains.health_records.models.health_points import HealthPoint
-from domains.health_records.types import number
 from domains.health_records.schemas.health import (
-    HEALTH_PROVIDER, DailyHealthRead, DeviceWorkoutRead, HealthSampleRead, SleepSessionRead,
+    HEALTH_PROVIDER,
+    DailyHealthRead,
+    DeviceWorkoutRead,
+    HealthSampleRead,
+    HeartRateHourRead,
+    SleepSessionRead,
 )
+from domains.health_records.types import number
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE
 
 NAMESPACE = UUID("6f1d2c7e-3a7b-4f53-9f0e-2c4d6b8a9e10")
@@ -325,6 +330,23 @@ async def samples(session, user_id: UUID, start: date, end: date, sample_type: s
     rows = [sample_row(point) for point in await points(session, user_id, data_types, start, end)]
     return sorted((HealthSampleRead.model_validate(row) for row in rows if row is not None),
                   key=lambda row: row.measured_at)
+
+
+async def heart_rate_hours(session, user_id: UUID, day: date, zone: str = DEFAULT_TIMEZONE) -> list[HeartRateHourRead]:
+    """Nhịp tim từng giờ của một ngày địa phương, theo thứ tự giờ; giờ có giá trị ngoài khoảng hợp lý bị bỏ."""
+    from zoneinfo import ZoneInfo
+
+    hours = []
+    for point in await points(session, user_id, ("heart-rate-hourly",), day, day):
+        avg = _bounded("hr_avg_bpm", number(point.value.get("beatsPerMinuteAvg")), 1)
+        if avg is None or point.start_at is None:
+            continue
+        hours.append(HeartRateHourRead(
+            start_at=point.start_at, end_at=point.end_at or point.start_at, bpm_avg=avg,
+            hour=point.start_at.astimezone(ZoneInfo(zone)).hour,
+            bpm_min=_bounded("hr_min_bpm", number(point.value.get("beatsPerMinuteMin"))),
+            bpm_max=_bounded("hr_max_bpm", number(point.value.get("beatsPerMinuteMax")))))
+    return sorted(hours, key=lambda row: row.start_at)
 
 
 async def sessions(session, user_id: UUID, data_type: str, start: date, end: date) -> list[dict[str, Any]]:

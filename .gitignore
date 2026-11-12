@@ -65,6 +65,8 @@ env/
 ENV/
 .uv/
 .python-version
+# Isolated tool environments (e.g. .venv-ragas for Ragas scoring).
+.venv-*/
 
 # Testing, Linting & Type Checking
 .pytest_cache/
@@ -84,9 +86,8 @@ coverage.xml
 *.py,cover
 .hypothesis/
 
-# Test suites and fixtures at any directory level
+# Thư mục test lạc chỗ ở mọi cấp; bộ test chính nằm trong tests/ ở gốc repo và được theo dõi
 test/
-tests/
 __tests__/
 spec/
 specs/
@@ -96,6 +97,8 @@ test_*.py
 conftest.py
 *.test.*
 *.spec.*
+!/tests/**/test_*.py
+!/tests/**/conftest.py
 
 # --- Databases & Local Persistence ---
 *.db
@@ -135,11 +138,10 @@ pids/
 
 design/
 
-# Documentation at every directory level (kept locally).
+# Local documentation drafts at every directory level (not versioned).
 docs/
 
-# Local analysis tools and outputs; runtime adapters remain versioned.
-evaluation/
+# Evaluation run outputs.
 eval_results/
 reports/
 traces/

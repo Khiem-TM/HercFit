@@ -5,7 +5,8 @@
 import type { BodyMetricRead, DailyAssessment, HealthConnection, MetricReading, NutritionTargets } from '@/types/api'
 import type { PlanEntry, TrainingPlan } from '@/features/plan/model'
 import { num } from '@/components/knowledge/health/healthFormat'
-import { ddmm, hoursMinutes, longDate, monday, shift, vn, WEEKDAY_LONG, WEEKDAY_SHORT, weekday } from './format'
+import { ddmm, hoursMinutes, longDate, monday, shift, TZ, vn, WEEKDAY_LONG, WEEKDAY_SHORT, weekday } from './format'
+import type { MealRow } from './useDashboardData'
 
 /* ---------------------------------------------------------------- sẵn sàng */
 
@@ -234,4 +235,21 @@ export function latestMeasures(metrics: BodyMetricRead[]) {
     return found ? { value: num(found[field] as number | string | null) as number, at: found.recorded_at } : null
   }
   return { chest: pick('chest_cm'), waist: pick('waist_cm'), hip: pick('hip_cm'), fat: pick('body_fat_pct') }
+}
+
+/* ---------------------------------------------------------------- ghi nhanh */
+
+/** Bữa ghi lại được khi mọi món còn bản ghi catalog (món đã bị xoá khỏi danh mục thì không có food_id). */
+export function canRepeatMeal(meal: MealRow): boolean {
+  return meal.items.length > 0 && meal.items.every(item => Boolean(item.food_id))
+}
+
+/** POST /api/meals ghi lại đúng các món, lượng và đơn vị của một bữa đã có, vào thời điểm bấm. */
+export function repeatMealPayload(meal: MealRow, now: Date) {
+  return {
+    name: meal.name,
+    timezone: TZ,
+    consumed_at: now.toISOString(),
+    items: meal.items.map(item => ({ food_id: item.food_id, quantity: Number(item.quantity), unit: item.unit, note: item.note })),
+  }
 }

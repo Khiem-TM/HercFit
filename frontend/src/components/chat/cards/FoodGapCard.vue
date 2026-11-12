@@ -8,7 +8,8 @@ import CatalogImage from '@/components/chat/cards/CatalogImage.vue'
 import PhotoAttachment from '@/components/chat/cards/PhotoAttachment.vue'
 import {
   type CustomFoodForm, type FoodGapApi, type FoodPick, LIMITS, choices, createFoodGapApi, customFoodError,
-  customFoodPayload, draftQuantity, emptyCustomForm, energyLabel, pickText, summary, unitFor, validQuantity,
+  customFoodPayload, draftQuantity, emptyCustomForm, energyLabel, householdPortion, pickText, summary, unitFor,
+  validQuantity,
 } from '@/features/chat/foodGap'
 
 const props = defineProps<{ gap: FoodGap; disabled?: boolean; api?: FoodGapApi }>()
@@ -29,6 +30,8 @@ interface ItemState {
   photo: File | null
   suggesting: boolean
   suggested: boolean
+  /** Gợi ý là AI ước tính, không chép từ nguồn. */
+  estimated: boolean
   saving: boolean
   error: string
   note: string
@@ -37,7 +40,7 @@ interface ItemState {
 
 const state = reactive<Record<string, ItemState>>(Object.fromEntries(props.gap.items.map((item) => [item.key, {
   tab: 'search', query: item.query, results: [], searching: Boolean(item.query.trim()), searchError: '', selected: null, quantity: null,
-  form: emptyCustomForm(item.query, item), photo: null, suggesting: false, suggested: false, saving: false, error: '',
+  form: emptyCustomForm(item.query, item), photo: null, suggesting: false, suggested: false, estimated: false, saving: false, error: '',
   note: '', seq: 0,
 } satisfies ItemState])))
 const picks = reactive<Record<string, FoodPick>>({})
@@ -81,8 +84,8 @@ onMounted(() => props.gap.items.forEach((item) => search(item)))
 function select(item: FoodGapItem, food: FoodRecord): void {
   const current = state[item.key]
   current.selected = food
-  const { unit } = unitFor(food)
-  current.quantity = draftQuantity(item, unit) ?? (unit === 'SERVING' ? 1 : null)
+  // Người dùng chưa nói lượng: điền sẵn một khẩu phần hộ gia đình của món (vẫn sửa được), nếu món có.
+  current.quantity = draftQuantity(item, food) ?? householdPortion(food)?.quantity ?? null
 }
 
 function usePick(item: FoodGapItem): void {
@@ -103,10 +106,13 @@ async function suggest(item: FoodGapItem): Promise<void> {
   current.error = ''
   current.note = ''
   try {
-    const facts = await api.suggest(current.form.name)
+    const { estimated = false, ...facts } = await api.suggest(current.form.name)
     Object.assign(current.form, facts)
     current.suggested = true
-    current.note = 'Số liệu gợi ý từ nguồn web, tính trên 100 g. Bạn kiểm tra lại trước khi lưu.'
+    current.estimated = estimated
+    current.note = estimated
+      ? 'AI ước tính trên 100 g vì chưa có nguồn ghi đủ số liệu. Bạn kiểm tra lại trước khi lưu.'
+      : 'Số liệu gợi ý từ nguồn web, tính trên 100 g. Bạn kiểm tra lại trước khi lưu.'
   } catch (err) {
     current.error = err instanceof Error ? err.message : 'Chưa gợi ý được số liệu; bạn nhập giúp nhé.'
   } finally {
@@ -122,7 +128,7 @@ async function saveCustom(item: FoodGapItem): Promise<void> {
   if (problem) return
   current.saving = true
   try {
-    const food = await api.create(customFoodPayload(current.form, current.suggested))
+    const food = await api.create(customFoodPayload(current.form, current.suggested, current.estimated))
     current.note = ''
     if (current.photo) {
       try {
@@ -213,7 +219,9 @@ const fields = [
           </ul>
           <div v-if="state[item.key].selected" class="qty">
             <div class="hf-field">
-              <label :for="`q-${item.key}`">Lượng đã ăn ({{ unitFor(state[item.key].selected!).label }})</label>
+              <label :for="`q-${item.key}`">Lượng đã ăn ({{ unitFor(state[item.key].selected!).label }})<template
+                v-if="householdPortion(state[item.key].selected!)"> · {{ householdPortion(state[item.key].selected!)!.label }} ≈
+                {{ householdPortion(state[item.key].selected!)!.quantity }} {{ unitFor(state[item.key].selected!).label }}</template></label>
               <input :id="`q-${item.key}`" v-model.number="state[item.key].quantity" class="hf-inp" type="number"
                      inputmode="decimal" min="0" :max="LIMITS.quantity" :step="unitFor(state[item.key].selected!).step"
                      :aria-invalid="state[item.key].quantity !== null && !validQuantity(state[item.key].quantity)"

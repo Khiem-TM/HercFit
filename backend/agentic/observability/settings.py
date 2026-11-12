@@ -23,7 +23,15 @@ class ObservabilitySettings(BaseSettings):
     LANGFUSE_SECRET_KEY: SecretStr | None = None
     LANGFUSE_BASE_URL: str = "https://cloud.langfuse.com"
     LANGFUSE_TRACING_ENVIRONMENT: str = "dev"
+    # Release gắn vào mọi trace và lần chạy eval. Chưa đặt thì lấy commit từ HERCFIT_RELEASE/GIT_COMMIT_SHA
+    # (Dockerfile và dev_up.sh truyền vào); vẫn thiếu thì "unknown" và /health/ready báo release_configured=false.
     LANGFUSE_RELEASE: str = "unknown"
+    HERCFIT_RELEASE: str | None = None
+    GIT_COMMIT_SHA: str | None = None
+    # Mức log của ứng dụng (dùng chung tên với backend) và của log hoàn tất request/kết cục chat. Log request
+    # có mức riêng để vẫn ghi được khi mức chung là WARNING: đó là log tương quan request_id ↔ trace_id.
+    LOG_LEVEL: str = "WARNING"
+    REQUEST_LOG_LEVEL: str = "INFO"
     LANGFUSE_CAPTURE_MODE: Literal["redacted", "metadata_only"] = "redacted"
     LANGFUSE_SAMPLE_RATE: float = Field(default=1, ge=0, le=1)
     LANGFUSE_PSEUDONYM_SECRET: SecretStr | None = None
@@ -60,6 +68,16 @@ class ObservabilitySettings(BaseSettings):
                 sources[name] = "derived"
         self._secret_sources = sources
         return self
+
+    @model_validator(mode="after")
+    def derive_release(self):
+        if self.LANGFUSE_RELEASE in ("", "unknown"):
+            self.LANGFUSE_RELEASE = self.HERCFIT_RELEASE or self.GIT_COMMIT_SHA or "unknown"
+        return self
+
+    @property
+    def release_configured(self):
+        return self.LANGFUSE_RELEASE != "unknown"
 
     @property
     def secret_sources(self):

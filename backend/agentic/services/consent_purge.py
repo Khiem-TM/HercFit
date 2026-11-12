@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextlib import suppress
+import time
 
 from agentic.tools.registry import REGISTRY
 
@@ -118,7 +118,14 @@ async def purge_once(runtime, *, limit: int = 50) -> int:
 
 
 async def purge_forever(runtime) -> None:
+    from agentic.observability import metrics
+
     while True:
-        with suppress(Exception):
+        try:
             await purge_once(runtime)
+            metrics.gauge("worker_last_success_ts", time.time(), worker="consent_purge")
+        except Exception as exc:  # noqa: BLE001 - vòng lặp nền phải sống sót qua lỗi tạm thời
+            # Trước đây lỗi bị nuốt im lặng: lệnh xoá theo consent có thể kẹt mà không ai thấy.
+            logger.warning("consent_purge_failed error_type=%s", type(exc).__name__)
+            metrics.incr("worker_failures_total", worker="consent_purge", error=type(exc).__name__)
         await asyncio.sleep(POLL_SECONDS)

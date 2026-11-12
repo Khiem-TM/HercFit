@@ -5,7 +5,7 @@
  * (POST /api/v1/chat/food-nutrition). Lựa chọn được gửi kèm tin nhắn tiếp theo dưới dạng food_choices; agent dựng
  * bản xem trước bữa ăn bằng code và người dùng vẫn xác nhận trên thẻ xác nhận.
  */
-import type { FoodChoice, FoodGap, FoodGapItem, FoodNutrition, FoodRecord, FoodUnit } from '@/types/api'
+import type { FoodChoice, FoodGap, FoodGapItem, FoodNutrition, FoodRecord, FoodUnit, HouseholdPortion, MeasureUnit } from '@/types/api'
 import { type Fetcher, HealthApiError } from '@/features/health-integration/api'
 
 /** Khớp kiểm tra của server: FoodChoice.quantity trong (0, 5000]; số liệu trên 100 g như kiểm tra của gợi ý AI. */
@@ -13,21 +13,30 @@ export const LIMITS = { kcal: 900, macro: 100, quantity: 5000, name: 120 } as co
 const UNITS: FoodUnit[] = ['G', 'ML', 'SERVING']
 
 export interface QuantityUnit {
-  unit: FoodUnit
+  unit: MeasureUnit
   label: string
   step: number
 }
 
-/** Đơn vị ghi lượng ăn theo cách bản ghi tính dinh dưỡng: món theo suất ghi số suất, món 100 g/100 ml ghi g/ml. */
+/** Lượng ăn luôn ghi bằng gam hoặc mililít, đúng đơn vị bản ghi tính dinh dưỡng. */
 export function unitFor(food: Pick<FoodRecord, 'serving_unit'>): QuantityUnit {
-  if (food.serving_unit === 'PORTION') return { unit: 'SERVING', label: 'suất', step: 0.5 }
   if (food.serving_unit === 'ML') return { unit: 'ML', label: 'ml', step: 10 }
   return { unit: 'G', label: 'g', step: 10 }
 }
 
-/** Lượng điền sẵn từ bản nháp của router khi cùng đơn vị với bản ghi đã chọn. */
-export function draftQuantity(item: FoodGapItem, unit: FoodUnit): number | null {
-  return item.unit === unit && typeof item.quantity === 'number' && item.quantity > 0 ? item.quantity : null
+/** Khẩu phần hộ gia đình đầu tiên đo bằng đơn vị của món ("1 tô" = 500 g), hoặc null. */
+export function householdPortion(food: Pick<FoodRecord, 'serving_unit' | 'portions'>): { label: string; quantity: number } | null {
+  const portion = (food.portions ?? []).find((p: HouseholdPortion) => p.unit === food.serving_unit)
+  const quantity = portion ? number(portion.quantity) : null
+  return portion && quantity !== null && quantity > 0 ? { label: portion.label, quantity } : null
+}
+
+/** Lượng g/ml điền sẵn từ bản nháp của router: cùng đơn vị thì giữ nguyên, "1 tô" (SERVING) quy ra theo khẩu phần. */
+export function draftQuantity(item: FoodGapItem, food: Pick<FoodRecord, 'serving_unit' | 'portions'>): number | null {
+  if (typeof item.quantity !== 'number' || item.quantity <= 0) return null
+  if (item.unit === food.serving_unit) return item.quantity
+  const portion = item.unit === 'SERVING' ? householdPortion(food) : null
+  return portion ? Math.round(item.quantity * portion.quantity * 10) / 10 : null
 }
 
 export function validQuantity(value: unknown): value is number {
@@ -43,7 +52,7 @@ function number(value: unknown): number | null {
 export function energyLabel(food: FoodRecord): string {
   const kcal = number(food.energy_kcal)
   const size = number(food.serving_size)
-  const basis = food.serving_unit === 'PORTION' ? 'suất' : `${size ?? 100} ${food.serving_unit === 'ML' ? 'ml' : 'g'}`
+  const basis = `${size ?? 100} ${food.serving_unit === 'ML' ? 'ml' : 'g'}`
   return kcal === null ? 'chưa rõ kcal' : `${Math.round(kcal)} kcal / ${basis}`
 }
 
@@ -61,7 +70,7 @@ export interface CustomFoodForm {
 export function emptyCustomForm(name: string, item?: FoodGapItem): CustomFoodForm {
   const trimmed = name.trim()
   return { name: trimmed.charAt(0).toLocaleUpperCase('vi-VN') + trimmed.slice(1), energy_kcal: null, carbohydrate_g: null, fat_g: null, protein_g: null,
-           grams: item ? draftQuantity(item, 'G') : null }
+           grams: item ? draftQuantity(item, { serving_unit: 'G' }) : null }
 }
 
 /** Lỗi đầu tiên của form món riêng, hoặc null khi lưu được. Năng lượng bắt buộc; macro bỏ trống là chưa biết. */
@@ -84,7 +93,7 @@ export function customFoodError(form: CustomFoodForm): string | null {
 }
 
 /** Món riêng của người dùng, dinh dưỡng tính trên 100 g. */
-export function customFoodPayload(form: CustomFoodForm, aiSuggested: boolean): Record<string, unknown> {
+export function customFoodPayload(form: CustomFoodForm, aiSuggested: boolean, aiEstimated = false): Record<string, unknown> {
   return {
     name_vi: form.name.trim(),
     serving_size: 100,
@@ -93,7 +102,7 @@ export function customFoodPayload(form: CustomFoodForm, aiSuggested: boolean): R
     carbohydrate_g: number(form.carbohydrate_g),
     fat_g: number(form.fat_g),
     protein_g: number(form.protein_g),
-    data_quality: { entry: 'chat_food_card', basis: 'per_100g', ai_suggested: aiSuggested },
+    data_quality: { entry: 'chat_food_card', basis: 'per_100g', ai_suggested: aiSuggested, ai_estimated: aiEstimated },
   }
 }
 

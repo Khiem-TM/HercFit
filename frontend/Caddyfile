@@ -18,7 +18,7 @@
 		reverse_proxy agentic:8081 {
 			flush_interval -1
 			transport http {
-				read_timeout 180s
+				read_timeout 330s
 			}
 		}
 	}

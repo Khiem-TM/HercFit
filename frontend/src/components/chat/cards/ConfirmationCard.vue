@@ -48,7 +48,7 @@ const subtitle = computed(() => {
   if (kind.value === 'meal') return `${when(value.consumed_at, value.timezone)} · ${(value.items || []).length} món`
   if (kind.value === 'training') return `${when(value.started_at, value.timezone)} · ${DISCIPLINE[value.discipline] || ''}${value.session_rpe ? ` · RPE buổi ${fmt(value.session_rpe, 1)}` : ''}`
   if (kind.value === 'plan') return edited.value ? 'Đã sửa trên thẻ · lưu bản đã sửa' : 'Bấm “Sửa lịch” để chỉnh trước khi lưu'
-  if (kind.value === 'sport') return 'Ghi lên Google Health'
+  if (kind.value === 'sport') return 'Lưu trong HercFit · đồng bộ Google Health khi đã kết nối'
   if (kind.value === 'catalog') return value.resolution === 'reuse' ? 'Không tạo bản ghi mới; lưu liên kết nguồn nghiên cứu' : 'Bản ghi CUSTOM chỉ bạn nhìn thấy'
   return ''
 })

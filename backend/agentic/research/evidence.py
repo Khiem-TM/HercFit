@@ -144,7 +144,7 @@ def _set(data, key, value, path, cleared, derived=False):
 
 
 def _foods(data, claims, missing, cleared):
-    for field in (*NUTRIENTS, "portion_weight_g"):
+    for field in NUTRIENTS:
         if data.get(field) is not None and not _number_ok(data[field], _quotes(claims, (field,))):
             _set(data, field, None, field, cleared)
     serving = _quotes(claims, ("serving_size",))
@@ -158,7 +158,6 @@ def _foods(data, claims, missing, cleared):
     if (
         any(data.get(f) is not None for f in NUTRIENTS)
         and data.get("serving_size") is None
-        and data.get("serving_unit") != "PORTION"
     ):
         missing.append("serving_size")
     portions = data.get("portions") or []

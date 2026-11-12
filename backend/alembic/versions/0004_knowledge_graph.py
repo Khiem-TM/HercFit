@@ -1,7 +1,6 @@
 """Ghi nhận phép chiếu knowledge graph một cách nguyên tử cùng với lệnh ghi nguồn."""
 
 from alembic import op
-
 from core.graph_outbox import CHILD_TABLES, SOURCE_TABLES, installation_statements
 
 revision = "0004_knowledge_graph"

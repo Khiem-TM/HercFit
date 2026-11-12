@@ -2,12 +2,13 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Response
-from core.transaction import transaction
-from core.idempotency import IdempotentRoute
-from domains.training.models.trainings import Training
-from domains.training.schemas.trainings import TrainingCreate, TrainingReplace, TrainingRead
-from api.dependencies import JournalServiceDep, JournalQueryDep, VersionQuery
+
+from api.dependencies import JournalQueryDep, JournalServiceDep, VersionQuery
 from api.responses import created
+from core.idempotency import IdempotentRoute
+from core.transaction import transaction
+from domains.training.models.trainings import Training
+from domains.training.schemas.trainings import TrainingCreate, TrainingRead, TrainingReplace
 
 router = APIRouter(route_class=IdempotentRoute, prefix="/trainings", tags=["trainings"])
 

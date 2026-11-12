@@ -1,7 +1,7 @@
 """Phụ thuộc service đã xác thực và query đã kiểm tra, dùng chung."""
 
 from datetime import date
-from typing import Literal, Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import Depends, Query
@@ -10,18 +10,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
 from core.security import get_current_user
-from domains.identity.models.user import User
 from domains.body.schemas.body_metrics import BodyMetricQuery
-from domains.shared.schemas.common import Pagination
-from domains.identity.services.user_data_service import UserDataService, request_validation_error
-from domains.catalog.services.catalog_service import CatalogService
-from domains.shared.services.journal_service import JournalService
-from domains.goals_plans.services.plan_service import PlanService
-from domains.shared.services.common import UserService
-from domains.shared.schemas.enums import FoodItemType, FoodSourceType
-from domains.catalog.schemas.foods import FoodQuery
 from domains.catalog.schemas.exercises import ExerciseKind, ExerciseQuery
+from domains.catalog.schemas.foods import FoodQuery
+from domains.catalog.services.catalog_service import CatalogService
 from domains.goals_plans.schemas.plans import PlanQuery, PlanStatus
+from domains.goals_plans.services.plan_service import PlanService
+from domains.identity.models.user import User
+from domains.identity.services.user_data_service import UserDataService, request_validation_error
+from domains.shared.schemas.common import Pagination
+from domains.shared.schemas.enums import FoodItemType, FoodSourceType
 from domains.shared.schemas.tracking import (
     DateRangeQuery,
     JournalQuery,
@@ -29,6 +27,8 @@ from domains.shared.schemas.tracking import (
     ScheduleEntryQuery,
     TimeZoneName,
 )
+from domains.shared.services.common import UserService
+from domains.shared.services.journal_service import JournalService
 
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]

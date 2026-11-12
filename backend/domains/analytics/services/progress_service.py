@@ -6,12 +6,17 @@ from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy import Date, case, func, select
 
-from domains.nutrition.models.meals import Meal, MealItem
-from domains.training.models.trainings import Training, TrainingItem
+from domains.analytics.schemas.progress import (
+    DailyProgressRead,
+    MetricProgress,
+    PlanProgressRead,
+    ProgressRead,
+)
 from domains.goals_plans.models.plans import Plan
+from domains.nutrition.models.meals import Meal, MealItem
 from domains.shared.schemas.activity import NUTRIENT_FIELDS
-from domains.analytics.schemas.progress import DailyProgressRead, MetricProgress, PlanProgressRead, ProgressRead
 from domains.shared.schemas.tracking import DateRangeQuery
+from domains.training.models.trainings import Training, TrainingItem
 
 
 async def _daily_totals(session, model, user_id, options, fields):

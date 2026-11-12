@@ -2,10 +2,10 @@
 
 * Bài STRENGTH → MỘT buổi gym trong nhật ký (Training, source_entry_id = buổi kế hoạch): số hiệp/reps theo mức
   chỉ định (reps tối thiểu), tạ chỉ khi lịch ghi kg. Backend ước tính calo; buổi gym tự đẩy lên Google sau commit.
-* Bài ENDURANCE/SPORT → buổi thể thao ghi thẳng lên Google Health (HercFit không lưu cục bộ loại này). Quãng
+* Bài ENDURANCE/SPORT → buổi thể thao lưu trong HercFit (health_points), đẩy lên Google sau commit khi có kết nối. Quãng
   đường/thời lượng suy từ chính các bước của lịch và pace mục tiêu (pace cụ thể, hoặc vùng pace của hồ sơ VĐV);
   không suy được thì bỏ qua kèm thông báo, không bịa số liệu.
-* Ghi Google là best-effort trong savepoint riêng: lỗi hay chưa kết nối không chặn việc tick, chỉ thành thông báo.
+* Mỗi buổi thể thao ghi trong savepoint riêng: lỗi (ví dụ trùng giờ) không chặn việc tick, chỉ thành thông báo.
 
 Mọi bài đều là bản ghi catalog: plan chỉ lưu exercise_id đã kiểm tra, buổi tập dùng lại đúng các id đó.
 """
@@ -90,13 +90,13 @@ def _sport_performance(item, zones) -> dict[str, Any] | None:
 
 async def complete_entry(service, schedule_id, entry_id) -> dict[str, Any] | None:
     """service là PlanService (session + user của request). Trả None khi không tìm thấy lịch/buổi."""
+    from domains.catalog.schemas.exercises import StrengthPerformance
     from domains.health_records import ports
     from domains.shared.services.journal_service import JournalService
     from domains.training.models.trainings import Training
     from domains.training.schemas.trainings import TrainingCreate
     from domains.training.services.training_analytics import profile_read
     from domains.training.services.training_metrics import strength_duration
-    from domains.catalog.schemas.exercises import StrengthPerformance
 
     session, user_id = service.session, service.user_id
     schedule, entry = await TrainingPlan.lock_entry_for_completion(session, schedule_id, entry_id, user_id=user_id)
@@ -144,10 +144,7 @@ async def complete_entry(service, schedule_id, entry_id) -> dict[str, Any] | Non
                 written = await ports.write(session, user_id, "exercise", payload)
         except HTTPException as exc:
             detail = exc.detail.get("message") if isinstance(exc.detail, dict) else exc.detail
-            notices.append(f"Chưa ghi {name} lên Google Health: {detail}")
-            continue
-        if written is None:
-            notices.append(f"Chưa ghi {name}: kết nối Google Health (Cài đặt → Kết nối) để lưu buổi thể thao/chạy.")
+            notices.append(f"Chưa ghi {name}: {detail}")
             continue
         result["google_sessions"] += 1
         energy.append((written.get("derived") or {}).get("energy_kcal"))

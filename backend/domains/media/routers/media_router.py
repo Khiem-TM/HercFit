@@ -3,7 +3,8 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, UploadFile
-from api.dependencies import service_dependency, VersionQuery
+
+from api.dependencies import VersionQuery, service_dependency
 from domains.media.schemas.media import ImageEntity, ImageImport, ImageRead
 from domains.media.services.media_service import MediaService
 

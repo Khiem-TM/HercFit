@@ -4,10 +4,11 @@ Tách ra từ schemas.health trong đợt tổ chức lại theo miền."""
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
+
 from pydantic import AwareDatetime, BaseModel, Field, model_validator
+
 from domains.shared.schemas.common import EntityRead, InputSchema
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, DateRangeQuery, TimeZoneName
-
 
 HEALTH_PROVIDER = "GOOGLE_HEALTH"
 
@@ -151,6 +152,16 @@ class HealthSampleRead(EntityRead):
     value: Decimal
     unit: str
     details: dict[str, Any]
+
+class HeartRateHourRead(BaseModel):
+    """Nhịp tim trong một giờ (rollUp của Google): giờ không có mẫu thì không có dòng."""
+    start_at: AwareDatetime
+    end_at: AwareDatetime
+    hour: int = Field(ge=0, le=23, description="Giờ địa phương bắt đầu cửa sổ")
+    bpm_avg: Decimal
+    bpm_min: int | None
+    bpm_max: int | None
+
 
 class HealthSampleQuery(DateRangeQuery):
     sample_type: SampleType | None = None

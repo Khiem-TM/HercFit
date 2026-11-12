@@ -4,7 +4,9 @@ import type { BodyMetricRead } from '@/types/api'
 import type { TrainingPlan } from '@/features/plan/model'
 import { useHealthData } from '@/components/knowledge/health/useHealthData'
 import { useNutritionTargets } from '@/components/knowledge/dashboard/useNutritionTargets'
+import { createHealthApi } from '@/features/health-integration/api'
 import { localDate, shift, TZ } from './format'
+import { repeatMealPayload } from './today'
 
 /** Bữa ăn như /api/meals trả về (chỉ các trường Dashboard dùng). */
 export interface MealRow {
@@ -18,8 +20,10 @@ export interface MealRow {
   nutrition_incomplete: boolean
   items: {
     id: string
+    food_id: string | null
+    note: string | null
     quantity: number | string
-    unit: 'G' | 'ML' | 'SERVING'
+    unit: 'G' | 'ML'
     food_snapshot: Record<string, unknown>
     energy_kcal: number | string | null
     protein_g: number | string | null
@@ -104,6 +108,24 @@ export function useDashboardData() {
     await Promise.all([load(), health.refresh()])
   }
 
+  // Ghi nhanh từ tab Hôm nay: mỗi lần bấm là một lệnh ghi mới (khoá idempotency mới); lỗi ném ra cho nơi gọi báo.
+  const healthApi = createHealthApi((url, init) => authFetch(url, init))
+
+  async function logMealAgain(meal: MealRow) {
+    const response = await authFetch('/api/meals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+      body: JSON.stringify(repeatMealPayload(meal, new Date())),
+    })
+    if (!response.ok) throw new Error(String(response.status))
+    await refresh()
+  }
+
+  async function logWater(milliliters: number) {
+    await healthApi.createRecord('hydration', { amount_ml: milliliters, consumed_at: new Date().toISOString(), timezone: TZ })
+    await refresh()
+  }
+
   void load()
   onUnmounted(() => controller?.abort())
 
@@ -115,7 +137,7 @@ export function useDashboardData() {
     targets: nutrition.targets, plan, previousPlan, meals, mealsToday, metrics, trainings,
     loading: computed(() => loading.value || (health.loading.value && !health.data.value)),
     failed: computed(() => [...failed.value, ...health.failed.value]),
-    refresh, reloadPlan: load,
+    refresh, reloadPlan: load, logMealAgain, logWater,
   }
 }
 

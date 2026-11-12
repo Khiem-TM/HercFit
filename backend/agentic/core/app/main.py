@@ -14,6 +14,7 @@ from agentic.core.app.config import AgentSettings, agent_settings
 from agentic.core.llm import Models
 from agentic.knowledge_graph.service import GraphContextService
 from agentic.observability import observer
+from agentic.observability.logs import configure_from_settings
 from agentic.observability.middleware import ObservabilityMiddleware
 from agentic.services.jev import JevService
 from agentic.services.memory.checkpoints import persistence
@@ -47,6 +48,7 @@ async def manage_background_tasks(runtime, graph_context, store, settings: Agent
             tasks.append(asyncio.create_task(purge_forever(runtime)))
         if graph_context is not None:
             tasks.append(asyncio.create_task(graph_context.warm_up()))
+            tasks.append(asyncio.create_task(graph_context.keep_warm()))
         yield
     finally:
         for task in tasks:
@@ -68,6 +70,7 @@ def create_agentic_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        configure_from_settings(model_retries=True)
         async with AsyncExitStack() as stack:
             stack.push_async_callback(observer().close)
             settings.check()

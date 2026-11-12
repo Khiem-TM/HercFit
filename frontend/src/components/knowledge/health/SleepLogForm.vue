@@ -5,7 +5,7 @@ import { useAuth } from '@/composables/useAuth'
 import { createHealthApi, HealthApiError } from '@/features/health-integration/api'
 import { dashboardTimezone, shiftDay } from '../dashboard/dashboardData'
 
-/** Ghi tay giấc ngủ đêm qua (giờ đi ngủ – giờ thức dậy) khi thiết bị không ghi; ghi thẳng lên Google Health. */
+/** Ghi tay giấc ngủ đêm qua (giờ đi ngủ – giờ thức dậy) khi thiết bị không ghi; lưu trong HercFit, đồng bộ Google khi đã kết nối. */
 const props = defineProps<{ day: string }>()
 const emit = defineEmits<{ saved: [] }>()
 const api = createHealthApi((url, init) => useAuth().authFetch(url, init))
@@ -30,7 +30,7 @@ async function save() {
       timezone: dashboardTimezone,
     })
     failed.value = false
-    message.value = 'Đã ghi giấc ngủ lên Google Health.'
+    message.value = 'Đã ghi giấc ngủ.'
     emit('saved')
   } catch (error) {
     failed.value = true

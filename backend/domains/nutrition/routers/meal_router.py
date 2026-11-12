@@ -2,12 +2,13 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Response
-from core.transaction import transaction
-from core.idempotency import IdempotentRoute
-from domains.nutrition.models.meals import Meal
-from domains.nutrition.schemas.meals import MealCreate, MealReplace, MealRead
-from api.dependencies import JournalServiceDep, JournalQueryDep, VersionQuery
+
+from api.dependencies import JournalQueryDep, JournalServiceDep, VersionQuery
 from api.responses import created
+from core.idempotency import IdempotentRoute
+from core.transaction import transaction
+from domains.nutrition.models.meals import Meal
+from domains.nutrition.schemas.meals import MealCreate, MealRead, MealReplace
 
 router = APIRouter(route_class=IdempotentRoute, prefix="/meals", tags=["meals"])
 

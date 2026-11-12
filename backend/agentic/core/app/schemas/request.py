@@ -11,7 +11,7 @@ class FoodChoice(BaseModel):
     key: str = Field(min_length=1, max_length=16)
     food_id: UUID
     quantity: float = Field(gt=0, le=5000)
-    unit: Literal["G", "ML", "SERVING"]
+    unit: Literal["G", "ML"]
 
 
 class ChatRequest(BaseModel):

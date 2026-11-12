@@ -14,7 +14,6 @@ Thứ tự quan trọng:
 Không có downgrade: khôi phục bằng bản sao lưu chụp trước 0027 (dữ liệu sức khoẻ thì đồng bộ lại từ Google).
 """
 from alembic import op
-
 from core.graph_outbox import installation_statements
 
 revision = "0027_health_points"

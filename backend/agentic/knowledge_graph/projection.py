@@ -1,5 +1,6 @@
 """Phép chiếu có bảo vệ theo phiên bản. Mỗi sự kiện là một transaction Neo4j nguyên tử."""
 
+import calendar
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -9,9 +10,11 @@ from .intents import hub as intent_hub
 from .intents import label as intent_label
 from .model import LOCAL, MODEL_VERSION, build_user_model, model_links
 from .models import ProjectionEvent
+from .schema import LABELS, REL_PROPS, coerce, local_parts, to_date, to_datetime
 from .service import normalize
 
-PROJECTION_VERSION = 4
+# v5: thuộc tính có kiểu cho Cypher sinh ra, cây thời gian Day/Period, Run-[:NEXT]->Run, mục tiêu đã kết thúc giữ lại.
+PROJECTION_VERSION = 5
 NUTRIENTS = {"energy_kcal", "protein_g", "carbohydrate_g", "fat_g", "fiber_g"}
 FOOD_FIELDS = NUTRIENTS | {
     "id",
@@ -87,6 +90,10 @@ FIELDS = {
         "error_code",
         "template_id",
         "template_version",
+        "occurred_at",
+        # Bộ nhớ quyết định: tham số có cấu trúc đã lọc (tools.registry.remembered_args) và kết quả gọn từ backend.
+        "args",
+        "outcome",
     },
     "Session": {"session_id", "generation"},
     # Một lượt hội thoại: chỉ dữ kiện định tuyến có cấu trúc, không bao giờ có văn bản tin nhắn hay câu trả lời.
@@ -100,6 +107,9 @@ FIELDS = {
         "status",
         "tools",
         "occurred_at",
+        "prev_run_id",
+        "decision",
+        "edited_fields",
     },
     # Dữ liệu thiết bị đeo mà người dùng cho phép trợ lý dùng: chỉ tổng hợp ngày và các phiên.
     "DailyHealth": {
@@ -200,6 +210,141 @@ RELATIONS = {
 }
 # Các loại bản ghi mà một lượt hội thoại có thể nói VỀ (và một lần thực thi có thể NHẮM TỚI).
 RECORD_KINDS = {"Goal", "BodyMetric", "Meal", "Food", "Training", *HEALTH_KINDS}
+# Bản ghi có ngày địa phương: nối -[:ON_DAY]->(Day) và nuôi tổng hợp ngày/tuần/tháng.
+DAY_KINDS = ("Meal", "Training", "BodyMetric", *HEALTH_KINDS)
+# Trường thời điểm nguồn của thuộc tính `at`.
+SOURCE_TIME = {
+    "Meal": "consumed_at",
+    "Training": "started_at",
+    "BodyMetric": "recorded_at",
+    "DeviceWorkout": "started_at",
+    "Run": "occurred_at",
+    "Execution": "occurred_at",
+}
+
+
+def _ratio(value, divisor):
+    try:
+        return float(value) / divisor if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def typed_properties(kind, data, occurred_at=None):
+    """Thuộc tính có kiểu (schema.LABELS) mà Cypher sinh ra đọc được; tên nguồn khác được đổi hoặc suy ra ở đây."""
+    label = LABELS.get(kind)
+    if label is None:
+        return {}
+    source = dict(data)
+    if kind == "BodyMetric":
+        source["origin"] = data.get("source") or "MANUAL"
+    elif kind == "Training":
+        source["duration_min"] = _ratio(data.get("duration_seconds"), 60)
+    elif kind == "DeviceWorkout":
+        source["active_min"] = _ratio(data.get("active_seconds"), 60)
+        source["distance_km"] = _ratio(data.get("distance_m"), 1000)
+    elif kind == "Food":
+        source["name_search"] = normalize(
+            " ".join(filter(None, [data.get("name_vi"), data.get("name_en")]))
+        )
+    elif kind == "Run":
+        source["intent_label"] = intent_label(data.get("intent"))
+    elif kind == "Execution":
+        source["domain"] = tool_domain(data.get("tool", ""))
+    if kind in SOURCE_TIME:
+        moment = to_datetime(data.get(SOURCE_TIME[kind]) or occurred_at)
+        day, clock = local_parts(moment)
+        source["at"] = moment
+        source.setdefault("local_time", clock)
+        if not data.get("local_date"):
+            source["local_date"] = day
+    typed = {}
+    for name, prop in label.props.items():
+        converted = coerce(prop, source.get(name))
+        if converted is not None:
+            typed[name] = converted
+    return typed
+
+
+def _week(day):
+    start = day - timedelta(days=day.weekday())
+    year, week, _ = day.isocalendar()
+    return f"{year}-W{week:02d}", start, start + timedelta(days=6)
+
+
+def _month(day):
+    start = day.replace(day=1)
+    return (
+        f"{day.year}-{day.month:02d}",
+        start,
+        day.replace(day=calendar.monthrange(day.year, day.month)[1]),
+    )
+
+
+# Tổng hợp một ngày được tính lại toàn phần từ các bản ghi của ngày đó (sự kiện trùng hay đảo thứ tự vẫn cho cùng
+# kết quả). Bản ghi đã quá hạn lưu (pruned) vẫn được tính: tổng hợp là bộ nhớ dài hạn, bản ghi thô thì không.
+DAY_ROLLUP = """
+MERGE (d:KGEntity {key:$key}) ON CREATE SET d.source_version=0
+SET d:Day, d.kind='Day', d.owner_id=$owner, d.scope='PRIVATE', d.deleted=false, d.date=$date
+WITH d
+CALL (d) {
+  OPTIONAL MATCH (m:Meal {owner_id:$owner, local_date:$date}) WHERE m.deleted=false OR m.pruned=true
+  RETURN count(m) AS meals, sum(m.energy_kcal) AS kcal, sum(m.protein_g) AS protein,
+         sum(m.carbohydrate_g) AS carb, sum(m.fat_g) AS fat
+}
+CALL (d) {
+  OPTIONAL MATCH (t:Training {owner_id:$owner, local_date:$date}) WHERE t.deleted=false OR t.pruned=true
+  RETURN count(t) AS trainings, sum(t.duration_min) AS minutes, sum(t.training_load) AS load
+}
+CALL (d) {
+  OPTIONAL MATCH (h:DailyHealth {owner_id:$owner, local_date:$date}) WHERE h.deleted=false OR h.pruned=true
+  RETURN max(h.steps) AS steps, max(h.active_minutes) AS active, max(h.total_kcal) AS burned,
+         max(h.resting_hr_bpm) AS rhr, max(h.hrv_ms) AS hrv, max(h.sleep_minutes) AS device_sleep
+}
+CALL (d) {
+  OPTIONAL MATCH (s:SleepSession {owner_id:$owner, local_date:$date})
+  WHERE (s.deleted=false OR s.pruned=true) AND coalesce(s.is_nap, false) = false
+  RETURN count(s) AS sleeps, sum(s.minutes_asleep) AS slept
+}
+CALL (d) {
+  OPTIONAL MATCH (b:BodyMetric {owner_id:$owner, local_date:$date})
+  WHERE (b.deleted=false OR b.pruned=true) AND b.weight_kg IS NOT NULL
+  WITH b ORDER BY b.at DESC
+  RETURN head(collect(b.weight_kg)) AS weight
+}
+SET d.meals=meals, d.kcal=CASE WHEN meals > 0 THEN round(kcal, 1) END,
+    d.protein_g=CASE WHEN meals > 0 THEN round(protein, 1) END,
+    d.carbohydrate_g=CASE WHEN meals > 0 THEN round(carb, 1) END,
+    d.fat_g=CASE WHEN meals > 0 THEN round(fat, 1) END,
+    d.trainings=trainings, d.training_minutes=CASE WHEN trainings > 0 THEN round(minutes, 1) END,
+    d.training_load=CASE WHEN trainings > 0 THEN round(load, 1) END,
+    d.steps=steps, d.active_minutes=active, d.total_kcal=burned, d.resting_hr_bpm=rhr, d.hrv_ms=hrv,
+    d.sleep_minutes=CASE WHEN sleeps > 0 THEN slept ELSE device_sleep END, d.weight_kg=weight
+WITH d
+CALL (d) {
+  MATCH (r:KGEntity {owner_id:$owner})
+  WHERE r.kind IN $kinds AND r.local_date = $date AND (r.deleted=false OR r.pruned=true)
+  MERGE (r)-[:ON_DAY]->(d)
+}
+"""
+PERIOD_ROLLUP = """
+MATCH (d:Day {key:$day_key})
+MERGE (p:KGEntity {key:$key}) ON CREATE SET p.source_version=0
+SET p:Period, p.kind='Period', p.owner_id=$owner, p.scope='PRIVATE', p.deleted=false,
+    p.grain=$grain, p.label=$label, p.start=$start, p.end=$end
+MERGE (d)-[:IN]->(p)
+WITH p
+MATCH (x:Day {owner_id:$owner}) WHERE x.date >= $start AND x.date <= $end
+WITH p, x ORDER BY x.date
+WITH p, sum(CASE WHEN x.meals > 0 THEN 1 ELSE 0 END) AS days_with_meals,
+     avg(CASE WHEN x.meals > 0 THEN x.kcal END) AS kcal, avg(CASE WHEN x.meals > 0 THEN x.protein_g END) AS protein,
+     sum(x.trainings) AS trainings, sum(x.training_minutes) AS minutes, sum(x.training_load) AS load,
+     avg(x.steps) AS steps, avg(x.sleep_minutes) AS sleep, [w IN collect(x.weight_kg) WHERE w IS NOT NULL] AS weights
+SET p.days_with_meals=days_with_meals, p.kcal_avg=round(kcal, 1), p.protein_avg=round(protein, 1),
+    p.trainings=trainings, p.training_minutes=round(minutes, 1), p.training_load=round(load, 1),
+    p.steps_avg=round(steps), p.sleep_avg_minutes=round(sleep), p.weight_start=head(weights),
+    p.weight_end=last(weights)
+"""
 
 
 def sanitize(event):
@@ -293,6 +438,9 @@ def event_properties(event):
         or data.get("occurred_at")
         or event.occurred_at
     )
+    props.update(typed_properties(event.aggregate_type, data, event.occurred_at))
+    if event.aggregate_type == "Run" and data.get("prev_run_id"):
+        props["prev_key"] = "agent:Run:" + str(data["prev_run_id"])
     if event.aggregate_type == "Goal":
         props["status"] = str(data.get("status", "")).upper()
     if event.aggregate_type == "Execution":
@@ -352,20 +500,21 @@ class Projector:
             ("KGEntity", "key"),
             ("KGOwner", "key"),
             ("KGState", "key"),
-            ("Agent", "name"),
-            ("Domain", "name"),
-            ("Tool", "name"),
-            ("TaskTemplate", "id"),
             ("Intent", "name"),
         ):
             await self.query(
                 f"CREATE CONSTRAINT kg_{label.lower()} IF NOT EXISTS FOR (n:{label}) REQUIRE n.{prop} IS UNIQUE"
             )
-        for name, expression in (
-            ("owner_kind", "(n.owner_id, n.kind)"),
-            ("execution_owner", "(n.owner_id, n.source_at)"),
-        ):
-            label = "Execution" if name == "execution_owner" else "KGEntity"
+        indexes = [
+            ("owner_kind", "KGEntity", "(n.owner_id, n.kind)"),
+            ("execution_owner", "Execution", "(n.owner_id, n.source_at)"),
+            ("day_owner", "Day", "(n.owner_id, n.date)"),
+            ("period_owner", "Period", "(n.owner_id, n.grain, n.start)"),
+            ("run_owner", "Run", "(n.owner_id, n.at)"),
+            # Cypher sinh ra luôn được gắn owner_id; khoảng thời gian đọc theo ngày địa phương.
+            *((kind.lower() + "_day", kind, "(n.owner_id, n.local_date)") for kind in DAY_KINDS),
+        ]
+        for name, label, expression in indexes:
             await self.query(
                 f"CREATE INDEX kg_{name} IF NOT EXISTS FOR (n:{label}) ON {expression}"
             )
@@ -373,34 +522,14 @@ class Projector:
         await self.query(
             "MERGE (s:KGState {key:'main'}) ON CREATE SET s.ready=false, s.generation=1"
         )
-        await self.seed_capabilities()
-
-    async def seed_capabilities(self):
-        # Registry mang tính khai báo, không khởi tạo model hay kiểm tra khoá.
-        from agentic.tools.registry import REGISTRY
-
-        rows = [
-            dict(name=spec.name, domain=spec.domain, write=spec.write) for spec in REGISTRY.values()
-        ]
+        # Đồ thị năng lực (Agent/Tool/Domain/TaskTemplate) chưa từng được đọc: dọn khỏi graph cũ.
         await self.query(
-            """
-          MERGE (o:Agent {name:'orchestrator'}) MERGE (a:Agent {name:'tool_agent'})
-          MERGE (r:Agent {name:'research_agent'})
-          WITH o,a,r UNWIND $rows AS row
-          MERGE (t:Tool {name:row.name}) SET t.domain=row.domain,t.write=row.write
-          MERGE (d:Domain {name:row.domain})
-          MERGE (t)-[:IN_DOMAIN]->(d) MERGE (a)-[:USES_TOOL]->(t)
-          MERGE (a)-[:CAN_HANDLE]->(d) MERGE (o)-[:CAN_HANDLE]->(d)
-          FOREACH (_ IN CASE WHEN row.domain IN ['foods','exercises'] THEN [1] ELSE [] END |
-            MERGE (r)-[:CAN_HANDLE]->(d))
-        """,
-            rows=rows,
+            "MATCH (n) WHERE n:Agent OR n:Tool OR n:Domain OR n:TaskTemplate DETACH DELETE n"
         )
-        await self.query("""
-          MERGE (t:TaskTemplate {id:'progress.explicit_dates'})
-          SET t.version=1,t.domain='progress',t.requires_tool='get_progress',t.enabled=true
-          WITH t MATCH (tool:Tool {name:'get_progress'}) MERGE (t)-[:REQUIRES_TOOL]->(tool)
-        """)
+        await self.query("DROP CONSTRAINT kg_agent IF EXISTS")
+        await self.query("DROP CONSTRAINT kg_domain IF EXISTS")
+        await self.query("DROP CONSTRAINT kg_tool IF EXISTS")
+        await self.query("DROP CONSTRAINT kg_tasktemplate IF EXISTS")
 
     async def apply(self, event: ProjectionEvent):
         if event.schema_version != 1 or event.payload.get("schema_version", 1) != 1:
@@ -440,13 +569,16 @@ class Projector:
             """
             MERGE (n:KGEntity {key:$key}) ON CREATE SET n.source_version=0,n.lock=0
             SET n.lock=coalesce(n.lock,0)+1
-            RETURN coalesce(n.source_version, 0) AS version, n.session_generation AS generation
+            RETURN coalesce(n.source_version, 0) AS version, n.session_generation AS generation,
+                   n.local_date AS local_date
         """,
             key=event.key,
         )
         previous = await result.single()
         if previous["version"] >= event.aggregate_version:
             return "stale"
+        # Ngày cũ của bản ghi: đổi ngày hay xoá đều phải tính lại tổng hợp của ngày đó.
+        old_day = to_date(previous["local_date"]) if previous["local_date"] else None
         props, data = event_properties(event)
         label = event.aggregate_type  # Literal đã kiểm tra, không bao giờ là dữ liệu từ request
         if label == "Session" and previous["generation"] is not None:
@@ -493,6 +625,8 @@ class Projector:
                 props=self.tombstone(props),
             )
             await self._delete(tx, event)
+            if label in DAY_KINDS:
+                await self._roll_up(tx, event, {old_day})
             return "deleted"
         # Tài khoản đã vô hiệu hoá là trạng thái cuối của phép chiếu này. Bật lại
         # cần dựng lại từ nguồn; sự kiện cũ không thể khôi phục dữ liệu của nó.
@@ -553,7 +687,28 @@ class Projector:
             """,
                 key=event.key,
             )
+        if label in DAY_KINDS:
+            await self._roll_up(tx, event, {old_day, props.get("local_date")})
         return "applied"
+
+    async def _roll_up(self, tx, event, days):
+        """Tính lại Day và hai Period (tuần, tháng) chứa nó, trong cùng transaction với sự kiện."""
+        await tx.run("MATCH (n:KGEntity {key:$key})-[r:ON_DAY]->() DELETE r", key=event.key)
+        owner = event.owner_id
+        for day in sorted(d for d in days if d):
+            day_key = f"day:{owner}:{day.isoformat()}"
+            await tx.run(DAY_ROLLUP, key=day_key, owner=owner, date=day, kinds=list(DAY_KINDS))
+            for grain, (label, start, end) in (("week", _week(day)), ("month", _month(day))):
+                await tx.run(
+                    PERIOD_ROLLUP,
+                    day_key=day_key,
+                    key=f"period:{owner}:{grain}:{label}",
+                    owner=owner,
+                    grain=grain,
+                    label=label,
+                    start=start,
+                    end=end,
+                )
 
     @staticmethod
     def tombstone(props):
@@ -623,6 +778,21 @@ class Projector:
                     k: exercise[k] for k in ("name_vi", "name_en", "kind", "code") if k in exercise
                 },
             }
+            typed = {
+                k: exercise[k]
+                for k in ("name_vi", "name_en", "kind")
+                if exercise.get(k) is not None
+            }
+            typed["name_search"] = normalize(
+                " ".join(filter(None, [exercise.get("name_vi"), exercise.get("name_en")]))
+            )
+            performed = {
+                "hard_sets": item.get("hard_sets"),
+                "volume_kg": item.get("volume_kg"),
+                "best_e1rm_kg": item.get("best_e1rm_kg"),
+                "distance_km": _ratio(item.get("distance_meters"), 1000),
+                "duration_min": _ratio(item.get("duration_seconds"), 60),
+            }
             rows.append(
                 dict(
                     key="backend:Exercise:" + str(exercise["id"]),
@@ -630,6 +800,12 @@ class Projector:
                     owner_id=None if system else event.owner_id,
                     position=item.get("position", 0),
                     fact_json=json.dumps(fact, ensure_ascii=False, separators=(",", ":")),
+                    typed=typed,
+                    performed={
+                        k: coerce(REL_PROPS["PERFORMED"][k], v)
+                        for k, v in performed.items()
+                        if v is not None
+                    },
                 )
             )
         await tx.run(
@@ -638,7 +814,8 @@ class Projector:
             MERGE (x:KGEntity:Exercise {key:row.key})
             ON CREATE SET x.source_version=0
             SET x.kind='Exercise',x.scope=row.scope,x.owner_id=row.owner_id,x.fact_json=row.fact_json,x.deleted=false,x.source='backend'
-            MERGE (t)-[p:PERFORMED]->(x) SET p.position=row.position
+            SET x += row.typed
+            MERGE (t)-[p:PERFORMED]->(x) SET p.position=row.position, p += row.performed
         """,
             key=event.key,
             rows=rows,
@@ -662,6 +839,10 @@ class Projector:
         )
         rows = []
         for index, item in enumerate(data.get("items", [])):
+            food = item.get("food_snapshot") or {}
+            typed = typed_properties(
+                "MealItem", {**item, "food_name": food.get("name_vi") or food.get("name_en")}
+            )
             rows.append(
                 dict(
                     key=event.key + ":item:" + str(item.get("id", index)),
@@ -669,13 +850,15 @@ class Projector:
                     food_key="backend:Food:" + str(item.get("food_id", "")),
                     snapshot_json=json.dumps(item, ensure_ascii=False, separators=(",", ":")),
                     position=item.get("position", index),
+                    typed=typed,
                 )
             )
         await tx.run(
             """
             MATCH (m:Meal {key:$key}) UNWIND $rows AS row
             MERGE (i:KGEntity:MealItem {key:row.key})
-            SET i.owner_id=row.owner_id,i.kind='MealItem',i.snapshot_json=row.snapshot_json,i.position=row.position,i.food_key=row.food_key
+            SET i.owner_id=row.owner_id,i.kind='MealItem',i.snapshot_json=row.snapshot_json,i.position=row.position,i.food_key=row.food_key,
+                i.deleted=false, i += row.typed
             MERGE (m)-[:HAS_ITEM]->(i)
             WITH i,row OPTIONAL MATCH (f:Food {key:row.food_key})
             WHERE f.owner_id=$owner OR f.scope='SYSTEM'
@@ -708,8 +891,6 @@ class Projector:
             MERGE (r:KGEntity:Run {key:$run_key})
             SET r.kind='Run',r.owner_id=$owner,r.session_id=$session_id,r.session_generation=$generation,r.source_at=$source_at
             MERGE (s)-[:HAS_RUN]->(r) MERGE (r)-[:HAS_EXECUTION]->(e)
-            WITH e,r OPTIONAL MATCH (t:Tool {name:$tool})
-            FOREACH (_ IN CASE WHEN t IS NULL THEN [] ELSE [1] END | MERGE (e)-[:USES_TOOL]->(t))
         """,
             session_key=session_key,
             user_key="backend:User:" + event.owner_id,
@@ -719,7 +900,6 @@ class Projector:
             session_id=data["session_id"],
             generation=data["session_generation"],
             source_at=utc_string(event.occurred_at),
-            tool=data.get("tool"),
         )
         await tx.run(
             """
@@ -736,16 +916,6 @@ class Projector:
                 for r in data.get("resource_refs", [])
             ],
         )
-        if data.get("template_id"):
-            await tx.run(
-                """
-                MATCH (r:Run {key:$run_key}),(t:TaskTemplate {id:$template,version:$version})
-                MERGE (r)-[:MATCHES_TEMPLATE]->(t)
-            """,
-                run_key=run_key,
-                template=data["template_id"],
-                version=data.get("template_version", 1),
-            )
 
     async def _run(self, tx, event, data, session_key):
         await tx.run(
@@ -776,6 +946,19 @@ class Projector:
             refs=[
                 "backend:" + r["kind"] + ":" + r["source_id"] for r in data.get("resource_refs", [])
             ],
+        )
+        # Chuỗi quyết định của phiên: lượt trước -[:NEXT]-> lượt này, dù lượt nào được chiếu trước.
+        await tx.run(
+            """
+            MATCH (r:Run {key:$key})
+            OPTIONAL MATCH (p:Run {key:r.prev_key}) WHERE p.owner_id=$owner
+            FOREACH (_ IN CASE WHEN p IS NULL THEN [] ELSE [1] END | MERGE (p)-[:NEXT]->(r))
+            WITH r
+            OPTIONAL MATCH (n:Run {owner_id:$owner, prev_key:$key})
+            FOREACH (_ IN CASE WHEN n IS NULL THEN [] ELSE [1] END | MERGE (r)-[:NEXT]->(n))
+        """,
+            key=event.key,
+            owner=event.owner_id,
         )
 
     async def refresh_model(self, owner, now=None):
@@ -858,24 +1041,26 @@ class Projector:
         return [row["owner"] for row in rows]
 
     async def prune(self):
+        """Bản ghi thô quá hạn lưu bị ẩn (deleted) nhưng giữ thuộc tính có kiểu với cờ pruned, để tổng hợp Day/Period
+        tính lại vẫn đúng. Mục tiêu đã kết thúc được giữ với trạng thái của nó (lịch sử mục tiêu)."""
         now = datetime.now(timezone.utc)
-        for kinds, days in (
+        for kinds, days, pruned in (
             (
                 ["Meal", "BodyMetric", "Training", *HEALTH_KINDS],
                 value(self.settings, "KG_BUSINESS_RETENTION_DAYS", 90),
+                True,
             ),
-            (["Execution", "Run"], value(self.settings, "KG_MEMORY_RETENTION_DAYS", 30)),
+            (["Execution", "Run"], value(self.settings, "KG_MEMORY_RETENTION_DAYS", 30), False),
         ):
             await self.query(
                 """
               MATCH (n:KGEntity) WHERE n.kind IN $kinds AND coalesce(n.business_at,n.source_at)<$cutoff
+                AND coalesce(n.pruned, false) = false AND (n.deleted = false OR n.fact_json IS NOT NULL)
               OPTIONAL MATCH (n)-[:HAS_ITEM]->(item:MealItem)
               DETACH DELETE item
-              SET n.fact_json=null,n.search_text=null,n.deleted=true
+              SET n.fact_json=null,n.search_text=null,n.deleted=true,n.pruned=$pruned
             """,
                 kinds=kinds,
                 cutoff=(now - timedelta(days=days)).isoformat(),
+                pruned=pruned,
             )
-        await self.query(
-            "MATCH (n:Goal) WHERE n.status<>'IN_PROGRESS' SET n.fact_json=null,n.deleted=true"
-        )

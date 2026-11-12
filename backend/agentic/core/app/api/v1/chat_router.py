@@ -9,8 +9,17 @@ from agentic.core.app.dependencies import authenticated
 from agentic.core.app.schemas.request import ChatRequest, ConfirmationRequest, FoodNutritionRequest
 from agentic.core.app.schemas.response import ChatResponse, FoodNutrition
 from agentic.core.context import request_context
+from agentic.observability.outcomes import (
+    CANCELLED,
+    CLIENT,
+    DISCONNECT,
+    FAILED,
+    ChatSession,
+    note_error,
+)
 from agentic.security.input_guard import safe_query
 from agentic.services import nutrition_lookup
+from agentic.services.runtime import RunCancelled
 from core.rate_limit import SlidingWindowLimiter
 
 router = APIRouter(prefix="/chat", tags=["agent-chat"])
@@ -52,17 +61,44 @@ async def new_turn(request: Request, ctx=Depends(rate_limited)):
     return ctx
 
 
+async def _tracked(session, call):
+    """Một kết cục cuối cho lượt chat không stream: theo trạng thái ChatResponse, không theo mã HTTP."""
+    with session:
+        try:
+            result = await call
+        except RunCancelled:
+            session.finish(CANCELLED, failure_class=CLIENT)
+            raise
+        except HTTPException as exc:
+            session.finish(FAILED, status_code=exc.status_code)
+            raise
+        session.finish_result(result.status)
+        return result
+
+
 @router.post("", response_model=ChatResponse)
 async def chat(payload: ChatRequest, request: Request, ctx=Depends(new_turn)):
-    return await request.app.state.runtime.chat(payload, ctx.user_id)
+    return await _tracked(
+        ChatSession("chat", payload.mode), request.app.state.runtime.chat(payload, ctx.user_id)
+    )
 
 
 @router.post("/confirm", response_model=ChatResponse)
 async def confirm(payload: ConfirmationRequest, request: Request, ctx=Depends(rate_limited)):
-    return await request.app.state.runtime.confirm(payload, ctx.user_id)
+    return await _tracked(
+        ChatSession("confirm"), request.app.state.runtime.confirm(payload, ctx.user_id)
+    )
 
 
-@router.post("/food-nutrition", response_model=FoodNutrition, responses={404: {}, 422: {}, 503: {}})
+# Mô tả tường minh: văn bản mặc định lấy từ http.HTTPStatus và khác nhau giữa Python 3.12 và 3.13.
+NUTRITION_RESPONSES = {
+    404: {"description": "No trustworthy figures found"},
+    422: {"description": "Not a food name"},
+    503: {"description": "Suggestion temporarily unavailable"},
+}
+
+
+@router.post("/food-nutrition", response_model=FoodNutrition, responses=NUTRITION_RESPONSES)
 async def food_nutrition(
     payload: FoodNutritionRequest, request: Request, ctx=Depends(rate_limited)
 ):
@@ -86,12 +122,26 @@ async def food_nutrition(
     return facts
 
 
+@router.post("/runs/{run_id}/cancel", status_code=202)
+async def cancel_run(run_id: str, request: Request, ctx=Depends(authenticated)):
+    """Dừng lượt chat đang chạy của chính người dùng (404 khi không thấy, 409 khi đang thực thi lệnh ghi đã duyệt)."""
+    request.app.state.runtime.cancel(run_id, ctx.user_id)
+    return {"run_id": run_id, "status": "cancelling"}
+
+
+# Nhịp kiểm tra client còn kết nối: đủ ngắn để lượt bị bỏ dừng sớm; ping SSE vẫn theo SSE_HEARTBEAT_SECONDS.
+DISCONNECT_CHECK_SECONDS = 2
+
+
 @router.post("/stream")
 async def stream(payload: ChatRequest, request: Request, ctx=Depends(new_turn)):
     heartbeat = request.app.state.runtime.settings.SSE_HEARTBEAT_SECONDS
 
     async def events():
         queue = asyncio.Queue()
+        # Kết cục cuối chỉ được ghi khi sự kiện cuối thật sự đã gửi xong cho client (sau `yield`).
+        session = ChatSession("stream", payload.mode)
+        final = {}
 
         async def produce():
             mark = request_context.set(ctx)
@@ -103,35 +153,66 @@ async def stream(payload: ChatRequest, request: Request, ctx=Depends(new_turn)):
                     "pending_confirmation": "pending_confirmation",
                     "failed": "error",
                 }[result.status]
+                final["status"] = result.status
                 await queue.put({"type": event, **result.model_dump(mode="json")})
+            except RunCancelled:
+                final["cancelled"] = True
+                await queue.put({"type": "cancelled"})
             except HTTPException as exc:
+                final["status_code"] = exc.status_code
                 await queue.put(
                     {"type": "error", "status_code": exc.status_code, "detail": exc.detail}
                 )
-            except Exception:
+            except Exception as exc:
+                note_error(exc)
+                final["error"] = exc
                 await queue.put({"type": "error", "detail": "Agent service failed"})
             finally:
                 request_context.reset(mark)
                 await queue.put(None)
 
-        task = asyncio.create_task(produce())
-        try:
-            while True:
-                try:
-                    item = await asyncio.wait_for(queue.get(), timeout=heartbeat)
-                except TimeoutError:
-                    if await request.is_disconnected():
-                        break  # Client đã rời đi; dừng lượt chạy thay vì tính toán cho không ai cả.
-                    # Comment SSE: giữ cho proxy không đóng một kết nối đang im lặng.
-                    yield ": ping\n\n"
-                    continue
-                if item is None:
-                    break
-                yield "data: " + json.dumps(item, ensure_ascii=False) + "\n\n"
-            yield "data: [DONE]\n\n"
-        finally:
-            task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
+        def settle():
+            if final.get("cancelled"):
+                session.finish(CANCELLED, failure_class=CLIENT)
+            elif "status" in final:
+                session.finish_result(final["status"])
+            elif "status_code" in final:
+                session.finish(FAILED, status_code=final["status_code"])
+            elif "error" in final:
+                session.finish(FAILED, error=final["error"])
+
+        with session:
+            task = asyncio.create_task(produce())
+            loop = asyncio.get_running_loop()
+            pinged = loop.time()
+            try:
+                while True:
+                    try:
+                        item = await asyncio.wait_for(
+                            queue.get(), timeout=min(heartbeat, DISCONNECT_CHECK_SECONDS)
+                        )
+                    except TimeoutError:
+                        if await request.is_disconnected():
+                            # Client đã rời đi; dừng lượt chạy thay vì tính toán cho không ai cả.
+                            session.finish(CANCELLED, failure_class=DISCONNECT)
+                            break
+                        if loop.time() - pinged >= heartbeat:
+                            # Comment SSE: giữ cho proxy không đóng một kết nối đang im lặng.
+                            pinged = loop.time()
+                            yield ": ping\n\n"
+                        continue
+                    if item is None:
+                        settle()
+                        break
+                    yield "data: " + json.dumps(item, ensure_ascii=False) + "\n\n"
+                    if item.get("type") == "token":
+                        session.first_token()
+                    elif item.get("type") not in {"progress", "run"}:
+                        settle()
+                yield "data: [DONE]\n\n"
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
 
     return StreamingResponse(
         events(),

@@ -15,21 +15,28 @@ Với mỗi loại đã được cấp quyền đọc (domains/health_records/ty
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any, Iterator
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from core.database import get_db_session
 from domains.health_records import views
 from domains.health_records.models.health_points import HealthPoint as HealthPointRow
-from domains.health_records.types import SELF_MARKED, DataType, Read, readable
+from domains.health_records.types import SELF_MARKED, DataType, Read, readable, spec
 from integrations.google_health import kinds
-from integrations.google_health.client import PERMISSION, GoogleHealthClient, GoogleHealthError, ReauthRequired
+from integrations.google_health.client import (
+    PERMISSION,
+    GoogleHealthClient,
+    GoogleHealthError,
+    ReauthRequired,
+)
 
 logger = logging.getLogger(__name__)
 LIST_WINDOW_DAYS = 90
+HOUR_SECONDS = 3600
 
 
 def chunks(start: date, end: date, days: int) -> Iterator[tuple[date, date]]:
@@ -44,12 +51,18 @@ async def fetch(client: GoogleHealthClient, t: DataType, start: date, end: date,
     """(các điểm có ngày địa phương trong [start, end), đã đọc trọn mọi trang hay chưa)."""
     points: list[kinds.HealthPoint] = []
     complete = True
-    rollup = t.read is Read.DAILY_ROLLUP
+    rollup = t.read in (Read.DAILY_ROLLUP, Read.HOURLY_ROLLUP)
     for low, high in chunks(start, end, t.chunk_days if rollup else LIST_WINDOW_DAYS):
-        if rollup:
-            result = await client.daily_rollup_all(t.id, low, high, page_size=t.page_size)
+        if t.read is Read.HOURLY_ROLLUP:
+            # Nửa đêm địa phương → nửa đêm địa phương: mỗi cửa sổ giờ nằm trọn trong một ngày.
+            local = ZoneInfo(zone)
+            result = await client.rollup_all(t.google_id, datetime.combine(low, time.min, local),
+                                             datetime.combine(high, time.min, local),
+                                             window_seconds=HOUR_SECONDS, page_size=t.page_size)
+        elif rollup:
+            result = await client.daily_rollup_all(t.google_id, low, high, page_size=t.page_size)
         else:
-            result = await client.list_all(t.id, filter=kinds.filter_for(t, low, high), page_size=t.page_size,
+            result = await client.list_all(t.google_id, filter=kinds.filter_for(t, low, high), page_size=t.page_size,
                                            reconcile=t.read is Read.RECONCILE, family=family)
         complete = complete and result.complete
         for raw in result.points:
@@ -58,6 +71,33 @@ async def fetch(client: GoogleHealthClient, t: DataType, start: date, end: date,
             if point is not None and start <= point.local_date < end:
                 points.append(point)
     return points, complete
+
+
+def adoption_key(data_type: str, payload: dict[str, Any]) -> tuple[str, ...]:
+    """Khoá nhận lại điểm HercFit đã ghi: thời điểm bắt đầu hoặc thời điểm đo (và tên món với nutrition-log)."""
+    value = payload.get(spec(data_type).field) or {}
+    start = kinds.timestamp((value.get("interval") or {}).get("startTime")
+                            or (value.get("sampleTime") or {}).get("physicalTime"))
+    return (kinds.stamp(start) if start else "", value.get("foodDisplayName") or "")
+
+
+async def orphans(user_id: UUID, data_type: str, points: list[kinds.HealthPoint], own: set[str]) -> set[str]:
+    """Điểm HercFit đã tạo trên Google cho một dòng "local/..." nhưng chưa kịp đổi tên (tiến trình dừng giữa
+    chừng): chưa thuộc dòng nào và trùng khoá với một dòng cục bộ đang chờ. Pull bỏ qua chúng để lượt đẩy
+    nhận lại, thay vì đọc về thành bản ghi thứ hai."""
+    from integrations.google_health.records import LOCAL_PREFIX, LOCAL_TYPES
+
+    candidates = [point for point in points if point.remote_name in own]
+    if data_type not in LOCAL_TYPES or not candidates:
+        return set()
+    field = spec(data_type).field
+    async with get_db_session() as session:
+        rows = (await session.execute(select(HealthPointRow.remote_name, HealthPointRow.value).where(
+            HealthPointRow.user_id == user_id, HealthPointRow.data_type == data_type))).all()
+    stored = {name for name, _value in rows}
+    pending = {adoption_key(data_type, {field: value}) for name, value in rows if name.startswith(LOCAL_PREFIX)}
+    return {point.remote_name for point in candidates if point.remote_name not in stored
+            and adoption_key(data_type, {field: point.value}) in pending}
 
 
 async def pushed_names(user_id: UUID) -> set[str]:
@@ -92,8 +132,9 @@ async def pull(client: GoogleHealthClient, user_id: UUID, granted: list[str], st
         if not complete:
             status[t.id] = {"error": "incomplete"}
             continue
+        skipped = pushed | await orphans(user_id, t.id, points, own)
         rows = [point.row(user_id, written_by_hercfit=point.remote_name in own)
-                for point in points if point.remote_name not in pushed]
+                for point in points if point.remote_name not in skipped]
         async with get_db_session() as session:
             written, removed = await HealthPointRow.replace_window(session, user_id, t.id, start, end, rows)
         status[t.id] = {"through": (end - timedelta(days=1)).isoformat(), "error": None, "rows": written,

@@ -79,6 +79,16 @@ export interface HealthProfile {
   conflicts: string[]
 }
 
+/** Nhịp tim trong một giờ (GET /api/health/heart-rate/hourly); giờ không có mẫu thì không có dòng. */
+export interface HeartRateHour {
+  start_at: string
+  end_at: string
+  hour: number
+  bpm_avg: Numeric
+  bpm_min: number | null
+  bpm_max: number | null
+}
+
 export interface DailyHealth {
   id: string
   local_date: string
@@ -303,8 +313,16 @@ export interface NumberFrame {
   presets?: number[]
 }
 
+/** Một ngày (ISO 'YYYY-MM-DD') chọn trên lịch hoặc từ mốc gợi ý trong [min, max]; khoảng và mốc do agent dựng. */
+export interface DateFrame {
+  min: string
+  max: string
+  default?: string | null
+  presets?: { label: string; value: string }[]
+}
+
 /** Khung trên thẻ; mọi khung đều trả lời trên thẻ, không bao giờ bằng văn bản tự do gõ tay. */
-export type ClarifyMode = 'single' | 'multiple' | 'quick_reply' | 'number' | 'sets'
+export type ClarifyMode = 'single' | 'multiple' | 'quick_reply' | 'number' | 'date' | 'sets'
 
 export interface ClarifyQuestion {
   id: string
@@ -312,8 +330,8 @@ export interface ClarifyQuestion {
   label: string
   question: string
   /**
-   * 'number' chọn một giá trị theo `number`. 'sets' sửa sets × reps × kg theo từng bài tập: các bài đã chọn trong
-   * `for_questions`, hoặc các lựa chọn riêng của nó.
+   * 'number' chọn một giá trị theo `number`, 'date' chọn một ngày theo `date_frame`. 'sets' sửa sets × reps × kg theo
+   * từng bài tập: các bài đã chọn trong `for_questions`, hoặc các lựa chọn riêng của nó.
    */
   mode: ClarifyMode
   options: ClarifyOption[]
@@ -325,6 +343,7 @@ export interface ClarifyQuestion {
   /** Chỉ hỏi khi câu hỏi trước đó được trả lời bằng một trong các lựa chọn này. */
   show_if?: { question: string; option_ids: string[] } | null
   number?: NumberFrame | null
+  date_frame?: DateFrame | null
 }
 
 /** Form để con người quyết định, hỏi từng câu một và trả lời gộp thành một tin nhắn. */
@@ -342,7 +361,17 @@ export interface FoodGapItem {
   unit?: FoodUnit | null
 }
 
+/** Đơn vị trong bản nháp của router: SERVING là số đếm (tô, cái, suất), quy ra g/ml theo portions của món. */
 export type FoodUnit = 'G' | 'ML' | 'SERVING'
+/** Đơn vị catalog tính dinh dưỡng và đơn vị ghi lượng ăn. */
+export type MeasureUnit = 'G' | 'ML'
+
+/** Khẩu phần hộ gia đình của món, đo bằng đơn vị của món, ví dụ "1 tô" = 500 G. */
+export interface HouseholdPortion {
+  label: string
+  quantity: number | string
+  unit: MeasureUnit
+}
 
 export interface FoodGap {
   items: FoodGapItem[]
@@ -354,7 +383,7 @@ export interface FoodChoice {
   key: string
   food_id: string
   quantity: number
-  unit: FoodUnit
+  unit: MeasureUnit
 }
 
 /** Gợi ý AI cho món riêng: đúng 4 chỉ số trên 100 g. */
@@ -363,6 +392,8 @@ export interface FoodNutrition {
   carbohydrate_g: number
   fat_g: number
   protein_g: number
+  /** true: AI ước tính (không nguồn nào ghi đủ 4 chỉ số); false: chép từ một nguồn web. */
+  estimated?: boolean
 }
 
 /** Một bản ghi catalog trả về từ GET /api/foods (các trường thẻ dùng). */
@@ -372,12 +403,12 @@ export interface FoodRecord {
   name_vi: string
   name_en?: string | null
   serving_size?: string | number | null
-  serving_unit: 'G' | 'ML' | 'PORTION'
+  serving_unit: MeasureUnit
   energy_kcal?: string | number | null
   protein_g?: string | number | null
   carbohydrate_g?: string | number | null
   fat_g?: string | number | null
-  portion_weight_g?: string | number | null
+  portions?: HouseholdPortion[] | null
   image_url?: string | null
   source_type: 'SYSTEM' | 'CUSTOM'
 }
@@ -498,8 +529,8 @@ export interface NutritionTargets {
   method: Record<string, string>
 }
 
-// ---- Google Health: ghi xuyên qua (/api/v2/health/records) -----------------------------------
-/** Loại Google sở hữu mà HercFit ghi thẳng lên Google (buổi thể thao, số đo cơ thể, nước uống, giấc ngủ ghi tay). */
+// ---- Bản ghi sức khoẻ người dùng nhập (/api/v2/health/records) ----------------------------------
+/** Loại lưu trong HercFit rồi đẩy lên Google khi đã kết nối (buổi thể thao, số đo cơ thể, nước uống, giấc ngủ ghi tay). */
 export type HealthRecordKind = 'exercise' | 'weight' | 'height' | 'body-fat' | 'hydration' | 'sleep'
 
 /** Một điểm Google do HercFit vừa ghi; `pending` khi Google chưa trả điểm (lần đồng bộ sau mang về). */

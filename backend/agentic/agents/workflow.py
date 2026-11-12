@@ -8,7 +8,8 @@ from agentic.agents.state import AgentState
 from agentic.agents.tool_agent import ToolAgent
 from agentic.core import roster
 from agentic.core.context import request_context
-from agentic.knowledge_graph.service import domains_for
+from agentic.knowledge_graph.context import pipeline as context_pipeline
+from agentic.knowledge_graph.context.graph import ContextGraph
 from agentic.observability import annotate
 from agentic.observability.execution import run_node
 from agentic.observability.telemetry import MeasuredModels
@@ -21,6 +22,7 @@ from agentic.services.routing import (
     latest_request,
     make_fast_read_plan,
 )
+from agentic.services.simple_writes import simple_route
 from agentic.tools.policy import continue_catalog_lookup
 
 
@@ -39,11 +41,10 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
             return await run_node(fn, state, node, settings)
 
     async def decide_step(state):
-        hinted = domains_for(latest_request(state))
-        update = await retrieve_graph_context(
-            state, hinted, settings=settings, graph_context=graph_context
-        )
-        current = {**state, **update}
+        # Không còn đọc graph theo từ khoá trước router (khớp nhầm "cần" → cân nặng, timeout lần đọc đầu): dữ liệu cá
+        # nhân đến từ context graph của câu hỏi sau khi router đã gọi tên ý định (nút context_graph).
+        update = {}
+        current = dict(state)
         policy = mode.policy(state)
         # Chế độ Plan không có lối tắt đọc theo mẫu: người dùng đã chọn tư vấn chuyên sâu.
         # Lựa chọn trên thẻ món thiếu đi thẳng tới bước dựng bữa của orchestrator, không qua lối tắt đọc theo mẫu.
@@ -71,6 +72,24 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
                     "intent": decision["intent"],
                     "domain": decision["domain"],
                     "action": decision["action"],
+                },
+            }
+        simple = simple_route(current) if shortcuts else None
+        if simple and policy.allows(simple["domain"]):
+            # Lệnh ghi đơn giản theo mẫu (cân nặng, nước, giấc ngủ): lời gọi dựng sẵn, không gọi model định tuyến hay
+            # chọn tool; agent chuyên trách vẫn thực thi qua danh sách cho phép, bản xem trước và thẻ xác nhận.
+            annotate(route="simple_write", simple_write=simple["code_call"]["name"])
+            return {
+                **update,
+                "decision": simple,
+                "status": "running",
+                "fast_read_plan": None,
+                "fast_read_complete": False,
+                "turn": {
+                    "run_id": state.get("run_id"),
+                    "intent": simple["intent"],
+                    "domain": simple["domain"],
+                    "action": simple["action"],
                 },
             }
         if (
@@ -114,7 +133,7 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
             for task in [decision, *(decision.get("delegated_tasks") or [])]
             for d in decision_domains(task)
         ]
-        missed = [d for d in dict.fromkeys(named) if d not in hinted]
+        missed = list(dict.fromkeys(named))
         if missed:
             update = {
                 **update,
@@ -177,18 +196,27 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         if decision.get("decision") == "approve":
             # Bản người dùng sửa trên thẻ đã được runtime kiểm tra và lưu vào hành động đang chờ.
             edited = decision.get("action")
+            # Bộ nhớ quyết định: chỉ tên các trường người dùng đã sửa, không bao giờ giá trị.
+            original = state["pending_action"].get("payload") or {}
+            changed = sorted(
+                k for k, v in ((edited or {}).get("payload") or {}).items() if original.get(k) != v
+            )
             return {
                 "approved": True,
+                "action_decision": "approved",
+                "edited_fields": [*(state.get("edited_fields") or []), *changed][:10],
                 **({"pending_action": {**state["pending_action"], **edited}} if edited else {}),
             }
         rejected = delegation.after_reject(state)
         if rejected:
-            return rejected  # lượt giao việc song song: thẻ kế tiếp, hoặc trả lời các phần còn lại
+            # Lượt giao việc song song: thẻ kế tiếp, hoặc trả lời các phần còn lại.
+            return {**rejected, "action_decision": "rejected"}
         from langchain_core.messages import AIMessage
 
         reply = "Đã từ chối thao tác; không ghi dữ liệu."
         return {
             "approved": False,
+            "action_decision": "rejected",
             "pending_action": None,
             "status": "completed",
             "reply": reply,
@@ -266,6 +294,67 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
     async def invoke_context(state):
         return await guarded(context_step, state, "context")
 
+    def needs_context_graph(s):
+        decision = s.get("decision") or {}
+        return bool(
+            graph_context is not None
+            and decision.get("context")
+            and s.get("context_graph_run_id") != s.get("run_id")
+            and decision.get("action") in {"answer", "tool", "research"}
+            and not decision.get("delegated_tasks")
+        )
+
+    async def context_graph_step(state):
+        """G_C = f(G_K, q, u, t, i, s, p) cho câu hỏi này, một lần mỗi lượt chạy. Câu hỏi đọc mà graph không trả lời
+        được (lỗi, bị từ chối, chưa đồng bộ) chuyển sang đọc backend như trước, do code quyết định."""
+        decision = state["decision"]
+        ctx = request_context.get(None)
+        if ctx is None or ctx.user_id != state.get("user_id"):
+            built = ContextGraph(status="blocked")
+        else:
+            built = await context_pipeline.build(
+                graph_context,
+                models,
+                owner=ctx.user_id,
+                session_id=state.get("session_id"),
+                question=latest_request(state),
+                decision=decision,
+            )
+        update = {
+            "context_graph": built.model_dump(mode="json"),
+            "context_graph_run_id": state.get("run_id"),
+        }
+        trace = {
+            "stage": "context_graph",
+            "status": built.status,
+            "source": built.source,
+            "rows": len(built.rows),
+        }
+        if (
+            not built.usable
+            and decision.get("action") == "answer"
+            and not decision.get("personalize")
+            and roster.specialist_for(decision.get("domain"))
+        ):
+            update["decision"] = {
+                **decision,
+                "action": "tool",
+                "next_agent": "tool",
+                "read_only": True,
+                "instruction": "Đọc dữ liệu đã lưu từ backend để trả lời: "
+                + decision.get("instruction", ""),
+            }
+            trace["fallback"] = "backend_read"
+        annotate(context_fallback=trace.get("fallback"))
+        update["route_trace"] = [*(state.get("route_trace") or []), trace]
+        return update
+
+    async def invoke_context_graph(state):
+        result = await guarded(context_graph_step, state, "context_graph", roster.CONTEXT)
+        # Kể cả khi bước lỗi: đánh dấu đã thử, nếu không after_orchestrator sẽ quay lại nút này mãi.
+        result.setdefault("context_graph_run_id", state.get("run_id"))
+        return result
+
     async def invoke_research(state):
         return await guarded(research.invoke, state, "research", roster.RESEARCH)
 
@@ -290,6 +379,7 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
     graph.add_node("join", join)
     graph.add_node("research", invoke_research)
     graph.add_node("context", invoke_context)
+    graph.add_node("context_graph", invoke_context_graph)
     graph.add_node("confirmation", await_confirmation)
     graph.add_node("execute", execute)
     graph.add_node("answer", answer)
@@ -297,6 +387,8 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
 
     def after_orchestrator(s):
         decision = s["decision"]
+        if needs_context_graph(s):
+            return "context_graph"  # dữ liệu đã lưu của chính câu hỏi trước mọi bước khác
         if (
             decision.get("personalize")
             and not s.get("personal_reads_done")
@@ -315,6 +407,11 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
 
     graph.add_conditional_edges(
         "orchestrator",
+        after_orchestrator,
+        [*specialists, "delegate", "research", "answer", "context", "context_graph"],
+    )
+    graph.add_conditional_edges(
+        "context_graph",
         after_orchestrator,
         [*specialists, "delegate", "research", "answer", "context"],
     )

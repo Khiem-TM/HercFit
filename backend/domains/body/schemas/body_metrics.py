@@ -1,8 +1,7 @@
 from datetime import datetime, timezone
-from uuid import UUID
-
 from decimal import Decimal
 from typing import Annotated
+from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
 
@@ -18,7 +17,6 @@ from domains.shared.schemas.common import (
     PositiveMeasurement,
     WeightKg,
 )
-
 
 # Vòng ngực / eo / hông (cm): khoảng hợp lý của người trưởng thành và trẻ lớn.
 CircumferenceCm = Annotated[Decimal, Field(ge=30, le=250, max_digits=6, decimal_places=2, allow_inf_nan=False)]

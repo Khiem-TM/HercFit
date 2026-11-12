@@ -2,13 +2,15 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Response
-from core.transaction import transaction
+
+from agentic.research.contracts import FoodFinalization, FoodFinalizationResult
+from api.dependencies import CatalogServiceDep, FoodQueryDep, VersionQuery
+from api.responses import created
 from core.idempotency import IdempotentRoute
+from core.transaction import transaction
 from domains.catalog.models.foods import FoodItem
 from domains.catalog.schemas.foods import FoodCreate, FoodRead, FoodUpdateRequest
 from domains.shared.schemas.tracking import VersionedRequest
-from api.dependencies import CatalogServiceDep, FoodQueryDep, VersionQuery
-from api.responses import created
 
 router = APIRouter(route_class=IdempotentRoute, prefix="/foods", tags=["foods"])
 
@@ -31,7 +33,6 @@ async def resolve_food(service: CatalogServiceDep, query: str):
     return await resolve(service, 'foods', ResolveQuery(query=query).query)
 
 
-from agentic.research.contracts import FoodFinalization, FoodFinalizationResult
 
 # Route idempotent lưu phản hồi đã kiểm tra, nên kết quả cần một response model.
 @router.post("/research-finalizations", response_model=FoodFinalizationResult)

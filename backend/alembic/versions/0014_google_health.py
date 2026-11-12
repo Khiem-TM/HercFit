@@ -11,9 +11,9 @@
   chỉ phát khi người dùng cho phép trợ lý dùng dữ liệu thiết bị, và
   node User của graph có thêm giới tính và mức vận động đã khai báo.
 """
-from alembic import op
 from sqlalchemy import text
 
+from alembic import op
 from core.graph_outbox import installation_statements
 
 revision = "0014_google_health"

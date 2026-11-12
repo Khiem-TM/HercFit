@@ -32,6 +32,13 @@ from agentic.prompts.v5.domains import COACH_GUIDANCE as COACH_GUIDANCE_V5
 from agentic.prompts.v5.domains import HEALTH_GUIDANCE as HEALTH_GUIDANCE_V5
 from agentic.prompts.v6 import routing as v6_routing
 from agentic.prompts.v6.domains import CAPABILITY_GUIDANCE as CAPABILITY_GUIDANCE_V6
+from agentic.prompts.v7.domains import CAPABILITY_GUIDANCE as CAPABILITY_GUIDANCE_V7
+from agentic.prompts.v7.tool import PROMPT as TOOL_PROMPT_V7
+from agentic.prompts.v8 import clarification as v8_clarification
+from agentic.prompts.v8 import context as v8_context
+from agentic.prompts.v8 import domains as v8_domains
+from agentic.prompts.v8 import nutrition as v8_nutrition
+from agentic.prompts.v8 import routing as v8_routing
 
 TEMPLATES = MappingProxyType(
     {
@@ -79,6 +86,24 @@ TEMPLATES = MappingProxyType(
         ("nutrition.capabilities", "v6"): CAPABILITY_GUIDANCE_V6,
         # v1: gợi ý 4 chỉ số dinh dưỡng (trên 100 g) cho món riêng tạo trên thẻ món thiếu, chép nguyên văn từ một nguồn.
         ("nutrition.lookup", "v1"): NUTRITION_LOOKUP_PROMPT,
+        # v7: mọi món tính theo 100 g/100 ml; tô/suất quy ra gam/ml bằng portions, không còn PORTION.
+        ("nutrition.capabilities", "v7"): CAPABILITY_GUIDANCE_V7,
+        ("tool.call", "v7"): TOOL_PROMPT_V7,
+        # v8: Context Graph (text-to-Cypher). Câu hỏi đọc dữ liệu đã lưu đi qua context graph, không bắt buộc đọc
+        # backend; Context Agent viết Cypher theo lược đồ knowledge_graph.schema.
+        ("orchestration.route", "v8"): v8_routing.ROUTING_PROMPT,
+        ("orchestration.route_normal", "v8"): v8_routing.NORMAL_ROUTING_PROMPT,
+        ("orchestration.graph_context", "v2"): v8_context.GRAPH_CONTEXT_GUIDANCE,
+        ("orchestration.graph_answer", "v1"): v8_context.ANSWER_GRAPH_GUIDANCE,
+        ("context.cypher", "v1"): v8_context.CYPHER_PROMPT,
+        # v8: lệnh ghi mục tiêu (GOAL_SET/GOAL_UPDATE) hỏi lại bằng thẻ; lời mời sang Plan cho lệnh ghi; khung ngày.
+        ("orchestration.plan_mode_write_reply", "v1"): v8_routing.PLAN_MODE_WRITE_REPLY,
+        ("clarification.form", "v4"): v8_clarification.PROMPT,
+        # v8: gợi ý dinh dưỡng chép số từ nguồn khi có, nếu không thì ước tính trên 100 g (được đánh dấu là ước tính).
+        ("nutrition.lookup", "v2"): v8_nutrition.LOOKUP_PROMPT,
+        # v8: buổi thể thao, nước, giấc ngủ, số đo lưu trong HercFit trước; Google chỉ là đích đồng bộ khi đã kết nối.
+        ("training.coach", "v6"): v8_domains.COACH_GUIDANCE,
+        ("health.guidance", "v6"): v8_domains.HEALTH_GUIDANCE,
     }
 )
 

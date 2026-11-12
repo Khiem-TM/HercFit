@@ -7,8 +7,7 @@
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview --port 4173",
-    "type-check": "vue-tsc --noEmit",
-    "test": "vitest run"
+    "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@vueuse/core": "15.0.0",
@@ -28,7 +27,6 @@
     "tailwindcss": "^3.4.17",
     "typescript": "~5.6.3",
     "vite": "^6.0.5",
-    "vitest": "^3.2.4",
     "vue-tsc": "^2.2.0"
   }
 }

@@ -16,6 +16,8 @@ from integrations.google_health.models import HealthConnection
 
 logger = logging.getLogger(__name__)
 PUSHED = {"Training", "Meal"}
+# Loại chỉ ghi được qua Google trước đây; nay tạo mới luôn lưu trong HercFit dù chưa kết nối.
+LOCAL_FIRST = {"exercise", "hydration", "sleep"}
 
 
 def _day(value: Any) -> date | None:
@@ -58,22 +60,23 @@ class GoogleHealthDirectory:
         from integrations.google_health import records
 
         connection = await HealthConnection.for_user(session, user_id)
-        # Chưa kết nối hoặc chưa cấp quyền ghi loại này: miền lưu trong HercFit như trước.
-        if (connection is None or connection.status != "ACTIVE"
-                or not can_write(records.DATA_TYPE[kind], connection.granted_scopes or [])):
-            return None
+        connected = (connection is not None and connection.status == "ACTIVE"
+                     and can_write(records.DATA_TYPE[kind], connection.granted_scopes or []))
+        if point_id is None and not delete:
+            if connected or kind in LOCAL_FIRST:
+                return await records.create(session, user_id, kind, payload or {})
+            return None  # số đo khi chưa kết nối hoặc chưa cấp quyền ghi: miền lưu vào body_metrics như trước
+        # Sửa / xoá một bản ghi HercFit đã lưu trong health_points: records chọn đường cục bộ hay Google.
         if delete:
             await records.delete(session, user_id, kind, point_id)
             return {"deleted": True}
-        if point_id is not None:
-            return await records.update(session, user_id, kind, point_id, payload or {})
-        return await records.create(session, user_id, kind, payload or {})
+        return await records.update(session, user_id, kind, point_id, payload or {})
 
     async def refresh(self, user_id: UUID, days: int = 2) -> bool:
         """Đồng bộ ngay vài ngày gần nhất (trước briefing buổi sáng); False khi chưa kết nối hoặc người dùng
         chọn chỉ đồng bộ khi mở ứng dụng / thủ công (đồng bộ nền là việc của tần suất "hourly")."""
-        from integrations.google_health import sync
         from core.database import get_db_session
+        from integrations.google_health import sync
 
         async with get_db_session() as session:
             connection = await HealthConnection.for_user(session, user_id)
@@ -92,7 +95,13 @@ class GoogleHealthDirectory:
 
 async def push_after_commit(session, user_id: UUID, aggregate_type: str, entity: Any, op: str, **_extra: Any) -> None:
     """Buổi gym / bữa ăn vừa đổi: sau khi commit, đẩy ngay lên Google (lượt định kỳ vẫn bắt lại nếu lỡ)."""
-    if aggregate_type not in PUSHED or session.info.get("gh_push_scheduled"):
+    if aggregate_type in PUSHED:
+        schedule_push(session, user_id)
+
+
+def schedule_push(session, user_id: UUID) -> None:
+    """Sau khi transaction commit, chạy một lượt chỉ đẩy cho user (mỗi transaction tối đa một lượt)."""
+    if session.info.get("gh_push_scheduled"):
         return
     session.info["gh_push_scheduled"] = True
 

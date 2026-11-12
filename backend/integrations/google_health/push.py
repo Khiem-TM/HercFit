@@ -1,4 +1,4 @@
-"""Đẩy buổi gym và bữa ăn của HercFit lên Google Health (HercFit là nguồn sự thật, không đọc lại).
+"""Đẩy buổi gym, bữa ăn và bản ghi sức khoẻ người dùng nhập của HercFit lên Google Health (HercFit là nguồn sự thật).
 
 * Buổi gym → MỘT exercise STRENGTH_TRAINING: khoảng thời gian, thời lượng, kcal và tóm tắt số hiệp.
 * Bữa ăn → mỗi món một nutrition-log "thực phẩm ẩn danh" theo docs dinh dưỡng.
@@ -15,6 +15,11 @@ khi tạo, HercFit tìm điểm do chính nó ghi (reconcile self-sources) có c
 cùng tên món) mà chưa thuộc dòng nào thì nhận lại điểm đó; một lần tạo bị sập giữa chừng vì thế
 được nhận lại ở lượt sau. Buổi gym trùng ≥ 50% với phiên mà đồng hồ đã ghi thì chỉ gắn vào phiên
 đó (owned = false), kể cả khi đồng hồ đồng bộ muộn hơn lúc đẩy.
+
+Bản ghi sức khoẻ người dùng nhập (buổi thể thao, nước, giấc ngủ, số đo) nằm sẵn trong health_points với
+remote_name "local/..." (records.py). Mỗi dòng như vậy được tạo trên Google (hoặc nhận lại một điểm
+HercFit đã tạo mà chưa kịp gắn: pull không đọc điểm đó về, xem pull.orphans) rồi đổi remote_name thành tên
+Google; lần pull sau cập nhật đúng dòng đó.
 """
 from __future__ import annotations
 
@@ -24,17 +29,25 @@ from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text, update
 
 from core.database import get_db_session
 from domains.health_records.models.health_points import HealthPoint
-from domains.health_records.types import spec
+from domains.health_records.types import can_write, spec
 from domains.nutrition.models.meals import Meal
 from domains.training.models.trainings import Training
 from integrations.google_health import kinds
-from integrations.google_health.client import PERMISSION, SCHEMA, UNSUPPORTED, GoogleHealthClient, GoogleHealthError
+from integrations.google_health.client import (
+    PERMISSION,
+    SCHEMA,
+    UNSUPPORTED,
+    GoogleHealthClient,
+    GoogleHealthError,
+)
 from integrations.google_health.models import GooglePush
+from integrations.google_health.pull import adoption_key as _key
 from integrations.google_health.pull import fetch
+from integrations.google_health.records import LOCAL_PREFIX, LOCAL_TYPES
 
 logger = logging.getLogger(__name__)
 GYM_EXERCISE_TYPE = "STRENGTH_TRAINING"
@@ -89,13 +102,6 @@ def meal_points(meal: Meal) -> list[dict[str, Any]]:
     return points
 
 
-def _key(data_type: str, payload: dict[str, Any]) -> tuple[str, ...]:
-    """Khoá nhận lại điểm đã ghi: thời điểm bắt đầu (và tên món với nutrition-log)."""
-    value = payload.get(spec(data_type).field) or {}
-    start = kinds.timestamp((value.get("interval") or {}).get("startTime"))
-    return (kinds.stamp(start) if start else "", value.get("foodDisplayName") or "")
-
-
 # ------------------------------------------------------------------------------ Google
 class Pusher:
     def __init__(self, client: GoogleHealthClient, user_id: UUID, start: date, end: date, zone: str):
@@ -103,9 +109,9 @@ class Pusher:
         self.counts = {"created": 0, "adopted": 0, "linked": 0, "deleted": 0, "failed": 0}
         self.own: dict[str, dict[tuple[str, ...], str]] = {}
 
-    async def load_own(self, known: set[str]) -> None:
+    async def load_own(self, known: set[str], data_types: tuple[str, ...] = tuple(DATA_TYPE.values())) -> None:
         """Điểm do HercFit ghi trong cửa sổ mà chưa thuộc dòng google_pushes nào (để nhận lại)."""
-        for data_type in DATA_TYPE.values():
+        for data_type in dict.fromkeys(data_types):
             points, _complete = await fetch(self.client, spec(data_type), self.start, self.end, self.zone,
                                             family="self-sources")
             self.own[data_type] = {_key(data_type, {spec(data_type).field: point.value}): point.remote_name
@@ -165,7 +171,10 @@ def _device_match(span: tuple[datetime, datetime], sessions: list[HealthPoint]) 
 
 
 # ------------------------------------------------------------------------------ một lượt đẩy
-async def push_pending(client: GoogleHealthClient, user_id: UUID, start: date, end: date, zone: str) -> dict[str, int]:
+async def push_pending(client: GoogleHealthClient, user_id: UUID, start: date, end: date, zone: str,
+                       granted: list[str] | tuple[str, ...] = ()) -> dict[str, int]:
+    """`granted`: scope của kết nối; bản ghi cục bộ chỉ được đẩy với loại có quyền ghi."""
+    local_types = tuple(data_type for data_type in LOCAL_TYPES if can_write(data_type, granted))
     async with get_db_session() as session:
         pushes = {(row.record_type, row.record_id): row for row in (await session.execute(
             select(GooglePush).where(GooglePush.user_id == user_id))).scalars()}
@@ -178,6 +187,10 @@ async def push_pending(client: GoogleHealthClient, user_id: UUID, start: date, e
         alive = {(kind, record_id) for kind, record_id in (await session.execute(text("""
             SELECT 'Training', id FROM trainings WHERE user_id = :u AND is_active
             UNION ALL SELECT 'Meal', id FROM meals WHERE user_id = :u AND is_active"""), {"u": user_id})).all()}
+        # Điểm đã thuộc một dòng health_points (kể cả bản ghi người dùng đã đẩy) không bao giờ được nhận lại lần nữa.
+        stored = set((await session.execute(select(HealthPoint.remote_name).where(
+            HealthPoint.user_id == user_id, HealthPoint.data_type.in_(local_types),
+            HealthPoint.remote_name.not_like(LOCAL_PREFIX + "%")))).scalars()) if local_types else set()
     pusher = Pusher(client, user_id, start, end, zone)
     try:
         # 1. Bản ghi đã bị thay hoặc xoá: gỡ điểm HercFit tạo.
@@ -187,7 +200,8 @@ async def push_pending(client: GoogleHealthClient, user_id: UUID, start: date, e
                     await pusher.delete(DATA_TYPE[row.record_type], list(row.names))
                 await _forget(*key)
         # 2. Tạo / tạo lại / gắn vào phiên đồng hồ.
-        await pusher.load_own({name for row in pushes.values() for name in row.names})
+        await pusher.load_own({name for row in pushes.values() for name in row.names} | stored,
+                              (*DATA_TYPE.values(), *local_types))
         devices = await _device_sessions(user_id, start, end)
         for record_type, rows in records.items():
             for record in rows:
@@ -197,6 +211,8 @@ async def push_pending(client: GoogleHealthClient, user_id: UUID, start: date, e
                 if row is not None and row.pushed_at is not None and not linked_late:
                     continue
                 await _push_one(pusher, record_type, record, row, devices)
+        # 3. Bản ghi sức khoẻ người dùng nhập còn ở dạng cục bộ.
+        await _push_local(pusher, local_types)
     except GoogleHealthError as exc:
         if exc.error_class != PERMISSION:
             raise
@@ -209,6 +225,36 @@ async def push_pending(client: GoogleHealthClient, user_id: UUID, start: date, e
                 DELETE FROM health_points h USING google_pushes p
                 WHERE h.user_id = :u AND p.user_id = :u AND p.owned AND h.remote_name = ANY(p.names)"""), {"u": user_id})
     return pusher.counts
+
+
+async def _push_local(pusher: Pusher, data_types: tuple[str, ...]) -> None:
+    """Tạo trên Google từng dòng "local/..." trong cửa sổ rồi đổi remote_name của chính dòng đó thành tên Google.
+
+    Lỗi của một dòng không chặn các dòng khác (trừ lỗi quyền, dừng cả lượt như gym / bữa ăn)."""
+    if not data_types:
+        return
+    async with get_db_session() as session:
+        rows = list((await session.execute(select(HealthPoint).where(
+            HealthPoint.user_id == pusher.user_id, HealthPoint.data_type.in_(data_types),
+            HealthPoint.remote_name.like(LOCAL_PREFIX + "%"),
+            HealthPoint.local_date >= pusher.start, HealthPoint.local_date < pusher.end))).scalars())
+    for row in rows:
+        payload = {"dataSource": kinds.MANUAL, spec(row.data_type).field: row.value}
+        try:
+            name = await pusher.create(row.data_type, payload)
+        except GoogleHealthError as exc:
+            pusher.counts["failed"] += 1
+            if exc.error_class == PERMISSION:
+                raise
+            logger.warning("google_health_local_push_failed type=%s code=%s", row.data_type, exc.code)
+            continue
+        if name is None:
+            continue  # Operation chưa xong: lượt sau nhận lại qua self-sources
+        async with get_db_session() as session:
+            # Chỉ đổi tên khi dòng vẫn là bản cục bộ đã đọc (người dùng có thể vừa sửa hoặc xoá nó).
+            await session.execute(update(HealthPoint).where(
+                HealthPoint.id == row.id, HealthPoint.remote_name == row.remote_name,
+            ).values(remote_name=name, updated_at=func.now()))
 
 
 async def _push_one(pusher: Pusher, record_type: str, record: Any, row: GooglePush | None,

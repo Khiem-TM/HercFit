@@ -1,6 +1,5 @@
 """Chiếu users.age và hồ sơ tập luyện đã kiểm tra lên node User của graph."""
 from alembic import op
-
 from core.graph_outbox import installation_statements
 
 revision = "0011_kg_profile"

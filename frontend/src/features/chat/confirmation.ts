@@ -71,12 +71,12 @@ export const ACTION_NOTES: Record<string, string> = {
   complete_goal: 'Mục tiêu sẽ được đánh dấu hoàn thành.',
   cancel_goal: 'Mục tiêu sẽ bị huỷ.',
   end_training_plan: 'Lịch tập sẽ kết thúc; các buổi đã ghi được giữ nguyên.',
-  update_sport_session: 'Buổi thể thao trên Google Health được thay bằng bản mới.',
-  delete_sport_session: 'Buổi thể thao sẽ bị xoá khỏi Google Health.',
-  log_water: 'Ghi thẳng lên Google Health; Google giữ bản gốc.',
-  delete_water: 'Lần uống nước sẽ bị xoá khỏi Google Health.',
-  log_sleep: 'Ghi thẳng lên Google Health giờ đi ngủ và giờ thức dậy bạn khai; không có giai đoạn ngủ.',
-  delete_sleep: 'Giấc ngủ ghi tay sẽ bị xoá khỏi Google Health.',
+  update_sport_session: 'Buổi thể thao được thay bằng bản mới (cả trên Google Health nếu đã kết nối).',
+  delete_sport_session: 'Buổi thể thao sẽ bị xoá (cả trên Google Health nếu đã kết nối).',
+  log_water: 'Lưu trong HercFit; tự đồng bộ lên Google Health khi bạn đã kết nối.',
+  delete_water: 'Lần uống nước sẽ bị xoá (cả trên Google Health nếu đã kết nối).',
+  log_sleep: 'Lưu giờ đi ngủ và giờ thức dậy bạn khai, không có giai đoạn ngủ; tự đồng bộ lên Google Health khi đã kết nối.',
+  delete_sleep: 'Giấc ngủ ghi tay sẽ bị xoá (cả trên Google Health nếu đã kết nối).',
 }
 
 /** Tiêu đề thẻ cho lệnh ghi catalog; bản ghi được dùng lại không phải mục catalog mới. */
@@ -92,7 +92,7 @@ export const AUTHORITY: Record<string, string> = {
 
 const FIELD_LABELS: Record<string, string> = {
   energy_kcal: 'năng lượng', protein_g: 'protein', carbohydrate_g: 'carb', fat_g: 'fat', fiber_g: 'chất xơ',
-  serving_size: 'khẩu phần', portion_weight_g: 'khối lượng suất', portions: 'khẩu phần hộ gia đình',
+  serving_size: 'khẩu phần', portions: 'khẩu phần hộ gia đình',
   nutrition_information: 'vi chất', muscle_groups: 'nhóm cơ', equipment: 'dụng cụ', instructions: 'hướng dẫn',
   'configuration.category': 'loại bài (đa khớp/đơn khớp)', 'configuration.equipment_type': 'loại dụng cụ',
   'configuration.secondary_muscles': 'cơ phụ', 'configuration.unilateral': 'tập một bên',
@@ -129,7 +129,7 @@ export function displayError(kind: CardKind, display?: Row | null): string | nul
     case 'catalog':
       return display.kind === 'catalog_candidate' && typeof display.record?.name_vi === 'string' ? null : 'bản ghi catalog thiếu tên'
     case 'sport':
-      // POST /api/v2/health/records/exercise:preview: data point sẽ gửi lên Google + giá trị HercFit đã suy ra.
+      // POST /api/v2/health/records/exercise:preview: data point sẽ lưu (và đồng bộ lên Google) + giá trị HercFit đã suy ra.
       if (display.data_type !== 'exercise' || !display.derived || typeof display.derived !== 'object') return 'thiếu bản xem trước buổi tập'
       return typeof display.data_point?.exercise?.interval?.startTime === 'string' ? null : 'thiếu thời điểm bắt đầu'
     default:

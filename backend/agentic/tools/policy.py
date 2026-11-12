@@ -4,9 +4,9 @@ from agentic.prompts.registry import get_prompt
 from agentic.tools.registry import REGISTRY
 from domains.catalog.models.foods import normalize_food_text
 
-COACH_GUIDANCE = get_prompt("training.coach", "v5")
-CAPABILITY_GUIDANCE = get_prompt("nutrition.capabilities", "v6")
-HEALTH_GUIDANCE = get_prompt("health.guidance", "v5")
+COACH_GUIDANCE = get_prompt("training.coach", "v6")
+CAPABILITY_GUIDANCE = get_prompt("nutrition.capabilities", "v7")
+HEALTH_GUIDANCE = get_prompt("health.guidance", "v6")
 
 CATALOG_DEPENDENCIES = {"meals": "foods", "trainings": "exercises", "training_plans": "exercises"}
 # Các miền chỉ đọc bổ sung: huấn luyện diễn giải nhật ký/tiến độ, ghi nhật ký có thể kiểm tra lịch tập.

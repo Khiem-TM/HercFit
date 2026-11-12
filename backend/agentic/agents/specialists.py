@@ -50,6 +50,8 @@ class Specialist(ToolAgent):
         kết quả thì chuyển thẳng sang câu trả lời."""
         result = await self.invoke_fast(state)
         if result is None:
+            result = await self.invoke_simple(state)
+        if result is None:
             result = await self.work(state)
         if result.get('fast_read_complete') and not result.get('pending_action') and result.get('status') == 'running':
             plan = FastReadPlan.model_validate(state['fast_read_plan'])
@@ -83,9 +85,10 @@ class Nutrition(Specialist):
         meal = await self.invoke_meal(state)
         if meal is None:
             return await self.invoke(state)
-        if meal.get('pending_action') or meal.get('prepared_reply'):
+        # Có bản nháp bữa: mọi kết cục do code dựng (thẻ xác nhận, thẻ chọn món, hoặc lỗi backend).
+        if meal.get('pending_action') or meal.get('prepared_reply') or meal.get('status') != 'running':
             return meal
-        # Có món chưa khớp chắc chắn: model dựng create_meals từ kết quả tra cứu vừa có (không tra lại).
+        # Chỉ có lựa chọn trên thẻ, không có bản nháp bữa: model dựng create_meals từ bản ghi vừa đọc (không tra lại).
         looked = {**state, **meal, 'messages': [*state.get('messages', []), *meal['messages']]}
         result = await self.invoke(looked)
         return {**meal, **result, 'messages': [*meal['messages'], *result.get('messages', [])]}
