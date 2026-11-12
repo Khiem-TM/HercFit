@@ -95,7 +95,13 @@ class GoogleHealthDirectory:
 
 async def push_after_commit(session, user_id: UUID, aggregate_type: str, entity: Any, op: str, **_extra: Any) -> None:
     """Buổi gym / bữa ăn vừa đổi: sau khi commit, đẩy ngay lên Google (lượt định kỳ vẫn bắt lại nếu lỡ)."""
-    if aggregate_type not in PUSHED or session.info.get("gh_push_scheduled"):
+    if aggregate_type in PUSHED:
+        schedule_push(session, user_id)
+
+
+def schedule_push(session, user_id: UUID) -> None:
+    """Sau khi transaction commit, chạy một lượt chỉ đẩy cho user (mỗi transaction tối đa một lượt)."""
+    if session.info.get("gh_push_scheduled"):
         return
     session.info["gh_push_scheduled"] = True
 

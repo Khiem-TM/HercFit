@@ -220,6 +220,9 @@ async def create(session, user_id: UUID, kind: str, payload: dict[str, Any]) -> 
     data_type = DATA_TYPE[kind]
     point, derived = await build(session, user_id, kind, payload)
     stored = await _store_local(session, user_id, data_type, point, payload.get("timezone") or DEFAULT_TIMEZONE)
+    from integrations.google_health.directory import schedule_push
+
+    schedule_push(session, user_id)  # đẩy lên Google sau commit khi có kết nối (không gọi mạng trong transaction)
     return {**view(stored), "derived": derived}
 
 
