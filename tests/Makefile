@@ -19,8 +19,8 @@ import:
 	cd ../backend && $(SAFE_ENV) $(PY) -c "import agentic.core.app.main, app"
 unit:
 	$(PY) -m pytest unit
-integration:
-	@echo "integration: chưa có test tích hợp (L1.2)"
+integration:   ## cần Postgres dev; dùng database riêng hercfit_test (đổi bằng HERCFIT_TEST_DB, phải kết thúc _test)
+	$(PY) -m pytest integration
 cypher-safety:
 	cd ../backend && $(SAFE_ENV) PYTHONPATH=$(TESTS) $(PY) -m evaluation.kg_eval safety --offline
 
