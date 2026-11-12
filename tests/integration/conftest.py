@@ -77,3 +77,19 @@ async def make_user():
         async with get_db_session() as session:
             await session.execute(text("DELETE FROM users WHERE id = ANY(:ids)"), {"ids": created})
 
+
+
+@pytest.fixture(scope="session")
+async def agent_pool():
+    """Pool của agent trên database test; bảng agent và checkpoint LangGraph tạo bằng migrate_pool."""
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+    from psycopg.rows import dict_row
+    from psycopg_pool import AsyncConnectionPool
+
+    from agentic.migrations.runner import migrate_pool
+
+    async with AsyncConnectionPool(get_postgres_connection_string(), min_size=1, max_size=4, open=False,
+                                   kwargs={"autocommit": True, "row_factory": dict_row}) as pool:
+        await pool.open(wait=True)
+        await migrate_pool(pool, AsyncPostgresSaver(pool))
+        yield pool

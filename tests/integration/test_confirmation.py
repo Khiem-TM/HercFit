@@ -8,16 +8,12 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from psycopg.rows import dict_row
-from psycopg_pool import AsyncConnectionPool
 
 from agentic.agents.workflow import build_workflow
 from agentic.core.app.schemas.request import ChatRequest, ConfirmationRequest
 from agentic.core.context import RequestContext, request_context
-from agentic.migrations.runner import migrate_pool
 from agentic.services.memory.store import Store
 from agentic.services.runtime import Runtime
-from core.database import get_postgres_connection_string
 from evaluation.adapters.fixtures import EvalBackend, token_for
 from evaluation.adapters.graph_runtime import ScriptedModels, eval_settings
 
@@ -26,15 +22,6 @@ SCRIPT = {"decision": [{
     "intent": "LOG_FOOD", "next_agent": "tool", "domain": "meals", "action": "tool", "instruction": "Ghi bữa ăn.",
     "meal_log": [{"name": "Bữa sáng", "consumed_at": "2026-11-02T07:30:00+07:00",
                   "items": [{"food": "bánh bao nhân thịt", "quantity": 1, "unit": "SERVING"}]}]}]}
-
-
-@pytest.fixture(scope="session")
-async def agent_pool():
-    async with AsyncConnectionPool(get_postgres_connection_string(), min_size=1, max_size=4, open=False,
-                                   kwargs={"autocommit": True, "row_factory": dict_row}) as pool:
-        await pool.open(wait=True)
-        await migrate_pool(pool, AsyncPostgresSaver(pool))
-        yield pool
 
 
 @pytest.fixture

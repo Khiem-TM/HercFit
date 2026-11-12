@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import monotonic, time
 from uuid import uuid4
@@ -37,6 +38,21 @@ MEMORY_PURGE_SECONDS = 300
 DECISION_WINDOW_MESSAGES = 8
 
 
+class RunCancelled(HTTPException):
+    """Lượt chat bị người dùng huỷ (POST /chat/runs/{run_id}/cancel): kết thúc với outcome cancelled, không ghi gì thêm."""
+
+    def __init__(self):
+        super().__init__(409, "Lượt chạy đã bị huỷ.")
+
+
+@dataclass(frozen=True)
+class RunningTurn:
+    task: asyncio.Task
+    user_id: str
+    # "chat": huỷ được. "confirm": đang thực thi lệnh ghi người dùng đã duyệt, không huỷ giữa chừng.
+    kind: str
+
+
 RECOVER_APPROVED = "Lượt xử lý chưa hoàn tất. Có thể thử xác nhận lại cùng action_id để khôi phục thao tác đã duyệt."
 
 
@@ -56,6 +72,33 @@ class Runtime:
             settings,
             memory,
         )
+        # Lượt đang chạy trong tiến trình này: run_id → task chạy graph (gỡ trong finally). Chỉ tiến trình giữ lượt
+        # mới huỷ được nó.
+        self.running: dict[str, RunningTurn] = {}
+
+    async def _tracked(self, run_id, user_id, kind, work):
+        """Chạy graph trong một task riêng có đăng ký, để cancel() dừng được đúng lượt này."""
+        task = asyncio.ensure_future(work)
+        self.running[run_id] = RunningTurn(task, user_id, kind)
+        try:
+            return await task
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if not task.cancelled() or (current is not None and current.cancelling()):
+                raise  # chính request bị huỷ (client rời đi): để tầng trên ghi nhận
+            outcome("cancelled", error_code="user_cancelled")
+            raise RunCancelled() from None
+        finally:
+            self.running.pop(run_id, None)
+
+    def cancel(self, run_id, user_id):
+        """Huỷ lượt chat đang chạy của chính người dùng. 404: không có (hoặc của người khác); 409: đang ghi."""
+        turn = self.running.get(run_id)
+        if turn is None or turn.user_id != user_id:
+            raise HTTPException(404, "Run not found")
+        if turn.kind != "chat":
+            raise HTTPException(409, "Đang lưu thao tác đã xác nhận; không thể dừng lúc này.")
+        turn.task.cancel()
 
     def config(self, thread_id):
         return graph_config(
@@ -468,7 +511,12 @@ class Runtime:
             }
             await self.graph.aupdate_state(self.config(thread_id), initial, as_node="__start__")
             await self.store.bind(payload.session_id, thread_id)
-            return await self.run(None, thread_id, emit, payload.mode)
+            if emit:
+                # Sự kiện đầu tiên: client cần run_id để huỷ lượt này.
+                await emit({"type": "run", "run_id": thread_id})
+            return await self._tracked(
+                thread_id, user_id, "chat", self.run(None, thread_id, emit, payload.mode)
+            )
 
     @observed("runtime.confirm", capture=("payload",))
     async def confirm(self, payload, user_id, emit=None):
@@ -554,11 +602,16 @@ class Runtime:
                 )
             resume = {"decision": payload.decision, **({"action": edited} if edited else {})}
             # Lượt tiếp tục chạy ở đúng chế độ đã lưu trong checkpoint, không theo client.
-            result = await self.run(
-                Command(resume=resume) if interrupted else None,
+            result = await self._tracked(
                 session["thread_id"],
-                emit,
-                snapshot.values.get("mode") or modes.FULL,
+                user_id,
+                "confirm",
+                self.run(
+                    Command(resume=resume) if interrupted else None,
+                    session["thread_id"],
+                    emit,
+                    snapshot.values.get("mode") or modes.FULL,
+                ),
             )
             latest = await self.store.action(payload.action_id)
             if latest["status"] in {"executed", "rejected", "failed"}:
