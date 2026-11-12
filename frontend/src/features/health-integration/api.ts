@@ -50,7 +50,7 @@ export function createHealthApi(fetcher: Fetcher) {
       call<HealthConnection>(`${GH}/settings`, { method: 'PATCH', body: JSON.stringify(settings),
         headers: { 'Content-Type': 'application/json' } }, 'Không lưu được cài đặt đồng bộ.'),
     createRecord: (kind: HealthRecordKind, payload: Record<string, unknown>, key: string = crypto.randomUUID()) =>
-      call<HealthRecordRead>(`${RECORDS}/${kind}`, write('POST', payload, key), 'Không ghi được lên Google Health.'),
+      call<HealthRecordRead>(`${RECORDS}/${kind}`, write('POST', payload, key), 'Không ghi được bản ghi.'),
     updateRecord: (kind: HealthRecordKind, id: string, payload: Record<string, unknown>,
                    key: string = crypto.randomUUID()) =>
       call<HealthRecordRead>(`${RECORDS}/${kind}/${id}`, write('PATCH', payload, key), 'Không sửa được bản ghi.'),
