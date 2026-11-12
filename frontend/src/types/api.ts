@@ -392,6 +392,8 @@ export interface FoodNutrition {
   carbohydrate_g: number
   fat_g: number
   protein_g: number
+  /** true: AI ước tính (không nguồn nào ghi đủ 4 chỉ số); false: chép từ một nguồn web. */
+  estimated?: boolean
 }
 
 /** Một bản ghi catalog trả về từ GET /api/foods (các trường thẻ dùng). */

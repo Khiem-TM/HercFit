@@ -93,7 +93,7 @@ export function customFoodError(form: CustomFoodForm): string | null {
 }
 
 /** Món riêng của người dùng, dinh dưỡng tính trên 100 g. */
-export function customFoodPayload(form: CustomFoodForm, aiSuggested: boolean): Record<string, unknown> {
+export function customFoodPayload(form: CustomFoodForm, aiSuggested: boolean, aiEstimated = false): Record<string, unknown> {
   return {
     name_vi: form.name.trim(),
     serving_size: 100,
@@ -102,7 +102,7 @@ export function customFoodPayload(form: CustomFoodForm, aiSuggested: boolean): R
     carbohydrate_g: number(form.carbohydrate_g),
     fat_g: number(form.fat_g),
     protein_g: number(form.protein_g),
-    data_quality: { entry: 'chat_food_card', basis: 'per_100g', ai_suggested: aiSuggested },
+    data_quality: { entry: 'chat_food_card', basis: 'per_100g', ai_suggested: aiSuggested, ai_estimated: aiEstimated },
   }
 }
 

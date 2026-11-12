@@ -36,6 +36,7 @@ from agentic.prompts.v7.domains import CAPABILITY_GUIDANCE as CAPABILITY_GUIDANC
 from agentic.prompts.v7.tool import PROMPT as TOOL_PROMPT_V7
 from agentic.prompts.v8 import clarification as v8_clarification
 from agentic.prompts.v8 import context as v8_context
+from agentic.prompts.v8 import nutrition as v8_nutrition
 from agentic.prompts.v8 import routing as v8_routing
 
 TEMPLATES = MappingProxyType(
@@ -97,6 +98,8 @@ TEMPLATES = MappingProxyType(
         # v8: lệnh ghi mục tiêu (GOAL_SET/GOAL_UPDATE) hỏi lại bằng thẻ; lời mời sang Plan cho lệnh ghi; khung ngày.
         ("orchestration.plan_mode_write_reply", "v1"): v8_routing.PLAN_MODE_WRITE_REPLY,
         ("clarification.form", "v4"): v8_clarification.PROMPT,
+        # v8: gợi ý dinh dưỡng chép số từ nguồn khi có, nếu không thì ước tính trên 100 g (được đánh dấu là ước tính).
+        ("nutrition.lookup", "v2"): v8_nutrition.LOOKUP_PROMPT,
     }
 )
 

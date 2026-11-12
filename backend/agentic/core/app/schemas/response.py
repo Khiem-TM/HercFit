@@ -329,6 +329,8 @@ class FoodNutrition(BaseModel):
     carbohydrate_g: float
     fat_g: float
     protein_g: float
+    # True: model estimate (no source stated all four values); False: copied verbatim from one web source.
+    estimated: bool = False
 
 
 class PendingAction(BaseModel):
