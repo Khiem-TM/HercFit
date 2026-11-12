@@ -62,11 +62,11 @@ class GoogleHealthDirectory:
         connection = await HealthConnection.for_user(session, user_id)
         connected = (connection is not None and connection.status == "ACTIVE"
                      and can_write(records.DATA_TYPE[kind], connection.granted_scopes or []))
-        if point_id is None and not delete and (connected or kind in LOCAL_FIRST):
-            return await records.create(session, user_id, kind, payload or {})
-        # Số đo khi chưa kết nối hoặc chưa cấp quyền ghi: miền lưu vào body_metrics như trước.
-        if not connected:
-            return None
+        if point_id is None and not delete:
+            if connected or kind in LOCAL_FIRST:
+                return await records.create(session, user_id, kind, payload or {})
+            return None  # số đo khi chưa kết nối hoặc chưa cấp quyền ghi: miền lưu vào body_metrics như trước
+        # Sửa / xoá một bản ghi HercFit đã lưu trong health_points: records chọn đường cục bộ hay Google.
         if delete:
             await records.delete(session, user_id, kind, point_id)
             return {"deleted": True}

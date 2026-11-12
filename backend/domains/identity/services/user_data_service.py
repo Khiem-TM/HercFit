@@ -45,8 +45,8 @@ class UserDataService(UserService):
     LOCAL_FIELDS = ("muscle_mass_kg", "chest_cm", "waist_cm", "hip_cm")
 
     async def create_metric(self, payload: BodyMetricCreate) -> Any:
-        """Đã kết nối Google: cân nặng / chiều cao / mỡ được ghi thẳng lên Google (nguồn sự thật);
-        khối cơ và chỉ số khác Google không có vẫn lưu trong HercFit. Chưa kết nối: lưu như trước."""
+        """Đã kết nối Google: cân nặng / chiều cao / mỡ lưu vào health_points (bản HercFit) rồi được đẩy lên Google
+        sau commit; khối cơ và chỉ số khác Google không có vẫn lưu trong body_metrics. Chưa kết nối: lưu như trước."""
         from domains.body.services.readings import Reading
         from domains.health_records import ports
 
@@ -112,10 +112,8 @@ class UserDataService(UserService):
                             if getattr(reading, column) is not None)
         if getattr(data, column) is None:
             raise HTTPException(422, f"{column} is required to edit this measurement")
-        result = await ports.write(self.session, self.user_id, kind, {
+        await ports.write(self.session, self.user_id, kind, {
             "value": float(getattr(data, column)), "measured_at": data.recorded_at.isoformat()}, point_id=metric_id)
-        if result is None:
-            raise HTTPException(409, "Google Health is not connected")
         return require_found(await self._google_reading(metric_id), "Body metric")
 
     async def delete_metric(self, metric_id: UUID) -> None:
@@ -128,8 +126,7 @@ class UserDataService(UserService):
             ), "Body metric")
             return
         kind = next(kind for column, kind in self.GOOGLE_FIELDS if getattr(reading, column) is not None)
-        if await ports.write(self.session, self.user_id, kind, point_id=metric_id, delete=True) is None:
-            raise HTTPException(409, "Google Health is not connected")
+        await ports.write(self.session, self.user_id, kind, point_id=metric_id, delete=True)
 
     async def confirm_goal(self, payload: GoalCreate) -> Goal:
         # Mục tiêu đã xác nhận chuyển sang IN_PROGRESS; bản nháp vẫn ở phía client.
