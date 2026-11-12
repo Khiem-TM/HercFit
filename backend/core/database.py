@@ -3,10 +3,9 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from psycopg import AsyncConnection
 from psycopg.conninfo import make_conninfo
-from psycopg.rows import dict_row
-from psycopg_pool import AsyncConnectionPool
+from sqlalchemy import event
+from sqlalchemy import text as sql_text
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -14,12 +13,10 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, Session
 
 from core.settings import settings
-from core.transaction import transaction
 
-_crud_pool: AsyncConnectionPool | None = None
 _async_engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
@@ -83,51 +80,13 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     return _session_factory
 
 
-async def init_crud_db_pool() -> None:
-    """Chờ PostgreSQL sẵn sàng trước khi phục vụ request."""
-    global _crud_pool
-    if _crud_pool is not None:
-        return
-    pool = AsyncConnectionPool(
-        get_postgres_connection_string(),
-        min_size=settings.POSTGRES_MIN_CONNECTIONS_PER_POOL,
-        max_size=settings.POSTGRES_MAX_CONNECTIONS_PER_POOL,
-        timeout=settings.POSTGRES_POOL_TIMEOUT,
-        kwargs={
-            "autocommit": False,
-            "row_factory": dict_row,
-            "application_name": f"{settings.POSTGRES_APPLICATION_NAME}-crud",
-        },
-        check=AsyncConnectionPool.check_connection,
-        open=False,
-    )
-    try:
-        await pool.open(wait=True, timeout=settings.POSTGRES_POOL_TIMEOUT)
-    except BaseException:
-        await pool.close()
-        raise
-    _crud_pool = pool
-
-
 async def close_crud_db_pool() -> None:
-    """Đóng và đặt lại pool cùng engine SQLAlchemy khi tắt."""
-    global _crud_pool, _async_engine, _session_factory
-    if _crud_pool is not None:
-        await _crud_pool.close()
-        _crud_pool = None
+    """Đóng và đặt lại engine SQLAlchemy khi tắt."""
+    global _async_engine, _session_factory
     if _async_engine is not None:
         await _async_engine.dispose()
         _async_engine = None
         _session_factory = None
-
-
-@asynccontextmanager
-async def get_db_connection() -> AsyncIterator[AsyncConnection]:
-    """Commit khi thành công, rollback khi lỗi; không bao giờ âm thầm quay về dữ liệu giả."""
-    if _crud_pool is None:
-        raise RuntimeError("Database pool is not initialized; call init_crud_db_pool() at startup")
-    async with _crud_pool.connection() as conn:
-        yield conn
 
 
 @asynccontextmanager
@@ -151,17 +110,15 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 
 # GUC trace chỉ được các lệnh insert outbox/job đọc, nên nó được đặt một lần mỗi
 # transaction trên đường ghi (ORM flush và câu lệnh DML), không bao giờ trên đường đọc.
-from sqlalchemy import event, text as sql_text
-from sqlalchemy.orm import Session
-
 
 def attach_trace_context(session):
     connection = session.connection()  # bắt đầu transaction khi một câu lệnh mở nó
     transaction = session.get_transaction()
     if session.info.get('trace_transaction') is transaction or connection.dialect.name != 'postgresql':
         return
-    from agentic.observability import durable_context
     import json
+
+    from agentic.observability import durable_context
     session.info['trace_transaction'] = transaction
     context = durable_context()
     if context:

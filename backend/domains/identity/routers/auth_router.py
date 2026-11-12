@@ -2,10 +2,16 @@
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request
 
-from core.database import transaction
 from core.rate_limit import SlidingWindowLimiter, client_key, enforce
-from core.security import BearerCredentials, PKCE_COOKIE_NAME, RefreshTokenCookie, STATE_COOKIE_NAME, decode_access_token
+from core.security import (
+    PKCE_COOKIE_NAME,
+    STATE_COOKIE_NAME,
+    BearerCredentials,
+    RefreshTokenCookie,
+    decode_access_token,
+)
 from core.settings import settings
+from core.transaction import transaction
 from domains.identity.schemas.auth_session import LogoutResponse
 from domains.identity.services.auth_service import AuthService, AuthServiceDep
 

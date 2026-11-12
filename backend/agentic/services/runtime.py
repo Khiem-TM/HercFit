@@ -338,7 +338,6 @@ class Runtime:
             outcome(result.status, answer_ms=round((monotonic() - started) * 1000, 3))
         return result
 
-    @observed("runtime.chat", capture=("payload",))
     async def decision_trace(self, session_id, generation, previous):
         """Các dòng quyết định của phiên, hoặc [] khi lượt trước chưa được ghi nhật ký (giữ cửa sổ nguyên văn đầy đủ)."""
         if not previous.get("run_id") or not hasattr(self.store, "decision_trace"):
@@ -352,6 +351,7 @@ class Runtime:
             return []
         return decisions.render(rows)
 
+    @observed("runtime.chat", capture=("payload",))
     async def chat(self, payload, user_id, emit=None):
         identify(user_id, payload.session_id)
         async with self.store.session(payload.session_id, user_id) as session:
