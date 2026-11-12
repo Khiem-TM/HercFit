@@ -85,6 +85,13 @@ class AgentSettings(BaseSettings):
     AGENT_SERVICE_SECRET: SecretStr | None = None
     # Quên output của tool sức khoẻ, thẻ ngữ cảnh và bộ nhớ phiên khi người dùng thu hồi consent.
     CONSENT_PURGE_ENABLED: bool = True
+    # Chỉ để chạy thí nghiệm Phase 6: tắt từng nguồn ngữ cảnh cá nhân (personal_context.sources). Sẽ bị xoá ở L7.1.
+    CONTEXT_SOURCES: list[Literal["card", "kg_facts", "context_graph", "backend_reads"]] = [
+        "card",
+        "kg_facts",
+        "context_graph",
+        "backend_reads",
+    ]
     JEV_MODE: Literal["off", "shadow", "enforce"] = "off"
     JEV_BASE_URL: str = Field(
         default="https://litellm.otanicloud.link/v1",

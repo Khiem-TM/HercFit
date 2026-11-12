@@ -43,7 +43,11 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         update = {}
         current = dict(state)
         policy = mode.policy(state)
-        if policy.personal_card and current.get("user_context_run_id") != current.get("run_id"):
+        if (
+            policy.personal_card
+            and "card" in personal_context.sources(settings)
+            and current.get("user_context_run_id") != current.get("run_id")
+        ):
             # Một lần mỗi lượt chạy: những gì HercFit đã biết về người dùng, để router đọc thay vì hỏi.
             ctx = request_context.get(None)
             card = await personal_context.load_card(ctx.backend, ctx.token) if ctx else None
@@ -207,6 +211,8 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
             reads = [
                 (name, args) for name, args in reads if not name.startswith(("get_health", "list_"))
             ]
+        if "backend_reads" not in personal_context.sources(settings):
+            reads = []
         result = await tool.read_context(state, reads) if reads else {}
         outputs = {o["tool"]: o for o in result.get("tool_outputs", [])}
         trace = {
@@ -230,6 +236,7 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         decision = s.get("decision") or {}
         return bool(
             graph_context is not None
+            and "context_graph" in personal_context.sources(settings)
             and decision.get("context")
             and s.get("context_graph_run_id") != s.get("run_id")
             and decision.get("action") in {"answer", "tool", "research"}
