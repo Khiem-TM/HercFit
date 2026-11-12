@@ -143,10 +143,13 @@ async def revoke_connection(connection: HealthConnection, http: httpx.AsyncClien
 
 
 async def purge_device_data(session, user_id: UUID) -> dict[str, int]:
-    """Xoá bản sao dữ liệu Google trong HercFit (dữ liệu trên Google giữ nguyên) và thu hồi consent."""
+    """Xoá bản sao dữ liệu Google trong HercFit (dữ liệu trên Google giữ nguyên) và thu hồi consent.
+
+    Chỉ xoá điểm đọc về từ thiết bị: số đo người dùng tự nhập qua HercFit (written_by_hercfit) được giữ lại."""
     counts = {
-        "health_points": (await session.execute(text("DELETE FROM health_points WHERE user_id = :u"),
-                                                {"u": user_id})).rowcount or 0,
+        "health_points": (await session.execute(
+            text("DELETE FROM health_points WHERE user_id = :u AND written_by_hercfit = false"),
+            {"u": user_id})).rowcount or 0,
         "google_pushes": (await session.execute(text("DELETE FROM google_pushes WHERE user_id = :u"),
                                                 {"u": user_id})).rowcount or 0,
     }

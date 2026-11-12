@@ -142,7 +142,7 @@ onUnmounted(() => {
         </div>
         <div v-if="confirmDisconnect" class="confirm">
           <p>HercFit sẽ thu hồi quyền tại Google và xoá token đã lưu.</p>
-          <label class="check"><input v-model="purge" type="checkbox" /> Xoá luôn dữ liệu đã đồng bộ (không thể hoàn tác)</label>
+          <label class="check"><input v-model="purge" type="checkbox" /> Xoá dữ liệu thiết bị đã đồng bộ (số đo bạn tự nhập được giữ lại)</label>
           <div class="hf-acts">
             <button type="button" class="hf-btn dng sm" :disabled="busy" @click="handleDisconnect">Xác nhận ngắt</button>
             <button type="button" class="hf-btn sm on-card" @click="confirmDisconnect = false">Huỷ</button>
