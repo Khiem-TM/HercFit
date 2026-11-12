@@ -213,10 +213,10 @@ class ToolAgent:
     async def invoke_meal(self, state):
         """Đường nhanh của LOG_FOOD: một lần list_foods rồi create_meals do code dựng, không gọi model.
 
-        Trả về None khi không áp dụng. Món không trùng tên bản ghi nào thì dừng lại hỏi bằng thẻ món thiếu (tìm món
-        hoặc tạo món riêng). Lựa chọn trên thẻ (`food_resolved`) được đọc lại bằng get_foods và kiểm tra đơn vị. Khi
-        còn món chưa khớp chắc chắn, trả về kết quả tra cứu không kèm pending_action; node tool chuyển nó cho model
-        (model không phải tra lại)."""
+        Trả về None khi không áp dụng. Món không trùng tên bản ghi nào, hoặc không khớp chắc chắn (nhiều bản ghi, thiếu
+        lượng, đơn vị không quy đổi được), thì dừng lại hỏi bằng thẻ chọn món (tìm món hoặc tạo món riêng). Lựa chọn
+        trên thẻ (`food_resolved`) được đọc lại bằng get_foods và kiểm tra đơn vị. Chỉ khi không có bản nháp bữa (lựa
+        chọn trên thẻ của lượt model tự tìm món) thì kết quả get_foods mới đi tiếp cho model, status running."""
         decision = {**state["decision"], "domain": "meals"}
         resolved = decision.get("food_resolved") or {}
         plan = meal_logging.next_meal(state)
@@ -262,17 +262,22 @@ class ToolAgent:
             if not out.get("ok") or not food_gap.usable(out.get("output"), pick["unit"])
         ]
         valid = {k: v for k, v in resolved.items() if k not in {item["key"] for item in rejected}}
-        # Món đã chọn không đọc được hoặc sai đơn vị và món catalog chưa có: hỏi lại bằng thẻ, không đoán món gần giống.
-        gaps = [
-            *rejected,
-            *(
-                food_gap.missing(meal, index, found.get("output"), resolved)
-                if meal and found.get("ok")
-                else []
-            ),
+        if meal is not None and not found.get("ok"):
+            # Tra catalog lỗi: dừng với lỗi đã ghi (câu trả lời do code viết), không để model đoán món.
+            annotate(meal_fast="lookup_failed")
+            return {**looked, "decision": decision}
+        # Món đã chọn mà không dùng được, món catalog chưa có (thẻ món thiếu) và món code không tự chọn được
+        # (thẻ chọn món): một thẻ cho cả bữa, không đoán món gần giống.
+        missing = food_gap.missing(meal, index, found.get("output"), resolved) if meal else []
+        skip = {item["key"] for item in [*rejected, *missing]}
+        choose = [
+            food_gap.gap_item(item_key, item.get("food"), item.get("quantity"), item.get("unit"), choose=True)
+            for position, item in (meal_logging.unmatched(meal, found.get("output"), valid, index) if meal else [])
+            if (item_key := meal_logging.item_key(index, position)) not in skip
         ]
+        gaps = [*rejected, *missing, *choose]
         if gaps:
-            annotate(meal_fast="food_gap", food_gap_items=len(gaps))
+            annotate(meal_fast="food_gap", food_gap_items=len(gaps), food_gap_choose=len(choose))
             draft = {
                 "meal_log": decision.get("meal_log"),
                 "index": index,
@@ -284,36 +289,36 @@ class ToolAgent:
                 **food_gap.ask(gaps, retry=bool(rejected) and len(rejected) == len(gaps), **draft),
                 "decision": {**decision, "meal_log_next": index},
             }
-        items = (
-            meal_logging.match(meal, found.get("output"), valid, index)
-            if meal and found.get("ok") and meal_logging.complete(meal, valid, index)
-            else None
+        if meal is None:
+            # Chỉ có lựa chọn trên thẻ, không có bản nháp bữa của router: model dựng create_meals từ bản ghi vừa đọc.
+            return self._meal_by_model(state, looked, decision, valid)
+        items = meal_logging.match(meal, found.get("output"), valid, index)
+        call = {
+            "name": "create_meals",
+            "args": meal_logging.payload(meal, items),
+            "id": str(uuid5(NAMESPACE_URL, key + ":create")),
+        }
+        if self.repeats(state, call):
+            return self.saved(state, "repeat")
+        after = {**state, **looked, "decision": decision}
+        proposed = await self.execute_calls(
+            after, [call], [AIMessage(content="", tool_calls=[call])], allowed=allowed
         )
-        if items:
-            call = {
-                "name": "create_meals",
-                "args": meal_logging.payload(meal, items),
-                "id": str(uuid5(NAMESPACE_URL, key + ":create")),
-            }
-            if self.repeats(state, call):
-                return self.saved(state, "repeat")
-            after = {**state, **looked, "decision": decision}
-            proposed = await self.execute_calls(
-                after, [call], [AIMessage(content="", tool_calls=[call])], allowed=allowed
-            )
-            if proposed.get("pending_action"):
-                annotate(meal_fast="preview", meal_fast_items=len(items))
-                return {
-                    **proposed,
-                    "messages": [*looked["messages"], *proposed["messages"]],
-                    "decision": {**decision, "meal_log_next": index + 1},
-                }
-            # Backend từ chối bản xem trước (đơn vị, khẩu phần): model đọc kết quả tra cứu và tự dựng lại.
+        pending = bool(proposed.get("pending_action"))
+        # Backend từ chối bản xem trước: trả lỗi của backend (status needs_input), không chuyển cho model dựng lại.
+        annotate(meal_fast="preview" if pending else "preview_rejected", meal_fast_items=len(items))
+        return {
+            **proposed,
+            "messages": [*looked["messages"], *proposed["messages"]],
+            "decision": {**decision, "meal_log_next": index + 1 if pending else index},
+        }
+
+    @staticmethod
+    def _meal_by_model(state, looked, decision, valid):
+        """Lựa chọn trên thẻ không kèm bản nháp bữa: kết quả get_foods đi tiếp cho model dựng create_meals."""
         annotate(meal_fast="fallback")
-        instruction = (
-            decision["instruction"] if index == 0 or not meal else meal_logging.instruction(meal)
-        )
-        if meal and valid:
+        instruction = decision["instruction"]
+        if valid:
             instruction += (
                 " Món người dùng đã chọn trên thẻ (dùng đúng bản ghi get_foods của lượt này): "
                 + "; ".join(
@@ -322,7 +327,6 @@ class ToolAgent:
                 )
                 + "."
             )
-        # Bữa này (và các bữa sau) do model dựng: tắt đường nhanh để không đề xuất trùng.
         return {
             **looked,
             "status": "running",

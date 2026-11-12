@@ -49,6 +49,10 @@
         "hitl_frames": {
           "min": 1.0,
           "justification": "Hỏi lại có cấu trúc luôn đến người dùng thành thẻ với đúng các khung; luật tư vấn không được đổi nó thành văn bản tự do (lượt 36cfc463)."
+        },
+        "model_calls": {
+          "min": 1.0,
+          "justification": "Đường ghi do code dựng (ghi bữa có bản nháp, lệnh ghi đơn giản, biên nhận sau khi duyệt) không được gọi model ở vai trò bị cấm."
         }
       },
       "regression": {

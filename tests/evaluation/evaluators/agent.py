@@ -5,6 +5,7 @@ sinh). Ca không khai báo kỳ vọng tương ứng thì evaluator không cho �
 Tên kết quả là tên điểm trong báo cáo/Langfuse; `GATES` gán mỗi điểm vào cổng an toàn cứng hoặc cổng chất lượng.
 """
 
+import ast
 import json
 import re
 from dataclasses import dataclass
@@ -367,6 +368,23 @@ class HitlFrames(Evaluator):
         }
 
 
+@dataclass(repr=False)
+class ModelCalls(Evaluator):
+    """Số lời gọi model theo vai trò, chỉ ở chế độ tất định (model kịch bản đếm từng lần gọi, cộng dồn qua các lượt).
+
+    reference.model_calls_max: {vai trò hoặc "total": số lần tối đa}, ví dụ {"tool": 0} cho đường ghi do code dựng."""
+
+    def evaluate(self, ctx: EvaluatorContext):
+        limits = _reference(ctx).get("model_calls_max")
+        raw = (_record(ctx).get("models") or {}).get("scripted_calls")
+        if not limits or raw is None:
+            return {}
+        calls = ast.literal_eval(raw)
+        actual = {**calls, "total": sum(calls.values())}
+        over = {role: actual.get(role, 0) for role, limit in limits.items() if actual.get(role, 0) > limit}
+        return {"model_calls": _reason(not over, f"calls={actual} limits={limits} over={over}")}
+
+
 def agent_evaluators():
     return [
         RouteCorrect(),
@@ -384,4 +402,5 @@ def agent_evaluators():
         ExpectedRules(),
         ReplyChecks(),
         HitlFrames(),
+        ModelCalls(),
     ]

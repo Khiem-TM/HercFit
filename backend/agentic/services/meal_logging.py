@@ -4,8 +4,9 @@ Một lượt ghi bữa ăn từng tốn 4–8 lần gọi model (tra món, đ�
 lệnh backend chỉ mất 20–190 ms (đo trên 26 lượt ngày 02/11). Bộ định tuyến đã gọi model một lần; nó tách
 luôn bản nháp `meal_log` (bữa, thời điểm, món, số lượng, đơn vị). Code tra mọi món trong một lần
 list_foods, và chỉ khi mỗi món có đúng một bản ghi trùng tên chuẩn hoá (cùng tiêu chí EXACT của
-/foods/resolve) với đơn vị dùng được thì mới tự dựng create_meals. Mọi trường hợp khác (món mơ hồ, thiếu
-số lượng, đơn vị cần quy đổi) đi đường model như cũ, với kết quả tra cứu đã có sẵn.
+/foods/resolve) với đơn vị dùng được thì mới tự dựng create_meals. Món còn lại (catalog chưa có, nhiều bản ghi
+trùng tên, thiếu số lượng, đơn vị không quy đổi được) được hỏi bằng thẻ chọn món do code dựng (food_gap.py); sau khi
+người dùng chọn, code dựng create_meals. Model không tham gia khi router đã tách được bản nháp bữa.
 
 Bản xem trước vẫn do backend dựng và người dùng vẫn phải xác nhận: đường nhanh chỉ bỏ bớt lời gọi model.
 """
@@ -14,6 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from domains.shared.models.catalog import normalize_food_text
 
@@ -49,37 +51,20 @@ def measure(row: Any, quantity: Any, unit: str | None) -> tuple[float, str] | No
     return None
 
 
-def _moment(value: Any) -> datetime | None:
+def _moment(value: Any, zone: str | None = None) -> datetime | None:
+    """Thời điểm có múi giờ; giờ không kèm offset được hiểu theo múi giờ của bữa."""
+    if not value:
+        return None
     try:
         moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except (TypeError, ValueError):
         return None
-    return moment if moment.tzinfo is not None else None
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=ZoneInfo(zone or DEFAULT_TIMEZONE))
 
 
 def item_key(index: int, position: int) -> str:
     """Khoá của một món trong bản nháp (bữa thứ index, món thứ position): thẻ món thiếu trả lựa chọn theo khoá này."""
     return f"{index}:{position}"
-
-
-def complete(meal: dict, resolved: dict | None = None, index: int = 0) -> bool:
-    """Bữa có đủ dữ kiện để code dựng: thời điểm có múi giờ và mỗi món có tên, số lượng, đơn vị
-    (món người dùng đã chọn trên thẻ món thiếu mang lượng và đơn vị của thẻ)."""
-    items = meal.get("items") or []
-    resolved = resolved or {}
-    return (
-        bool(items)
-        and _moment(meal.get("consumed_at")) is not None
-        and all(
-            item_key(index, position) in resolved
-            or (
-                (item.get("food") or "").strip()
-                and (item.get("quantity") or 0) > 0
-                and item.get("unit") in DRAFT_UNITS
-            )
-            for position, item in enumerate(items)
-        )
-    )
 
 
 def eligible(state: dict) -> bool:
@@ -158,6 +143,23 @@ def _exact(query: str, unit: str, rows: list[dict]) -> dict | None:
     return hits[0] if len(hits) == 1 else None
 
 
+def unmatched(meal: dict, rows: Any, resolved: dict | None = None, index: int = 0) -> list[tuple[int, dict]]:
+    """(vị trí, món) mà code không tự dựng được: chưa chọn trên thẻ và thiếu lượng/đơn vị, hoặc không có đúng một bản
+    ghi trùng tên dùng được với đơn vị đó (catalog chưa có, nhiều bản trùng tên, "1 tô" mà món không có khẩu phần)."""
+    resolved = resolved or {}
+    rows = rows if isinstance(rows, list) else []
+    return [
+        (position, item)
+        for position, item in enumerate(meal["items"])
+        if item_key(index, position) not in resolved
+        and (
+            item.get("unit") not in DRAFT_UNITS
+            or not (item.get("quantity") or 0) > 0
+            or _exact(item.get("food") or "", item["unit"], rows) is None
+        )
+    ]
+
+
 def match(meal: dict, rows: Any, resolved: dict | None = None, index: int = 0) -> list[dict] | None:
     """Các món của create_meals khi mọi món khớp đúng một bản ghi với đơn vị dùng được; ngược lại None.
 
@@ -188,13 +190,16 @@ def match(meal: dict, rows: Any, resolved: dict | None = None, index: int = 0) -
 
 
 def payload(meal: dict, items: list[dict]) -> dict:
+    """Lệnh create_meals; bữa không rõ giờ thì bỏ consumed_at để backend lấy thời điểm ghi (như khi model dựng)."""
     name = (meal.get("name") or "").strip() or ", ".join(
         item["food"].strip() for item in meal["items"]
     )
+    zone = meal.get("timezone") or DEFAULT_TIMEZONE
+    moment = _moment(meal.get("consumed_at"), zone)
     return {
         "name": name[:120],
-        "consumed_at": _moment(meal["consumed_at"]).isoformat(),
-        "timezone": meal.get("timezone") or DEFAULT_TIMEZONE,
+        **({"consumed_at": moment.isoformat()} if moment else {}),
+        "timezone": zone,
         "items": items,
     }
 

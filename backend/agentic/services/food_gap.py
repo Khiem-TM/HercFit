@@ -40,8 +40,11 @@ def missing(meal: dict, index: int, rows: Any, resolved: dict | None = None) -> 
     return gaps
 
 
-def gap_item(key: str, query: Any, quantity: Any = None, unit: Any = None) -> dict:
-    return {'key': key, 'query': str(query or '').strip()[:80], 'quantity': quantity, 'unit': unit}
+def gap_item(key: str, query: Any, quantity: Any = None, unit: Any = None, *, choose: bool = False) -> dict:
+    """Một món trên thẻ. choose: catalog có món trùng tên nhưng code không tự chọn được (nhiều bản ghi, thiếu lượng,
+    đơn vị không quy đổi được); thẻ vẫn là thẻ tìm món, chỉ câu trả lời khác."""
+    item = {'key': key, 'query': str(query or '').strip()[:80], 'quantity': quantity, 'unit': unit}
+    return {**item, 'reason': 'choose'} if choose else item
 
 
 def usable(row: Any, unit: str) -> bool:
@@ -59,13 +62,24 @@ def card(items: list[dict], *, meal_log: list | None = None, index: int = 0, ins
             'resolved': dict(resolved or {}), 'instruction': instruction or DEFAULT_INSTRUCTION}
 
 
+def _quoted(items: list[dict]) -> str:
+    return ', '.join(f'"{item["query"]}"' for item in items)
+
+
 def reply(items: list[dict], retry: bool = False) -> str:
-    names = ', '.join(f'"{item["query"]}"' for item in items)
     if retry:
-        return (f'Món đã chọn cho {names} không dùng được (không tìm thấy hoặc sai đơn vị). '
+        return (f'Món đã chọn cho {_quoted(items)} không dùng được (không tìm thấy hoặc sai đơn vị). '
                 'Bạn chọn lại hoặc tạo món riêng bên dưới.')
-    return (f'Danh mục món ăn của HercFit chưa có {names}. Bạn tìm món tương tự trong danh mục hoặc tạo món riêng '
-            'bên dưới; HercFit sẽ ghi bữa sau khi bạn chọn.')
+    missing = [item for item in items if item.get('reason') != 'choose']
+    choose = [item for item in items if item.get('reason') == 'choose']
+    if not choose:
+        return (f'Danh mục món ăn của HercFit chưa có {_quoted(missing)}. Bạn tìm món tương tự trong danh mục hoặc tạo '
+                'món riêng bên dưới; HercFit sẽ ghi bữa sau khi bạn chọn.')
+    parts = [f'Danh mục món ăn của HercFit chưa có {_quoted(missing)}.'] if missing else []
+    parts.append(f'Bạn chọn đúng món và lượng (g/ml) cho {_quoted(choose)}: danh mục có nhiều bản ghi hoặc cần biết '
+                 'lượng cụ thể.')
+    return ' '.join(parts) + ' Chọn bên dưới; HercFit sẽ ghi bữa sau khi bạn chọn.'
+
 
 
 def ask(items: list[dict], retry: bool = False, **draft) -> dict:
