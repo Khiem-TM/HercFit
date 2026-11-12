@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { GlassWater } from 'lucide-vue-next'
 import type { HealthApi } from './api'
 
-const props = defineProps<{ api: HealthApi; canWrite: boolean }>()
+const props = defineProps<{ api: HealthApi }>()
 const emit = defineEmits<{ saved: [] }>()
 
 const amount = ref(250)
@@ -18,13 +18,11 @@ async function save(): Promise<void> {
   message.value = null
   try {
     if (pendingWrite?.amount !== amount.value) pendingWrite = { amount: amount.value, key: crypto.randomUUID() }
-    const saved = await props.api.createRecord('hydration', {
+    await props.api.createRecord('hydration', {
       amount_ml: amount.value, consumed_at: new Date().toISOString(), timezone: 'Asia/Ho_Chi_Minh',
     }, pendingWrite.key)
     pendingWrite = null
-    message.value = { tone: 'ok', text: saved.pending
-      ? `Google đã nhận ${amount.value} ml; số liệu hiện ở lần đồng bộ tới.`
-      : `Đã ghi ${amount.value} ml lên Google Health.` }
+    message.value = { tone: 'ok', text: `Đã ghi ${amount.value} ml.` }
     emit('saved')
   } catch (err) {
     message.value = { tone: 'error', text: err instanceof Error ? err.message : 'Không ghi được.' }
@@ -36,18 +34,15 @@ async function save(): Promise<void> {
 
 <template>
   <div class="water">
-    <p class="hf-mut intro">Ghi thẳng lên Google Health (Google giữ bản gốc). Bạn cũng có thể nói với trợ lý, ví dụ “mình vừa uống 500 ml nước”.</p>
-    <template v-if="canWrite">
-      <div class="row">
-        <label class="hf-sr" for="water-ml">Lượng nước (ml)</label>
-        <input id="water-ml" v-model.number="amount" class="hf-inp amount" type="number" min="10" max="5000" step="50" />
-        <span class="hf-mut">ml</span>
-        <button v-for="preset in [250, 500]" :key="preset" type="button" class="hf-tog" @click="amount = preset">{{ preset }} ml</button>
-        <button type="button" class="hf-btn pri" :disabled="busy || !(amount > 0)" @click="save">Ghi</button>
-      </div>
-      <p v-if="message" class="msg" :class="message.tone" role="status">{{ message.text }}</p>
-    </template>
-    <p v-else class="hf-warn">Chưa cấp quyền ghi dinh dưỡng lên Google Health. Bấm “Cấp thêm quyền” ở trên.</p>
+    <p class="hf-mut intro">Lưu trong HercFit và tự đồng bộ lên Google Health khi đã kết nối. Bạn cũng có thể nói với trợ lý, ví dụ “mình vừa uống 500 ml nước”.</p>
+    <div class="row">
+      <label class="hf-sr" for="water-ml">Lượng nước (ml)</label>
+      <input id="water-ml" v-model.number="amount" class="hf-inp amount" type="number" min="10" max="5000" step="50" />
+      <span class="hf-mut">ml</span>
+      <button v-for="preset in [250, 500]" :key="preset" type="button" class="hf-tog" @click="amount = preset">{{ preset }} ml</button>
+      <button type="button" class="hf-btn pri" :disabled="busy || !(amount > 0)" @click="save">Ghi</button>
+    </div>
+    <p v-if="message" class="msg" :class="message.tone" role="status">{{ message.text }}</p>
   </div>
 </template>
 

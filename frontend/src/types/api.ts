@@ -529,8 +529,8 @@ export interface NutritionTargets {
   method: Record<string, string>
 }
 
-// ---- Google Health: ghi xuyên qua (/api/v2/health/records) -----------------------------------
-/** Loại Google sở hữu mà HercFit ghi thẳng lên Google (buổi thể thao, số đo cơ thể, nước uống, giấc ngủ ghi tay). */
+// ---- Bản ghi sức khoẻ người dùng nhập (/api/v2/health/records) ----------------------------------
+/** Loại lưu trong HercFit rồi đẩy lên Google khi đã kết nối (buổi thể thao, số đo cơ thể, nước uống, giấc ngủ ghi tay). */
 export type HealthRecordKind = 'exercise' | 'weight' | 'height' | 'body-fat' | 'hydration' | 'sleep'
 
 /** Một điểm Google do HercFit vừa ghi; `pending` khi Google chưa trả điểm (lần đồng bộ sau mang về). */

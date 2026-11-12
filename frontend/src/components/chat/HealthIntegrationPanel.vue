@@ -34,9 +34,7 @@ const GROUPS: { id: SyncGroup; label: string; hint: string }[] = [
   { id: 'body', label: 'Cân nặng & mỡ cơ thể', hint: 'Cập nhật hồ sơ và mô hình cơ thể' },
 ]
 const resultNotice = computed(() => (props.result ? CONNECT_RESULT_TEXT[props.result] ?? CONNECT_RESULT_TEXT.error : null))
-const NUTRITION_WRITE = 'https://www.googleapis.com/auth/googlehealth.nutrition.writeonly'
 const missing = computed(() => (connection.value?.missing_scopes ?? []).map(scopeLabel))
-const canWriteWater = computed(() => (connection.value?.granted_scopes ?? []).includes(NUTRITION_WRITE))
 const groups = computed(() => connection.value?.sync_groups ?? {})
 const enabledCount = computed(() => GROUPS.filter(group => groups.value[group.id] !== false).length)
 const status = computed(() => (needsReauth.value ? { text: 'Cần kết nối lại', cls: 'or' }
@@ -187,7 +185,7 @@ onUnmounted(() => {
       <div class="hf-fsec">Trạng thái theo loại dữ liệu</div>
       <SyncStatusCard :connection="connection" />
       <div class="hf-fsec">Nước uống</div>
-      <HydrationCard :api="api" :can-write="canWriteWater && !needsReauth" />
+      <HydrationCard :api="api" />
     </template>
   </div>
 </template>
