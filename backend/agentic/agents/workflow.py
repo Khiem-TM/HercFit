@@ -13,16 +13,13 @@ from agentic.knowledge_graph.context.graph import ContextGraph
 from agentic.observability import annotate
 from agentic.observability.execution import run_node
 from agentic.observability.telemetry import MeasuredModels
-from agentic.security.content_filter import assess
-from agentic.services import delegation, food_suggestion, mode, personal_context
+from agentic.services import delegation, mode, personal_context
 from agentic.services.rag_pipeline import decision_domains, retrieve_graph_context
 from agentic.services.routing import (
     fast_reads_enabled,
-    fast_route,
     latest_request,
     make_fast_read_plan,
 )
-from agentic.services.simple_writes import simple_route
 from agentic.tools.policy import continue_catalog_lookup
 
 
@@ -46,75 +43,6 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         update = {}
         current = dict(state)
         policy = mode.policy(state)
-        # Chế độ Plan không có lối tắt đọc theo mẫu: người dùng đã chọn tư vấn chuyên sâu.
-        # Lựa chọn trên thẻ món thiếu đi thẳng tới bước dựng bữa của orchestrator, không qua lối tắt đọc theo mẫu.
-        shortcuts = (
-            policy.shortcuts
-            and assess(latest_request(current)) is None
-            and not current.get("food_choices")
-        )
-        routed = fast_route(current) if fast_reads_enabled(settings) and shortcuts else None
-        if routed and not policy.allows(routed[0]["domain"]):
-            # Mẫu đọc nhanh của miền ngoài chế độ (vd. dữ liệu sức khoẻ ở chế độ thường) đi qua router để được mời sang Plan.
-            routed = None
-        if routed:
-            # Lệnh đọc độc lập khớp một mẫu chặt chẽ: không gọi model định tuyến hay chọn tool.
-            decision, plan = routed
-            annotate(fast_route=plan.template_id)
-            return {
-                **update,
-                "decision": decision,
-                "status": "running",
-                "fast_read_plan": plan.model_dump(mode="json"),
-                "fast_read_complete": False,
-                "turn": {
-                    "run_id": state.get("run_id"),
-                    "intent": decision["intent"],
-                    "domain": decision["domain"],
-                    "action": decision["action"],
-                },
-            }
-        simple = simple_route(current) if shortcuts else None
-        if simple and policy.allows(simple["domain"]):
-            # Lệnh ghi đơn giản theo mẫu (cân nặng, nước, giấc ngủ): lời gọi dựng sẵn, không gọi model định tuyến hay
-            # chọn tool; agent chuyên trách vẫn thực thi qua danh sách cho phép, bản xem trước và thẻ xác nhận.
-            annotate(route="simple_write", simple_write=simple["code_call"]["name"])
-            return {
-                **update,
-                "decision": simple,
-                "status": "running",
-                "fast_read_plan": None,
-                "fast_read_complete": False,
-                "turn": {
-                    "run_id": state.get("run_id"),
-                    "intent": simple["intent"],
-                    "domain": simple["domain"],
-                    "action": simple["action"],
-                },
-            }
-        if (
-            shortcuts
-            and food_suggestion.is_food_suggestion(latest_request(current))
-            and not current.get("tool_outputs")
-            and not current.get("pending_action")
-            and (state.get("turn") or {}).get("run_id") != state.get("run_id")
-        ):
-            # Gợi ý bữa ăn độc lập: một lần tra catalog chỉ đọc, không gọi model định tuyến.
-            decision = food_suggestion.lookup_decision()
-            annotate(route="food_suggestion")
-            return {
-                **update,
-                "decision": decision,
-                "status": "running",
-                "fast_read_plan": None,
-                "fast_read_complete": False,
-                "turn": {
-                    "run_id": state.get("run_id"),
-                    "intent": decision["intent"],
-                    "domain": decision["domain"],
-                    "action": decision["action"],
-                },
-            }
         if policy.personal_card and current.get("user_context_run_id") != current.get("run_id"):
             # Một lần mỗi lượt chạy: những gì HercFit đã biết về người dùng, để router đọc thay vì hỏi.
             ctx = request_context.get(None)
@@ -122,6 +50,10 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
             update = {**update, "user_context": card, "user_context_run_id": current.get("run_id")}
             current.update(update)
         result = await orchestrator.decide(current)
+        if "fast_read_plan" in result:
+            # Lối tắt của supervisor (đọc nhanh, ghi đơn giản, gợi ý món) đã đặt tên lượt và kế hoạch đọc nhanh của nó:
+            # không đọc graph, không dựng lại kế hoạch.
+            return {**update, **result}
         current.update(result)
         decision = result.get("decision") or {}
         # Cách diễn đạt có thể không gọi tên miền graph nào ("pace 5K của tôi"): đọc ngay miền của router và

@@ -1,10 +1,25 @@
-"""Luật code sau router (agentic/services/route_rules.py): mỗi luật một bảng ca đầu vào → đầu ra, và thứ tự POST_ROUTER."""
+"""Luật code trước và sau router (agentic/services/route_rules.py): mỗi luật một bảng ca đầu vào → đầu ra, và thứ
+tự của PRE_ROUTER, POST_ROUTER."""
+from types import SimpleNamespace
+
 import pytest
+from langchain_core.messages import HumanMessage
 
 from agentic.agents.state import RouteDecision
+from agentic.security.content_filter import assess
 from agentic.services import mode
 from agentic.services import route_rules as rules
-from agentic.services.route_rules import POST_ROUTER, Applied, RouteContext, run
+from agentic.services.route_rules import (
+    POST_ROUTER,
+    PRE_ROUTER,
+    Applied,
+    Pre,
+    PreContext,
+    RouteContext,
+    run,
+    run_pre,
+)
+from agentic.services.routing import latest_request
 
 CARD = {"body": {"weight_kg": 70, "height_cm": 175}, "profile": {"age": 28}}
 TWO_TASKS = [{"domain": "meals", "intent": "LOG_FOOD", "instruction": "Ghi bữa sáng."},
@@ -191,3 +206,119 @@ def test_run_traces_each_rule_and_shares_outputs():
     assert trace == [{"stage": "rule", "rule": "first", "action": "tool", "domain": "meals"},
                      {"stage": "rule", "rule": "custom", "action": "delegate", "domain": None}]
     assert outputs == {"redirect": True} and seen == [{"redirect": True}]
+
+
+# ---------------------------------------------------------------- luật trước router
+
+SETTINGS = SimpleNamespace(FAST_READ_ENABLED=True, MAX_TOOL_CALLS=12)
+WRITE = {"tool": "create_meals", "ok": True, "action_id": "a-1", "output": {"id": "m-1"}}
+
+
+def turn_state(text="", **extra):
+    return {"messages": [HumanMessage(content=text)], "run_id": "r-1", "tool_outputs": [], "status": "running",
+            **extra}
+
+
+def pre(state, chat=mode.NORMAL, verdict=None, first=True, carry=None):
+    return PreContext(state=state, policy=mode.POLICIES[chat], settings=SETTINGS, request=latest_request(state),
+                      verdict=verdict, first=first, carry=carry or {})
+
+
+BLOCK = assess("Dạo này tôi không muốn sống nữa, ăn kiêng cũng chẳng để làm gì")
+CAUTION = assess("Tôi đang mang thai 4 tháng, có nên giảm cân không?")
+CHOICE = {"domain": "exercises", "query": "split squat", "choices": {"tạo mới": {"kind": "create_distinct"}}}
+GAP = {"items": [{"key": "0:0", "query": "bánh mì chảo"}], "meal_log": MEAL}
+PICK = [{"key": "0:0", "food_id": "f-1", "quantity": 150, "unit": "G"}]
+PLAN_BUILD = {"intent": "TRAINING_PLAN", "action": "research", "domain": "training_plans", "plan_task": "plan_build"}
+
+# (luật, state, ngữ cảnh, kỳ vọng): None = không áp dụng; {"carry": ...} = tiếp tục với cập nhật mang theo;
+# ngược lại là các trường của kết quả kết thúc bước định tuyến (khoá "intent" so với decision["intent"]).
+PRE_CASES = [
+    (rules.fast_read, turn_state("Cân nặng của tôi"), None, {"intent": "READ", "turn": True, "plan": True}),
+    (rules.fast_read, turn_state("Cân nặng của tôi"), {"chat": mode.PLAN}, None),
+    (rules.fast_read, turn_state("Cân nặng của tôi"), {"verdict": CAUTION}, None),
+    (rules.fast_read, turn_state("Giấc ngủ của tôi"), None, None),
+    (rules.simple_write, turn_state("cân nặng 68,2 kg"), None, {"intent": "LOG_METRICS", "turn": True, "plan": False}),
+    (rules.simple_write, turn_state("cân nặng 68,2 kg", food_choices=PICK), None, None),
+    (rules.food_suggestion_shortcut, turn_state("Gợi ý món ăn sáng"), None, {"intent": "FOOD_SUGGESTION"}),
+    (rules.food_suggestion_shortcut, turn_state("Gợi ý món ăn sáng"), {"first": False}, None),
+    (rules.food_suggestion_shortcut, turn_state("Gợi ý món ăn sáng", pending_action={"action_id": "a"}), None, None),
+    (rules.status_answer, turn_state(status="needs_input"), None, {"intent": "clarification"}),
+    (rules.status_answer, turn_state(status="failed", error="lỗi"), None, {"intent": "error"}),
+    (rules.status_answer, turn_state(), None, None),
+    (rules.tool_budget, turn_state(tool_count=12), None, {"intent": "limit", "status": "failed"}),
+    (rules.tool_budget, turn_state(tool_count=11), None, None),
+    (rules.safety_block, turn_state(), {"verdict": BLOCK}, {"intent": "SAFETY", "safety": True}),
+    (rules.safety_block, turn_state(), {"verdict": CAUTION}, None),
+    (rules.catalog_choice_answer, turn_state("Tạo mới", catalog_choice=CHOICE), {"carry": {"safety": "s"}},
+     {"intent": "catalog_research", "safety": True}),
+    (rules.catalog_choice_answer, turn_state("Thôi", catalog_choice=CHOICE), None, {"carry": {"catalog_choice": None}}),
+    (rules.catalog_choice_answer, turn_state("Tạo mới"), None, None),
+    (rules.food_gap_resolved, turn_state("Bánh mì chảo", food_gap=GAP, food_choices=PICK), None,
+     {"intent": "LOG_FOOD", "rule": "food_gap_resolved"}),
+    (rules.food_gap_resolved, turn_state("Bỏ qua", food_gap=GAP, food_choices=[]), None,
+     {"carry": {"food_gap": None, "food_choices": None}}),
+    (rules.food_gap_resolved, turn_state(), None, None),
+    (rules.read_only_handoff, turn_state(decision={"read_only": True, "domain": "foods"},
+                                         catalog_handoff={"domain": "foods"}), None, {"intent": "READ"}),
+    (rules.read_only_handoff, turn_state(decision={"domain": "meals"}, catalog_handoff={"domain": "foods"}), None, None),
+    (rules.catalog_handoff, turn_state(catalog_handoff={"domain": "foods"}), None, {"intent": "catalog_lookup"}),
+    (rules.catalog_handoff, turn_state(catalog_handoff={"domain": "metrics"}), None, None),
+    (rules.research_handoff, turn_state(research_handoff={"domain": "exercises", "query": "split squat"}), None,
+     {"intent": "catalog_research"}),
+    (rules.research_handoff, turn_state(), None, None),
+    (rules.specialist_resume, turn_state(decision=PLAN_BUILD, research_count=1), {"carry": {"safety": "s"}},
+     {"intent": "TRAINING_PLAN", "rule": "plan_build_tool", "safety": True}),
+    (rules.specialist_resume, turn_state(decision=PLAN_BUILD), None, None),
+    (rules.write_done, turn_state(decision={"intent": "LOG_FOOD", "domain": "meals", "writes_before": 0},
+                                  tool_outputs=[WRITE]), None, {"intent": "LOG_FOOD", "rule": "write_done"}),
+    (rules.write_done, turn_state(decision={"intent": "LOG_FOOD", "domain": "meals"}, tool_outputs=[WRITE]), None,
+     None),
+]
+
+
+@pytest.mark.parametrize(("rule", "state", "options", "expected"), PRE_CASES,
+                         ids=[f"{case[0].__name__}-{i}" for i, case in enumerate(PRE_CASES)])
+def test_pre_rule(rule, state, options, expected):
+    out = rule(state, pre(state, **(options or {})))
+    if expected is None:
+        assert out is None
+        return
+    if "carry" in expected:
+        assert out == Pre(carry=expected["carry"])
+        return
+    result = out.result
+    assert result["decision"]["intent"] == expected["intent"]
+    if "turn" in expected:
+        assert result["turn"]["run_id"] == "r-1"
+        assert (result["fast_read_plan"] is not None) is expected["plan"]
+    if "rule" in expected:
+        assert result["route_trace"][-1]["rule"] == expected["rule"]
+    for key in ("status", "safety"):
+        if key in expected:
+            assert bool(result.get(key)) if expected[key] is True else result.get(key) == expected[key]
+
+
+def test_run_pre_carries_updates_into_the_rule_that_ends_the_step():
+    state = turn_state("Thôi", catalog_choice=CHOICE, food_gap=GAP, food_choices=[], decision=PLAN_BUILD,
+                       research_count=1)
+    result, carry = run_pre(PRE_ROUTER, state, pre(state, chat=mode.FULL, verdict=CAUTION,
+                                                   carry={"safety": CAUTION.as_state()}))
+    assert result["route_trace"][-1]["rule"] == "plan_build_tool"
+    assert {k: result[k] for k in ("catalog_choice", "food_gap", "food_choices")} == dict.fromkeys(
+        ("catalog_choice", "food_gap", "food_choices"))
+    assert result["safety"] == CAUTION.as_state() and carry == {**dict.fromkeys(
+        ("catalog_choice", "food_gap", "food_choices")), "safety": CAUTION.as_state()}
+
+
+def test_run_pre_falls_through_to_the_router():
+    state = turn_state("Hôm nay trời đẹp quá")
+    assert run_pre(PRE_ROUTER, state, pre(state)) == (None, {})
+
+
+def test_pre_router_order():
+    assert [rule.__name__ for rule in PRE_ROUTER] == [
+        "fast_read", "simple_write", "food_suggestion_shortcut", "status_answer", "tool_budget", "safety_block",
+        "catalog_choice_answer", "food_gap_resolved", "read_only_handoff", "catalog_handoff", "research_handoff",
+        "specialist_resume", "write_done",
+    ]

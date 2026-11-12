@@ -12,7 +12,6 @@ from agentic.agents.adaptive_router import (
     jev_read_domain,
     jev_routing_projection,
 )
-from agentic.agents.specialists import SPECIALISTS
 from agentic.agents.state import GOAL_INTENTS, RouteDecision
 from agentic.components.context_filter import compact_evidence, model_graph_context
 from agentic.core.app.schemas.response import Clarification
@@ -21,8 +20,6 @@ from agentic.prompts.layout import layout
 from agentic.prompts.registry import get_prompt
 from agentic.security.content_filter import assess
 from agentic.services import (
-    catalog_choice,
-    food_gap,
     mode,
     personal_context,
     route_rules,
@@ -33,7 +30,6 @@ from agentic.services.routing import latest_request
 from agentic.services.write_reply import (
     claims_pending,
     executed_writes,
-    finishes_turn,
     reads_after_writes,
     write_reply,
 )
@@ -60,6 +56,18 @@ def local_now_minute():
     """Giờ đồng hồ làm tròn tới phút: đủ chính xác cho "hôm nay", và nó
     nằm trong tin nhắn cuối nên tiền tố prompt tĩnh vẫn cache được."""
     return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).replace(second=0, microsecond=0).isoformat()
+
+
+def stage_entry(stage, decision, action=None):
+    """Mục vết định tuyến của một quyết định: chỉ nhãn, không có văn bản tự do."""
+    return {
+        "stage": stage,
+        "intent": decision.intent,
+        "action": action or decision.action,
+        "domain": decision.domain,
+        "personalize": decision.personalize,
+        "topic": decision.topic,
+    }
 
 
 def verified_fallback(state):
@@ -125,144 +133,22 @@ class OrchestrationAgent:
         self.jev = jev
 
     async def decide(self, state):
-        if state.get("status") in {"needs_input", "failed"}:
-            return {
-                "decision": {
-                    "intent": "clarification" if state["status"] == "needs_input" else "error",
-                    "action": "answer",
-                    "next_agent": "orchestrator",
-                    "instruction": state.get("error") or "Hỏi thông tin còn thiếu.",
-                }
-            }
-        if state.get("tool_count", 0) >= self.settings.MAX_TOOL_CALLS:
-            return {
-                "status": "failed",
-                "error": "Đã đạt giới hạn tool calls của lượt này.",
-                "decision": {
-                    "intent": "limit",
-                    "action": "answer",
-                    "next_agent": "orchestrator",
-                    "instruction": "Giải thích giới hạn và kết quả đã thực hiện.",
-                },
-            }
         verdict = assess(latest_request(state))
-        if verdict is not None and verdict.level == "block":
-            # Điểm dừng an toàn do code quyết định: không gọi tool, không tra cứu, không sinh kế hoạch cho yêu cầu này.
-            return {
-                "safety": verdict.as_state(),
-                "status": "running",
-                "decision": {
-                    "intent": "SAFETY",
-                    "action": "answer",
-                    "next_agent": "orchestrator",
-                    "domain": None,
-                    "instruction": verdict.guidance,
-                },
-            }
-        safety_update = {"safety": verdict.as_state()} if verdict is not None else {}
-        if state.get("catalog_choice"):
-            # Câu trả lời cho form chọn bản ghi/biến thể được so khớp tất định, không bao giờ diễn giải lại.
-            option = catalog_choice.chosen(state, latest_request(state))
-            applied = catalog_choice.apply(state, option) if option else None
-            if applied:
-                return {**applied, **safety_update}
-            safety_update["catalog_choice"] = None
-        if state.get("food_gap"):
-            # Lựa chọn trên thẻ món thiếu là dữ liệu có cấu trúc: code dựng tiếp bữa ăn, không gọi model định tuyến.
-            applied = food_gap.apply(state)
-            if applied:
-                trace = {
-                    "stage": "rule",
-                    "rule": "food_gap_resolved",
-                    "action": "tool",
-                    "domain": "meals",
-                }
-                applied["decision"]["writes_before"] = len(executed_writes(state))
-                return {
-                    **applied,
-                    "route_trace": [*(state.get("route_trace") or []), trace],
-                    **safety_update,
-                }
-            safety_update.update(food_gap=None, food_choices=None)
-        if (state.get("decision") or {}).get("read_only") and (
-            state.get("catalog_handoff") or state.get("research_handoff")
-        ):
-            return {
-                "catalog_handoff": None,
-                "research_handoff": None,
-                "status": "running",
-                "decision": {
-                    "intent": "READ",
-                    "action": "answer",
-                    "next_agent": "orchestrator",
-                    "read_only": True,
-                    "domain": state["decision"].get("domain"),
-                    "instruction": "Trả lời theo dữ liệu backend đã đọc; catalog trống thì nêu chưa có kết quả.",
-                },
-            }
-        handoff = state.get("catalog_handoff")
-        if handoff and handoff.get("domain") in {"foods", "exercises"}:
-            return {
-                "catalog_handoff": None,
-                "status": "running",
-                "decision": {
-                    "intent": "catalog_lookup",
-                    "action": "tool",
-                    "next_agent": "tool",
-                    "domain": handoff["domain"],
-                    "instruction": "Tra catalog bằng tên trong yêu cầu gốc; tự lấy ID nội bộ. Nếu không có kết quả, chuyển research; nếu có nhiều biến thể, hỏi bằng tên. Sau đó tiếp tục ghi nhật ký.",
-                },
-            }
-        research = state.get("research_handoff")
-        if research:
-            return {
-                "research_handoff": None,
-                "status": "running",
-                "decision": {
-                    "intent": "catalog_research",
-                    "action": "research",
-                    "next_agent": "research",
-                    "domain": research["domain"],
-                    "research_query": research["query"],
-                    "instruction": 'Catalog chưa có "'
-                    + research["query"]
-                    + '": nghiên cứu nguồn công khai để đề xuất bản ghi CUSTOM, sau đó tiếp tục yêu cầu gốc.',
-                },
-            }
-        for agent in SPECIALISTS:
-            # Agent chuyên trách tiếp tục việc nhiều bước của chính nó (bữa kế tiếp, lịch tập sau tra cứu, câu trả lời
-            # cho form gym) mà không gọi model định tuyến. Xét trước write_done: bản nháp nhiều bữa chưa xong lượt.
-            resumed = agent.resume(state)
-            if resumed:
-                decision, trace = resumed
-                return {
-                    "decision": decision,
-                    "status": "running",
-                    "route_trace": [*(state.get("route_trace") or []), *trace],
-                    **safety_update,
-                }
-        if finishes_turn(state):
-            # Lệnh ghi vừa xác nhận đã hoàn tất yêu cầu: trả biên nhận do code viết, không gọi lại router hay model tool.
-            decision = {
-                **state["decision"],
-                "action": "answer",
-                "next_agent": "orchestrator",
-                "instruction": "Báo lại đúng các bản ghi vừa lưu.",
-            }
-            trace = {
-                "stage": "rule",
-                "rule": "write_done",
-                "action": "answer",
-                "domain": decision.get("domain"),
-            }
-            return {
-                "decision": decision,
-                "status": "running",
-                "route_trace": [*(state.get("route_trace") or []), trace],
-                **safety_update,
-            }
         first = (state.get("turn") or {}).get("run_id") != state.get("run_id")
         policy = mode.policy(state)
+        # Các luật code trước router, theo đúng thứ tự (services/route_rules.py): luật đầu tiên trả kết quả kết thúc bước.
+        pre = route_rules.PreContext(
+            state=state,
+            policy=policy,
+            settings=self.settings,
+            request=latest_request(state),
+            verdict=verdict,
+            first=first,
+            carry={"safety": verdict.as_state()} if verdict is not None else {},
+        )
+        routed, safety_update = route_rules.run_pre(route_rules.PRE_ROUTER, state, pre)
+        if routed is not None:
+            return routed
         jev_events = list(state.get("jev_events") or [])
         # Chế độ Plan không có lối tắt đọc: người dùng đã chọn tư vấn chuyên sâu.
         projection = (
@@ -329,16 +215,7 @@ class OrchestrationAgent:
         decision.read_only = False
         decision.create_distinct = False
         # Vết định tuyến: quyết định của model, rồi từng luật code đã thay đổi nó (nhãn, không có văn bản tự do).
-        trace = [
-            {
-                "stage": "router",
-                "intent": decision.intent,
-                "action": decision.action,
-                "domain": decision.domain,
-                "personalize": decision.personalize,
-                "topic": decision.topic,
-            }
-        ]
+        trace = [stage_entry("router", decision)]
         ctx = route_rules.RouteContext(
             state=state,
             policy=policy,
@@ -353,16 +230,7 @@ class OrchestrationAgent:
         decision, steps, found = route_rules.run(route_rules.POST_ROUTER, decision, ctx)
         trace.extend(steps)
         delegated = found.get("delegated")
-        trace.append(
-            {
-                "stage": "final",
-                "intent": decision.intent,
-                "action": "delegate" if delegated else decision.action,
-                "domain": decision.domain,
-                "personalize": decision.personalize,
-                "topic": decision.topic,
-            }
-        )
+        trace.append(stage_entry("final", decision, "delegate" if delegated else None))
         # Số lệnh ghi đã thực thi lúc router quyết định: finishes_turn so các lệnh ghi sau đó với mục tiêu của quyết định này.
         result = {
             "decision": {

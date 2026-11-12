@@ -1,9 +1,13 @@
-"""Các luật code chạy sau lời gọi model định tuyến trong OrchestrationAgent.decide.
+"""Các luật định tuyến do code sở hữu của OrchestrationAgent.decide, theo hai danh sách có thứ tự.
 
-Mỗi luật nhận quyết định của router (RouteDecision, sửa tại chỗ như trước) và ngữ cảnh chỉ đọc của bước định tuyến;
-trả Applied khi luật có tác dụng, None khi không. `POST_ROUTER` giữ đúng thứ tự xét luật trước đây trong decide;
-`run` chạy lần lượt danh sách, ghi vết từng luật vào route_trace như cũ và gom kết quả phụ (form, thẻ món thiếu, lời
-mời sang chế độ Plan, nhiệm vụ song song) cho decide dựng kết quả định tuyến.
+`PRE_ROUTER`: trước lời gọi model định tuyến. Mỗi luật nhận state và ngữ cảnh chỉ đọc; luật đầu tiên trả kết quả kết
+thúc bước định tuyến (lối tắt đọc nhanh/ghi đơn giản/gợi ý món, trạng thái hỏi lại, ngân sách tool, chặn an toàn, câu
+trả lời cho thẻ, handoff, luật tiếp nối của agent chuyên trách, write_done).
+
+`POST_ROUTER`: sau lời gọi model. Mỗi luật nhận quyết định của router (RouteDecision, sửa tại chỗ như trước) và ngữ
+cảnh chỉ đọc; trả Applied khi có tác dụng, None khi không. `run` chạy lần lượt danh sách, ghi vết từng luật vào
+route_trace như cũ và gom kết quả phụ (form, thẻ món thiếu, lời mời sang chế độ Plan, nhiệm vụ song song) cho decide
+dựng kết quả định tuyến.
 """
 from __future__ import annotations
 
@@ -13,13 +17,24 @@ from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Any, NamedTuple
 
-from agentic.agents.specialists import BY_NAME
+from agentic.agents.specialists import BY_NAME, SPECIALISTS
 from agentic.agents.state import RouteDecision
 from agentic.core import roster
 from agentic.core.context import request_context
+from agentic.observability import annotate
 from agentic.research.contracts import QA_INTENTS
 from agentic.security.input_guard import safe_query
-from agentic.services import delegation, food_gap, food_suggestion, mode, personal_context
+from agentic.services import (
+    catalog_choice,
+    delegation,
+    food_gap,
+    food_suggestion,
+    mode,
+    personal_context,
+)
+from agentic.services.routing import fast_reads_enabled, fast_route
+from agentic.services.simple_writes import simple_route
+from agentic.services.write_reply import executed_writes, finishes_turn
 from agentic.tools.policy import CATALOG_DEPENDENCIES, TRAINING_DOMAINS, needs_catalog_handoff
 
 PERSONAL_MEASURE = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:kg|cm|tuổi|tuoi|kcal|bpm)\b", re.I)
@@ -131,6 +146,301 @@ def asks_first(task, state, request):
         BY_NAME[roster.specialist_for(task["domain"])].preflight(probe, state, request)
         is not None
     )
+
+
+# ---------------------------------------------------------------- luật trước router, theo thứ tự xét
+
+
+@dataclass(frozen=True)
+class PreContext:
+    """Ngữ cảnh chỉ đọc của các luật trước router."""
+
+    state: dict
+    policy: mode.ModePolicy
+    settings: Any
+    request: str
+    # Đánh giá an toàn của yêu cầu (chặn hoặc lưu ý), hoặc None.
+    verdict: Any
+    first: bool
+    # Cập nhật mang theo vào kết quả của các luật sau và của router: kết quả an toàn không chặn, thẻ chọn bản ghi
+    # hay thẻ món thiếu mà câu trả lời không khớp (được xoá).
+    carry: Mapping = field(default_factory=dict)
+
+
+class Pre(NamedTuple):
+    # Kết quả của bước định tuyến: luật kết thúc bước, không gọi router.
+    result: dict | None = None
+    # Hoặc cập nhật mang theo, các luật sau tiếp tục xét.
+    carry: dict | None = None
+
+
+def run_pre(rules, state, ctx):
+    """(kết quả của luật đầu tiên kết thúc bước định tuyến, hoặc None để gọi router; cập nhật mang theo)."""
+    for rule in rules:
+        out = rule(state, ctx)
+        if out is None:
+            continue
+        if out.result is not None:
+            return out.result, dict(ctx.carry)
+        ctx = replace(ctx, carry=MappingProxyType({**ctx.carry, **out.carry}))
+    return None, dict(ctx.carry)
+
+
+def _shortcuts(state, ctx):
+    # Chế độ Plan không có lối tắt đọc theo mẫu: người dùng đã chọn tư vấn chuyên sâu. Yêu cầu có lưu ý an toàn đi qua
+    # router. Lựa chọn trên thẻ món thiếu đi thẳng tới bước dựng bữa của orchestrator, không qua lối tắt.
+    return ctx.policy.shortcuts and ctx.verdict is None and not state.get("food_choices")
+
+
+def _shortcut(state, decision, plan=None):
+    """Kết quả của lối tắt: lượt được đặt tên ngay và mang kế hoạch đọc nhanh của nó (None khi không đọc)."""
+    return Pre(
+        {
+            "decision": decision,
+            "status": "running",
+            "fast_read_plan": plan,
+            "fast_read_complete": False,
+            "turn": {
+                "run_id": state.get("run_id"),
+                "intent": decision["intent"],
+                "domain": decision["domain"],
+                "action": decision["action"],
+            },
+        }
+    )
+
+
+def fast_read(state, ctx):
+    """Lệnh đọc độc lập khớp một mẫu chặt chẽ: không gọi model định tuyến hay chọn tool."""
+    routed = fast_route(state) if fast_reads_enabled(ctx.settings) and _shortcuts(state, ctx) else None
+    if not routed or not ctx.policy.allows(routed[0]["domain"]):
+        # Mẫu đọc nhanh của miền ngoài chế độ (vd. dữ liệu sức khoẻ ở chế độ thường) đi qua router để được mời sang Plan.
+        return None
+    decision, plan = routed
+    annotate(fast_route=plan.template_id)
+    return _shortcut(state, decision, plan.model_dump(mode="json"))
+
+
+def simple_write(state, ctx):
+    """Lệnh ghi đơn giản theo mẫu (cân nặng, nước, giấc ngủ): lời gọi dựng sẵn, không gọi model định tuyến hay chọn
+    tool; agent chuyên trách vẫn thực thi qua danh sách cho phép, bản xem trước và thẻ xác nhận."""
+    simple = simple_route(state) if _shortcuts(state, ctx) else None
+    if not simple or not ctx.policy.allows(simple["domain"]):
+        return None
+    annotate(route="simple_write", simple_write=simple["code_call"]["name"])
+    return _shortcut(state, simple)
+
+
+def food_suggestion_shortcut(state, ctx):
+    """Gợi ý bữa ăn độc lập: một lần tra catalog chỉ đọc, không gọi model định tuyến."""
+    if not (
+        _shortcuts(state, ctx)
+        and food_suggestion.is_food_suggestion(ctx.request)
+        and not state.get("tool_outputs")
+        and not state.get("pending_action")
+        and ctx.first
+    ):
+        return None
+    annotate(route="food_suggestion")
+    return _shortcut(state, food_suggestion.lookup_decision())
+
+
+def status_answer(state, ctx):
+    """Bước trước đã hỏi lại hoặc thất bại: trả lời, không định tuyến lại."""
+    if state.get("status") not in {"needs_input", "failed"}:
+        return None
+    return Pre(
+        {
+            "decision": {
+                "intent": "clarification" if state["status"] == "needs_input" else "error",
+                "action": "answer",
+                "next_agent": "orchestrator",
+                "instruction": state.get("error") or "Hỏi thông tin còn thiếu.",
+            }
+        }
+    )
+
+
+def tool_budget(state, ctx):
+    if state.get("tool_count", 0) < ctx.settings.MAX_TOOL_CALLS:
+        return None
+    return Pre(
+        {
+            "status": "failed",
+            "error": "Đã đạt giới hạn tool calls của lượt này.",
+            "decision": {
+                "intent": "limit",
+                "action": "answer",
+                "next_agent": "orchestrator",
+                "instruction": "Giải thích giới hạn và kết quả đã thực hiện.",
+            },
+        }
+    )
+
+
+def safety_block(state, ctx):
+    if ctx.verdict is None or ctx.verdict.level != "block":
+        return None
+    # Điểm dừng an toàn do code quyết định: không gọi tool, không tra cứu, không sinh kế hoạch cho yêu cầu này.
+    return Pre(
+        {
+            "safety": ctx.verdict.as_state(),
+            "status": "running",
+            "decision": {
+                "intent": "SAFETY",
+                "action": "answer",
+                "next_agent": "orchestrator",
+                "domain": None,
+                "instruction": ctx.verdict.guidance,
+            },
+        }
+    )
+
+
+def catalog_choice_answer(state, ctx):
+    if not state.get("catalog_choice"):
+        return None
+    # Câu trả lời cho form chọn bản ghi/biến thể được so khớp tất định, không bao giờ diễn giải lại.
+    option = catalog_choice.chosen(state, ctx.request)
+    applied = catalog_choice.apply(state, option) if option else None
+    if applied:
+        return Pre({**applied, **ctx.carry})
+    return Pre(carry={"catalog_choice": None})
+
+
+def food_gap_resolved(state, ctx):
+    if not state.get("food_gap"):
+        return None
+    # Lựa chọn trên thẻ món thiếu là dữ liệu có cấu trúc: code dựng tiếp bữa ăn, không gọi model định tuyến.
+    applied = food_gap.apply(state)
+    if not applied:
+        return Pre(carry={"food_gap": None, "food_choices": None})
+    trace = {"stage": "rule", "rule": "food_gap_resolved", "action": "tool", "domain": "meals"}
+    applied["decision"]["writes_before"] = len(executed_writes(state))
+    return Pre({**applied, "route_trace": [*(state.get("route_trace") or []), trace], **ctx.carry})
+
+
+def read_only_handoff(state, ctx):
+    """Lần đọc chỉ-đọc không chuyển sang tra catalog hay tra cứu: trả lời từ dữ liệu đã đọc."""
+    if not (
+        (state.get("decision") or {}).get("read_only")
+        and (state.get("catalog_handoff") or state.get("research_handoff"))
+    ):
+        return None
+    return Pre(
+        {
+            "catalog_handoff": None,
+            "research_handoff": None,
+            "status": "running",
+            "decision": {
+                "intent": "READ",
+                "action": "answer",
+                "next_agent": "orchestrator",
+                "read_only": True,
+                "domain": state["decision"].get("domain"),
+                "instruction": "Trả lời theo dữ liệu backend đã đọc; catalog trống thì nêu chưa có kết quả.",
+            },
+        }
+    )
+
+
+def catalog_handoff(state, ctx):
+    handoff = state.get("catalog_handoff")
+    if not (handoff and handoff.get("domain") in {"foods", "exercises"}):
+        return None
+    return Pre(
+        {
+            "catalog_handoff": None,
+            "status": "running",
+            "decision": {
+                "intent": "catalog_lookup",
+                "action": "tool",
+                "next_agent": "tool",
+                "domain": handoff["domain"],
+                "instruction": "Tra catalog bằng tên trong yêu cầu gốc; tự lấy ID nội bộ. Nếu không có kết quả, chuyển research; nếu có nhiều biến thể, hỏi bằng tên. Sau đó tiếp tục ghi nhật ký.",
+            },
+        }
+    )
+
+
+def research_handoff(state, ctx):
+    research = state.get("research_handoff")
+    if not research:
+        return None
+    return Pre(
+        {
+            "research_handoff": None,
+            "status": "running",
+            "decision": {
+                "intent": "catalog_research",
+                "action": "research",
+                "next_agent": "research",
+                "domain": research["domain"],
+                "research_query": research["query"],
+                "instruction": 'Catalog chưa có "'
+                + research["query"]
+                + '": nghiên cứu nguồn công khai để đề xuất bản ghi CUSTOM, sau đó tiếp tục yêu cầu gốc.',
+            },
+        }
+    )
+
+
+def specialist_resume(state, ctx):
+    """Agent chuyên trách tiếp tục việc nhiều bước của chính nó (bữa kế tiếp, lịch tập sau tra cứu, câu trả lời cho
+    form gym) mà không gọi model định tuyến. Xét trước write_done: bản nháp nhiều bữa chưa xong lượt."""
+    for agent in SPECIALISTS:
+        resumed = agent.resume(state)
+        if resumed:
+            decision, trace = resumed
+            return Pre(
+                {
+                    "decision": decision,
+                    "status": "running",
+                    "route_trace": [*(state.get("route_trace") or []), *trace],
+                    **ctx.carry,
+                }
+            )
+    return None
+
+
+def write_done(state, ctx):
+    """Lệnh ghi vừa xác nhận đã hoàn tất yêu cầu: trả biên nhận do code viết, không gọi lại router hay model tool."""
+    if not finishes_turn(state):
+        return None
+    decision = {
+        **state["decision"],
+        "action": "answer",
+        "next_agent": "orchestrator",
+        "instruction": "Báo lại đúng các bản ghi vừa lưu.",
+    }
+    trace = {"stage": "rule", "rule": "write_done", "action": "answer", "domain": decision.get("domain")}
+    return Pre(
+        {
+            "decision": decision,
+            "status": "running",
+            "route_trace": [*(state.get("route_trace") or []), trace],
+            **ctx.carry,
+        }
+    )
+
+
+# Thứ tự là hợp đồng: luật đầu tiên trả kết quả kết thúc bước định tuyến. Lối tắt (trước đây trong decide_step của
+# workflow.py) đứng đầu như trước; cổng định tuyến đọc của Jev (bất đồng bộ) chạy trong decide ngay sau danh sách này.
+PRE_ROUTER = (
+    fast_read,
+    simple_write,
+    food_suggestion_shortcut,
+    status_answer,
+    tool_budget,
+    safety_block,
+    catalog_choice_answer,
+    food_gap_resolved,
+    read_only_handoff,
+    catalog_handoff,
+    research_handoff,
+    specialist_resume,
+    write_done,
+)
 
 
 # ---------------------------------------------------------------- luật sau router, theo thứ tự xét

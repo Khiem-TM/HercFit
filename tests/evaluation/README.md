@@ -40,7 +40,7 @@ tuyến và luật, không kiểm trạng thái cuối.
 Ca `rule_*_fires`/`*_fires` là ca luật kích hoạt; ca `*_quiet` gần giống nhưng luật không kích hoạt. Thứ tự các dòng
 là thứ tự luật được xét trong code.
 
-### Trước router (`OrchestrationAgent.decide`, trả về sớm)
+### Trước router (`services/route_rules.py`, `PRE_ROUTER`: luật đầu tiên trả kết quả kết thúc bước định tuyến)
 
 | Luật / nhánh | Dấu hiệu trong bản ghi | Ca kích hoạt | Ca không kích hoạt |
 |---|---|---|---|
@@ -57,9 +57,9 @@ là thứ tự luật được xét trong code.
 | `gym_mode_detailed` (TrainingLog) | tên luật | `rule_gym_mode_detailed_fires` | `rule_gym_mode_quiet` |
 | `gym_mode_quick` (TrainingLog) | tên luật | `receipt_after_confirm_quick_gym` | `rule_gym_mode_quiet`, `rule_gym_mode_detailed_fires` |
 | `write_done` | tên luật | `meal_exact_fast_path`, `receipt_after_confirm_meal`, `receipt_after_confirm_weight` | `rule_write_done_quiet` |
-| cổng định tuyến đọc của Jev | — | không có: eval tất định chạy `JEV_MODE=off`; Jev có bộ eval riêng (`jev_eval.py`) | — |
+| cổng định tuyến đọc của Jev (trong `decide`, ngay sau `PRE_ROUTER`) | — | không có: eval tất định chạy `JEV_MODE=off`; Jev có bộ eval riêng (`jev_eval.py`) | — |
 
-### Lối tắt trong `decide_step` (`agents/workflow.py`)
+### Lối tắt (ba luật đầu của `PRE_ROUTER`, trước đây trong `decide_step` của `agents/workflow.py`)
 
 | Lối tắt | Dấu hiệu trong bản ghi | Ca kích hoạt | Ca không kích hoạt |
 |---|---|---|---|
@@ -67,7 +67,7 @@ là thứ tự luật được xét trong code.
 | lệnh ghi đơn giản (`simple_route`) | intent `LOG_*`, 0 lần gọi model | `simple_write_weight`, `simple_write_water`, `simple_write_sleep` | `simple_write_question_not_logged` |
 | gợi ý món | intent `FOOD_SUGGESTION`, 0 lần gọi router | `shortcut_food_suggestion_fires` | `shortcut_food_suggestion_quiet` |
 
-### Sau router (`OrchestrationAgent.decide`)
+### Sau router (`services/route_rules.py`, `POST_ROUTER`)
 
 | Luật | Ca kích hoạt | Ca không kích hoạt |
 |---|---|---|
