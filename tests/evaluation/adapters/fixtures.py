@@ -263,6 +263,10 @@ class EvalBackend:
                     for item in body.get("items") or []
                 ],
             }
+        if path.endswith(":preview") and body is not None:
+            # Bản ghi sức khoẻ (/api/v2/health/records/{kind}:preview): data point sẽ lưu, không suy ra thêm.
+            self._fail("preview")
+            return {"preview": True, "data_point": deepcopy(body), "derived": {}}
         raise BackendError(404, "Not available in the evaluation backend")
 
     def verified_state(self):

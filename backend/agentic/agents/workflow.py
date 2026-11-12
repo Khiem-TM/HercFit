@@ -22,6 +22,7 @@ from agentic.services.routing import (
     latest_request,
     make_fast_read_plan,
 )
+from agentic.services.simple_writes import simple_route
 from agentic.tools.policy import continue_catalog_lookup
 
 
@@ -71,6 +72,24 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
                     "intent": decision["intent"],
                     "domain": decision["domain"],
                     "action": decision["action"],
+                },
+            }
+        simple = simple_route(current) if shortcuts else None
+        if simple and policy.allows(simple["domain"]):
+            # Lệnh ghi đơn giản theo mẫu (cân nặng, nước, giấc ngủ): lời gọi dựng sẵn, không gọi model định tuyến hay
+            # chọn tool; agent chuyên trách vẫn thực thi qua danh sách cho phép, bản xem trước và thẻ xác nhận.
+            annotate(route="simple_write", simple_write=simple["code_call"]["name"])
+            return {
+                **update,
+                "decision": simple,
+                "status": "running",
+                "fast_read_plan": None,
+                "fast_read_complete": False,
+                "turn": {
+                    "run_id": state.get("run_id"),
+                    "intent": simple["intent"],
+                    "domain": simple["domain"],
+                    "action": simple["action"],
                 },
             }
         if (

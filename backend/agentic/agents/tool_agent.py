@@ -443,6 +443,21 @@ class ToolAgent:
             catalog_choice.revise(candidate, resolution, found, existing),
         )
 
+    async def invoke_simple(self, state):
+        """Lệnh ghi đơn giản code đã dựng ở bước định tuyến (simple_writes): một lời gọi, không gọi model.
+
+        Chỉ ở bước đầu của lượt; cùng danh sách cho phép, chuẩn hoá, bản xem trước và thẻ xác nhận như mọi lệnh ghi."""
+        code_call = (state.get("decision") or {}).get("code_call")
+        if not code_call or state.get("tool_outputs") or state.get("pending_action"):
+            return None
+        call = {
+            "name": code_call["name"],
+            "args": code_call["args"],
+            "id": str(uuid5(NAMESPACE_URL, state["run_id"] + ":simple-write")),
+        }
+        annotate(simple_write=call["name"])
+        return await self.execute_calls(state, [call], [AIMessage(content="", tool_calls=[call])])
+
     async def invoke_fast(self, state):
         plan = verified_fast_plan(state)
         if not plan or not fast_reads_enabled(self.settings):

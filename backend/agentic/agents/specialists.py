@@ -50,6 +50,8 @@ class Specialist(ToolAgent):
         kết quả thì chuyển thẳng sang câu trả lời."""
         result = await self.invoke_fast(state)
         if result is None:
+            result = await self.invoke_simple(state)
+        if result is None:
             result = await self.work(state)
         if result.get('fast_read_complete') and not result.get('pending_action') and result.get('status') == 'running':
             plan = FastReadPlan.model_validate(state['fast_read_plan'])
