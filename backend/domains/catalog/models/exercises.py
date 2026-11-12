@@ -9,22 +9,27 @@ from uuid import UUID as PyUUID
 from fastapi import HTTPException
 from pydantic import TypeAdapter
 from sqlalchemy import (
-    CheckConstraint, Enum, ForeignKey, Index, Select, String, Text,
-    column, event, func, inspect, select, table, text,
+    CheckConstraint,
+    Enum,
+    ForeignKey,
+    Index,
+    Select,
+    String,
+    Text,
+    column,
+    event,
+    func,
+    inspect,
+    select,
+    table,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
-from domains.shared.models.basemodel import BaseModel, uuid7
-from domains.shared.models.catalog import SEARCH_CANDIDATES, CatalogMixin, apply_search_text, normalize_food_text
 from core.catalog_lock import catalog_write
-from domains.shared.models.domain import require_version, try_lock_user
-
-_EXERCISE_ALIASES = table("exercises_aliases", column("entity_id"), column("normalized_alias"))
-from domains.shared.schemas.common import UserScope
-from domains.shared.schemas.enums import FoodSourceType
 from domains.catalog.schemas.exercises import (
     ExerciseConfiguration,
     ExerciseCreate,
@@ -35,9 +40,21 @@ from domains.catalog.schemas.exercises import (
     SystemExerciseCreate,
     muscle_name,
 )
+from domains.shared.models.basemodel import BaseModel, uuid7
+from domains.shared.models.catalog import (
+    SEARCH_CANDIDATES,
+    CatalogMixin,
+    apply_search_text,
+    normalize_food_text,
+)
+from domains.shared.models.domain import require_version, try_lock_user
+from domains.shared.schemas.common import UserScope
+from domains.shared.schemas.enums import FoodSourceType
 
 if TYPE_CHECKING:
     from domains.identity.models.user import User
+
+_EXERCISE_ALIASES = table("exercises_aliases", column("entity_id"), column("normalized_alias"))
 
 _configuration_adapter = TypeAdapter(ExerciseConfiguration)
 

@@ -90,13 +90,13 @@ def _sport_performance(item, zones) -> dict[str, Any] | None:
 
 async def complete_entry(service, schedule_id, entry_id) -> dict[str, Any] | None:
     """service là PlanService (session + user của request). Trả None khi không tìm thấy lịch/buổi."""
+    from domains.catalog.schemas.exercises import StrengthPerformance
     from domains.health_records import ports
     from domains.shared.services.journal_service import JournalService
     from domains.training.models.trainings import Training
     from domains.training.schemas.trainings import TrainingCreate
     from domains.training.services.training_analytics import profile_read
     from domains.training.services.training_metrics import strength_duration
-    from domains.catalog.schemas.exercises import StrengthPerformance
 
     session, user_id = service.session, service.user_id
     schedule, entry = await TrainingPlan.lock_entry_for_completion(session, schedule_id, entry_id, user_id=user_id)

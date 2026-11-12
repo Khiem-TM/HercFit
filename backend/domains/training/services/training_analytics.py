@@ -18,14 +18,13 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from sqlalchemy import Date, cast, func, or_, select
 
-from domains.training.models.trainings import Training, TrainingItem
-from domains.goals_plans.models.plans import TrainingPlan, TrainingPlanEntry
 from domains.catalog.schemas.exercises import HARD_WORKOUTS, StrengthSet, WorkoutType
+from domains.goals_plans.models.plans import TrainingPlan, TrainingPlanEntry
 from domains.shared.schemas.tracking import day_bounds
+from domains.training.models.trainings import Training, TrainingItem
 from domains.training.schemas.training import TrainingProfile
 from domains.training.services.training_metrics import (
     effective_load,
-    estimate_1rm,
     hr_zones,
     pace_zones,
     riegel,

@@ -4,10 +4,11 @@ Tách ra từ schemas.health trong đợt tổ chức lại theo miền."""
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
+
 from pydantic import AwareDatetime, BaseModel, Field, model_validator
+
 from domains.shared.schemas.common import EntityRead, InputSchema
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, DateRangeQuery, TimeZoneName
-
 
 HEALTH_PROVIDER = "GOOGLE_HEALTH"
 

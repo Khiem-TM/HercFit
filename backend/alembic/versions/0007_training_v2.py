@@ -9,9 +9,9 @@ không lịch nào lưu được và các truy vấn vòng đời Plan thất b�
 theo hợp đồng ORM; migration từ chối chạy nếu bất kỳ bảng nào có dữ liệu.
 """
 
-from alembic import op
 from sqlalchemy import text
 
+from alembic import op
 from core.graph_outbox import installation_statements
 
 revision = "0007_training_v2"

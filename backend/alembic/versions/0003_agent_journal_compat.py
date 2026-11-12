@@ -3,8 +3,9 @@
 Giữ các cột và tổng cũ. Các bản cài đặt đã theo schema hiện hành không
 thay đổi. Việc đối soát schema kế hoạch/lịch tập nằm ngoài migration này.
 """
-from alembic import op
 from sqlalchemy import inspect
+
+from alembic import op
 
 revision = "0003_agent_journal_compat"
 down_revision = "0002_api_idempotency"

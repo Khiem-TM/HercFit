@@ -23,11 +23,11 @@ from core.security import (
 )
 from core.settings import settings
 from domains.identity.models.auth_session import AuthSession
-from domains.shared.models.basemodel import utc_now
 from domains.identity.models.oauth_account import OAuthAccount
 from domains.identity.models.user import User
 from domains.identity.schemas.auth_session import AuthSessionCreate, LogoutResponse
 from domains.identity.schemas.user import UserRead
+from domains.shared.models.basemodel import utc_now
 
 logger = logging.getLogger(__name__)
 GOOGLE_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"

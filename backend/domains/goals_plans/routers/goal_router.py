@@ -4,9 +4,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Response, status
 
-from core.transaction import transaction
-from core.idempotency import IdempotentRoute
 from api.dependencies import PaginationDep, UserDataServiceDep
+from core.idempotency import IdempotentRoute
+from core.transaction import transaction
 from domains.goals_plans.schemas.goal import GoalCreate, GoalRead, GoalUpdateRequest
 
 router = APIRouter(route_class=IdempotentRoute, prefix="/goals", tags=["goals"])

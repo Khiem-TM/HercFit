@@ -16,7 +16,6 @@
 Chỉ cộng thêm; downgrade chỉ xoá những gì revision này đã tạo.
 """
 from alembic import op
-
 from core.graph_outbox import installation_statements
 
 revision = "0017_health_identity_consent"

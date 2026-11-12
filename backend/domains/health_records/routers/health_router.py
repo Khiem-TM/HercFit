@@ -17,8 +17,8 @@ from domains.health_records.schemas.health import (
     SampleType,
     SleepSessionRead,
 )
-from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, DateRangeQuery, TimeZoneName
 from domains.health_records.services.health_service import HealthService
+from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, DateRangeQuery, TimeZoneName
 
 HealthServiceDep = Annotated[HealthService, service_dependency(HealthService)]
 

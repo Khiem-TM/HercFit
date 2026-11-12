@@ -32,7 +32,13 @@ from domains.health_records.types import spec
 from domains.nutrition.models.meals import Meal
 from domains.training.models.trainings import Training
 from integrations.google_health import kinds
-from integrations.google_health.client import PERMISSION, SCHEMA, UNSUPPORTED, GoogleHealthClient, GoogleHealthError
+from integrations.google_health.client import (
+    PERMISSION,
+    SCHEMA,
+    UNSUPPORTED,
+    GoogleHealthClient,
+    GoogleHealthError,
+)
 from integrations.google_health.models import GooglePush
 from integrations.google_health.pull import fetch
 

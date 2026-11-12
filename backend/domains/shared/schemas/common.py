@@ -6,8 +6,18 @@ from typing import Annotated, Any, ClassVar, Literal, Self
 from uuid import UUID
 
 from pydantic import (
-    AfterValidator, AwareDatetime, BaseModel, BeforeValidator, ConfigDict, Field, JsonValue,
-    RootModel, StrictFloat, StrictInt, StringConstraints, model_validator,
+    AfterValidator,
+    AwareDatetime,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    JsonValue,
+    RootModel,
+    StrictFloat,
+    StrictInt,
+    StringConstraints,
+    model_validator,
 )
 
 

@@ -22,8 +22,8 @@ import httpx
 from sqlalchemy import select, text
 
 from core.database import get_async_engine, get_db_session
-from domains.shared import events
 from domains.health_records.types import disabled_types
+from domains.shared import events
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE
 from integrations.google_health import tokens
 from integrations.google_health.client import GoogleHealthClient, GoogleHealthError, ReauthRequired

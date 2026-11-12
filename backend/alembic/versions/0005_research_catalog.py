@@ -1,5 +1,6 @@
 """Giải quyết bí danh tra cứu và biên nhận finalize nguyên tử."""
 from alembic import op
+
 revision = '0005_research_catalog'
 down_revision = '0004_knowledge_graph'
 branch_labels = depends_on = None

@@ -5,8 +5,8 @@ from fastapi import APIRouter, Query
 
 from api.dependencies import service_dependency
 from domains.nutrition.schemas.nutrition import NutritionTargetsRead
-from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName
 from domains.nutrition.services.nutrition_targets import NutritionTargetService
+from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName
 
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
 NutritionTargetServiceDep = Annotated[NutritionTargetService, service_dependency(NutritionTargetService)]

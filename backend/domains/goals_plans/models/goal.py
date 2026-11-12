@@ -5,17 +5,29 @@ from datetime import date
 from typing import TYPE_CHECKING, Any
 from uuid import UUID as PyUUID
 
-from fastapi import HTTPException, status as http_status
-from sqlalchemy import CheckConstraint, Date, Enum, ForeignKey, Index, String, Text, event, inspect, text
+from fastapi import HTTPException
+from fastapi import status as http_status
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    Enum,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    event,
+    inspect,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
+from domains.goals_plans.schemas.goal import GoalCreate, GoalUpdate
 from domains.shared.models.basemodel import BaseModel
 from domains.shared.models.domain import require_version, try_lock_user
 from domains.shared.schemas.enums import GoalStatus
-from domains.goals_plans.schemas.goal import GoalCreate, GoalUpdate
 
 if TYPE_CHECKING:
     from domains.identity.models.user import User

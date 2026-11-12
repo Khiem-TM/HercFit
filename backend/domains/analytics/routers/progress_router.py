@@ -2,9 +2,10 @@
 from uuid import UUID
 
 from fastapi import APIRouter
-from api.dependencies import UserContextDep, DateRangeQueryDep, ProgressRangeQueryDep
-from domains.analytics.schemas.progress import ProgressRead, PlanProgressRead
-from domains.analytics.services.progress_service import summarize_user, summarize_plan
+
+from api.dependencies import DateRangeQueryDep, ProgressRangeQueryDep, UserContextDep
+from domains.analytics.schemas.progress import PlanProgressRead, ProgressRead
+from domains.analytics.services.progress_service import summarize_plan, summarize_user
 
 router = APIRouter(tags=["progress"])
 

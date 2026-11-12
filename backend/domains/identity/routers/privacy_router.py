@@ -5,9 +5,9 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from api.dependencies import UserContextDep
 from core.security import PKCE_COOKIE_NAME, REFRESH_TOKEN_COOKIE_NAME, STATE_COOKIE_NAME
 from core.transaction import transaction
-from api.dependencies import UserContextDep
 from domains.identity.services.privacy_service import erase_user, export_user_data
 
 router = APIRouter(prefix="/profile", tags=["privacy"])

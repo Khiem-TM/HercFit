@@ -3,11 +3,13 @@
 Tách ra từ models.journals trong đợt tổ chức lại theo miền."""
 from typing import Any, ClassVar
 from uuid import UUID as PyUUID
+
 from fastapi import HTTPException
 from sqlalchemy import CheckConstraint, ForeignKey, String, Text, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, selectinload
+
 from domains.shared.models.basemodel import BaseModel
 from domains.shared.models.domain import lock_user, require_version
 from domains.shared.schemas.tracking import JournalQuery

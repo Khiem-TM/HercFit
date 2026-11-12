@@ -16,6 +16,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0032_food_mass_basis"

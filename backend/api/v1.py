@@ -2,26 +2,27 @@
 
 from fastapi import APIRouter, Depends
 
-from domains.identity.routers.auth_router import limit_auth, login, logout, router as auth_router
+from api.preview_router import router as preview_router
+from domains.analytics.routers.assistant_router import router as assistant_router
+from domains.analytics.routers.progress_router import router as progress_router
 from domains.body.routers.body_metrics_router import router as body_metrics_router
-from domains.goals_plans.routers.goal_router import router as goal_router
-from domains.identity.routers.profile_router import router as profile_router
-from domains.catalog.routers.food_router import router as food_router
 from domains.catalog.routers.exercise_router import router as exercise_router
+from domains.catalog.routers.food_router import router as food_router
+from domains.goals_plans.routers.goal_router import router as goal_router
 from domains.goals_plans.routers.plan_router import router as plan_router
 from domains.goals_plans.routers.training_plan_router import router as training_plan_router
-from domains.nutrition.routers.meal_router import router as meal_router
-from domains.training.routers.training_router import router as training_router
-from domains.analytics.routers.progress_router import router as progress_router
-from domains.training.routers.training_analytics_router import router as training_analytics_router
-from api.preview_router import router as preview_router
-from domains.media.routers.media_router import router as media_router
-from domains.nutrition.routers.nutrition_router import router as nutrition_router
-from domains.identity.routers.privacy_router import router as privacy_router
-from integrations.google_health.router import router as integration_router
 from domains.health_records.routers.health_router import router as health_router
-from domains.analytics.routers.assistant_router import router as assistant_router
+from domains.identity.routers.auth_router import limit_auth, login, logout
+from domains.identity.routers.auth_router import router as auth_router
+from domains.identity.routers.privacy_router import router as privacy_router
+from domains.identity.routers.profile_router import router as profile_router
 from domains.identity.schemas.auth_session import LogoutResponse
+from domains.media.routers.media_router import router as media_router
+from domains.nutrition.routers.meal_router import router as meal_router
+from domains.nutrition.routers.nutrition_router import router as nutrition_router
+from domains.training.routers.training_analytics_router import router as training_analytics_router
+from domains.training.routers.training_router import router as training_router
+from integrations.google_health.router import router as integration_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)

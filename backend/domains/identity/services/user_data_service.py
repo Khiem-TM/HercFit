@@ -11,14 +11,13 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from domains.body.models.body_metrics import BodyMetric
-from domains.goals_plans.models.goal import Goal
-from domains.identity.models.user import User
 from domains.body.schemas.body_metrics import BodyMetricCreate, BodyMetricQuery
-from domains.shared.schemas.common import JsonObject, Pagination
+from domains.goals_plans.models.goal import Goal
 from domains.goals_plans.schemas.goal import GoalCreate, GoalUpdateRequest
+from domains.identity.models.user import User
 from domains.identity.schemas.user import OnboardingInput, UserUpdate
-
-from domains.shared.services.common import UserService, require_found, request_validation_error
+from domains.shared.schemas.common import JsonObject, Pagination
+from domains.shared.services.common import UserService, request_validation_error, require_found
 
 
 class UserDataService(UserService):

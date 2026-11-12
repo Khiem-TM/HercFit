@@ -2,13 +2,15 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Response
-from core.transaction import transaction
+
+from agentic.research.contracts import ExerciseFinalization, ExerciseFinalizationResult
+from api.dependencies import CatalogServiceDep, ExerciseQueryDep, VersionQuery
+from api.responses import created
 from core.idempotency import IdempotentRoute
+from core.transaction import transaction
 from domains.catalog.models.exercises import Exercise
 from domains.catalog.schemas.exercises import ExerciseCreate, ExerciseRead, ExerciseUpdateRequest
 from domains.shared.schemas.tracking import VersionedRequest
-from api.dependencies import CatalogServiceDep, ExerciseQueryDep, VersionQuery
-from api.responses import created
 
 router = APIRouter(route_class=IdempotentRoute, prefix="/exercises", tags=["exercises"])
 
@@ -31,7 +33,6 @@ async def resolve_exercise(service: CatalogServiceDep, query: str):
     return await resolve(service, 'exercises', ResolveQuery(query=query).query)
 
 
-from agentic.research.contracts import ExerciseFinalization, ExerciseFinalizationResult
 
 # Route idempotent lưu phản hồi đã kiểm tra, nên kết quả cần một response model.
 @router.post("/research-finalizations", response_model=ExerciseFinalizationResult)

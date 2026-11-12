@@ -8,7 +8,6 @@ món trong bữa ăn làm tăng aggregate *bữa ăn* kể cả khi phần đầ
 
 from sqlalchemy import event
 
-
 COMMON_FIELDS = ("id", "version_id", "is_active", "created_at", "updated_at")
 NUTRIENT_FIELDS = ("energy_kcal", "protein_g", "carbohydrate_g", "fat_g", "fiber_g")
 FOOD_FIELDS = COMMON_FIELDS + (

@@ -15,15 +15,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
 from sqlalchemy.orm.exc import StaleDataError
 
-from core.database import get_async_engine, close_crud_db_pool
-from core.settings import settings
 from agentic.observability import observer
 from agentic.observability.logs import configure_from_settings
 from agentic.observability.middleware import ObservabilityMiddleware
-from core.media_limits import ImageUploadLimit
-from core.route_metrics import RouteMetricsMiddleware
 from api.v1 import api_router
 from api.v2 import api_v2_router
+from core.database import close_crud_db_pool, get_async_engine
+from core.media_limits import ImageUploadLimit
+from core.route_metrics import RouteMetricsMiddleware
+from core.settings import settings
 from domains.shared.services.common import request_validation_error
 
 
@@ -33,7 +33,8 @@ async def lifespan(app: FastAPI):
     configure_from_settings()  # Áp dụng LOG_LEVEL; log request_finished có mức riêng (REQUEST_LOG_LEVEL).
     get_async_engine()
     observer()
-    from agentic.embedding.core import EmbeddingClient, RerankClient, settings as embedding_settings
+    from agentic.embedding.core import EmbeddingClient, RerankClient
+    from agentic.embedding.core import settings as embedding_settings
     app.state.embedding_client = app.state.rerank_client = None
     if embedding_settings().RAG_ENABLED:
         try:

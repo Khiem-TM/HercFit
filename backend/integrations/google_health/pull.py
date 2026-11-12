@@ -27,7 +27,12 @@ from domains.health_records import views
 from domains.health_records.models.health_points import HealthPoint as HealthPointRow
 from domains.health_records.types import SELF_MARKED, DataType, Read, readable
 from integrations.google_health import kinds
-from integrations.google_health.client import PERMISSION, GoogleHealthClient, GoogleHealthError, ReauthRequired
+from integrations.google_health.client import (
+    PERMISSION,
+    GoogleHealthClient,
+    GoogleHealthError,
+    ReauthRequired,
+)
 
 logger = logging.getLogger(__name__)
 LIST_WINDOW_DAYS = 90

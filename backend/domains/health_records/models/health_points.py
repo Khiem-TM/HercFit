@@ -11,7 +11,18 @@ from datetime import date, datetime
 from typing import Any, Iterable
 from uuid import UUID as PyUUID
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, String, UniqueConstraint, delete, func, text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    delete,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID, insert
 from sqlalchemy.orm import Mapped, mapped_column
 

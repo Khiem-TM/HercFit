@@ -4,11 +4,15 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Request
 
+from core.principal import AGENT_CLIENT_HEADER  # noqa: E402,F401  (re-export cho các import cũ)
+from domains.analytics.services.health_profile import (
+    MIN_WORN_DAYS_FOR_LEVEL,
+    build_overview,
+    build_profile,
+)
 from domains.body.models.body_metrics import BodyMetric
 from domains.body.services import readings
 from domains.health_records import ports, views
-from domains.health_records.types import spec
-from domains.identity import consent
 from domains.health_records.schemas.health import (
     WORN_DAY_MIN_STEPS,
     HealthOverviewQuery,
@@ -17,11 +21,11 @@ from domains.health_records.schemas.health import (
     HealthSampleQuery,
     activity_level_from_steps,
 )
+from domains.health_records.types import spec
+from domains.identity import consent
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, DateRangeQuery
 from domains.shared.services.common import UserService
-from domains.analytics.services.health_profile import MIN_WORN_DAYS_FOR_LEVEL, build_overview, build_profile
 
-from core.principal import AGENT_CLIENT_HEADER  # noqa: E402,F401  (re-export cho các import cũ)
 COMPLETE_DAY_MIN_MEALS = 2
 # Loại mẫu mà registry đánh dấu nhạy cảm (types.DataType.sensitive), theo tên sample_type của API.
 SENSITIVE_SAMPLES = frozenset(sample for data_type, (sample, *_rest) in views.SAMPLES.items()

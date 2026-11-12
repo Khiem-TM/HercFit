@@ -4,7 +4,15 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from domains.shared.schemas.common import EntityRead, FiniteNumber, JsonObject, Name, NonBlank, PartialSchema, Version
+from domains.shared.schemas.common import (
+    EntityRead,
+    FiniteNumber,
+    JsonObject,
+    Name,
+    NonBlank,
+    PartialSchema,
+    Version,
+)
 from domains.shared.schemas.enums import GoalStatus
 
 

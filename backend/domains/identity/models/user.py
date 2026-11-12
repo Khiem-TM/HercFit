@@ -21,16 +21,16 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from domains.identity.schemas.user import GoogleProfile, OnboardingInput, UserUpdate
 from domains.shared.models.basemodel import BaseModel, utc_now
 from domains.shared.models.domain import try_lock_user
 from domains.shared.schemas.common import JsonObjectInput
-from domains.identity.schemas.user import GoogleProfile, OnboardingInput, UserUpdate
 
 if TYPE_CHECKING:
-    from domains.identity.models.auth_session import AuthSession
     from domains.body.models.body_metrics import BodyMetric
     from domains.catalog.models.foods import FoodItem
     from domains.goals_plans.models.goal import Goal
+    from domains.identity.models.auth_session import AuthSession
     from domains.identity.models.oauth_account import OAuthAccount
 
 

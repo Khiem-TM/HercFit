@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
-from collections.abc import Mapping
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from domains.shared.models.basemodel import BaseModel, utc_now
 from domains.identity.schemas.auth_session import AuthSessionCreate, AuthSessionRevoke
+from domains.shared.models.basemodel import BaseModel, utc_now
 
 if TYPE_CHECKING:
     from domains.identity.models.user import User

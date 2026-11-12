@@ -4,11 +4,13 @@ Tách ra từ schemas.journals trong đợt tổ chức lại theo miền."""
 from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
+
 from pydantic import AwareDatetime, Field, model_validator
+
 from domains.shared.schemas.activity import FoodPortionInput, FoodPortionRead, NutritionTotals
 from domains.shared.schemas.common import InputSchema, Name
-from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName, VersionedRequest
 from domains.shared.schemas.journal import JournalRead
+from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName, VersionedRequest
 
 
 class MealCreate(InputSchema):

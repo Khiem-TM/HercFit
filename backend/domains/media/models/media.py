@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from core.database import Base
 
 

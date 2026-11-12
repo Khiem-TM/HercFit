@@ -104,7 +104,7 @@ class DataType:
         return f"{SCOPE_PREFIX}{self.scope}.writeonly" if self.scope in WRITE_GROUPS else None
 
 
-I, S, D, SE = Kind.INTERVAL, Kind.SAMPLE, Kind.DAILY, Kind.SESSION
+I, S, D, SE = Kind.INTERVAL, Kind.SAMPLE, Kind.DAILY, Kind.SESSION  # noqa: E741 (viết tắt cho bảng TYPES)
 ROLLUP, WT, HF = Read.DAILY_ROLLUP, Owner.WRITE_THROUGH, Owner.HERCFIT
 TYPES: dict[str, DataType] = {item.id: item for item in (
     # --- vận động: tổng theo ngày ---

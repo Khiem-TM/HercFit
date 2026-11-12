@@ -6,21 +6,38 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID as PyUUID
 
 from sqlalchemy import (
-    CheckConstraint, Enum, ForeignKey, Index, Numeric, Select, String, Text,
-    column, event, func, or_, table, text,
+    CheckConstraint,
+    Enum,
+    ForeignKey,
+    Index,
+    Numeric,
+    Select,
+    String,
+    Text,
+    column,
+    event,
+    func,
+    or_,
+    table,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
-from domains.shared.models.basemodel import BaseModel, uuid7
-from domains.shared.models.catalog import SEARCH_CANDIDATES, CatalogMixin, apply_search_text, normalize_food_text
 from core.catalog_lock import catalog_write
+from domains.catalog.schemas.foods import FoodCreate, FoodQuery, FoodUpdate, SystemFoodCreate
+from domains.shared.models.basemodel import BaseModel, uuid7
+from domains.shared.models.catalog import (
+    SEARCH_CANDIDATES,
+    CatalogMixin,
+    apply_search_text,
+    normalize_food_text,
+)
 from domains.shared.models.domain import require_version
 from domains.shared.schemas.common import UserScope
 from domains.shared.schemas.enums import FoodItemType, FoodServingUnit, FoodSourceType
-from domains.catalog.schemas.foods import FoodCreate, FoodQuery, FoodUpdate, SystemFoodCreate
 
 if TYPE_CHECKING:
     from domains.identity.models.user import User

@@ -1,8 +1,8 @@
 """Lệnh ghi nghiệp vụ idempotent, commit nguyên tử cùng phản hồi của chúng."""
 
+import json
 from contextvars import ContextVar
 from hashlib import sha256
-import json
 
 from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse

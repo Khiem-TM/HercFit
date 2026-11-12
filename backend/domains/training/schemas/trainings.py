@@ -5,13 +5,14 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
+
 from pydantic import AwareDatetime, Field, model_validator
+
+from domains.catalog.schemas.foods import Nutrient
 from domains.shared.schemas.activity import ExerciseActivityInput, ExerciseActivityRead
 from domains.shared.schemas.common import InputSchema, Name
-from domains.catalog.schemas.foods import Nutrient
-from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName, VersionedRequest
 from domains.shared.schemas.journal import JournalRead
-
+from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName, VersionedRequest
 
 # Nhật ký tập của HercFit chỉ gồm buổi gym: bài STRENGTH và bài ghi nhanh "Tập gym (tổng quát)"
 # (migration 0016). Buổi thể thao được ghi thẳng lên Google Health (Google là nguồn sự thật).

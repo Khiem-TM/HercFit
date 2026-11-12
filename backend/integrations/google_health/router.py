@@ -16,10 +16,19 @@ from core.rate_limit import SlidingWindowLimiter, enforce
 from core.settings import settings
 from core.transaction import transaction
 from integrations.google_health import oauth, records
-from integrations.google_health.connection import HealthConnectionService, complete_connect, frontend_result
+from integrations.google_health.connection import (
+    HealthConnectionService,
+    complete_connect,
+    frontend_result,
+)
 from integrations.google_health.schemas import (
-    HealthConnectionRead, HealthConnectRequest, HealthConnectResponse, HealthConsentUpdate, HealthRecordRead,
-    HealthSyncAccepted, HealthSyncSettingsUpdate,
+    HealthConnectionRead,
+    HealthConnectRequest,
+    HealthConnectResponse,
+    HealthConsentUpdate,
+    HealthRecordRead,
+    HealthSyncAccepted,
+    HealthSyncSettingsUpdate,
 )
 from integrations.google_health.sync import BACKFILL_DAYS, run
 

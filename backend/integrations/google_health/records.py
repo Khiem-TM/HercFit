@@ -22,11 +22,16 @@ from domains.catalog.schemas.exercises import ExercisePerformance
 from domains.health_records.models.health_points import HealthPoint
 from domains.health_records.types import can_write, spec
 from domains.shared.models.activity import build_exercise_item
-from domains.training.schemas.trainings import GYM_GENERAL_CODE
 from domains.shared.schemas.common import InputSchema
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName
+from domains.training.schemas.trainings import GYM_GENERAL_CODE
 from integrations.google_health import kinds, tokens
-from integrations.google_health.client import PERMISSION, GoogleHealthClient, GoogleHealthError, ReauthRequired
+from integrations.google_health.client import (
+    PERMISSION,
+    GoogleHealthClient,
+    GoogleHealthError,
+    ReauthRequired,
+)
 from integrations.google_health.models import HealthConnection
 
 Kind = Literal["exercise", "weight", "height", "body-fat", "hydration", "sleep"]

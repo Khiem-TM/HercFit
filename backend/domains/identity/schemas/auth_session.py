@@ -5,8 +5,8 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field
 
-from domains.shared.schemas.common import EntityRead, InputSchema
 from domains.identity.schemas.user import UserRead
+from domains.shared.schemas.common import EntityRead, InputSchema
 
 
 class AuthSessionCreate(InputSchema):

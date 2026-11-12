@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID as PyUUID
 
 from sqlalchemy import (
@@ -13,8 +13,12 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from domains.shared.models.basemodel import BaseModel, utc_now
 from domains.identity.schemas.oauth_account import OAuthAccountCreate, OAuthTokenUpdate
+from domains.shared.models.basemodel import BaseModel, utc_now
+
+if TYPE_CHECKING:
+    from domains.identity.models.user import User
+
 
 class OAuthAccount(BaseModel):
     __tablename__ = "oauth_accounts"

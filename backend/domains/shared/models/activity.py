@@ -1,24 +1,35 @@
 """Hàm dựng ảnh chụp catalog dùng chung cho mục kế hoạch (chỉ định) và mục thực tế (thành tích)."""
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID as PyUUID
 
 from fastapi import HTTPException
-from sqlalchemy import Boolean, CheckConstraint, Enum, ForeignKey, Integer, Numeric, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
-from domains.shared.schemas.activity import FoodPortionInput, NUTRIENT_FIELDS, NutritionTotals
 from domains.catalog.schemas.exercises import (
     ExerciseActivityInput,
     ExerciseKind,
     ExercisePrescriptionInput,
     ExerciseRead,
 )
-from domains.training.services.training_metrics import estimate_kcal, item_metrics
 from domains.catalog.schemas.foods import FoodRead
+from domains.shared.schemas.activity import NUTRIENT_FIELDS, FoodPortionInput, NutritionTotals
+from domains.training.services.training_metrics import estimate_kcal, item_metrics
+
 
 # Cột dinh dưỡng vĩ mô --> Được sử dụng tại FoodPortionMixin và Meal (nhật ký bữa ăn)
 class NutrientColumns:

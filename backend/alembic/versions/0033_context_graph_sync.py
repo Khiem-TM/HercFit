@@ -9,7 +9,6 @@
 Downgrade chỉ bỏ index: thân hàm do code hiện tại sinh ra (thông báo thừa và mục tiêu đã kết thúc vô hại với worker cũ).
 """
 from alembic import op
-
 from core.graph_outbox import installation_statements
 
 revision = "0033_context_graph_sync"

@@ -2,12 +2,12 @@
 
 from fastapi import APIRouter, Response, status
 
+from api.dependencies import UserDataServiceDep
+from core.idempotency import IdempotentRoute
 from core.security import REFRESH_TOKEN_COOKIE_NAME, STATE_COOKIE_NAME
 from core.transaction import transaction
-from core.idempotency import IdempotentRoute
-from api.dependencies import UserDataServiceDep
-from domains.shared.schemas.common import JsonObjectInput
 from domains.identity.schemas.user import OnboardingInput, UserRead, UserUpdate
+from domains.shared.schemas.common import JsonObjectInput
 
 router = APIRouter(route_class=IdempotentRoute, prefix="/profile", tags=["profile"])
 

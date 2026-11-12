@@ -3,8 +3,8 @@ from fastapi import APIRouter
 
 from api.dependencies import UserContextDep
 from domains.analytics.schemas.assistant import AssistantContextRead
-from domains.shared.schemas.tracking import TimeZoneName
 from domains.analytics.services import assistant_context
+from domains.shared.schemas.tracking import TimeZoneName
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 

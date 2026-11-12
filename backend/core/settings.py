@@ -188,6 +188,7 @@ class Settings(BaseSettings):
         referer: str | None = None,
     ) -> str:
         from urllib.parse import urlparse
+
         from fastapi import HTTPException
 
         allowed = list(dict.fromkeys([

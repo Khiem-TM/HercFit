@@ -18,8 +18,12 @@ import httpx
 import jwt
 
 from core.settings import settings
-from domains.identity.services.auth_service import GOOGLE_AUTHORIZE_URL, GOOGLE_TOKEN_URL, GOOGLE_USERINFO_URL
 from domains.health_records.types import CONNECT_SCOPES
+from domains.identity.services.auth_service import (
+    GOOGLE_AUTHORIZE_URL,
+    GOOGLE_TOKEN_URL,
+    GOOGLE_USERINFO_URL,
+)
 from integrations.google_health.client import GoogleHealthError, ReauthRequired
 
 logger = logging.getLogger(__name__)

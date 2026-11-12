@@ -4,9 +4,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Response, status
 
-from core.transaction import transaction
-from core.idempotency import IdempotentRoute
 from api.dependencies import BodyMetricQueryDep, UserDataServiceDep
+from core.idempotency import IdempotentRoute
+from core.transaction import transaction
 from domains.body.schemas.body_metrics import BodyMetricCreate, BodyMetricRead, BodyMetricReplace
 
 router = APIRouter(route_class=IdempotentRoute, prefix="/body-metrics", tags=["body-metrics"])

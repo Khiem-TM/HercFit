@@ -14,16 +14,34 @@ from uuid import UUID as PyUUID
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, Time, select, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    Time,
+    select,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 
-from domains.shared.models.activity import ExercisePlanMixin, build_prescription_item, prescription_item_constraints
+from domains.goals_plans.schemas.plans import PlanCreate, PlanQuery, TrainingPlanCreate
+from domains.shared.models.activity import (
+    ExercisePlanMixin,
+    build_prescription_item,
+    prescription_item_constraints,
+)
 from domains.shared.models.basemodel import BaseModel, utc_now
 from domains.shared.models.domain import guard_immutable, lock_user, require_version
 from domains.shared.schemas.enums import GoalStatus
-from domains.goals_plans.schemas.plans import PlanCreate, PlanQuery, TrainingPlanCreate
 
 
 def _lifecycle_constraints(table: str, slot: str):
@@ -164,8 +182,8 @@ class Plan(PlanLifecycleMixin, BaseModel):
     @classmethod
     async def _build(cls, session: AsyncSession, *, user_id: PyUUID, payload: PlanCreate, replaces_id: PyUUID | None = None):
         from domains.body.models.body_metrics import BodyMetric
-        from domains.goals_plans.models.goal import Goal
         from domains.body.schemas.body_metrics import BodyMetricRead
+        from domains.goals_plans.models.goal import Goal
         from domains.goals_plans.schemas.goal import GoalRead
         from domains.identity.schemas.user import UserRead
 

@@ -3,14 +3,18 @@ from uuid import UUID
 
 from fastapi import APIRouter
 
-from domains.nutrition.models.meals import Meal
-from domains.training.models.trainings import Training
-from domains.goals_plans.models.plans import TrainingPlan
 from api.dependencies import JournalServiceDep, PlanServiceDep
-from domains.shared.services.common import require_found
+from domains.goals_plans.models.plans import TrainingPlan
+from domains.goals_plans.schemas.plans import (
+    TrainingPlanCreate,
+    TrainingPlanRead,
+    TrainingPlanReplace,
+)
+from domains.nutrition.models.meals import Meal
 from domains.nutrition.schemas.meals import MealCreate, MealRead
+from domains.shared.services.common import require_found
+from domains.training.models.trainings import Training
 from domains.training.schemas.trainings import TrainingCreate, TrainingRead
-from domains.goals_plans.schemas.plans import TrainingPlanCreate, TrainingPlanRead, TrainingPlanReplace
 
 router = APIRouter(tags=["previews"])
 

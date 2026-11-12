@@ -7,15 +7,22 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID as PyUUID
 
 from sqlalchemy import (
-    CheckConstraint, DateTime, ForeignKey, Index, Numeric, String, func, text,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from domains.body.schemas.body_metrics import CIRCUMFERENCES, BodyMetricCreate, BodyMetricQuery
 from domains.shared.models.basemodel import BaseModel, utc_now
 from domains.shared.models.domain import guard_immutable
-from domains.body.schemas.body_metrics import CIRCUMFERENCES, BodyMetricCreate, BodyMetricQuery
 from domains.shared.schemas.common import UserScope
 
 if TYPE_CHECKING:

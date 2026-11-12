@@ -2,17 +2,17 @@
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-
 from domains.body.models.body_metrics import BodyMetric
 from domains.body.services import readings
 from domains.goals_plans.models.goal import Goal
-from domains.nutrition.models.meals import Meal
-from domains.shared.schemas.activity import NUTRIENT_FIELDS
+from domains.health_records.services.health_service import (
+    device_expenditure,
+    observed_activity_level,
+)
 from domains.nutrition.schemas.nutrition import NutritionTargetsRead
-from domains.shared.schemas.tracking import DateRangeQuery
 from domains.nutrition.services import energy
+from domains.shared.schemas.tracking import DateRangeQuery
 from domains.shared.services.common import UserService
-from domains.health_records.services.health_service import device_expenditure, observed_activity_level
 
 GOAL_TYPES = {"fat_loss", "muscle_gain", "maintenance", "fitness"}
 COMPLETE_DAY_MIN_MEALS = 2

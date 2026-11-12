@@ -72,8 +72,8 @@ class GoogleHealthDirectory:
     async def refresh(self, user_id: UUID, days: int = 2) -> bool:
         """Đồng bộ ngay vài ngày gần nhất (trước briefing buổi sáng); False khi chưa kết nối hoặc người dùng
         chọn chỉ đồng bộ khi mở ứng dụng / thủ công (đồng bộ nền là việc của tần suất "hourly")."""
-        from integrations.google_health import sync
         from core.database import get_db_session
+        from integrations.google_health import sync
 
         async with get_db_session() as session:
             connection = await HealthConnection.for_user(session, user_id)

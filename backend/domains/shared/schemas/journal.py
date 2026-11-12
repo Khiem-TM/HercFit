@@ -1,9 +1,9 @@
 """Nhật ký ăn uống/tập luyện thực tế; bên gọi không được truyền tổng hay cờ cũ.
 
 Tách ra từ schemas.journals trong đợt tổ chức lại theo miền."""
-from datetime import timezone
 from typing import Literal
 from uuid import UUID
+
 from domains.shared.schemas.common import EntityRead
 
 
