@@ -33,13 +33,11 @@ DONE = {
     "merge_personal_info": "Đã cập nhật thông tin cá nhân",
     "onboard": "Đã lưu hồ sơ ban đầu",
     "update_training_profile": "Đã cập nhật hồ sơ vận động viên",
-    "update_sport_session": "Đã cập nhật buổi thể thao trên Google Health",
-    "delete_sport_session": "Đã xoá buổi thể thao khỏi Google Health",
-    "delete_water": "Đã xoá lần uống nước khỏi Google Health",
-    "delete_sleep": "Đã xoá giấc ngủ ghi tay khỏi Google Health",
+    "update_sport_session": "Đã cập nhật buổi thể thao",
+    "delete_sport_session": "Đã xoá buổi thể thao",
+    "delete_water": "Đã xoá lần uống nước",
+    "delete_sleep": "Đã xoá giấc ngủ ghi tay",
 }
-# Google chưa trả điểm vừa ghi (Operation chưa xong): lần đồng bộ sau mang nó về.
-ARRIVES_LATER = " (Google đã nhận; số liệu hiện sau lần đồng bộ tới)"
 # Câu trả lời vẫn gọi lệnh ghi đã lưu là bản xem trước đang chờ xác nhận (đã bỏ dấu).
 PENDING_CLAIM = re.compile(
     r"cho (?:ban )?xac nhan|xac nhan qua api|api rieng|ban xem truoc|chua (?:duoc )?luu|"
@@ -261,10 +259,9 @@ def sport_lines(record: dict) -> list[str]:
     ]
     facts = [fact for fact in facts if fact]
     return [
-        f"✅ Đã ghi buổi **{name}** lên Google Health"
+        f"✅ Đã ghi buổi **{name}**"
         + (f" lúc {moment}" if moment else "")
         + (": " + " · ".join(facts) if facts else "")
-        + (ARRIVES_LATER if record.get("pending") else "")
     ]
 
 
@@ -274,9 +271,8 @@ def water_lines(record: dict) -> list[str]:
     return [
         "✅ Đã ghi"
         + (f" {vn(amount, 0)} ml" if amount is not None else "")
-        + " nước uống lên Google Health"
+        + " nước uống"
         + (f" lúc {moment}" if moment else "")
-        + (ARRIVES_LATER if record.get("pending") else "")
     ]
 
 
@@ -289,9 +285,7 @@ def sleep_lines(record: dict) -> list[str]:
     return [
         "✅ Đã ghi giấc ngủ"
         + length
-        + " lên Google Health"
         + (f" ({span})" if span else "")
-        + (ARRIVES_LATER if record.get("pending") else "")
     ]
 
 

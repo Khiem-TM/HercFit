@@ -94,4 +94,6 @@ def simple_route(state, now=None) -> dict | None:
     domain, intent, tool, args = found
     decision = RouteDecision(intent=intent, action="tool", next_agent="tool", domain=domain,
                              instruction=f"Đề xuất {tool} đã dựng sẵn để người dùng xác nhận.").model_dump()
-    return {**decision, "code_call": {"name": tool, "args": args}}
+    # writes_before = 0 như quyết định của router: sau khi người dùng duyệt, luật write_done kết thúc lượt bằng biên
+    # nhận do code viết thay vì gọi lại router.
+    return {**decision, "writes_before": 0, "code_call": {"name": tool, "args": args}}
