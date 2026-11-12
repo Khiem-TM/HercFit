@@ -20,6 +20,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
+from agentic.agents.state import initial_state
 from agentic.core import roster
 from agentic.core.app.config import AgentSettings
 from agentic.core.context import RequestContext, request_context
@@ -182,21 +183,16 @@ class ScriptedModels:
 
 
 def _initial(turn, case_id, index, user_id, previous):
-    state = {
-        "session_id": f"s-{case_id}",
-        "user_id": user_id,
-        "run_id": f"r-{case_id}-{index}",
-        "messages": [HumanMessage(content=turn["message"])],
-        "status": "running",
-        "tool_outputs": [],
-        "tool_count": 0,
-        "mode": None if turn.get("mode", "normal") == "full" else turn.get("mode", "normal"),
-        "user_context": None,
-        "replying_to_form": bool(previous and previous.get("status") == "needs_input"),
-    }
-    if turn.get("food_choices") is not None:
-        state["food_gap"] = (previous or {}).get("food_gap")
-        state["food_choices"] = turn["food_choices"]
+    # Cùng state khởi tạo với Runtime.chat; lượt trước của ca là `previous` (thẻ đang trả lời được mang sang như thật).
+    state = initial_state(
+        run_id=f"r-{case_id}-{index}",
+        user_id=user_id,
+        session_id=f"s-{case_id}",
+        messages=[HumanMessage(content=turn["message"])],
+        mode=None if turn.get("mode", "normal") == "full" else turn.get("mode", "normal"),
+        previous=previous,
+        food_choices=turn.get("food_choices") or None,
+    )
     if turn.get("state"):
         # Điều kiện model kịch bản không dựng được (thẻ chọn bản ghi sau tra cứu web) hoặc nhánh phòng thủ của
         # supervisor: đặt thẳng vào state của lượt.

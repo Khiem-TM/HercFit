@@ -273,3 +273,77 @@ class AgentState(TypedDict, total=False):
     # đặt lại; các bản xem trước còn lại chờ thẻ xác nhận của chúng, từng thẻ một.
     agent_results: Annotated[list[dict[str, Any]], collect_results]
     pending_queue: list[dict[str, Any]]
+
+
+def initial_state(
+    *,
+    run_id,
+    user_id,
+    session_id,
+    messages,
+    mode=None,
+    previous=None,
+    food_choices=None,
+    generation=None,
+    memory=None,
+    trace_context=None,
+):
+    """State khởi tạo của một lượt chat trên thread mới: nguồn duy nhất cho Runtime.chat và bộ chuyển đổi eval.
+
+    `previous` là state cuối của lượt trước trong phiên: chỉ thẻ người dùng đang trả lời (chọn bản ghi, món thiếu),
+    cờ trả lời form và run_id của nó được mang sang; mọi trường khác bắt đầu trống."""
+    # services nhập agents.state, nên nhập trong hàm để không tạo vòng import.
+    from agentic.services import catalog_choice, food_gap
+
+    previous = previous or {}
+    return {
+        "trace_context": trace_context,
+        "messages": messages,
+        "user_id": user_id,
+        "session_id": session_id,
+        "run_id": run_id,
+        "tool_outputs": [],
+        "tool_count": 0,
+        "session_generation": generation,
+        "research_answer": None,
+        "research_count": 0,
+        "sources": [],
+        "candidate": None,
+        "pending_action": None,
+        "clarification": None,
+        "illustrations": [],
+        "research_handoff": None,
+        "status": "running",
+        "error": None,
+        "catalog_choice": catalog_choice.carried(previous),
+        "prepared_reply": None,
+        "food_gap": food_gap.carried(previous),
+        "food_choices": food_choices,
+        "replying_to_form": previous.get("status") == "needs_input",
+        "graph_context": None,
+        "graph_retrieval_attempted": False,
+        "graph_context_run_id": None,
+        "graph_context_domains": [],
+        "context_graph": None,
+        "context_graph_run_id": None,
+        "prev_run_id": previous.get("run_id"),
+        "action_decision": None,
+        "edited_fields": [],
+        "turn": None,
+        "fast_read_plan": None,
+        "fast_read_complete": False,
+        "telemetry": {},
+        "execution_records": [],
+        "jev_events": [],
+        "jev_rejections": {},
+        "model_auth_failed": False,
+        "session_memory": memory,
+        "safety": None,
+        "user_context": None,
+        "user_context_run_id": None,
+        "personal_reads_done": False,
+        "research_evidence": None,
+        "route_trace": [],
+        "mode": mode,
+        "suggested_mode": None,
+    }

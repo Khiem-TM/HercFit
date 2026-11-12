@@ -14,8 +14,9 @@ LANGFUSE_TRACING=false JEV_MODE=off JWT_SECRET_KEY=ci-only PYTHONPATH=../tests \
 
 Mỗi ca chạy graph LangGraph thật (`build_workflow`) với model kịch bản (`input.script`, mỗi vai trò một danh sách
 đầu ra; hết kịch bản thì router trả lời, tool model trả văn bản `script.tool_reply`) và backend giả
-(`adapters/fixtures.py`). Mỗi lượt (`input.turns`) là một thread mới; lượt sau chỉ nhận lại `replying_to_form`, thẻ
-món thiếu (khi có `food_choices`) và `turn.state`.
+(`adapters/fixtures.py`). Mỗi lượt (`input.turns`) là một thread mới với cùng state khởi tạo như `Runtime.chat`
+(`agents/state.initial_state`): lượt sau nhận lại cờ trả lời form và thẻ đang được trả lời của lượt trước, cộng
+`turn.food_choices` và `turn.state`.
 
 Khoá kỳ vọng dùng để kiểm luật định tuyến (evaluator `ExpectedRules`, điểm `code_rules`):
 

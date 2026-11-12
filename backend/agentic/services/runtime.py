@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
 from langgraph.types import Command
 
+from agentic.agents.state import initial_state
 from agentic.core.app.config import AgentSettings
 from agentic.core.app.schemas.response import ChatResponse, Clarification, FoodGap
 from agentic.core.providers.fpt import ToolMarkupFilter, strip_tool_markup
@@ -24,7 +25,6 @@ from agentic.observability import metrics as ops
 from agentic.observability.outcomes import note_error
 
 # 'modes', không phải 'mode': _run_stream có biến cục bộ mode (kiểu sự kiện stream).
-from agentic.services import catalog_choice, food_gap
 from agentic.services import mode as modes
 from agentic.services.clarification import catalog_groups, fallback_clarification, logs_training
 from agentic.services.failure_reply import NODE_ERROR, failure_reply
@@ -456,59 +456,20 @@ class Runtime:
                 )
             thread_id = str(uuid4())
             annotate(business_run_id=thread_id, graph_thread_id=thread_id)
-            initial = {
-                "trace_context": durable_context(),
-                "messages": [*history, HumanMessage(content=payload.message)],
-                "user_id": user_id,
-                "session_id": payload.session_id,
-                "run_id": thread_id,
-                "tool_outputs": [],
-                "tool_count": 0,
-                "session_generation": session["generation"],
-                "research_answer": None,
-                "research_count": 0,
-                "sources": [],
-                "candidate": None,
-                "pending_action": None,
-                "clarification": None,
-                "illustrations": [],
-                "research_handoff": None,
-                "status": "running",
-                "error": None,
-                "catalog_choice": catalog_choice.carried(previous),
-                "prepared_reply": None,
-                "food_gap": food_gap.carried(previous),
-                "food_choices": [c.model_dump(mode="json") for c in payload.food_choices]
+            initial = initial_state(
+                trace_context=durable_context(),
+                messages=[*history, HumanMessage(content=payload.message)],
+                user_id=user_id,
+                session_id=payload.session_id,
+                run_id=thread_id,
+                generation=session["generation"],
+                previous=previous,
+                food_choices=[c.model_dump(mode="json") for c in payload.food_choices]
                 if payload.food_choices
                 else None,
-                "replying_to_form": previous.get("status") == "needs_input",
-                "graph_context": None,
-                "graph_retrieval_attempted": False,
-                "graph_context_run_id": None,
-                "graph_context_domains": [],
-                "context_graph": None,
-                "context_graph_run_id": None,
-                "prev_run_id": previous.get("run_id"),
-                "action_decision": None,
-                "edited_fields": [],
-                "turn": None,
-                "fast_read_plan": None,
-                "fast_read_complete": False,
-                "telemetry": {},
-                "execution_records": [],
-                "jev_events": [],
-                "jev_rejections": {},
-                "model_auth_failed": False,
-                "session_memory": memory,
-                "safety": None,
-                "user_context": None,
-                "user_context_run_id": None,
-                "personal_reads_done": False,
-                "research_evidence": None,
-                "route_trace": [],
-                "mode": payload.mode,
-                "suggested_mode": None,
-            }
+                memory=memory,
+                mode=payload.mode,
+            )
             await self.graph.aupdate_state(self.config(thread_id), initial, as_node="__start__")
             await self.store.bind(payload.session_id, thread_id)
             if emit:
