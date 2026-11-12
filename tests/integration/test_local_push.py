@@ -1,6 +1,6 @@
 """Phase 2: bản ghi cục bộ (remote_name "local/...") được đẩy lên Google sau commit (L2.2), Google giả lập."""
 import asyncio
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from google_fake import FakeGoogle
 from payloads import scalar
@@ -47,10 +47,12 @@ async def test_point_created_before_crash_is_adopted(client, make_user):
     user_id, headers = await make_user()
     record = await log_water(client, headers)
     google = FakeGoogle()
-    # Lần trước đã tạo trên Google nhưng sập trước khi đổi tên; lần pull sau đó đọc nó về thành dòng riêng.
+    # Lần trước đã tạo trên Google nhưng sập trước khi đổi tên. Pull (chạy trước push trong lượt đồng bộ đầy đủ)
+    # không đọc điểm mồ côi đó về thành bản ghi thứ hai.
     orphan = google.put("hydration-log", {"dataSource": kinds.MANUAL, "hydrationLog": record["value"]})
     await pull(google, user_id, NUTRITION, START, END, ZONE)
-    assert len(await remote_names(user_id)) == 2
+    [name] = await remote_names(user_id)
+    assert name.startswith("local/")
 
     counts = await push_pending(google, user_id, START, END, ZONE, NUTRITION)
 
@@ -123,3 +125,21 @@ async def test_create_schedules_a_push_after_commit(client, make_user, monkeypat
     await asyncio.sleep(0)  # task được tạo trong hook after_commit
 
     assert scheduled == [(user_id, {"push_only": True})]
+
+
+async def test_same_second_records_keep_their_own_points(client, make_user):
+    """Hai số đo cùng một giây (cùng khoá nhận lại) không được nhận nhầm điểm của nhau hay xoá nhau."""
+    user_id, headers = await make_user()
+    moment = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    google = FakeGoogle()
+    metrics = [spec("weight").read_scope, spec("weight").write_scope]
+    # Số đo thứ nhất đã lên Google; số đo thứ hai cùng giây còn đang chờ ở lượt đẩy sau.
+    for kg in (70.0, 70.4):
+        response = await client.post("/api/v2/health/records/weight", headers=headers,
+                                     json={"value": kg, "measured_at": moment})
+        assert response.status_code == 201, response.text
+        await push_pending(google, user_id, START, END, ZONE, metrics)
+    await pull(google, user_id, metrics, START, END, ZONE)
+
+    assert len(google.created) == 2
+    assert await remote_names(user_id) == sorted(name for _, name in google.created)

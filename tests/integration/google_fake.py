@@ -10,6 +10,7 @@ class FakeGoogle(GoogleHealthClient):
         self.points: dict[str, dict[str, dict]] = {}
         self.created: list[tuple[str, str]] = []
         self.deleted: list[str] = []
+        self.patched: list[str] = []
         self._ids = count(1)
 
     def put(self, data_type: str, payload: dict) -> str:
@@ -23,10 +24,22 @@ class FakeGoogle(GoogleHealthClient):
         # Bộ lọc ngày do pull.fetch áp lại sau khi parse, nên trả mọi điểm của loại là đủ.
         return Page(list(deepcopy(self.points.get(data_type, {})).values()), None)
 
+    async def daily_rollup_page(self, data_type, start, end_exclusive, *, page_size=90, page_token=None):
+        return Page([], None)
+
+    async def rollup_page(self, data_type, start, end, *, window_seconds, page_size=1000, page_token=None):
+        return Page([], None)
+
     async def create_point(self, data_type, point):
         name = self.put(data_type, point)
         self.created.append((data_type, name))
         return {"done": True, "response": {"name": name}}
+
+    async def patch_point(self, name, point):
+        data_type = name.split("/")[3]
+        self.points.setdefault(data_type, {})[name] = {**deepcopy(point), "name": name}
+        self.patched.append(name)
+        return {"done": True, "response": {**deepcopy(point), "name": name}}
 
     async def batch_delete(self, data_type, names):
         for name in names:

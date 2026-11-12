@@ -18,7 +18,8 @@ cùng tên món) mà chưa thuộc dòng nào thì nhận lại điểm đó; m�
 
 Bản ghi sức khoẻ người dùng nhập (buổi thể thao, nước, giấc ngủ, số đo) nằm sẵn trong health_points với
 remote_name "local/..." (records.py). Mỗi dòng như vậy được tạo trên Google (hoặc nhận lại một điểm
-HercFit đã tạo mà chưa kịp gắn) rồi đổi remote_name thành tên Google; lần pull sau cập nhật đúng dòng đó.
+HercFit đã tạo mà chưa kịp gắn: pull không đọc điểm đó về, xem pull.orphans) rồi đổi remote_name thành tên
+Google; lần pull sau cập nhật đúng dòng đó.
 """
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import func, select, text, update
 
 from core.database import get_db_session
 from domains.health_records.models.health_points import HealthPoint
@@ -44,15 +45,14 @@ from integrations.google_health.client import (
     GoogleHealthError,
 )
 from integrations.google_health.models import GooglePush
+from integrations.google_health.pull import adoption_key as _key
 from integrations.google_health.pull import fetch
-from integrations.google_health.records import LOCAL_PREFIX
+from integrations.google_health.records import LOCAL_PREFIX, LOCAL_TYPES
 
 logger = logging.getLogger(__name__)
 GYM_EXERCISE_TYPE = "STRENGTH_TRAINING"
 SAME_SESSION_OVERLAP = 0.5
 DATA_TYPE = {"Training": "exercise", "Meal": "nutrition-log"}
-# Loại do người dùng nhập, lưu cục bộ trước (records.py) rồi đẩy lên ở đây.
-LOCAL_TYPES = ("exercise", "hydration-log", "sleep", "weight", "height", "body-fat")
 
 
 def overlap(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime) -> float:
@@ -100,14 +100,6 @@ def meal_points(meal: Meal) -> list[dict[str, Any]]:
             kcal=grams(item.energy_kcal), carbohydrate_g=grams(item.carbohydrate_g), fat_g=grams(item.fat_g),
             protein_g=grams(item.protein_g), fiber_g=grams(item.fiber_g), amount=grams(item.quantity), unit=item.unit))
     return points
-
-
-def _key(data_type: str, payload: dict[str, Any]) -> tuple[str, ...]:
-    """Khoá nhận lại điểm đã ghi: thời điểm bắt đầu hoặc thời điểm đo (và tên món với nutrition-log)."""
-    value = payload.get(spec(data_type).field) or {}
-    start = kinds.timestamp((value.get("interval") or {}).get("startTime")
-                            or (value.get("sampleTime") or {}).get("physicalTime"))
-    return (kinds.stamp(start) if start else "", value.get("foodDisplayName") or "")
 
 
 # ------------------------------------------------------------------------------ Google
@@ -195,6 +187,10 @@ async def push_pending(client: GoogleHealthClient, user_id: UUID, start: date, e
         alive = {(kind, record_id) for kind, record_id in (await session.execute(text("""
             SELECT 'Training', id FROM trainings WHERE user_id = :u AND is_active
             UNION ALL SELECT 'Meal', id FROM meals WHERE user_id = :u AND is_active"""), {"u": user_id})).all()}
+        # Điểm đã thuộc một dòng health_points (kể cả bản ghi người dùng đã đẩy) không bao giờ được nhận lại lần nữa.
+        stored = set((await session.execute(select(HealthPoint.remote_name).where(
+            HealthPoint.user_id == user_id, HealthPoint.data_type.in_(local_types),
+            HealthPoint.remote_name.not_like(LOCAL_PREFIX + "%")))).scalars()) if local_types else set()
     pusher = Pusher(client, user_id, start, end, zone)
     try:
         # 1. Bản ghi đã bị thay hoặc xoá: gỡ điểm HercFit tạo.
@@ -204,7 +200,7 @@ async def push_pending(client: GoogleHealthClient, user_id: UUID, start: date, e
                     await pusher.delete(DATA_TYPE[row.record_type], list(row.names))
                 await _forget(*key)
         # 2. Tạo / tạo lại / gắn vào phiên đồng hồ.
-        await pusher.load_own({name for row in pushes.values() for name in row.names},
+        await pusher.load_own({name for row in pushes.values() for name in row.names} | stored,
                               (*DATA_TYPE.values(), *local_types))
         devices = await _device_sessions(user_id, start, end)
         for record_type, rows in records.items():
@@ -255,10 +251,6 @@ async def _push_local(pusher: Pusher, data_types: tuple[str, ...]) -> None:
         if name is None:
             continue  # Operation chưa xong: lượt sau nhận lại qua self-sources
         async with get_db_session() as session:
-            # Một lần pull trước đó có thể đã đọc điểm này về thành dòng riêng: bỏ dòng đó để không đếm hai lần.
-            await session.execute(delete(HealthPoint).where(
-                HealthPoint.user_id == pusher.user_id, HealthPoint.data_type == row.data_type,
-                HealthPoint.remote_name == name, HealthPoint.id != row.id))
             # Chỉ đổi tên khi dòng vẫn là bản cục bộ đã đọc (người dùng có thể vừa sửa hoặc xoá nó).
             await session.execute(update(HealthPoint).where(
                 HealthPoint.id == row.id, HealthPoint.remote_name == row.remote_name,

@@ -41,6 +41,7 @@ Kind = Literal["exercise", "weight", "height", "body-fat", "hydration", "sleep"]
 LOCAL_PREFIX = "local/"
 DATA_TYPE = {"exercise": "exercise", "weight": "weight", "height": "height", "body-fat": "body-fat",
              "hydration": "hydration-log", "sleep": "sleep"}
+LOCAL_TYPES = tuple(DATA_TYPE.values())
 # Giấc ngủ ghi tay: một đêm hợp lý và gần đây (đồng hồ vẫn là nguồn chính khi có).
 SLEEP_MIN, SLEEP_MAX, SLEEP_MAX_AGE = timedelta(hours=1), timedelta(hours=16), timedelta(days=30)
 # Môn trong catalog (configuration.sport / activity) → ExerciseType của Google; không khớp thì SPORT.
