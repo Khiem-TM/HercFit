@@ -128,8 +128,6 @@ class AgentSettings(BaseSettings):
     KG_WORKER_BATCH_SIZE: int = Field(default=100, ge=1, le=1000)
     KG_RECONCILE_SECONDS: float = Field(default=5, gt=0)
     AGENT_DATABASE_POOL_SIZE: int = Field(default=10, ge=2)
-    # Không còn dùng: phiên giờ dùng một dòng lease có thời hạn thay vì kết nối giữ advisory lock.
-    AGENT_SESSION_POOL_SIZE: int = Field(default=10, ge=1)
     # Thời gian một request thứ hai cho cùng cuộc trò chuyện chờ trước khi trả 409.
     SESSION_LEASE_WAIT_SECONDS: float = Field(default=30, ge=0, le=300)
     # Chốt chặn lạm dụng và chi phí (OWASP LLM10). 0 để tắt một giới hạn.
