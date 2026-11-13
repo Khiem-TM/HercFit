@@ -4,7 +4,8 @@
 PY ?= python
 TESTS := $(abspath .)
 # Eval tất định không gọi mạng; .env dev bật Langfuse và Jev nên tắt bằng biến môi trường.
-SAFE_ENV = JWT_SECRET_KEY=ci-only LANGFUSE_TRACING=false JEV_MODE=off
+# MODE=dev chỉ đặt cho lệnh con (agentic bắt buộc có MODE); biến Make $(MODE) bên dưới vẫn là chế độ eval.
+SAFE_ENV = MODE=dev JWT_SECRET_KEY=ci-only LANGFUSE_TRACING=false JEV_MODE=off
 EVAL = cd ../backend && $(SAFE_ENV) PYTHONPATH=$(TESTS) $(PY) -m evaluation
 OUT ?= eval_results/quality
 

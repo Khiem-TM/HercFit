@@ -14,5 +14,7 @@ if str(BACKEND) not in sys.path:
 os.environ["JWT_SECRET_KEY"] = "test-only-secret-key-not-for-production-0001"
 os.environ["LANGFUSE_TRACING"] = "false"
 os.environ["JEV_MODE"] = "off"
+# agentic bắt buộc có MODE; .env của dev đã đặt, CI thì không.
+os.environ.setdefault("MODE", "dev")
 # Không phiên test nào trỏ vào database dev: test tích hợp dùng database riêng, có hậu tố _test bắt buộc.
 os.environ["POSTGRES_DB"] = os.environ.get("HERCFIT_TEST_DB", "hercfit_test")

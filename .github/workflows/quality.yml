@@ -43,6 +43,9 @@ jobs:
         run: ruff check . --config agentic/ruff.toml
       - name: Import check
         working-directory: backend
+        # Chỉ đặt ở bước này: biến MODE toàn workflow sẽ đè biến Make $(MODE) (chế độ eval) của tests/Makefile.
+        env:
+          MODE: dev
         run: python -c "import agentic.core.app.main, app; print('imports ok')"
       - name: Unit tests
         working-directory: tests

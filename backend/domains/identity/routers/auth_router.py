@@ -23,9 +23,9 @@ def limit_auth(request: Request) -> None:
 
 
 def same_origin(request: Request) -> None:
-    """POST xác thực bằng cookie phải đến từ origin trình duyệt được phép (CSRF)."""
+    """POST xác thực bằng cookie phải đến từ origin trình duyệt được phép (CSRF); thiếu header Origin cũng bị từ chối."""
     origin = request.headers.get("origin")
-    if origin and origin.rstrip("/") not in {o.rstrip("/") for o in [*settings.CORS_ORIGINS, settings.FRONTEND_URL]}:
+    if not origin or origin.rstrip("/") not in {o.rstrip("/") for o in [*settings.CORS_ORIGINS, settings.FRONTEND_URL]}:
         raise HTTPException(403, "Origin is not allowed")
 
 
@@ -35,12 +35,11 @@ router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(limit_au
 @router.get(
     "/login",
     summary="Đăng nhập Google OAuth",
-    description="Bắt đầu Google OAuth (PKCE) hoặc xử lý callback. Làm mới phiên qua GET chỉ còn để tương thích; dùng POST /auth/refresh.",
+    description="Bắt đầu Google OAuth (PKCE, mode=oauth) hoặc xử lý callback (code, state). Làm mới phiên: POST /auth/refresh.",
 )
 @transaction
 async def login(
     request: Request,
-    refresh_token: RefreshTokenCookie,
     auth_service: AuthServiceDep,
     code: str | None = Query(default=None),
     state: str | None = Query(default=None),
@@ -63,10 +62,8 @@ async def login(
         )
     if mode == "oauth":
         return auth_service.start_google_login(settings.resolve_oauth_redirect_uri(redirect_uri, referer=referer))
-    if mode == "refresh" and not refresh_token:
-        raise HTTPException(401, "Missing refresh token")
-    resolved_redirect = settings.resolve_oauth_redirect_uri(redirect_uri, referer=referer) if not refresh_token else None
-    return await auth_service.refresh_with_cookie(refresh_token, redirect_uri=resolved_redirect)
+    # GET không làm mới phiên bằng cookie (CSRF): chỉ POST /auth/refresh, có kiểm tra Origin.
+    raise HTTPException(400, "Use mode=oauth to sign in or POST /auth/refresh to renew the session")
 
 
 @router.post(

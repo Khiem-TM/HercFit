@@ -106,7 +106,7 @@ class Settings(BaseSettings):
     AGENT_TOKEN_AUDIENCE: str = "hercfit-agent"
     AGENT_DELEGATION_MINUTES: int = Field(default=10, ge=1, le=60)
     # true: token người dùng có header tự khai báo X-HercFit-Client: agent bị từ chối.
-    AGENT_DELEGATION_REQUIRED: bool = False
+    AGENT_DELEGATION_REQUIRED: bool = True
     # Khoá Fernet (base64 an toàn cho URL, 32 byte) cho token nhà cung cấp được lưu trữ. Khoá đầu
     # tiên dùng để mã hoá; các khoá trước vẫn giải mã được trong lúc xoay khoá.
     TOKEN_ENCRYPTION_KEY: SecretStr | None = None

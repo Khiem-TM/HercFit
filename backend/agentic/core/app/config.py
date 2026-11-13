@@ -16,7 +16,8 @@ class AgentSettings(BaseSettings):
         extra="ignore",
         env_ignore_empty=True,
     )
-    MODE: str = "dev"
+    # Bắt buộc ("dev" hoặc "prod"), không có mặc định: thiếu thì khởi động báo lỗi thay vì lặng lẽ chạy như dev.
+    MODE: str
     AGENT_PORT: int = 8081
     BACKEND_BASE_URL: str = "http://localhost:8080"
     BACKEND_TIMEOUT_SECONDS: float = 15
