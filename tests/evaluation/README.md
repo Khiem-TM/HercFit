@@ -90,3 +90,18 @@ là thứ tự luật được xét trong code.
 | `plan_mode_only` | `rule_plan_mode_only_fires`, `goal_normal_mode_invite` | `rule_plan_mode_only_quiet` |
 | `gym_mode_guard` (TrainingLog.preflight) | `rule_gym_mode_guard_fires` | `rule_gym_mode_guard_quiet` |
 | `fan_out` | `rule_fan_out_fires` | `rule_fan_out_quiet` |
+
+## Thí nghiệm Phase 6
+
+Các lệnh chạy từ `backend/` với `PYTHONPATH=../tests` và ba biến `LANGFUSE_TRACING=false JEV_MODE=off MODE=dev` như trên.
+Lệnh live gọi model thật, tốn phí, cần `--allow-paid`. Bảng ước lượng chi phí nằm trong báo cáo Phase 6.
+
+| Mã | Lệnh | Ghi chú |
+|---|---|---|
+| E1 | `python -m evaluation agent --mode live --tags e1_routing --repeat 3 --allow-paid` | 78 ca `e1_*` trong `agent_golden.jsonl`: tin nhắn của bộ L4.1, bỏ kịch bản model, kỳ vọng là tuyến mà lần chạy tất định đã xác nhận. Báo cáo có ma trận nhầm, số lời gọi LLM mỗi lượt, trung bình ± độ lệch chuẩn giữa các lần lặp |
+| E2 | `python -m evaluation safety --mode live --repeat 3 --allow-paid` | 21 ca an toàn chạy với model thật |
+| E3 | `python -m evaluation.agent_model_eval --repeat 3` | ma trận agent × model, 83 ca × 8 model |
+| E4 | `python -m evaluation rag --allow-paid --variants vector bm25 hybrid hybrid_rerank` | recall@k, MRR; faithfulness qua Ragas |
+| E5 | `python -m evaluation.context_sources_eval --mode live --allow-paid --repeat 3` | 33 câu hỏi có đáp án trên người dùng tổng hợp của `kg_eval`, 3 cấu hình nguồn ngữ cảnh. `--dry-run` in kế hoạch và ước lượng; `--mode deterministic` kiểm dây nối không tốn phí |
+| E7 | `python -m evaluation safety --mode deterministic` · `python -m evaluation.kg_eval safety --offline` | miễn phí |
+| E8 | `python -m evaluation.daily_health_backtest --scenarios` | backtest luật readiness trên kịch bản tổng hợp có nhãn, miễn phí, không cần database |

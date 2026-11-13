@@ -8,6 +8,7 @@ Thứ tự quyết định (điểm ngữ nghĩa cao không bù được vi ph�
 """
 
 import json
+import statistics
 from collections import defaultdict
 from pathlib import Path
 
@@ -81,9 +82,40 @@ def aggregate(run: EvaluationRun):
     )
     usage = scoring.usage_summary([r.get("usage") or {} for r in records])
     aggregates.update({f"usage_{k}": v for k, v in usage.items() if k != "cost_status"})
+    # Số lời gọi LLM trung bình mỗi lần chạy một ca (E1: chi phí định tuyến mỗi lượt).
+    aggregates["usage_llm_calls_per_case_run"] = (
+        round(usage["llm_calls"] / len(records), 3) if records else None
+    )
     analyses["usage_cost_status"] = usage["cost_status"]
+    spread = repeat_spread(run)
+    if spread:
+        analyses["repeats"] = spread
     run.aggregates, run.analyses = aggregates, {**run.analyses, **analyses}
     return aggregates
+
+
+def repeat_spread(run: EvaluationRun):
+    """--repeat N > 1: mỗi số đo tính riêng cho từng lần lặp, rồi trung bình và độ lệch chuẩn mẫu giữa các lần."""
+    if run.metadata.repeat <= 1:
+        return {}
+    per_repeat = defaultdict(lambda: defaultdict(list))
+    for result in run.results:
+        for score in result.scores:
+            if score.data_type in {"BOOLEAN", "NUMERIC"} and score.value is not None:
+                per_repeat[score.name][result.repeat_index].append(float(score.value))
+        usage = (result.record or {}).get("usage") or {}
+        per_repeat["llm_calls_per_case_run"][result.repeat_index].append(float(usage.get("llm_calls", 0)))
+        if result.record and result.record.get("latency_ms") is not None:
+            per_repeat["latency_mean_ms"][result.repeat_index].append(float(result.record["latency_ms"]))
+    spread = {}
+    for name, by_repeat in sorted(per_repeat.items()):
+        values = [round(sum(v) / len(v), 4) for _, v in sorted(by_repeat.items()) if v]
+        spread[name] = {
+            "mean": round(statistics.mean(values), 4),
+            "std": round(statistics.stdev(values), 4) if len(values) > 1 else 0.0,
+            "values": values,
+        }
+    return spread
 
 
 def gate_config(suite, mode, path=GATES):
@@ -247,6 +279,8 @@ def markdown(report: EvaluationReport):
         f"- Commit: `{(meta.git_sha or 'unknown')[:12]}`{' (dirty)' if meta.git_dirty else ''} · release "
         f"`{meta.release}` · env `{meta.environment}` · graph `{meta.graph_version}`",
         f"- Models: {json.dumps(meta.models, ensure_ascii=False)}",
+        f"- Prompt: {json.dumps(meta.prompt_versions, ensure_ascii=False)}",
+        f"- Lặp: {meta.repeat} lần",
         f"- Evaluators: {json.dumps(meta.evaluator_versions)}",
         "",
         "## Cổng",
@@ -262,6 +296,12 @@ def markdown(report: EvaluationReport):
     lines += ["", "## Số đo", "", "| Số đo | Giá trị |", "|---|---|"]
     for key, value in report.aggregates.items():
         lines.append(f"| {key} | {value} |")
+    spread = report.analyses.get("repeats")
+    if spread:
+        lines += ["", f"## Lặp lại {meta.repeat} lần: trung bình ± độ lệch chuẩn giữa các lần", "",
+                  "| Số đo | Trung bình | Độ lệch chuẩn | Từng lần |", "|---|---|---|---|"]
+        for name, item in spread.items():
+            lines.append(f"| {name} | {item['mean']} | {item['std']} | {item['values']} |")
     if report.baseline:
         lines += ["", f"## Baseline: {report.baseline.get('status')}", ""]
         for metric, delta in (report.baseline.get("deltas") or {}).items():

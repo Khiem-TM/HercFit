@@ -50,7 +50,7 @@ async def agent_like(args, *, suite_label, tags=None):
             return blocked(suite_label, args.mode, reason, args.out)
     run = await runner.run_agent_suite(
         args.mode,
-        tags=tags,
+        tags=tags or getattr(args, "tags", None),
         ids=args.cases,
         repeat=args.repeat,
         concurrency=args.concurrency,
@@ -138,6 +138,7 @@ def main(argv=None):
         p = sub.add_parser(name)
         p.add_argument("--mode", choices=["deterministic", "live"], default="deterministic")
         p.add_argument("--cases", nargs="+")
+        p.add_argument("--tags", nargs="+", help="chỉ chạy ca có một trong các tag (vd. e1_routing)")
         p.add_argument("--repeat", type=int, default=1)
         p.add_argument("--concurrency", type=int, default=4)
         p.add_argument(
