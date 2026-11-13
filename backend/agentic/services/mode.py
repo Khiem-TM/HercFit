@@ -68,7 +68,10 @@ POLICIES = {
         deep=True,
         shortcuts=False,
         efforts={"research": "medium", "response": "high"},
-        timeouts={"research": 60, "response": 90},
+        # Router ở chế độ Plan nhận prompt dài hơn (cá nhân hoá + lập kế hoạch) và suy luận lâu hơn: đo trên Langfuse
+        # 13/11 là 9–21 s với 2–3,5k token đầu ra, vượt ROUTING_TIMEOUT_SECONDS = 12 s; ba lần thử đều hết giờ thì
+        # lượt chạy thất bại sau ~38 s (OpenAITimeoutError ở node orchestrator).
+        timeouts={"decision": 30, "research": 60, "response": 90},
         research_seconds=120,
         research_limits={"web": 10, "search": 4, "llm": 4, "rounds": 3},
         documents=8,
