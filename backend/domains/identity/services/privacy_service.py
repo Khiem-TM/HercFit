@@ -3,15 +3,25 @@
 Việc xoá sẽ xoá dòng users; khoá ngoại xoá dây chuyền tới mọi bảng sở hữu và các
 trigger ghi nhận knowledge graph phát sự kiện xoá, nên phép chiếu Neo4j được
 worker dọn. Quyền Google Health được thu hồi tại Google trước. Ảnh gắn với bản ghi của người dùng được xếp hàng
-để xoá trên Cloudinary trước. Dữ liệu hội thoại nằm trong service agent, service này
-có endpoint dọn dữ liệu riêng (DELETE /api/v1/chat/me).
+để xoá trên Cloudinary trước. Dữ liệu hội thoại nằm trong service agent: backend gọi endpoint nội bộ của agent
+(purge_agent_conversations) trước khi xoá bất cứ thứ gì, và dừng nếu agent không xoá được.
 """
+import logging
 from datetime import datetime, timezone
 
+import httpx
+from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
 
+from core import service_auth
 from core.settings import settings
+
+logger = logging.getLogger(__name__)
+AGENT_CONVERSATIONS_PATH = "/internal/users/{user_id}/conversations"
+# Xoá hội thoại có thể duyệt nhiều phiên: thời gian chờ rộng hơn lời gọi viết thông báo.
+AGENT_PURGE_TIMEOUT_SECONDS = 30
+ERASE_UNAVAILABLE = "Chưa xoá được lịch sử trò chuyện nên tài khoản chưa bị xoá. Vui lòng thử lại sau."
 
 EXPORT_FORMAT_VERSION = 1
 # Chỉ dùng SQL hằng; :uid là id của người dùng đã xác thực.
@@ -57,6 +67,25 @@ async def export_user_data(session, user_id) -> dict:
     data["notes"] = ("Hội thoại với trợ lý được lưu ở dịch vụ agent; xuất hoặc xoá qua /api/v1/chat. "
                      "Bản ghi nhật ký là snapshot bất biến; các bản đã thay thế có is_active=false.")
     return data
+
+
+async def purge_agent_conversations(user_id) -> dict:
+    """Xoá mọi cuộc trò chuyện của người dùng ở service agent (endpoint nội bộ ký HMAC). Không xoá được thì 503 để bên
+    gọi chưa xoá gì ở backend: không bao giờ còn hội thoại mồ côi sau khi tài khoản đã mất."""
+    secret = settings.AGENT_SERVICE_SECRET.get_secret_value() if settings.AGENT_SERVICE_SECRET else ""
+    if not settings.AGENTIC_INTERNAL_URL or not secret:
+        raise HTTPException(503, ERASE_UNAVAILABLE)
+    path = AGENT_CONVERSATIONS_PATH.format(user_id=user_id)
+    headers = {service_auth.HEADER: service_auth.sign(secret, "DELETE", path, str(user_id))}
+    try:
+        async with httpx.AsyncClient(base_url=settings.AGENTIC_INTERNAL_URL,
+                                     timeout=AGENT_PURGE_TIMEOUT_SECONDS) as client:
+            response = await client.delete(path, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("agent_conversation_purge_failed error=%s", type(exc).__name__)
+        raise HTTPException(503, ERASE_UNAVAILABLE) from None
 
 
 async def erase_user(session, user_id) -> dict:

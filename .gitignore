@@ -139,7 +139,8 @@ pids/
 design/
 
 # Local documentation drafts at every directory level (not versioned).
-docs/
+docs/*
+!docs/DATA_FLOW.md
 
 # Evaluation run outputs.
 eval_results/

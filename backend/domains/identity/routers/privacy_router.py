@@ -8,7 +8,11 @@ from pydantic import BaseModel, Field
 from api.dependencies import UserContextDep
 from core.security import PKCE_COOKIE_NAME, REFRESH_TOKEN_COOKIE_NAME, STATE_COOKIE_NAME
 from core.transaction import transaction
-from domains.identity.services.privacy_service import erase_user, export_user_data
+from domains.identity.services.privacy_service import (
+    erase_user,
+    export_user_data,
+    purge_agent_conversations,
+)
 
 router = APIRouter(prefix="/profile", tags=["privacy"])
 
@@ -25,11 +29,14 @@ async def export_data(service: UserContextDep):
 
 
 @router.post("/erase", summary="Xoá vĩnh viễn tài khoản và dữ liệu",
-             description="Xoá thật (không phải vô hiệu hoá). Hội thoại với trợ lý cần xoá riêng qua DELETE /api/v1/chat/me.")
+             description="Xoá thật (không phải vô hiệu hoá), gồm cả hội thoại với trợ lý. Service agent không xoá được "
+                         "hội thoại thì trả 503 và không xoá gì.")
 @transaction
 async def erase_account(payload: EraseRequest, service: UserContextDep):
     if payload.confirm_email.strip().lower() != str(service.user.email).lower():
         raise HTTPException(422, "Email xác nhận không khớp với tài khoản")
+    # Hội thoại ở service agent bị xoá trước; agent lỗi thì dừng ở đây (503), backend chưa xoá gì.
+    await purge_agent_conversations(service.user_id)
     receipt = await erase_user(service.session, service.user_id)
     response = JSONResponse(receipt)
     for cookie in (REFRESH_TOKEN_COOKIE_NAME, STATE_COOKIE_NAME, PKCE_COOKIE_NAME):

@@ -269,12 +269,8 @@ export function useAuth() {
     URL.revokeObjectURL(url)
   }
 
-  /** Xoá vĩnh viễn cuộc trò chuyện (agent) rồi đến tài khoản (backend). */
+  /** Xoá vĩnh viễn tài khoản; backend xoá cuộc trò chuyện ở service agent trước, lỗi thì không xoá gì. */
   async function eraseAccount(confirmEmail: string): Promise<void> {
-    const conversations = await authFetch('/api/v1/chat/me', { method: 'DELETE' })
-    if (!conversations.ok) {
-      throw new Error('Chưa xoá được lịch sử trò chuyện nên tài khoản chưa bị xoá. Vui lòng thử lại.')
-    }
     const resp = await authFetch('/api/profile/erase', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
