@@ -87,6 +87,33 @@ def test_kg_role_reads_the_outbox_only(roles):
         denied(conn, "SELECT count(*) FROM agent_actions")
 
 
+async def test_consent_purge_runs_on_the_agent_role(roles, make_user):
+    """Vòng dọn dữ liệu khi thu hồi consent (services/consent_purge.py) khoá sự kiện bằng FOR UPDATE ... SKIP LOCKED:
+    role agent cần quyền khoá dòng trên domain_events, nếu không vòng này lỗi InsufficientPrivilege mỗi 10 giây."""
+    from types import SimpleNamespace
+
+    from psycopg.rows import dict_row
+    from psycopg_pool import AsyncConnectionPool
+
+    from agentic.services import consent_purge
+
+    user_id, _ = await make_user()
+    with psycopg.connect(get_postgres_connection_string(), autocommit=True) as conn:
+        conn.execute("INSERT INTO domain_events (topic, user_id, payload) VALUES ('consent.changed', %s, %s)",
+                     (user_id, '{"purpose": "assistant", "granted": true}'))
+    dsn = make_conninfo(get_postgres_connection_string(), user=AGENT, password=PASSWORD)
+    async with AsyncConnectionPool(dsn, min_size=1, max_size=2, open=False,
+                                   kwargs={"autocommit": True, "row_factory": dict_row}) as pool:
+        await pool.open(wait=True)
+        handled = await consent_purge.purge_once(SimpleNamespace(store=SimpleNamespace(pool=pool)))
+    assert handled >= 1
+    with psycopg.connect(get_postgres_connection_string(), autocommit=True) as conn:
+        delivered = conn.execute(
+            "SELECT count(*) FROM domain_event_deliveries d JOIN domain_events e ON e.id = d.event_id "
+            "WHERE e.user_id = %s AND d.consumer = %s", (user_id, consent_purge.CONSUMER)).fetchone()[0]
+    assert delivered == 1
+
+
 async def test_agent_runtime_runs_on_the_agent_role(roles):
     """Một lượt chat có thẻ xác nhận chạy trọn bằng role agent: Store, checkpoint LangGraph, nhật ký thực thi."""
     from uuid import uuid4

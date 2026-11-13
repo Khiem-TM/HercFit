@@ -10,7 +10,8 @@
 -- Danh sách bảng lấy từ code (agentic/migrations/*.sql, services/memory/store.py, services/consent_purge.py,
 -- knowledge_graph/worker.py, knowledge_graph/context/templates.py, saver của LangGraph):
 --   hercfit_agent: đọc/ghi agent_*, checkpoints, checkpoint_blobs, checkpoint_writes, checkpoint_migrations,
---                  kg_outbox, kg_query_templates, domain_event_deliveries; chỉ đọc domain_events.
+--                  kg_outbox, kg_query_templates, domain_event_deliveries; chỉ đọc domain_events (cộng UPDATE trên
+--                  cột id: consent_purge khoá dòng bằng FOR UPDATE ... SKIP LOCKED, PostgreSQL đòi quyền UPDATE).
 --   hercfit_kg:    đọc/ghi kg_outbox; chỉ đọc kg_source_versions.
 
 \if :{?agent_role}
@@ -72,6 +73,11 @@ BEGIN
             EXECUTE format('GRANT SELECT ON TABLE public.%I TO %I', item.relname, agent);
         END IF;
     END LOOP;
+    -- consent_purge đọc sự kiện bằng FOR UPDATE OF e SKIP LOCKED: khoá dòng cần quyền UPDATE trên ít nhất một cột.
+    -- Chỉ cấp trên id, cột ít rủi ro nhất (đổi topic, payload hay occurred_at có thể làm sự kiện thu hồi bị bỏ qua).
+    IF to_regclass('public.domain_events') IS NOT NULL THEN
+        EXECUTE format('GRANT UPDATE (id) ON TABLE public.domain_events TO %I', agent);
+    END IF;
 
     -- kg-worker (database backend): hàng đợi chiếu và phiên bản nguồn.
     FOR item IN SELECT unnest(kg_tables) AS relname LOOP
