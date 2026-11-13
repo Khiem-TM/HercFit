@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
         except ValueError:
             pass  # Cấu hình RAG tuỳ chọn không thể tắt CRUD/chat.
     cleanup_task = None
-    if all((settings.CLOUDINARY_CLOUD_NAME, settings.CLOUDINARY_API_KEY, settings.CLOUDINARY_API_SECRET)):
+    if settings.IMAGE_CLEANUP_LOOP and settings.cloudinary_configured:
         from domains.media.services.image_cleanup import cleanup_loop
         cleanup_task = asyncio.create_task(cleanup_loop())
     health_task = None

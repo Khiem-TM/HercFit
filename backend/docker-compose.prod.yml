@@ -1,0 +1,206 @@
+# Bản triển khai HercFit (L5.3): MODE=prod, không --reload, không mount mã nguồn, mọi bí mật lấy từ biến môi trường
+# (mật khẩu không có giá trị mặc định: thiếu thì Compose dừng với thông báo lỗi).
+#
+# Chạy từ gốc repo với một file biến riêng của môi trường triển khai (không commit), ví dụ deploy.env:
+#   docker compose -p hercfit-prod -f backend/docker-compose.prod.yml --env-file deploy.env up -d --build
+# Biến bắt buộc trong deploy.env: POSTGRES_PASSWORD, AGENT_DB_PASSWORD, KG_DB_PASSWORD, NEO4J_PASSWORD, JWT_SECRET_KEY,
+# AGENT_SERVICE_SECRET, HERCFIT_DOMAIN. Cấu hình ứng dụng còn lại (FPT_API_KEY, TAVILY_API_KEY, OAuth Google,
+# TOKEN_ENCRYPTION_KEY, Cloudinary, Langfuse...) đặt trong backend/.env.prod (git-ignored, không vào image).
+#
+# Thứ tự khởi động: postgres → migrate (alembic + migration agent, bằng role chủ sở hữu) → db-roles (role tối thiểu,
+# backend/scripts/db_roles.sql) → backend, worker, agentic, kg-worker → web.
+name: hercfit-prod
+
+x-app-env: &app-env
+  MODE: prod
+  GIT_COMMIT_SHA: ${GIT_COMMIT_SHA:-}
+  DATABASE_TYPE: postgres
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_USER: ${POSTGRES_USER:-hercfit}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+  POSTGRES_DB: ${POSTGRES_DB:-hercfit_db}
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+  AGENT_SERVICE_SECRET: ${AGENT_SERVICE_SECRET:?AGENT_SERVICE_SECRET is required}
+  AGENT_DELEGATION_REQUIRED: "true"
+  FRONTEND_URL: https://${HERCFIT_DOMAIN:?HERCFIT_DOMAIN is required}
+  CORS_ORIGINS: '["https://${HERCFIT_DOMAIN:?HERCFIT_DOMAIN is required}"]'
+  AGENTIC_INTERNAL_URL: http://agentic:8081
+
+x-app-files: &app-files
+  - path: .env.prod
+    required: false
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hercfit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-hercfit_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hercfit} -d ${POSTGRES_DB:-hercfit_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Chạy một lần rồi thoát: schema backend (Alembic) và schema agent, bằng role chủ sở hữu.
+  migrate:
+    build:
+      context: .
+      target: backend
+    command: ["sh", "-c", "alembic upgrade head && python -m agentic.scripts.migrate"]
+    env_file: *app-files
+    environment:
+      <<: *app-env
+      AGENT_DATABASE_URL: postgresql://${POSTGRES_USER:-hercfit}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-hercfit_db}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    healthcheck:
+      disable: true
+
+  # Chạy một lần rồi thoát: role tối thiểu cho agent và kg-worker (cần bảng do migrate tạo).
+  db-roles:
+    image: pgvector/pgvector:pg16
+    command: ["sh", "-c", "psql -v ON_ERROR_STOP=1 -v agent_password=\"$$AGENT_DB_PASSWORD\" -v kg_password=\"$$KG_DB_PASSWORD\" -f /scripts/db_roles.sql"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-hercfit}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      PGDATABASE: ${POSTGRES_DB:-hercfit_db}
+      AGENT_DB_PASSWORD: ${AGENT_DB_PASSWORD:?AGENT_DB_PASSWORD is required}
+      KG_DB_PASSWORD: ${KG_DB_PASSWORD:?KG_DB_PASSWORD is required}
+    volumes:
+      - ./scripts/db_roles.sql:/scripts/db_roles.sql:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      target: backend
+    restart: unless-stopped
+    env_file: *app-files
+    environment:
+      <<: *app-env
+      # Vòng nền chạy trong service worker, không chạy trong API.
+      GOOGLE_HEALTH_SYNC_LOOP: "false"
+      DAILY_BRIEFING_LOOP: "false"
+      IMAGE_CLEANUP_LOOP: "false"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      target: backend
+    command: ["python", "worker.py"]
+    restart: unless-stopped
+    env_file: *app-files
+    environment:
+      <<: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      disable: true
+
+  agentic:
+    build:
+      context: .
+      target: agentic
+    restart: unless-stopped
+    env_file: *app-files
+    environment:
+      MODE: prod
+      GIT_COMMIT_SHA: ${GIT_COMMIT_SHA:-}
+      BACKEND_BASE_URL: http://backend:8080
+      AGENT_SERVICE_SECRET: ${AGENT_SERVICE_SECRET:?AGENT_SERVICE_SECRET is required}
+      AGENT_DATABASE_URL: postgresql://${AGENT_DB_USER:-hercfit_agent}:${AGENT_DB_PASSWORD:?AGENT_DB_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-hercfit_db}
+      CORS_ORIGINS: '["https://${HERCFIT_DOMAIN:?HERCFIT_DOMAIN is required}"]'
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
+      # Vòng nền của agent chỉ bật ở đúng một nơi: service này (một bản chạy).
+      AGENT_BACKGROUND_TASKS: "true"
+    depends_on:
+      db-roles:
+        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
+      neo4j:
+        condition: service_started
+
+  kg-worker:
+    build:
+      context: .
+      target: agentic
+    command: ["python", "-m", "agentic.knowledge_graph.worker", "run"]
+    restart: unless-stopped
+    env_file: *app-files
+    environment:
+      MODE: prod
+      AGENT_BACKGROUND_TASKS: "false"
+      AGENT_DATABASE_URL: postgresql://${AGENT_DB_USER:-hercfit_agent}:${AGENT_DB_PASSWORD:?AGENT_DB_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-hercfit_db}
+      KG_BACKEND_DATABASE_URL: postgresql://${KG_DB_USER:-hercfit_kg}:${KG_DB_PASSWORD:?KG_DB_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-hercfit_db}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
+    depends_on:
+      db-roles:
+        condition: service_completed_successfully
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
+  neo4j:
+    image: neo4j:2026.10.0
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
+      KG_HEALTH_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: [CMD-SHELL, 'cypher-shell -u neo4j -p "$$KG_HEALTH_PASSWORD" "RETURN 1" >/dev/null 2>&1']
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  # Caddy phục vụ frontend đã build và chuyển /api tới backend, /api/v1 tới agentic (frontend/Caddyfile).
+  web:
+    build:
+      context: ../frontend
+    restart: unless-stopped
+    environment:
+      HERCFIT_DOMAIN: ${HERCFIT_DOMAIN:?HERCFIT_DOMAIN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      agentic:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  caddy_data:
+  caddy_config:

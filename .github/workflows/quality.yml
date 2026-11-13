@@ -46,7 +46,7 @@ jobs:
         # Chỉ đặt ở bước này: biến MODE toàn workflow sẽ đè biến Make $(MODE) (chế độ eval) của tests/Makefile.
         env:
           MODE: dev
-        run: python -c "import agentic.core.app.main, app; print('imports ok')"
+        run: python -c "import agentic.core.app.main, app, worker; print('imports ok')"
       - name: Unit tests
         working-directory: tests
         run: python -m pytest unit

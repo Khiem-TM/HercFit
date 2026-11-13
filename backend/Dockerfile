@@ -33,7 +33,8 @@ USER app
 # =============================================================================
 # Target: backend (FastAPI CRUD & OAuth). Production defaults: no reload,
 # proxy headers so rate limits see the real client IP behind Caddy.
-# Migrations run separately (`alembic upgrade head`, see docker-compose.prod.yml).
+# Migrations run separately: the one-shot `migrate` service in docker-compose.prod.yml
+# (`alembic upgrade head`, then `python -m agentic.scripts.migrate`).
 # =============================================================================
 FROM base AS backend
 ARG GIT_COMMIT_SHA=

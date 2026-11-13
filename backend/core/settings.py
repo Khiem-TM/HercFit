@@ -99,6 +99,8 @@ class Settings(BaseSettings):
         pattern=r"^(https://[A-Za-z0-9.-]+(:[0-9]+)?|http://(localhost|127\.0\.0\.1)(:[0-9]+)?)/?$")
     # Số request và độ trễ theo route (api_route_usage), ghi xuống mỗi phút một lần.
     API_ROUTE_METRICS: bool = True
+    # Vòng dọn ảnh Cloudinary chạy trong API (cần cấu hình Cloudinary). Tắt khi worker.py chạy vòng này.
+    IMAGE_CLEANUP_LOOP: bool = True
     # Danh tính uỷ quyền cho service agent: nó chứng minh danh tính bằng HMAC trên mỗi
     # request uỷ quyền; sau đó backend cấp một token uỷ quyền ngắn hạn.
     AGENT_SERVICE_SECRET: SecretStr | None = None
@@ -173,6 +175,10 @@ class Settings(BaseSettings):
     def google_health_configured(self) -> bool:
         return bool(self.GOOGLE_HEALTH_ENABLED and self.GOOGLE_OAUTH_CLIENT_ID
                     and self.GOOGLE_OAUTH_CLIENT_SECRET and self.TOKEN_ENCRYPTION_KEY)
+
+    @property
+    def cloudinary_configured(self) -> bool:
+        return all((self.CLOUDINARY_CLOUD_NAME, self.CLOUDINARY_API_KEY, self.CLOUDINARY_API_SECRET))
 
     @computed_field  # type: ignore[prop-decorator]
     @property

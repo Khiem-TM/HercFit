@@ -17,7 +17,7 @@ check: lint import unit integration eval-agent eval-safety cypher-safety   ## c�
 lint:
 	cd ../backend && uvx ruff@0.17.4 check . --config agentic/ruff.toml
 import:
-	cd ../backend && $(SAFE_ENV) $(PY) -c "import agentic.core.app.main, app"
+	cd ../backend && $(SAFE_ENV) $(PY) -c "import agentic.core.app.main, app, worker"
 unit:
 	$(PY) -m pytest unit
 integration:   ## cần Postgres dev; dùng database riêng hercfit_test (đổi bằng HERCFIT_TEST_DB, phải kết thúc _test)

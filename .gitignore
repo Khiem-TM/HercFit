@@ -150,3 +150,6 @@ traces/
 # tokenizer cache are not.
 backend/agentic/embedding/ingestion/data/
 thesis/
+
+# Bản sao lưu database (backend/scripts/backup.sh) chứa dữ liệu người dùng.
+backups/
