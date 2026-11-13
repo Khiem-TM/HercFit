@@ -1,0 +1,306 @@
+{
+ "scenarios": {
+  "baseline_normal": {
+   "description": "Không có sự kiện: đo tỉ lệ báo động nhầm của heuristic",
+   "days": 55,
+   "states": {
+    "ready": 48,
+    "ease_off": 6,
+    "steady": 1
+   },
+   "confidence": {
+    "high": 55
+   },
+   "false_alarm_rate": 0.109,
+   "strain_detection": null,
+   "review_detection": null,
+   "review_as_needs_review": null,
+   "missing_as_insufficient": null,
+   "normal_insufficient": 0.0,
+   "reason_codes": {
+    "SLEEP_ON_TARGET": 53,
+    "HRV_ABOVE": 18,
+    "RHR_BELOW": 9,
+    "HRV_LOW": 5,
+    "SLEEP_SHORT": 1
+   },
+   "notifications": {
+    "total": 0,
+    "per_week": 0.0,
+    "per_week_by_rule": {},
+    "per_week_by_severity": {}
+   }
+  },
+  "overreaching": {
+   "description": "Tải tăng ×3 từ ngày 60; RHR +6, HRV −22% ngày 62–66",
+   "days": 55,
+   "states": {
+    "ready": 43,
+    "steady": 3,
+    "ease_off": 4,
+    "recover": 4,
+    "needs_review": 1
+   },
+   "confidence": {
+    "high": 55
+   },
+   "false_alarm_rate": 0.08,
+   "strain_detection": 1.0,
+   "review_detection": null,
+   "review_as_needs_review": null,
+   "missing_as_insufficient": null,
+   "normal_insufficient": 0.0,
+   "reason_codes": {
+    "SLEEP_ON_TARGET": 51,
+    "HRV_ABOVE": 19,
+    "LOAD_HIGH": 8,
+    "RHR_BELOW": 7,
+    "RHR_ELEVATED": 4,
+    "HRV_LOW": 4,
+    "MULTI_DEVIATION": 1
+   },
+   "notifications": {
+    "total": 0,
+    "per_week": 0.0,
+    "per_week_by_rule": {},
+    "per_week_by_severity": {}
+   }
+  },
+  "illness_onset": {
+   "description": "Ngày 70–72: RHR +9, HRV −35%, nhịp thở +2, nhiệt độ da +1,3 °C",
+   "days": 55,
+   "states": {
+    "ready": 43,
+    "ease_off": 6,
+    "steady": 3,
+    "needs_review": 3
+   },
+   "confidence": {
+    "high": 55
+   },
+   "false_alarm_rate": 0.115,
+   "strain_detection": null,
+   "review_detection": 1.0,
+   "review_as_needs_review": 1.0,
+   "missing_as_insufficient": null,
+   "normal_insufficient": 0.0,
+   "reason_codes": {
+    "SLEEP_ON_TARGET": 49,
+    "HRV_ABOVE": 17,
+    "RHR_BELOW": 12,
+    "HRV_LOW": 6,
+    "LOAD_HIGH": 4,
+    "MULTI_DEVIATION": 3,
+    "RHR_ELEVATED": 3,
+    "SLEEP_SHORT": 1
+   },
+   "notifications": {
+    "total": 0,
+    "per_week": 0.0,
+    "per_week_by_rule": {},
+    "per_week_by_severity": {}
+   }
+  },
+  "poor_sleep_week": {
+   "description": "Ngày 75–81: ngủ 5 giờ, đi ngủ 01:30",
+   "days": 55,
+   "states": {
+    "ready": 43,
+    "ease_off": 6,
+    "recover": 6
+   },
+   "confidence": {
+    "high": 55
+   },
+   "false_alarm_rate": 0.104,
+   "strain_detection": 1.0,
+   "review_detection": null,
+   "review_as_needs_review": null,
+   "missing_as_insufficient": null,
+   "normal_insufficient": 0.0,
+   "reason_codes": {
+    "SLEEP_ON_TARGET": 41,
+    "HRV_ABOVE": 17,
+    "RHR_BELOW": 14,
+    "SLEEP_DEBT": 9,
+    "SLEEP_SHORT": 8,
+    "SLEEP_IRREGULAR": 7,
+    "HRV_LOW": 1
+   },
+   "notifications": {
+    "total": 2,
+    "per_week": 0.25,
+    "per_week_by_rule": {
+     "sleep_short": 0.25
+    },
+    "per_week_by_severity": {
+     "info": 0.25
+    }
+   }
+  },
+  "irregular_sleep": {
+   "description": "Từ ngày 55: giờ ngủ xen kẽ 21:30 / 01:30, thời lượng bình thường",
+   "days": 55,
+   "states": {
+    "ready": 43,
+    "steady": 5,
+    "ease_off": 7
+   },
+   "confidence": {
+    "high": 55
+   },
+   "false_alarm_rate": 0.127,
+   "strain_detection": null,
+   "review_detection": null,
+   "review_as_needs_review": null,
+   "missing_as_insufficient": null,
+   "normal_insufficient": 0.0,
+   "reason_codes": {
+    "SLEEP_ON_TARGET": 46,
+    "SLEEP_IRREGULAR": 34,
+    "HRV_ABOVE": 15,
+    "RHR_BELOW": 9,
+    "HRV_LOW": 2,
+    "SLEEP_SHORT": 2,
+    "RHR_ELEVATED": 2,
+    "LOAD_HIGH": 1
+   },
+   "notifications": {
+    "total": 0,
+    "per_week": 0.0,
+    "per_week_by_rule": {},
+    "per_week_by_severity": {}
+   }
+  },
+  "improving": {
+   "description": "Từ ngày 55: HRV tăng dần 18%, RHR giảm 2–3 bpm",
+   "days": 55,
+   "states": {
+    "ease_off": 6,
+    "ready": 47,
+    "steady": 2
+   },
+   "confidence": {
+    "high": 55
+   },
+   "false_alarm_rate": 0.109,
+   "strain_detection": null,
+   "review_detection": null,
+   "review_as_needs_review": null,
+   "missing_as_insufficient": null,
+   "normal_insufficient": 0.0,
+   "reason_codes": {
+    "SLEEP_ON_TARGET": 48,
+    "HRV_ABOVE": 30,
+    "RHR_BELOW": 14,
+    "HRV_LOW": 5,
+    "SLEEP_SHORT": 1
+   },
+   "notifications": {
+    "total": 0,
+    "per_week": 0.0,
+    "per_week_by_rule": {},
+    "per_week_by_severity": {}
+   }
+  },
+  "missing_data": {
+   "description": "Ngày 50–55: không đeo thiết bị (không có giấc ngủ, HRV, RHR)",
+   "days": 55,
+   "states": {
+    "ready": 39,
+    "steady": 1,
+    "insufficient_data": 6,
+    "ease_off": 7,
+    "recover": 2
+   },
+   "confidence": {
+    "high": 49,
+    "low": 6
+   },
+   "false_alarm_rate": 0.184,
+   "strain_detection": null,
+   "review_detection": null,
+   "review_as_needs_review": null,
+   "missing_as_insufficient": 1.0,
+   "normal_insufficient": 0.0,
+   "reason_codes": {
+    "SLEEP_ON_TARGET": 46,
+    "HRV_ABOVE": 15,
+    "RHR_BELOW": 12,
+    "NO_DATA": 6,
+    "HRV_LOW": 6,
+    "LOAD_HIGH": 4,
+    "SLEEP_SHORT": 1
+   },
+   "notifications": {
+    "total": 0,
+    "per_week": 0.0,
+    "per_week_by_rule": {},
+    "per_week_by_severity": {}
+   }
+  },
+  "manual_sleep_only": {
+   "description": "Không có đồng hồ đo HRV/RHR; người dùng ghi tay giờ ngủ mỗi đêm",
+   "days": 55,
+   "states": {
+    "ready": 50,
+    "steady": 5
+   },
+   "confidence": {
+    "low": 55
+   },
+   "false_alarm_rate": 0.0,
+   "strain_detection": null,
+   "review_detection": null,
+   "review_as_needs_review": null,
+   "missing_as_insufficient": null,
+   "normal_insufficient": 0.0,
+   "reason_codes": {
+    "SLEEP_MANUAL": 55,
+    "NO_DATA": 55,
+    "SLEEP_ON_TARGET": 50
+   },
+   "notifications": {
+    "total": 0,
+    "per_week": 0.0,
+    "per_week_by_rule": {},
+    "per_week_by_severity": {}
+   }
+  },
+  "new_user": {
+   "description": "Chỉ có 10 ngày dữ liệu cuối",
+   "days": 55,
+   "states": {
+    "insufficient_data": 52,
+    "ready": 3
+   },
+   "confidence": {
+    "low": 55
+   },
+   "false_alarm_rate": 0.0,
+   "strain_detection": null,
+   "review_detection": null,
+   "review_as_needs_review": null,
+   "missing_as_insufficient": 1.0,
+   "normal_insufficient": 0.0,
+   "reason_codes": {
+    "NO_DATA": 45,
+    "SLEEP_ON_TARGET": 9,
+    "SHORT_BASELINE": 9,
+    "HRV_ABOVE": 2,
+    "RHR_BELOW": 1
+   },
+   "notifications": {
+    "total": 1,
+    "per_week": 0.13,
+    "per_week_by_rule": {
+     "activity_low": 0.13
+    },
+    "per_week_by_severity": {
+     "info": 0.13
+    }
+   }
+  }
+ },
+ "real": null
+}

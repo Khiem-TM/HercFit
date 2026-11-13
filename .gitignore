@@ -141,6 +141,7 @@ design/
 # Local documentation drafts at every directory level (not versioned).
 docs/*
 !docs/DATA_FLOW.md
+!docs/evaluation/
 
 # Evaluation run outputs.
 eval_results/
