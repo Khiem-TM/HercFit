@@ -140,7 +140,7 @@ design/
 
 # Local documentation drafts at every directory level (not versioned).
 # Ghi chú làm việc nội bộ (bản audit, roadmap, báo cáo từng lượt); tài liệu dự án trong docs/ được theo dõi.
-docs/reviews/
+docs/
 
 # Evaluation run outputs.
 eval_results/

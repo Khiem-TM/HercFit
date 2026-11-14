@@ -27,6 +27,7 @@ const {
   messages,
   isStreaming,
   isConfirming,
+  isLoadingHistory,
   activeNodeLabel,
   pendingAction,
   hasMessages,
@@ -208,6 +209,7 @@ onUnmounted(() => {
             <ChatComposer
               ref="composer"
               :mode="chatMode"
+              :disabled="isConfirming || isLoadingHistory"
               :is-streaming="isStreaming"
               @send="sendMessage"
               @stop="stopStreaming"
@@ -235,6 +237,7 @@ onUnmounted(() => {
             <ChatComposer
               ref="composer"
               :mode="chatMode"
+              :disabled="isConfirming || isLoadingHistory"
               :is-streaming="isStreaming"
               @send="sendMessage"
               @stop="stopStreaming"

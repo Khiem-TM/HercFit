@@ -12,6 +12,8 @@ from psycopg.types.json import Jsonb
 
 from agentic.observability import durable_context
 from agentic.observability.persistence import set_psycopg_context
+from agentic.services.memory.context_store import ContextStore
+from agentic.services.memory.history_store import HistoryStore
 from agentic.services.memory.turns import turn_record
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE
 
@@ -36,7 +38,7 @@ class SessionBusy(HTTPException):
         )
 
 
-class Store:
+class Store(HistoryStore, ContextStore):
     def __init__(self, pool, lock_pool=None, lease_seconds=180, wait_seconds=30):
         self.pool = pool
         self.lock_pool = lock_pool or pool  # giữ cho các bên gọi vẫn truyền nó
@@ -157,9 +159,12 @@ class Store:
     async def update_session_meta(self, session_id, *, title, last_message, message_count, status):
         async with self.pool.connection() as conn:
             await conn.execute(
-                """UPDATE agent_sessions SET title=COALESCE(title, %s), last_message=%s,
-                last_interaction_at=now(), message_count=%s, last_status=%s WHERE session_id=%s""",
-                (title, last_message, message_count, status, session_id),
+                """UPDATE agent_sessions SET title=COALESCE(title, %s),
+                last_message=COALESCE((SELECT left(content #>> '{}',90) FROM agent_transcript_messages
+                    WHERE session_id=%s ORDER BY seq DESC LIMIT 1),%s),
+                last_interaction_at=now(), message_count=(SELECT count(*) FROM agent_transcript_messages WHERE session_id=%s),
+                last_status=%s WHERE session_id=%s""",
+                (title, session_id, last_message, session_id, status, session_id),
             )
 
     async def consume_turn(self, user_id, *, turn_limit, token_limit, day=None):
@@ -210,7 +215,7 @@ class Store:
                     """SELECT t.thread_id FROM agent_threads t
                 JOIN agent_sessions s USING(session_id)
                 WHERE t.last_run_at < now() - make_interval(days => %s) AND t.thread_id IS DISTINCT FROM s.thread_id
-                  AND NOT t.needs_reconcile
+                  AND NOT t.needs_reconcile AND s.transcript_migrated AND NOT s.memory_cleanup_pending
                 ORDER BY t.last_run_at LIMIT %s""",
                     (older_than_days, limit),
                 )
@@ -751,7 +756,7 @@ class Store:
         async with self.pool.connection() as conn:
             rows = await (
                 await conn.execute(
-                    "SELECT thread_id FROM agent_threads WHERE session_id=%s", (session_id,)
+                    "SELECT thread_id FROM agent_threads WHERE session_id=%s ORDER BY last_run_at,thread_id", (session_id,)
                 )
             ).fetchall()
             return [r["thread_id"] for r in rows]

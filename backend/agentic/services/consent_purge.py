@@ -4,15 +4,10 @@ Backend phát `consent.changed` trong cùng transaction với quyết định
 (domain_events). Consumer này, chạy bên trong service agent, xử lý mỗi
 lần thu hồi một lần (domain_event_deliveries):
 
-* checkpoint hiện tại của mỗi cuộc trò chuyện bỏ output của tool sức khoẻ và
-  thẻ ngữ cảnh, để không gì được mang sang lượt sau;
-* các checkpoint theo lượt đã bị thay thế (output tool thô của các lượt cũ) bị xoá;
-* bộ nhớ phiên Redis (tóm tắt, các lượt được nhớ lại) bị quên; nó được
-  dựng lại từ các checkpoint còn lại;
-* các episode hội thoại về sức khoẻ (node `Run`/`Execution` trong graph: miền
-  health, một tool sức khoẻ, hoặc tham chiếu tới bản ghi thiết bị) bị đánh tombstone trong
-  graph và dòng nhật ký của chúng bị xoá, để dựng lại graph không khôi phục được
-  chúng. Episode không bao giờ chứa giá trị đo, nhưng có tiết lộ điều đã được hỏi.
+* transcript PostgreSQL thuộc người dùng, không bị xoá bởi thu hồi consent;
+* checkpoint và toàn bộ summary/context bị xoá, generation cũ bị vô hiệu;
+* lệnh đã duyệt chưa rõ kết quả chỉ giữ payload bất biến và khoá idempotency;
+* episode sức khoẻ được tombstone để graph không dựng lại dữ kiện đã thu hồi.
 
 Dữ kiện thiết bị trong graph đã được trigger của backend đánh tombstone. Bản
 ghi chat hiển thị vẫn được giữ: đó là cuộc trò chuyện của người dùng, họ có thể tự xoá.
@@ -46,38 +41,20 @@ def is_health_episode(data: dict) -> bool:
 
 
 async def purge_user_health(runtime, user_id: str) -> dict:
-    sessions = threads_deleted = rewritten = 0
+    sessions = threads_deleted = 0
     for session_id in await runtime.store.user_session_ids(user_id):
         sessions += 1
         async with runtime.store.session(session_id, user_id, create=False) as session:
-            current = session.get("thread_id")
-            for thread in await runtime.store.threads(session_id):
-                if thread != current:
-                    await runtime.saver.adelete_thread(thread)
-                    await runtime.store.forget_thread(thread)
-                    threads_deleted += 1
-            if current:
-                snapshot = await runtime.state(current)
-                values = (snapshot.values if snapshot else None) or {}
-                outputs = values.get("tool_outputs") or []
-                kept = [output for output in outputs if output.get("tool") not in HEALTH_TOOLS]
-                # Xác nhận đang chờ giữ nguyên thread của nó; output của nó không phải lần đọc sức khoẻ.
-                if (len(kept) != len(outputs) or values.get("user_context")) and not values.get(
-                    "pending_action"
-                ):
-                    await runtime.graph.aupdate_state(
-                        runtime.config(current),
-                        {"tool_outputs": kept, "user_context": None},
-                        as_node="__start__",
-                    )
-                    rewritten += 1
-        if runtime.memory:
-            await runtime.memory.forget(session_id)
+            before = set(await runtime.store.threads(session_id))
+            await runtime.prepare_session(session, user_id)
+            threads_deleted += len(before - set(await runtime.store.threads(session_id)))
+            if runtime.memory and session.get("memory_cache_cleanup_pending"):
+                raise RuntimeError("Revoked cache cleanup is pending; retry delivery")
     episodes = await runtime.store.forget_episodes(user_id, is_health_episode)
     return {
         "sessions": sessions,
         "threads_deleted": threads_deleted,
-        "checkpoints_rewritten": rewritten,
+        "checkpoints_rewritten": 0,
         "episodes_removed": sum(episodes.values()),
     }
 
@@ -91,7 +68,7 @@ async def purge_once(runtime, *, limit: int = 50) -> int:
                 await conn.execute(
                     """
                 SELECT e.id, e.user_id, e.payload FROM domain_events e
-                WHERE e.topic = 'consent.changed' AND e.occurred_at > now() - interval '7 days'
+                WHERE e.topic = 'consent.changed'
                   AND NOT EXISTS (SELECT 1 FROM domain_event_deliveries d WHERE d.consumer = %s AND d.event_id = e.id)
                 ORDER BY e.id LIMIT %s FOR UPDATE OF e SKIP LOCKED""",
                     (CONSUMER, limit),

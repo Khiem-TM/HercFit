@@ -5,8 +5,8 @@
 
 Mỗi lượt chat chạy trên một thread LangGraph riêng, nên checkpoint tăng theo từng
 lượt. Các thread đã bị thay thế cũ hơn cửa sổ lưu giữ bị xoá; thread hiện tại
-của phiên (cần cho lịch sử và xác nhận đang chờ) và các thread
-còn chờ đối soát luôn được giữ.
+của phiên (cần cho phục hồi thực thi/xác nhận) và các thread còn chờ đối soát
+luôn được giữ. Transcript có kho riêng; không prune phiên legacy chưa backfill.
 """
 
 import argparse

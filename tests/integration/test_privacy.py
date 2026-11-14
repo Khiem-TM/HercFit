@@ -23,11 +23,31 @@ from agentic.services.runtime import Runtime
 from core import idempotency, service_auth
 from core.database import get_db_session
 from core.settings import settings
+from core.security import create_delegated_token
 from domains.identity.services import privacy_service
 from evaluation.adapters.fixtures import EvalBackend, token_for
 from evaluation.adapters.graph_runtime import ScriptedModels, eval_settings
 
 SECRET = "privacy-test-service-secret-0001"
+
+
+async def test_delegated_principal_cannot_export_or_erase_owner_data(client, make_user):
+    user_id, headers = await make_user()
+    token, _ = create_delegated_token(user_id, consent_version=0)
+    delegated = {"Authorization": f"Bearer {token}"}
+    assert (await client.get("/api/profile/export", headers=delegated)).status_code == 403
+    assert (await client.post("/api/profile/erase", headers=delegated,
+                             json={"confirm_email": f"{user_id}@example.com"})).status_code == 403
+    assert await exists(user_id) == 1
+    assert (await client.get("/api/profile/export", headers=headers)).status_code == 200
+
+
+async def test_legacy_agent_header_cannot_export(client, make_user, monkeypatch):
+    _, headers = await make_user()
+    monkeypatch.setattr(settings, "AGENT_DELEGATION_REQUIRED", False)
+    from core.principal import AGENT_CLIENT_HEADER
+    response = await client.get("/api/profile/export", headers={**headers, AGENT_CLIENT_HEADER: "agent"})
+    assert response.status_code == 403
 
 
 def agent_app(runtime):

@@ -26,14 +26,12 @@ from agentic.tools.integrations.tavily import TavilyClient
 
 
 async def create_session_memory(settings: AgentSettings, models, stack: AsyncExitStack):
-    if settings.SESSION_MEMORY_MODE == "off":
-        return None
-
     from agentic.services.memory.session_memory import SessionMemory
 
     memory = SessionMemory.connect(settings, models)
     stack.push_async_callback(memory.close)
-    await memory.health()
+    if settings.SESSION_MEMORY_MODE != "off":
+        await memory.health()
     return memory
 
 

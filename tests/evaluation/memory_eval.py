@@ -53,7 +53,7 @@ async def run_case(runtime, backend, case, filler, mode):
     elapsed = (perf_counter() - started) * 1000
     values = (await runtime.state(response.run_id)).values
     telemetry = values.get('telemetry') or {}
-    memory = values.get('session_memory') or {}
+    memory = await runtime.store.model_context(session_id, str(EVAL_USER), values['session_generation']) or {}
     reply = normalize(response.reply)
     await runtime.clear(session_id, str(EVAL_USER))
     return {'mode': mode, 'id': case['id'], 'scope': case['scope'], 'status': response.status,

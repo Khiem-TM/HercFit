@@ -1,12 +1,17 @@
 """Export and erasure of the authenticated user's data (Luật Bảo vệ dữ liệu cá nhân 2025)."""
 from datetime import date
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from api.dependencies import UserContextDep
-from core.security import PKCE_COOKIE_NAME, REFRESH_TOKEN_COOKIE_NAME, STATE_COOKIE_NAME
+from core.security import (
+    PKCE_COOKIE_NAME,
+    REFRESH_TOKEN_COOKIE_NAME,
+    STATE_COOKIE_NAME,
+    require_user_principal,
+)
 from core.transaction import transaction
 from domains.identity.services.privacy_service import (
     erase_user,
@@ -14,7 +19,7 @@ from domains.identity.services.privacy_service import (
     purge_agent_conversations,
 )
 
-router = APIRouter(prefix="/profile", tags=["privacy"])
+router = APIRouter(prefix="/profile", tags=["privacy"], dependencies=[Depends(require_user_principal)])
 
 
 class EraseRequest(BaseModel):

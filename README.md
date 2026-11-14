@@ -79,6 +79,7 @@ Không gọi dịch vụ tốn phí. Test tích hợp cần Postgres đang chạ
 tạo nếu chưa có; tên database phải kết thúc bằng `_test`, nếu không test dừng ngay. Máy không có `backend/.env` thì đặt
 `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` qua biến môi trường.
 
-Frontend: `cd frontend && npm run type-check && npx vite build`.
+Frontend: `cd frontend && npm test && npm run build`. Test chat chạy bằng Node/Vite,
+điều khiển thứ tự các response HTTP giả; không cần trình duyệt hay dịch vụ ngoài.
 
 Eval và thí nghiệm: [`tests/evaluation/README.md`](tests/evaluation/README.md).

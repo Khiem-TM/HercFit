@@ -175,7 +175,7 @@ async def _client(session, user_id: UUID, data_type: str, http: httpx.AsyncClien
     try:
         token, granted = await tokens.access_token(connection.id, http)
     except ReauthRequired:
-        await tokens.mark_reauth(connection.id)
+        await tokens.mark_reauth(connection.id, generation=connection.sync_generation)
         raise HTTPException(409, {"code": "google_health_reauth",
                                   "message": "Kết nối Google Health đã hết hạn; hãy kết nối lại."}) from None
     if not can_write(data_type, granted):
@@ -219,6 +219,7 @@ async def _replace_local(session, current: HealthPoint, data_type: str, point: d
     parsed = kinds.parse(spec(data_type), point, zone)
     current.kind, current.start_at, current.end_at = parsed.kind, parsed.start_at, parsed.end_at
     current.local_date, current.value = parsed.local_date, parsed.value
+    current.revision += 1
     if not current.remote_name.startswith(LOCAL_PREFIX):
         current.remote_name = LOCAL_PREFIX + str(uuid7())
     await session.flush()
@@ -226,7 +227,7 @@ async def _replace_local(session, current: HealthPoint, data_type: str, point: d
 
 
 async def _owned(session, user_id: UUID, kind: str, point_id: UUID) -> HealthPoint:
-    point = await session.get(HealthPoint, point_id)
+    point = await session.get(HealthPoint, point_id, with_for_update=True, populate_existing=True)
     if point is None or point.user_id != user_id or point.data_type != DATA_TYPE[kind]:
         raise HTTPException(404, "Không tìm thấy bản ghi")
     if not point.written_by_hercfit:
@@ -257,7 +258,11 @@ async def update(session, user_id: UUID, kind: str, point_id: UUID, payload: dic
     point, derived = await build(session, user_id, kind, payload, exclude=current.id)
     zone = payload.get("timezone") or DEFAULT_TIMEZONE
     if current.remote_name.startswith(LOCAL_PREFIX) or not await _connected(session, user_id, data_type):
-        return {**view(await _replace_local(session, current, data_type, point, zone)), "derived": derived}
+        updated = await _replace_local(session, current, data_type, point, zone)
+        from integrations.google_health.directory import schedule_push
+
+        schedule_push(session, user_id)
+        return {**view(updated), "derived": derived}
     async with http_client() as http:
         client = await _client(session, user_id, data_type, http)
         try:

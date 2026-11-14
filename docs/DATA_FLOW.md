@@ -27,3 +27,6 @@ HercFit dùng sáu dịch vụ bên ngoài. Bảng dưới đây cho biết dữ
   trợ lý trước; nếu chưa xoá được, tài khoản giữ nguyên và bạn được báo thử lại. Sau đó tài khoản, nhật ký, số đo,
   kết nối Google Health bị xoá; ảnh được xếp hàng xoá trên Cloudinary.
 - **Dữ liệu thiết bị:** chỉ được trợ lý dùng khi bạn bật chia sẻ trong Cài đặt → Kết nối; tắt bất cứ lúc nào.
+- Export/erase và lịch sử chat chỉ dành cho phiên đăng nhập của chủ tài khoản; token uỷ quyền của trợ lý bị từ chối.
+- Transcript giữ độc lập với checkpoint và summary. Thu hồi consent xoá ngữ cảnh model, giữ cuộc trò chuyện để bạn
+  xem hoặc tự xoá. Chi tiết vòng đời, xử lý lỗi và migration: [Bộ nhớ hội thoại](MEMORY_LIFECYCLE.md).

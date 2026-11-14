@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from core.crypto import decrypt_secret, encrypt_secret
 from core.database import get_db_session
-from integrations.google_health import oauth
+from integrations.google_health import fencing, oauth
 from integrations.google_health.client import ReauthRequired
 from integrations.google_health.models import HealthConnection
 
@@ -41,7 +41,11 @@ async def access_token(connection_id: UUID, http: httpx.AsyncClient) -> tuple[st
             return decrypt_secret(connection.access_token_enc), list(connection.granted_scopes or [])
         if not connection.refresh_token_enc:
             raise ReauthRequired()
+        generation = connection.sync_generation
         data = await oauth.refresh_access_token(http, decrypt_secret(connection.refresh_token_enc))
+        await session.refresh(connection, with_for_update=True)
+        if connection.status != "ACTIVE" or connection.sync_generation != generation:
+            raise ReauthRequired()
         connection.access_token_enc = encrypt_secret(data["access_token"])
         connection.token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(data.get("expires_in", 3600)))
         if data.get("refresh_token"):
@@ -51,8 +55,10 @@ async def access_token(connection_id: UUID, http: httpx.AsyncClient) -> tuple[st
         return data["access_token"], list(connection.granted_scopes or [])
 
 
-async def mark_reauth(connection_id: UUID) -> None:
+async def mark_reauth(connection_id: UUID, *, generation: int | None = None) -> None:
     async with get_db_session() as session:
+        await fencing.check(session)
         await session.execute(text("""
             UPDATE health_connections SET status = 'NEEDS_REAUTH', last_error_code = 'reauth_required', updated_at = now()
-            WHERE id = :id AND status = 'ACTIVE'"""), {"id": connection_id})
+            WHERE id = :id AND status = 'ACTIVE' AND (:generation IS NULL OR sync_generation = :generation)"""),
+                              {"id": connection_id, "generation": generation})

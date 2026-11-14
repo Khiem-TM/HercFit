@@ -3,7 +3,7 @@
 from pathlib import Path
 
 MIGRATION_DIRECTORY = Path(__file__).parent
-EXPECTED_SCHEMA_VERSION = 9
+EXPECTED_SCHEMA_VERSION = 11
 
 
 async def migrate_pool(pool, saver):
