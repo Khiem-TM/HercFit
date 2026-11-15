@@ -137,6 +137,15 @@ class RouteDecision(BaseModel):
         text = re.sub(r"[\s\-]+", "_", str(value or "").strip()).upper()
         return INTENT_ALIASES.get(text, text)
 
+    @field_validator(
+        "missing_fields", "objectives", "research_queries", "meal_log", "tasks", mode="before"
+    )
+    @classmethod
+    def null_list_is_empty(cls, value):
+        """DeepSeek trên FPT trả `null` cho trường danh sách không dùng tới; cả quyết định từng bị từ chối vì một trường
+        như vậy và lượt chạy hỏng (lượt c4316cd1 ghi trứng, lượt ghi bóng rổ 15/11: "meal_log": null)."""
+        return [] if value is None else value
+
     next_agent: Literal["tool", "research", "orchestrator"]
     domain: Domain | None = None
     action: Literal["answer", "clarify", "tool", "research", "finish"]
