@@ -18,6 +18,7 @@ from sqlalchemy import (
     event,
     func,
     or_,
+    select,
     table,
     text,
 )
@@ -160,7 +161,8 @@ class FoodItem(CatalogMixin, BaseModel):
         if options.item_type is not None:
             query = query.where(cls.item_type == options.item_type)
         if not options.names:
-            return await cls._ranked(session, query, options.search, options.sort, options.offset, options.limit)
+            return await cls._with_aliases(session, await cls._ranked(
+                session, query, options.search, options.sort, options.offset, options.limit))
         # Nhiều tên trong một lần gọi (gợi ý bữa ăn): kết quả khớp tốt nhất của từng tên, theo thứ tự yêu cầu.
         per_name = max(1, options.limit // len(options.names))
         seen, results = set(), []
@@ -169,7 +171,20 @@ class FoodItem(CatalogMixin, BaseModel):
                 if food.id not in seen:
                     seen.add(food.id)
                     results.append(food)
-        return results
+        return await cls._with_aliases(session, results)
+
+    @classmethod
+    async def _with_aliases(cls, session: AsyncSession, foods: list[FoodItem]) -> list[FoodItem]:
+        """Gắn alias (dạng chuẩn hoá) vào kết quả để bên gọi khớp được "chả giò" với "Nem rán"; một truy vấn cho cả lô."""
+        if foods:
+            rows = await session.execute(select(_FOOD_ALIASES.c.entity_id, _FOOD_ALIASES.c.normalized_alias)
+                                         .where(_FOOD_ALIASES.c.entity_id.in_([food.id for food in foods])))
+            aliases: dict[PyUUID, list[str]] = {}
+            for entity_id, alias in rows:
+                aliases.setdefault(entity_id, []).append(alias)
+            for food in foods:
+                food.aliases = sorted(aliases.get(food.id, []))
+        return foods
 
     @classmethod
     async def _ranked(cls, session: AsyncSession, query: Select, search: str | None, sort: str,

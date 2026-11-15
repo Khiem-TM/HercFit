@@ -78,6 +78,8 @@ class FoodRead(FoodCreate, EntityRead):
     code: FoodCode
     source_type: FoodSourceType
     owner_user_id: UUID | None
+    aliases: list[str] = Field(default_factory=list, description="Normalized alternative names (lowercase, "
+                               "no diacritics); filled by list endpoints only.")
 
 
 class FoodUpdateRequest(FoodUpdate):
