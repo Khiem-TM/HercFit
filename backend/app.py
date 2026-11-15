@@ -1,5 +1,3 @@
-"""Ứng dụng CRUD của HercFit; không phụ thuộc nhà cung cấp Agent hay kho bộ nhớ."""
-
 import asyncio
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -18,8 +16,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from agentic.observability import observer
 from agentic.observability.logs import configure_from_settings
 from agentic.observability.middleware import ObservabilityMiddleware
-from api.v1 import api_router
-from api.v2 import api_v2_router
+from api.routes import api_router
 from core.database import close_crud_db_pool, get_async_engine
 from core.media_limits import ImageUploadLimit
 from core.route_metrics import RouteMetricsMiddleware
@@ -29,7 +26,7 @@ from domains.shared.services.common import request_validation_error
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings.jwt_secret_value  # Xác thực phải được cấu hình kể cả khi không có nhà cung cấp AI.
+    settings.jwt_secret_value
     configure_from_settings()  # Áp dụng LOG_LEVEL; log request_finished có mức riêng (REQUEST_LOG_LEVEL).
     get_async_engine()
     observer()
@@ -42,7 +39,7 @@ async def lifespan(app: FastAPI):
             if embedding_settings().RERANK_ENABLED:
                 app.state.rerank_client = RerankClient(embedding_settings())
         except ValueError:
-            pass  # Cấu hình RAG tuỳ chọn không thể tắt CRUD/chat.
+            pass
     cleanup_task = None
     if settings.IMAGE_CLEANUP_LOOP and settings.cloudinary_configured:
         from domains.media.services.image_cleanup import cleanup_loop
@@ -95,10 +92,7 @@ def create_app() -> FastAPI:
     )
     # Lớp ngoài cùng: số đếm và độ trễ theo route cho mọi request /api (core/route_metrics.py).
     app.add_middleware(RouteMetricsMiddleware)
-    app.include_router(api_v2_router, prefix="/api/v2")
-    app.include_router(api_router, prefix="/api")
-    from agentic.embedding.retrieval.router import router as embedding_router
-    app.include_router(embedding_router, prefix="/api")
+    app.include_router(api_router)
 
     @app.exception_handler(ValidationError)
     async def domain_validation(request: Request, exc: ValidationError):

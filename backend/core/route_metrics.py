@@ -27,7 +27,7 @@ BUCKETS_MS = (25, 50, 100, 250, 500, 1000, 2000, 5000)
 FLUSH_SECONDS = 60
 UNMATCHED = "<unmatched>"
 # Các route không đưa vào tài liệu OpenAPI vẫn cần nhãn.
-HIDDEN_TEMPLATES = ("/api/integrations/google-health/callback", "/api/login", "/api/logout")
+HIDDEN_TEMPLATES = ("/api/integrations/google-health/callback",)
 
 UPSERT = text("""
     INSERT INTO api_route_usage (day, api, method, route, client, requests, errors, latency_ms_sum, latency_buckets)
@@ -142,7 +142,7 @@ class RouteMetricsMiddleware:
                  extra_templates: tuple[str, ...] = HIDDEN_TEMPLATES):
         self.app = app
         self.metrics = metrics or ROUTE_METRICS
-        self.superseded = superseded if superseded is not None else _superseded()
+        self.superseded = superseded if superseded is not None else {}
         self.extra = extra_templates
         self._table: RouteTable | None = None
 
@@ -181,11 +181,6 @@ class RouteMetricsMiddleware:
                 self.metrics.record(api="v2" if path.startswith("/api/v2/") else "v1", method=scope["method"],
                                     route=route, client=_client(scope.get("headers") or []), status=status["code"],
                                     elapsed_ms=(time.perf_counter() - started) * 1000)
-
-
-def _superseded() -> dict[str, str]:
-    from api.deprecations import SUPERSEDED_V1
-    return SUPERSEDED_V1
 
 
 async def flush_loop(stop: asyncio.Event, session_scope: Callable[[], Any],
