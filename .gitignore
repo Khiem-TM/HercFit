@@ -86,7 +86,10 @@ coverage.xml
 *.py,cover
 .hypothesis/
 
-# Thư mục test lạc chỗ ở mọi cấp; bộ test chính nằm trong tests/ ở gốc repo và được theo dõi
+# Test chỉ giữ cục bộ, không đưa vào git (2026-11-15): bộ test và eval ở tests/, test frontend ở frontend/tests/,
+# và mọi file test lạc chỗ ở các cấp khác.
+tests/
+frontend/tests/
 test/
 __tests__/
 spec/
@@ -97,8 +100,6 @@ test_*.py
 conftest.py
 *.test.*
 *.spec.*
-!/tests/**/test_*.py
-!/tests/**/conftest.py
 
 # --- Databases & Local Persistence ---
 *.db
@@ -138,9 +139,9 @@ pids/
 
 design/
 
-# Local documentation drafts at every directory level (not versioned).
-# Ghi chú làm việc nội bộ (bản audit, roadmap, báo cáo từng lượt); tài liệu dự án trong docs/ được theo dõi.
+# Tài liệu chỉ giữ cục bộ ở mọi cấp (2026-11-15): docs/, bản PDF và LaTeX của khoá luận, file Claude xuất ra.
 docs/
+Claude outputs/
 
 # Evaluation run outputs.
 eval_results/
@@ -154,3 +155,7 @@ thesis/
 
 # Bản sao lưu database (backend/scripts/backup.sh) chứa dữ liệu người dùng.
 backups/
+Latex/
+
+# Cache thô khi dựng catalog thực phẩm (JSON nguồn, infographic, ảnh ứng viên); kết quả cuối nằm trong alembic/data.
+backend/.cache/

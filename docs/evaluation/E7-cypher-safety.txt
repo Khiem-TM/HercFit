@@ -1,2 +1,0 @@
-validator: 32 attacks, 4 rewrites checked
-safety PASS

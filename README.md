@@ -4,10 +4,8 @@ Trợ lý AI về dinh dưỡng, tập luyện và sức khoẻ (khoá luận t�
 hoặc giao diện, xem tiến độ và hỏi tư vấn có trích nguồn. Bốn trụ cột kỹ thuật: kiến trúc multi-agent với model riêng
 từng agent, Knowledge Graph / Context Graph, RAG, Evaluation & Observability.
 
-- Kiến trúc: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- Dữ liệu đi đâu: [`docs/DATA_FLOW.md`](docs/DATA_FLOW.md)
-- Đánh giá: [`docs/EVALUATION.md`](docs/EVALUATION.md)
-- Kịch bản demo: [`docs/DEMO.md`](docs/DEMO.md)
+Tài liệu kiến trúc, luồng dữ liệu, đánh giá và kịch bản demo (`docs/`) cùng bộ test và eval (`tests/`,
+`frontend/tests/`) chỉ giữ cục bộ, không có trong git.
 
 | Thư mục | Nội dung |
 |---|---|
@@ -15,7 +13,6 @@ từng agent, Knowledge Graph / Context Graph, RAG, Evaluation & Observability.
 | `backend/agentic/` | FastAPI :8081: LangGraph (`agents/`), `services/` (gồm `route_rules.py`), `tools/`, `knowledge_graph/`, `embedding/`, `observability/` |
 | `backend/voice/` | Worker giọng nói LiveKit (STT/TTS tiếng Việt); chỉ là lớp vào/ra của trang chat |
 | `frontend/` | Vue 3 + TypeScript + Tailwind |
-| `tests/` | test đơn vị, test tích hợp, package eval `evaluation`, `Makefile` |
 
 ## Yêu cầu
 
@@ -77,20 +74,12 @@ Các lệnh khác của `dev_up.sh`: `down`, `stop`, `restart`, `logs`, `status`
 `backend/scripts/backup.sh`; khôi phục: `backend/scripts/restore.md`. Bản triển khai: `backend/docker-compose.prod.yml`
 (hướng dẫn ở đầu file).
 
-## Kiểm thử
+## Kiểm tra
+
+Những bước CI chạy (`.github/workflows/quality.yml`), không gọi dịch vụ tốn phí:
 
 ```
-python3.12 -m venv .venv
-.venv/bin/pip install -r tests/requirements-dev.txt -r tests/requirements-eval.txt
-make -C tests check PY=$(pwd)/.venv/bin/python
+cd backend && uvx ruff@0.17.4 check . --config agentic/ruff.toml
+cd backend && MODE=dev python -c "import agentic.core.app.main, app, worker"
+cd frontend && npm ci && npm run type-check && npx vite build
 ```
-
-`check` gồm lint, kiểm tra import, test đơn vị, test tích hợp, eval agent tất định, eval an toàn và an toàn Cypher.
-Không gọi dịch vụ tốn phí. Test tích hợp cần Postgres đang chạy (container dev) và dùng database riêng `hercfit_test`, tự
-tạo nếu chưa có; tên database phải kết thúc bằng `_test`, nếu không test dừng ngay. Máy không có `backend/.env` thì đặt
-`POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` qua biến môi trường.
-
-Frontend: `cd frontend && npm test && npm run build`. Test chat chạy bằng Node/Vite,
-điều khiển thứ tự các response HTTP giả; không cần trình duyệt hay dịch vụ ngoài.
-
-Eval và thí nghiệm: [`tests/evaluation/README.md`](tests/evaluation/README.md).
