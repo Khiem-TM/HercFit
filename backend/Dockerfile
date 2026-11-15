@@ -67,3 +67,23 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system -r /app/agentic/embedding/ingestion/requirements.txt
 USER app
 CMD ["python", "-m", "agentic.embedding.ingestion.cli", "worker"]
+
+# =============================================================================
+# Target: voice (worker giọng nói LiveKit, voice/worker.py). Image riêng, không
+# dùng chung phụ thuộc với backend: worker chỉ cần LIVEKIT_URL, LIVEKIT_API_KEY
+# và LIVEKIT_API_SECRET, không nối database hay backend.
+# =============================================================================
+FROM python:3.12-slim AS voice
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_LINK_MODE=copy
+WORKDIR /app
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /bin/
+COPY voice/requirements.txt /app/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system -r /app/requirements.txt
+COPY --chown=app:app voice/worker.py voice/speech.py /app/
+USER app
+CMD ["python", "worker.py", "start"]

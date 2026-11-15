@@ -139,6 +139,17 @@ services:
       neo4j:
         condition: service_started
 
+  # Worker giọng nói (LiveKit): đọc LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET từ .env.prod, cùng chỗ với agentic.
+  # Chỉ mở kết nối ra LiveKit Cloud; không nối database hay backend. Bỏ service này nếu không dùng voice.
+  voice:
+    build:
+      context: .
+      target: voice
+    restart: unless-stopped
+    env_file: *app-files
+    healthcheck:
+      disable: true
+
   kg-worker:
     build:
       context: .

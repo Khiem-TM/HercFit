@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { ArrowUp, Sparkles, Square } from 'lucide-vue-next'
+import { ArrowUp, Mic, Sparkles, Square } from 'lucide-vue-next'
+import type { VoiceState } from '@/composables/useVoice'
 import type { ChatMode } from '@/types/api'
 
 const props = defineProps<{
   modelValue?: string
   disabled?: boolean
   isStreaming?: boolean
+  voiceState?: VoiceState
 }>()
 
 const emit = defineEmits<{
   (e: 'send', message: string): void
   (e: 'stop'): void
+  (e: 'voice'): void
 }>()
 
 /** Chế độ trò chuyện: người dùng chủ động bật Plan thay vì để trợ lý đoán. */
@@ -108,6 +111,16 @@ function handleKeydown(event: KeyboardEvent): void {
       <button type="button" class="tchip" :disabled="disabled || isStreaming" @click="prefill('Ghi bữa ăn: ')">Ghi bữa ăn</button>
       <button type="button" class="tchip" :disabled="disabled || isStreaming" @click="prefill('Ghi buổi tập: ')">Ghi buổi tập</button>
       <span class="grow" />
+      <button
+        v-if="voiceState"
+        type="button"
+        class="mic"
+        title="Trò chuyện bằng giọng nói"
+        aria-label="Trò chuyện bằng giọng nói"
+        @click="emit('voice')"
+      >
+        <Mic :size="16" aria-hidden="true" />
+      </button>
       <button v-if="isStreaming" type="button" class="hf-btn sm pri" title="Dừng trả lời" @click="emit('stop')">
         <Square :size="10" class="fill-current" aria-hidden="true" />Dừng
       </button>
@@ -153,4 +166,9 @@ textarea:disabled { opacity: .6; }
   display: inline-flex; align-items: center; justify-content: center; flex: none;
 }
 .send:disabled { background: var(--hf-fill); color: var(--hf-ghost); cursor: not-allowed; }
+.mic {
+  width: 36px; height: 36px; border-radius: 12px; border: 1px solid var(--hf-line); background: var(--hf-card); color: var(--hf-sub);
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+}
+.mic:hover { background: var(--hf-fill-3); }
 </style>

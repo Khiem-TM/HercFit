@@ -13,6 +13,7 @@ từng agent, Knowledge Graph / Context Graph, RAG, Evaluation & Observability.
 |---|---|
 | `backend/` | FastAPI :8080: `core/` (auth, DB, idempotency), `domains/` (nghiệp vụ), `integrations/google_health/`, `alembic/`, `worker.py` |
 | `backend/agentic/` | FastAPI :8081: LangGraph (`agents/`), `services/` (gồm `route_rules.py`), `tools/`, `knowledge_graph/`, `embedding/`, `observability/` |
+| `backend/voice/` | Worker giọng nói LiveKit (STT/TTS tiếng Việt); chỉ là lớp vào/ra của trang chat |
 | `frontend/` | Vue 3 + TypeScript + Tailwind |
 | `tests/` | test đơn vị, test tích hợp, package eval `evaluation`, `Makefile` |
 
@@ -61,6 +62,16 @@ từng agent, Knowledge Graph / Context Graph, RAG, Evaluation & Observability.
    ```
 
    Làm lại hai lệnh đầu mỗi khi có migration agent mới (`backend/agentic/migrations/`).
+
+5. **Trò chuyện bằng giọng nói (tuỳ chọn):** tạo project trên [LiveKit Cloud](https://cloud.livekit.io), điền
+   `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` vào `backend/agentic/.env`, rồi chạy `./dev_up.sh up -d --voice`
+   để có thêm worker `backend/voice/worker.py`. Nút micro ở ô soạn tin bật phiên nói; LiveKit lo nhận dạng và đọc tiếng
+   Việt, còn mỗi lượt nói vẫn chạy qua luồng chat như khi gõ (thẻ xác nhận duyệt được bằng câu "xác nhận" / "huỷ").
+   Trong lúc agent xử lý, trợ lý nói câu đệm ("Hmm, để mình nghĩ chút nhé."); câu trả lời được Gemini Flash-Lite
+   (LiveKit Inference, `VOICE_REWRITE_MODEL`) viết lại thành lời nói và `backend/voice/speech.py` kiểm tra con số, việc
+   đã lưu trước khi đọc.
+   Chạy worker ngoài Docker: `python -m venv backend/voice/.venv`, cài `backend/voice/requirements.txt`, rồi
+   `backend/voice/.venv/bin/python backend/voice/worker.py start`.
 
 Các lệnh khác của `dev_up.sh`: `down`, `stop`, `restart`, `logs`, `status`. Sao lưu database:
 `backend/scripts/backup.sh`; khôi phục: `backend/scripts/restore.md`. Bản triển khai: `backend/docker-compose.prod.yml`

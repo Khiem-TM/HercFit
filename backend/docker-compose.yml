@@ -183,6 +183,20 @@ services:
     healthcheck:
       disable: true
 
+  # Worker giọng nói (LiveKit): chỉ chạy với --profile voice (./dev_up.sh --voice); cần LIVEKIT_* trong agentic/.env.
+  voice:
+    profiles: [voice]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: voice
+    restart: unless-stopped
+    env_file:
+      - path: agentic/.env
+        required: false
+    healthcheck:
+      disable: true
+
   embedding-worker:
     profiles: [rag]
     build:

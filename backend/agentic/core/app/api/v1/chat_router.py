@@ -18,7 +18,7 @@ from agentic.observability.outcomes import (
     note_error,
 )
 from agentic.security.input_guard import safe_query
-from agentic.services import nutrition_lookup
+from agentic.services import nutrition_lookup, voice
 from agentic.services.runtime import RunCancelled
 from core.rate_limit import SlidingWindowLimiter
 
@@ -120,6 +120,15 @@ async def food_nutrition(
             404, "Chưa tìm được số liệu đáng tin cho món này; bạn nhập số liệu giúp nhé."
         )
     return facts
+
+
+@router.post("/voice/token", responses={503: {"description": "Voice is not configured"}})
+async def voice_token(request: Request, ctx=Depends(rate_limited)):
+    """Token vào phòng LiveKit riêng của người dùng cho lớp hội thoại giọng nói."""
+    grant = voice.room_token(request.app.state.runtime.settings, ctx.user_id)
+    if grant is None:
+        raise HTTPException(503, "Trò chuyện bằng giọng nói chưa được bật.")
+    return grant
 
 
 @router.post("/runs/{run_id}/cancel", status_code=202)

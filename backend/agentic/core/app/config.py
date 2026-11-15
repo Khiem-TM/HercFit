@@ -61,6 +61,10 @@ class AgentSettings(BaseSettings):
     # Yêu cầu nhà cung cấp gửi số liệu sử dụng trong phản hồi stream (stream_options.include_usage).
     MODEL_STREAM_USAGE: bool = False
     SSE_HEARTBEAT_SECONDS: float = Field(default=15, gt=0)
+    # Lớp hội thoại giọng nói (LiveKit): thiếu một trong ba thì POST /chat/voice/token trả 503.
+    LIVEKIT_URL: str | None = None
+    LIVEKIT_API_KEY: str | None = None
+    LIVEKIT_API_SECRET: SecretStr | None = None
     TAVILY_API_KEY: SecretStr | None = None
     AGENT_DATABASE_URL: SecretStr = SecretStr(
         "postgresql://hercfit:hercfit_secret@localhost:5432/hercfit_db"

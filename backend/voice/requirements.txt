@@ -1,0 +1,3 @@
+# Worker giọng nói (backend/voice/worker.py). Môi trường riêng: không dùng chung bản pin với agentic.
+livekit-agents[silero]~=1.8
+python-dotenv>=1.0

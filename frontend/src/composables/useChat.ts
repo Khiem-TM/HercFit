@@ -200,8 +200,12 @@ export function useChat() {
     }
   }
 
-  /** `extra.food_choices`: lựa chọn trên thẻ món thiếu; server chỉ dùng khi thẻ đó đang mở. */
-  async function sendMessage(rawText: string, extra: { food_choices?: FoodChoice[] } = {}): Promise<void> {
+  /**
+   * `extra.food_choices`: lựa chọn trên thẻ món thiếu; server chỉ dùng khi thẻ đó đang mở.
+   * `extra.speak`: lớp giọng nói (useVoice) nhận câu trả lời cuối của lượt, một lần (worker viết lại nó thành lời
+   * nói nên cần bản cuối có thẩm quyền, không cần từng token).
+   */
+  async function sendMessage(rawText: string, extra: { food_choices?: FoodChoice[]; speak?: (text: string) => void } = {}): Promise<void> {
     const text = rawText.trim()
     if (!text || isStreaming.value || isConfirming.value || isLoadingHistory.value) return
 
@@ -228,6 +232,11 @@ export function useChat() {
     streamController = controller
     // Chỉ số của bong bóng trợ lý đang được điền bằng token stream, nếu có.
     let streamingIndex = -1
+    let spoken = false
+    const speak = (content: string) => {
+      spoken = true
+      extra.speak?.(content)
+    }
 
     try {
       const resp = await authFetch('/api/v1/chat/stream', {
@@ -311,6 +320,7 @@ export function useChat() {
               if (streamingIndex >= 0) messages.value.splice(streamingIndex, 1, final)
               else messages.value.push(final)
               streamingIndex = -1
+              if (!spoken) speak(final.content)
             } else if (event.type === 'error') {
               const errMsg =
                 event.reply || event.detail || 'Đã xảy ra lỗi khi xử lý yêu cầu.'
@@ -329,6 +339,7 @@ export function useChat() {
               if (streamingIndex >= 0) messages.value.splice(streamingIndex, 1, failed)
               else messages.value.push(failed)
               streamingIndex = -1
+              if (!spoken) speak(errMsg)
             }
           } catch {
             // Bỏ qua frame SSE sai định dạng
@@ -346,6 +357,7 @@ export function useChat() {
         const msg = err instanceof Error ? err.message : 'Lỗi kết nối với Agent.'
         error.value = msg
         if (streamingIndex >= 0) messages.value[streamingIndex].status = 'failed'
+        if (!spoken) speak(msg)
       }
     } finally {
       if (streamController === controller) {
@@ -418,7 +430,8 @@ export function useChat() {
     }
   }
 
-  async function confirmAction(decision: 'approve' | 'reject', extras: ConfirmExtras = {}): Promise<void> {
+  /** `speak`: lớp giọng nói nhận câu trả lời sau khi duyệt hoặc huỷ bằng lời nói. */
+  async function confirmAction(decision: 'approve' | 'reject', extras: ConfirmExtras = {}, speak?: (text: string) => void): Promise<void> {
     if (!pendingAction.value || isConfirming.value || isStreaming.value || isLoadingHistory.value) return
     const action = pendingAction.value
     const generation = viewGeneration
@@ -449,6 +462,7 @@ export function useChat() {
       }
 
       const result: ChatResponse = await resp.json()
+      speak?.(result.reply)
       if (current()) {
         pendingAction.value = result.pending_action || null
         // Yêu cầu người dùng vừa trả lời không còn cần xác nhận; huy hiệu của nó cho biết đã quyết định gì.
@@ -474,7 +488,9 @@ export function useChat() {
 
       await loadSessions()
     } catch (err) {
-      if (current()) error.value = err instanceof Error ? err.message : 'Xác nhận thao tác thất bại.'
+      const msg = err instanceof Error ? err.message : 'Xác nhận thao tác thất bại.'
+      if (current()) error.value = msg
+      speak?.(msg)
     } finally {
       isConfirming.value = false
       if (current()) activeNode.value = null
