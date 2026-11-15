@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from agentic.agents.workflow import build_workflow
 from agentic.core.app.api.health import router as health_router
 from agentic.core.app.api.internal.notify_router import router as internal_notify_router
+from agentic.core.app.api.internal.users_router import router as internal_users_router
 from agentic.core.app.api.v1.chat_router import router
 from agentic.core.app.config import AgentSettings, agent_settings
 from agentic.core.llm import Models
@@ -25,14 +26,12 @@ from agentic.tools.integrations.tavily import TavilyClient
 
 
 async def create_session_memory(settings: AgentSettings, models, stack: AsyncExitStack):
-    if settings.SESSION_MEMORY_MODE == "off":
-        return None
-
     from agentic.services.memory.session_memory import SessionMemory
 
     memory = SessionMemory.connect(settings, models)
     stack.push_async_callback(memory.close)
-    await memory.health()
+    if settings.SESSION_MEMORY_MODE != "off":
+        await memory.health()
     return memory
 
 
@@ -147,6 +146,7 @@ def create_agentic_app(
     app.include_router(router, prefix="/api/v1")
     app.include_router(health_router)
     app.include_router(internal_notify_router)
+    app.include_router(internal_users_router)
     return app
 
 

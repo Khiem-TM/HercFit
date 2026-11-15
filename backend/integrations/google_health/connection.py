@@ -96,6 +96,7 @@ class HealthConnectionService(UserService):
             raise HTTPException(404, "Chưa kết nối Google Health")
         if groups:
             connection.sync_groups = {**(connection.sync_groups or {}), **groups}
+            connection.sync_generation += 1
         if frequency:
             connection.sync_frequency = frequency
         await self.session.flush()
@@ -110,6 +111,7 @@ class HealthConnectionService(UserService):
     async def disconnect(self, purge_data: bool) -> HealthConnectionRead:
         connection = await HealthConnection.for_user(self.session, self.user_id, for_update=True)
         if connection is not None:
+            connection.sync_generation += 1
             await revoke_connection(connection)
             connection.status = "REVOKED"
             connection.access_token_enc = connection.refresh_token_enc = None
@@ -147,6 +149,11 @@ async def purge_device_data(session, user_id: UUID) -> dict[str, int]:
 
     Chỉ xoá điểm đọc về từ thiết bị: số đo, buổi thể thao, nước và giấc ngủ người dùng tự nhập qua HercFit
     (written_by_hercfit) là dữ liệu của HercFit, kể cả khi đã được đẩy lên Google, nên được giữ lại."""
+    # Serialize with every sync commit; a response already in flight cannot repopulate this generation.
+    connection = await HealthConnection.for_user(session, user_id, for_update=True)
+    if connection is not None:
+        connection.sync_generation += 1
+        await session.flush()
     counts = {
         "health_points": (await session.execute(
             text("DELETE FROM health_points WHERE user_id = :u AND written_by_hercfit = false"),
@@ -207,6 +214,8 @@ async def _link(session, user: User, claims: dict[str, Any], code: str, verifier
     if connection is None:
         connection = HealthConnection(user_id=user.id, provider=HEALTH_PROVIDER, provider_subject=subject)
         session.add(connection)
+    else:
+        connection.sync_generation += 1
     if not tokens.get("refresh_token") and not connection.refresh_token_enc:
         return "error", None
     # None: một lần uỷ quyền tăng dần, giữ nguyên consent của trợ lý.

@@ -186,3 +186,10 @@ async def get_current_user(
     from agentic.observability import identify
     identify(str(user.id), private_values=(user.fullname, str(user.email), user.nick_name))
     return user
+
+
+async def require_user_principal(request: Request, user: Annotated[Any, Depends(get_current_user)]) -> Any:
+    """Các thao tác quản lý tài khoản không thuộc quyền uỷ nhiệm của trợ lý."""
+    if request.state.principal.is_agent:
+        raise HTTPException(403, "This operation requires the account owner")
+    return user

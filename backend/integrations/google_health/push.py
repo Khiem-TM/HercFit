@@ -36,7 +36,7 @@ from domains.health_records.models.health_points import HealthPoint
 from domains.health_records.types import can_write, spec
 from domains.nutrition.models.meals import Meal
 from domains.training.models.trainings import Training
-from integrations.google_health import kinds
+from integrations.google_health import fencing, kinds
 from integrations.google_health.client import (
     PERMISSION,
     SCHEMA,
@@ -108,6 +108,7 @@ class Pusher:
         self.client, self.user_id, self.start, self.end, self.zone = client, user_id, start, end, zone
         self.counts = {"created": 0, "adopted": 0, "linked": 0, "deleted": 0, "failed": 0}
         self.own: dict[str, dict[tuple[str, ...], str]] = {}
+        self.own_values: dict[str, dict] = {}
 
     async def load_own(self, known: set[str], data_types: tuple[str, ...] = tuple(DATA_TYPE.values())) -> None:
         """Điểm do HercFit ghi trong cửa sổ mà chưa thuộc dòng google_pushes nào (để nhận lại)."""
@@ -116,11 +117,13 @@ class Pusher:
                                             family="self-sources")
             self.own[data_type] = {_key(data_type, {spec(data_type).field: point.value}): point.remote_name
                                    for point in points if point.remote_name not in known}
+            self.own_values.update({point.remote_name: point.value for point in points})
 
     async def delete(self, data_type: str, names: list[str]) -> None:
         if not names:
             return
         try:
+            await fencing.before_request()
             await self.client.batch_delete(data_type, names)
         except GoogleHealthError as exc:
             if exc.status != 404:  # đã không còn trên Google: coi như đã xoá
@@ -130,8 +133,11 @@ class Pusher:
     async def create(self, data_type: str, payload: dict[str, Any]) -> str | None:
         """Tên điểm trên Google; None khi Operation chưa xong (lượt sau sẽ nhận lại qua self-sources)."""
         if (name := self.own.get(data_type, {}).pop(_key(data_type, payload), None)) is not None:
-            self.counts["adopted"] += 1
-            return name
+            # A time match alone must never adopt an older value of a locally edited point.
+            if data_type not in LOCAL_TYPES or self.own_values.get(name) == payload.get(spec(data_type).field):
+                self.counts["adopted"] += 1
+                return name
+        await fencing.before_request()
         operation = await self.client.create_point(data_type, payload)
         if operation.get("error"):
             raise GoogleHealthError(f"operation:{(operation['error'] or {}).get('code')}", None, SCHEMA)
@@ -141,6 +147,7 @@ class Pusher:
 
 async def _save(record_type: str, record_id: UUID, user_id: UUID, **values: Any) -> None:
     async with get_db_session() as session:
+        await fencing.check(session)
         row = await session.get(GooglePush, (record_type, record_id))
         if row is None:
             session.add(GooglePush(record_type=record_type, record_id=record_id, user_id=user_id, **values))
@@ -151,6 +158,7 @@ async def _save(record_type: str, record_id: UUID, user_id: UUID, **values: Any)
 
 async def _forget(record_type: str, record_id: UUID) -> None:
     async with get_db_session() as session:
+        await fencing.check(session)
         await session.execute(text("DELETE FROM google_pushes WHERE record_type = :t AND record_id = :r"),
                               {"t": record_type, "r": record_id})
 
@@ -193,6 +201,7 @@ async def push_pending(client: GoogleHealthClient, user_id: UUID, start: date, e
             HealthPoint.remote_name.not_like(LOCAL_PREFIX + "%")))).scalars()) if local_types else set()
     pusher = Pusher(client, user_id, start, end, zone)
     try:
+        await _cleanup_local(pusher)
         # 1. Bản ghi đã bị thay hoặc xoá: gỡ điểm HercFit tạo.
         for key, row in pushes.items():
             if key not in alive:
@@ -221,10 +230,26 @@ async def push_pending(client: GoogleHealthClient, user_id: UUID, start: date, e
         # Điểm vừa được nhận lại (hay tạo) cho gym / bữa ăn có thể đã được pull đọc vào như dữ liệu Google:
         # bỏ chúng khỏi health_points để mỗi buổi chỉ đếm một lần.
         async with get_db_session() as session:
+            await fencing.check(session)
             await session.execute(text("""
                 DELETE FROM health_points h USING google_pushes p
                 WHERE h.user_id = :u AND p.user_id = :u AND p.owned AND h.remote_name = ANY(p.names)"""), {"u": user_id})
     return pusher.counts
+
+
+async def _cleanup_local(pusher: Pusher):
+    """A stale push is durably excluded from pull until its remote copy is removed."""
+    async with get_db_session() as session:
+        rows = (await session.execute(text(
+            "SELECT data_type, remote_name FROM health_push_cleanup WHERE user_id = :u"),
+            {"u": pusher.user_id})).all()
+    for data_type, name in rows:
+        await pusher.delete(data_type, [name])
+        async with get_db_session() as session:
+            await fencing.check(session)
+            await session.execute(text("DELETE FROM health_push_cleanup WHERE user_id=:u "
+                                       "AND data_type=:t AND remote_name=:n"),
+                                  {"u": pusher.user_id, "t": data_type, "n": name})
 
 
 async def _push_local(pusher: Pusher, data_types: tuple[str, ...]) -> None:
@@ -251,10 +276,17 @@ async def _push_local(pusher: Pusher, data_types: tuple[str, ...]) -> None:
         if name is None:
             continue  # Operation chưa xong: lượt sau nhận lại qua self-sources
         async with get_db_session() as session:
+            await fencing.check(session)
             # Chỉ đổi tên khi dòng vẫn là bản cục bộ đã đọc (người dùng có thể vừa sửa hoặc xoá nó).
-            await session.execute(update(HealthPoint).where(
+            changed = await session.execute(update(HealthPoint).where(
                 HealthPoint.id == row.id, HealthPoint.remote_name == row.remote_name,
+                HealthPoint.revision == row.revision,
             ).values(remote_name=name, updated_at=func.now()))
+            if not changed.rowcount:
+                await session.execute(text("INSERT INTO health_push_cleanup VALUES (:u,:t,:n) "
+                                           "ON CONFLICT DO NOTHING"),
+                                      {"u": pusher.user_id, "t": row.data_type, "n": name})
+    await _cleanup_local(pusher)
 
 
 async def _push_one(pusher: Pusher, record_type: str, record: Any, row: GooglePush | None,

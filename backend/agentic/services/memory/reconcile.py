@@ -16,6 +16,7 @@ async def reconcile_checkpoints(pool, limit=50, grace_seconds=180):
         try:
             checkpoint = await saver.aget_tuple({"configurable": {"thread_id": row["thread_id"]}})
             if checkpoint and checkpoint.checkpoint["id"] != row["kg_checkpoint_id"]:
+                await store.archive_snapshot(checkpoint.checkpoint["channel_values"])
                 await store.record_execution_state(
                     checkpoint.checkpoint["channel_values"], checkpoint.checkpoint["id"]
                 )

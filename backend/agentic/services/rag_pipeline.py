@@ -11,6 +11,7 @@ from agentic.core.context import request_context
 from agentic.knowledge_graph.service import PILOT_DOMAINS
 from agentic.observability import annotate
 from agentic.observability.telemetry import active_metrics, merge_retrieval
+from agentic.services import personal_context
 from agentic.services.routing import latest_request
 
 # Các chủ đề ngữ cảnh cá nhân (services.personal_context.TOPICS) và miền graph chứa dữ liệu của chúng.
@@ -40,8 +41,12 @@ async def retrieve_graph_context(state, domains, *, settings, graph_context=None
     covered = list(state.get("graph_context_domains") or []) if fresh else []
     wanted = [d for d in dict.fromkeys([*covered, *domains]) if d in PILOT_DOMAINS]
     # Chỉ truy hồi lại khi định tuyến chạm tới một miền mà gợi ý đầu tiên bỏ sót. Khi không có
-    # service graph được dựng (baseline đánh giá offline) thì không có gì để đọc.
-    if graph_context is None or not set(wanted) - set(covered):
+    # service graph được dựng (baseline đánh giá offline) hoặc nguồn kg_facts bị tắt thì không có gì để đọc.
+    if (
+        graph_context is None
+        or "kg_facts" not in personal_context.sources(settings)
+        or not set(wanted) - set(covered)
+    ):
         return {}
     # Một miền chỉ được tính là đã phủ sau một lần đọc thành công, để timeout được thử lại sau trong lượt chạy.
     update = {

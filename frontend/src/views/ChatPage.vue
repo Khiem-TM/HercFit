@@ -5,6 +5,7 @@ import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmptyState from '@/components/chat/ChatEmptyState.vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import ChatSidebar from '@/components/chat/ChatSidebar.vue'
+import VoiceDock from '@/components/chat/VoiceDock.vue'
 import UserSettingsModal from '@/components/chat/UserSettingsModal.vue'
 import NotificationBell from '@/components/notifications/NotificationBell.vue'
 import HfToast from '@/components/app/HfToast.vue'
@@ -15,6 +16,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useChat } from '@/composables/useChat'
 import { onArrival } from '@/composables/useNotifications'
 import { useThemeDefault } from '@/composables/useTheme'
+import { useVoice } from '@/composables/useVoice'
 import { createHealthApi } from '@/features/health-integration/api'
 import { syncOnOpen } from '@/features/health-integration/openSync'
 import type { ConfirmExtras } from '@/components/chat/cards/ConfirmationCard.vue'
@@ -27,6 +29,7 @@ const {
   messages,
   isStreaming,
   isConfirming,
+  isLoadingHistory,
   activeNodeLabel,
   pendingAction,
   hasMessages,
@@ -42,6 +45,7 @@ const {
   setChatMode,
   askInPlan,
 } = useChat()
+const { voiceState, userLevel, agentLevel, caption, muted, toggleVoice, stopVoice, toggleMute } = useVoice()
 
 const DashboardModal = defineAsyncComponent(() => import('@/components/dashboard/DashboardModal.vue'))
 const isDashboardOpen = ref(false)
@@ -143,6 +147,7 @@ onMounted(async () => {
 // Thông báo mới qua WebSocket: toast ngắn, nút "Xem" mở hộp thư ở chuông.
 const stopArrivals = onArrival(item => say(item.title, { label: 'Xem', run: () => { toast.value = { text: '' }; bell.value?.open() } }, 6000))
 onUnmounted(() => {
+  void stopVoice()
   stopArrivals()
   clearTimeout(toastTimer)
   useThemeDefault('dark')
@@ -205,12 +210,26 @@ onUnmounted(() => {
       <div v-if="!hasMessages" class="empty">
         <ChatEmptyState :user="user">
           <template #composer>
+            <VoiceDock
+              v-if="voiceState !== 'idle'"
+              :state="voiceState"
+              :user-level="userLevel"
+              :agent-level="agentLevel"
+              :caption="caption"
+              :muted="muted"
+              @mute="toggleMute"
+              @end="stopVoice"
+            />
             <ChatComposer
+              v-else
               ref="composer"
               :mode="chatMode"
+              :disabled="isConfirming || isLoadingHistory"
               :is-streaming="isStreaming"
+              :voice-state="voiceState"
               @send="sendMessage"
               @stop="stopStreaming"
+              @voice="toggleVoice"
               @update:mode="setChatMode"
             />
           </template>
@@ -232,12 +251,26 @@ onUnmounted(() => {
         />
         <div class="composer-wrap">
           <div class="col720">
+            <VoiceDock
+              v-if="voiceState !== 'idle'"
+              :state="voiceState"
+              :user-level="userLevel"
+              :agent-level="agentLevel"
+              :caption="caption"
+              :muted="muted"
+              @mute="toggleMute"
+              @end="stopVoice"
+            />
             <ChatComposer
+              v-else
               ref="composer"
               :mode="chatMode"
+              :disabled="isConfirming || isLoadingHistory"
               :is-streaming="isStreaming"
+              :voice-state="voiceState"
               @send="sendMessage"
               @stop="stopStreaming"
+              @voice="toggleVoice"
               @update:mode="setChatMode"
             />
             <p class="disclaimer">Trợ lý HercFit có thể sai sót và không thay thế tư vấn y khoa.</p>

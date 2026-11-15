@@ -72,7 +72,8 @@ ${BOLD}Options:${NC}
   --frontend-only   Chỉ chạy landing page, không cần Docker hoặc Backend
   --local           Chạy PostgreSQL trên Docker, còn Backend & Frontend chạy trực tiếp trên máy host
   --memory          Khởi chạy thêm Redis cho session memory của agent (SESSION_MEMORY_MODE mặc định off)
-  --no-build        Không build lại Docker image khi khởi chạy
+  --voice           Khởi chạy thêm worker giọng nói LiveKit (cần LIVEKIT_* trong backend/agentic/.env)
+  --no-build       Không build lại Docker image khi khởi chạy
   -h, --help        Hiển thị hướng dẫn này
 
 ${BOLD}Chạy nhanh landing page:${NC}
@@ -87,6 +88,7 @@ COMMAND="up"
 DETACH=false
 WITH_UI=false
 WITH_MEMORY=false
+WITH_VOICE=false
 DB_ONLY=false
 FRONTEND_ONLY=false
 LOCAL_MODE=false
@@ -116,6 +118,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --memory)
             WITH_MEMORY=true
+            shift
+            ;;
+        --voice)
+            WITH_VOICE=true
             shift
             ;;
         --frontend-only)
@@ -319,16 +325,17 @@ case "${COMMAND}" in
     down|stop)
         log_info "Đang dừng toàn bộ dịch vụ HercFit..."
         stop_frontend
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile memory down
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile memory --profile voice down
         log_success "Đã dừng toàn bộ hệ thống."
         ;;
 
     restart)
         log_info "Đang khởi động lại hệ thống HercFit..."
         stop_frontend
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile memory down
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile memory --profile voice down
         RESTART_ARGS=(up)
         [[ "${WITH_MEMORY}" == true ]] && RESTART_ARGS+=(--memory)
+        [[ "${WITH_VOICE}" == true ]] && RESTART_ARGS+=(--voice)
         [[ "${LOCAL_MODE}" == true ]] && RESTART_ARGS+=(--local)
         [[ "${WITH_UI}" == true ]] && RESTART_ARGS+=(--ui)
         [[ "${DETACH}" == true ]] && RESTART_ARGS+=(--detach)
@@ -336,7 +343,7 @@ case "${COMMAND}" in
         ;;
 
     logs)
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile memory logs -f
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile memory --profile voice logs -f
         ;;
 
     status)
@@ -345,7 +352,7 @@ case "${COMMAND}" in
         else
             log_info "Frontend chưa chạy."
         fi
-        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile memory ps
+        ${COMPOSE_CMD} -f "${COMPOSE_FILE}" --profile full --profile memory --profile voice ps
         ;;
 
     up)
@@ -416,6 +423,9 @@ case "${COMMAND}" in
         fi
         if [[ "${WITH_MEMORY}" == true ]]; then
             PROFILE_ARGS+=(--profile memory)
+        fi
+        if [[ "${WITH_VOICE}" == true ]]; then
+            PROFILE_ARGS+=(--profile voice)
         fi
 
         log_info "Đang khởi chạy hạ tầng Backend & Database qua Docker Compose..."

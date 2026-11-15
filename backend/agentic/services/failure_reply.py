@@ -70,7 +70,7 @@ def saved_writes(state) -> list[tuple[str, str | None]]:
 
 def failure_reply(state) -> str:
     saved = saved_writes(state)
-    lines = ["⚠️ " + cause(state.get("error"))]
+    lines = [cause(state.get("error"))]
     if saved:
         lines += ["", "Đã lưu:"] + [
             f"- {WRITES[tool]}" + (f": {name}" if name else "") for tool, name in saved

@@ -25,7 +25,7 @@ from core.database import get_async_engine, get_db_session
 from domains.health_records.types import disabled_types
 from domains.shared import events
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE
-from integrations.google_health import tokens
+from integrations.google_health import fencing, tokens
 from integrations.google_health.client import GoogleHealthClient, GoogleHealthError, ReauthRequired
 from integrations.google_health.models import HealthConnection
 from integrations.google_health.pull import pull
@@ -86,12 +86,17 @@ async def run(user_id: UUID, *, days: int | None = None, push_only: bool = False
         key = {"key": f"gh-sync:{connection.id}"}
         if not (await lock.execute(text("SELECT pg_try_advisory_lock(hashtextextended(:key, 0))"), key)).scalar():
             return {"status": "running"}
+        marker = fencing.current.set(fencing.SyncFence(connection.id, connection.sync_generation))
         try:
+            await fencing.before_request()
             if http is not None:
                 return await _run(connection, days, push_only, http)
             async with httpx.AsyncClient() as client:
                 return await _run(connection, days, push_only, client)
+        except fencing.SyncSuperseded:
+            return {"status": "superseded"}
         finally:
+            fencing.current.reset(marker)
             await lock.execute(text("SELECT pg_advisory_unlock(hashtextextended(:key, 0))"), key)
 
 
@@ -117,7 +122,7 @@ async def _run(connection: HealthConnection, days: int | None, push_only: bool,
         pushed = await push_pending(client, connection.user_id, today - timedelta(days=BACKFILL_DAYS - 1), end, zone,
                                     granted)
     except ReauthRequired:
-        await tokens.mark_reauth(connection.id)
+        await tokens.mark_reauth(connection.id, generation=connection.sync_generation)
         return {"status": "needs_reauth"}
     except GoogleHealthError as exc:
         await _finish(connection.id, started, error=exc.code)
@@ -142,6 +147,7 @@ async def _finish(connection_id: UUID, started: datetime, *, status: dict[str, d
                   start: date | None = None, zone: str | None = None, profile: dict[str, Any] | None = None,
                   error: str | None = None) -> None:
     async with get_db_session() as session:
+        await fencing.check(session)
         connection = (await session.execute(select(HealthConnection).where(HealthConnection.id == connection_id)
                                             .with_for_update())).scalar_one()
         connection.last_sync_at = started

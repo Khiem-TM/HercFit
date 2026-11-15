@@ -17,7 +17,7 @@ from domains.catalog.services.catalog_service import CatalogService
 from domains.goals_plans.schemas.plans import PlanQuery, PlanStatus
 from domains.goals_plans.services.plan_service import PlanService
 from domains.identity.models.user import User
-from domains.identity.services.user_data_service import UserDataService, request_validation_error
+from domains.identity.services.user_data_service import UserDataService
 from domains.shared.schemas.common import Pagination
 from domains.shared.schemas.enums import FoodItemType, FoodSourceType
 from domains.shared.schemas.tracking import (
@@ -27,7 +27,7 @@ from domains.shared.schemas.tracking import (
     ScheduleEntryQuery,
     TimeZoneName,
 )
-from domains.shared.services.common import UserService
+from domains.shared.services.common import UserService, request_validation_error
 from domains.shared.services.journal_service import JournalService
 
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
@@ -45,6 +45,7 @@ CatalogServiceDep = Annotated[CatalogService, service_dependency(CatalogService)
 JournalServiceDep = Annotated[JournalService, service_dependency(JournalService)]
 PlanServiceDep = Annotated[PlanService, service_dependency(PlanService)]
 UserContextDep = Annotated[UserService, service_dependency(UserService)]
+UserDataServiceDep = Annotated[UserDataService, service_dependency(UserDataService)]
 
 
 def validated_query(schema, **values):
@@ -52,16 +53,6 @@ def validated_query(schema, **values):
         return schema(**values)
     except ValidationError as exc:
         raise request_validation_error(exc, "query") from exc
-
-
-def get_user_data_service(
-    session: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(get_current_user)],
-) -> UserDataService:
-    return UserDataService(session, user)
-
-
-UserDataServiceDep = Annotated[UserDataService, Depends(get_user_data_service)]
 
 
 def get_pagination(
@@ -80,12 +71,10 @@ def get_metric_query(
     recorded_from: Annotated[AwareDatetime | None, Query()] = None,
     recorded_to: Annotated[AwareDatetime | None, Query()] = None,
 ) -> BodyMetricQuery:
-    try:
-        return BodyMetricQuery(
-            **pagination.model_dump(), recorded_from=recorded_from, recorded_to=recorded_to,
-        )
-    except ValidationError as exc:
-        raise request_validation_error(exc, "query") from exc
+    return validated_query(
+        BodyMetricQuery, **pagination.model_dump(),
+        recorded_from=recorded_from, recorded_to=recorded_to,
+    )
 
 
 BodyMetricQueryDep = Annotated[BodyMetricQuery, Depends(get_metric_query)]

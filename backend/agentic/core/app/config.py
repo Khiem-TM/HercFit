@@ -16,7 +16,8 @@ class AgentSettings(BaseSettings):
         extra="ignore",
         env_ignore_empty=True,
     )
-    MODE: str = "dev"
+    # Bắt buộc ("dev" hoặc "prod"), không có mặc định: thiếu thì khởi động báo lỗi thay vì lặng lẽ chạy như dev.
+    MODE: str
     AGENT_PORT: int = 8081
     BACKEND_BASE_URL: str = "http://localhost:8080"
     BACKEND_TIMEOUT_SECONDS: float = 15
@@ -60,6 +61,10 @@ class AgentSettings(BaseSettings):
     # Yêu cầu nhà cung cấp gửi số liệu sử dụng trong phản hồi stream (stream_options.include_usage).
     MODEL_STREAM_USAGE: bool = False
     SSE_HEARTBEAT_SECONDS: float = Field(default=15, gt=0)
+    # Lớp hội thoại giọng nói (LiveKit): thiếu một trong ba thì POST /chat/voice/token trả 503.
+    LIVEKIT_URL: str | None = None
+    LIVEKIT_API_KEY: str | None = None
+    LIVEKIT_API_SECRET: SecretStr | None = None
     TAVILY_API_KEY: SecretStr | None = None
     AGENT_DATABASE_URL: SecretStr = SecretStr(
         "postgresql://hercfit:hercfit_secret@localhost:5432/hercfit_db"
@@ -85,6 +90,13 @@ class AgentSettings(BaseSettings):
     AGENT_SERVICE_SECRET: SecretStr | None = None
     # Quên output của tool sức khoẻ, thẻ ngữ cảnh và bộ nhớ phiên khi người dùng thu hồi consent.
     CONSENT_PURGE_ENABLED: bool = True
+    # Chỉ để chạy thí nghiệm Phase 6: tắt từng nguồn ngữ cảnh cá nhân (personal_context.sources). Sẽ bị xoá ở L7.1.
+    CONTEXT_SOURCES: list[Literal["card", "kg_facts", "context_graph", "backend_reads"]] = [
+        "card",
+        "kg_facts",
+        "context_graph",
+        "backend_reads",
+    ]
     JEV_MODE: Literal["off", "shadow", "enforce"] = "off"
     JEV_BASE_URL: str = Field(
         default="https://litellm.otanicloud.link/v1",
@@ -120,8 +132,6 @@ class AgentSettings(BaseSettings):
     KG_WORKER_BATCH_SIZE: int = Field(default=100, ge=1, le=1000)
     KG_RECONCILE_SECONDS: float = Field(default=5, gt=0)
     AGENT_DATABASE_POOL_SIZE: int = Field(default=10, ge=2)
-    # Không còn dùng: phiên giờ dùng một dòng lease có thời hạn thay vì kết nối giữ advisory lock.
-    AGENT_SESSION_POOL_SIZE: int = Field(default=10, ge=1)
     # Thời gian một request thứ hai cho cùng cuộc trò chuyện chờ trước khi trả 409.
     SESSION_LEASE_WAIT_SECONDS: float = Field(default=30, ge=0, le=300)
     # Chốt chặn lạm dụng và chi phí (OWASP LLM10). 0 để tắt một giới hạn.

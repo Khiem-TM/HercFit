@@ -5,6 +5,7 @@ FOOD_FIELDS = (
     "code",
     "name_vi",
     "name_en",
+    "aliases",
     "category_vi",
     "item_type",
     "source_type",
@@ -89,7 +90,8 @@ def compact_output(tool: str, data):
 # Trường chỉ để hiển thị (thẻ chọn món, ảnh minh hoạ): giữ trong state, không gửi cho model. Một lần tra 17 món
 # "xôi ..." từng tốn ~12,5k ký tự, phần lớn là URL ảnh và mô tả nguồn, đẩy lời gọi tool kế tiếp quá 30 s
 # (lượt chạy f6924adb và b5a60b71 timeout trước khi kịp xem trước bữa ăn).
-MODEL_HIDDEN = frozenset({"image_url", "category_vi", "item_type"})
+# aliases chỉ để code khớp tên (meal_logging.name_matches).
+MODEL_HIDDEN = frozenset({"image_url", "category_vi", "item_type", "aliases"})
 
 
 def _decimal(value):

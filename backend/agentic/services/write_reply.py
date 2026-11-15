@@ -165,7 +165,7 @@ def macros(record: dict) -> str:
 
 def meal_lines(record: dict) -> list[str]:
     energy = _number(record.get("energy_kcal"))
-    head = f"✅ Đã lưu bữa ăn **{record.get('name') or 'bữa ăn'}**"
+    head = f"Đã lưu bữa ăn **{record.get('name') or 'bữa ăn'}**"
     moment = when(record.get("consumed_at"), record.get("timezone"))
     head += f" lúc {moment}" if moment else ""
     head += f": **{vn(energy)} kcal**" if energy is not None else ""
@@ -207,7 +207,7 @@ def training_item(item: dict) -> str:
 
 
 def training_lines(record: dict) -> list[str]:
-    head = f"✅ Đã lưu buổi tập **{record.get('name') or 'buổi tập'}**"
+    head = f"Đã lưu buổi tập **{record.get('name') or 'buổi tập'}**"
     moment = when(record.get("started_at"), record.get("timezone"))
     head += f" lúc {moment}" if moment else ""
     facts = []
@@ -236,7 +236,7 @@ def metric_lines(record: dict) -> list[str]:
     ]
     moment = when(record.get("recorded_at"))
     return [
-        "✅ Đã lưu số đo"
+        "Đã lưu số đo"
         + (f" lúc {moment}" if moment else "")
         + (": " + " · ".join(parts) if parts else "")
     ]
@@ -259,7 +259,7 @@ def sport_lines(record: dict) -> list[str]:
     ]
     facts = [fact for fact in facts if fact]
     return [
-        f"✅ Đã ghi buổi **{name}**"
+        f"Đã ghi buổi **{name}**"
         + (f" lúc {moment}" if moment else "")
         + (": " + " · ".join(facts) if facts else "")
     ]
@@ -269,7 +269,7 @@ def water_lines(record: dict) -> list[str]:
     amount = _number((record.get("derived") or {}).get("amount_ml"))
     moment = when(record.get("start_at"))
     return [
-        "✅ Đã ghi"
+        "Đã ghi"
         + (f" {vn(amount, 0)} ml" if amount is not None else "")
         + " nước uống"
         + (f" lúc {moment}" if moment else "")
@@ -283,7 +283,7 @@ def sleep_lines(record: dict) -> list[str]:
         f" {int(minutes) // 60} giờ {int(minutes) % 60:02d} phút" if minutes is not None else ""
     )
     return [
-        "✅ Đã ghi giấc ngủ"
+        "Đã ghi giấc ngủ"
         + length
         + (f" ({span})" if span else "")
     ]
@@ -300,7 +300,7 @@ def goal_lines(record: dict) -> list[str]:
         )
     )
     return [
-        f"✅ Đã lưu mục tiêu **{record.get('title') or 'mục tiêu'}**"
+        f"Đã lưu mục tiêu **{record.get('title') or 'mục tiêu'}**"
         + (f" ({span})" if span else "")
     ]
 
@@ -308,11 +308,11 @@ def goal_lines(record: dict) -> list[str]:
 def catalog_lines(tool: str, record: dict) -> list[str]:
     name = record.get("name_vi") or record.get("name") or ""
     if tool.endswith("_exercises"):
-        return [f"✅ Đã thêm bài tập **{name}** vào catalog của bạn"]
+        return [f"Đã thêm bài tập **{name}** vào catalog của bạn"]
     energy = _number(record.get("energy_kcal"))
     basis = f"{vn(record.get('serving_size'), 0)} {UNITS.get(record.get('serving_unit'), 'g')}"
     return [
-        f"✅ Đã thêm món **{name}** vào catalog của bạn"
+        f"Đã thêm món **{name}** vào catalog của bạn"
         + (f" ({vn(energy)} kcal / {basis})" if energy is not None else "")
     ]
 
@@ -322,13 +322,13 @@ def plan_lines(tool: str, record: dict) -> list[str]:
     span = " → ".join(day(record.get(key)) for key in ("start_date", "end_date") if record.get(key))
     if tool == "end_training_plan":
         return [
-            f"✅ Đã kết thúc lịch tập **{name}**",
+            f"Đã kết thúc lịch tập **{name}**",
             "Các buổi đã tập và nhật ký được giữ nguyên. Bạn có thể nhờ mình lập lịch mới bất cứ lúc nào.",
         ]
     entries = [entry for entry in record.get("entries") or [] if not entry.get("is_rest")]
     detail = ", ".join(filter(None, (f"{len(entries)} buổi tập" if entries else "", span)))
     return [
-        f"✅ Đã lưu lịch tập **{name}**" + (f": {detail}" if detail else ""),
+        f"Đã lưu lịch tập **{name}**" + (f": {detail}" if detail else ""),
         "Theo dõi và tick từng buổi đã tập ở thanh bên **Kế hoạch**.",
     ]
 
@@ -356,7 +356,7 @@ def lines_for(output: dict) -> list[str]:
         return catalog_lines(tool, record)
     if tool in {"create_training_plans", "update_training_plans", "end_training_plan"}:
         return plan_lines(tool, record)
-    return ["✅ " + DONE.get(tool, "Đã lưu thay đổi")]
+    return [DONE.get(tool, "Đã lưu thay đổi")]
 
 
 def write_reply(state) -> str:

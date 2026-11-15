@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import monotonic, time
@@ -9,6 +10,7 @@ from fastapi import HTTPException
 from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
 from langgraph.types import Command
 
+from agentic.agents.state import initial_state
 from agentic.core.app.config import AgentSettings
 from agentic.core.app.schemas.response import ChatResponse, Clarification, FoodGap
 from agentic.core.providers.fpt import ToolMarkupFilter, strip_tool_markup
@@ -24,11 +26,11 @@ from agentic.observability import metrics as ops
 from agentic.observability.outcomes import note_error
 
 # 'modes', không phải 'mode': _run_stream có biến cục bộ mode (kiểu sự kiện stream).
-from agentic.services import catalog_choice, food_gap
 from agentic.services import mode as modes
 from agentic.services.clarification import catalog_groups, fallback_clarification, logs_training
 from agentic.services.failure_reply import NODE_ERROR, failure_reply
 from agentic.services.memory import decisions
+from agentic.services.memory.lifecycle import MemoryLifecycle
 from agentic.services.memory.transcript import visible
 from agentic.tools.output import carry_over
 
@@ -56,6 +58,15 @@ class RunningTurn:
 RECOVER_APPROVED = "Lượt xử lý chưa hoàn tất. Có thể thử xác nhận lại cùng action_id để khôi phục thao tác đã duyệt."
 
 
+# Emoji và ký hiệu hình (✅ ⚠️ 😊 ⭐...); mũi tên chữ (→) và dấu chấm giữa (·) vẫn giữ vì là một phần câu chữ.
+ICONS = re.compile("[\U0001f000-\U0001faff⌀-⏿☀-➿⬀-⯿️‍⃣]+ *")
+
+
+def strip_icons(text: str) -> str:
+    """Câu trả lời gửi frontend không chứa icon, kể cả khi model tự thêm."""
+    return re.sub(r"(?<=\S) +(?=[.,!?…])", "", ICONS.sub("", text)).strip()
+
+
 def interrupted_reply(state, exc) -> str:
     """Chỉ đề nghị xác nhận lại khi lượt bị ngắt đang thực thi một thao tác đã duyệt."""
     if state.get("approved"):
@@ -63,7 +74,7 @@ def interrupted_reply(state, exc) -> str:
     return failure_reply({**state, "error": f"{NODE_ERROR}{type(exc).__name__})."})
 
 
-class Runtime:
+class Runtime(MemoryLifecycle):
     def __init__(self, graph, store, saver, settings: AgentSettings, memory=None):
         self.graph, self.store, self.saver, self.settings, self.memory = (
             graph,
@@ -119,6 +130,7 @@ class Runtime:
         if not snapshot or not snapshot.values:
             return
         try:
+            await self.archive(snapshot)
             checkpoint_id = (snapshot.config or {}).get("configurable", {}).get("checkpoint_id")
             await self.store.record_execution_state(snapshot.values, checkpoint_id)
             run_id = snapshot.values.get("run_id")
@@ -178,7 +190,11 @@ class Runtime:
     # Ghi lượt vừa chạy vào session memory (Redis); lỗi chỉ làm mất phần nhớ bổ sung
     async def remember(self, snapshot):
         if self.memory and snapshot and snapshot.values:
-            await self.memory.record_run(snapshot.values, getattr(snapshot, "created_at", None))
+            values = snapshot.values
+            if hasattr(self.store, "model_context"):
+                context = await self.store.model_context(values["session_id"], values["user_id"], values["session_generation"])
+                values = {**values, "model_context": context}
+            await self.memory.record_run(values, getattr(snapshot, "created_at", None))
 
     async def reconcile_forever(self):
         from agentic.services.memory.reconcile import reconcile_checkpoints
@@ -188,6 +204,7 @@ class Runtime:
             return  # Worker khác sở hữu việc đối soát và dọn bộ nhớ.
         while True:
             try:
+                await self.store.prune_model_context()
                 await reconcile_checkpoints(
                     self.store.pool, grace_seconds=self.settings.KG_RECONCILE_GRACE_SECONDS
                 )
@@ -215,7 +232,7 @@ class Runtime:
     def response(self, state):
         pending = state.get("pending_action")
         is_pending = state.get("status") == "pending_confirmation"
-        reply = (
+        reply = strip_icons(
             "Vui lòng kiểm tra và xác nhận thao tác trước khi lưu."
             if is_pending
             else state.get("reply") or state.get("error") or ""
@@ -343,6 +360,11 @@ class Runtime:
                         )
                         if emit:
                             await emit({"type": "progress", "node": node})
+        except asyncio.CancelledError:
+            snapshot = await self.state(thread_id)
+            await self.journal_snapshot(snapshot)
+            await self.record_session(snapshot, previous_telemetry)
+            raise
         except Exception as exc:
             note_error(exc)
             outcome(
@@ -355,13 +377,17 @@ class Runtime:
             snapshot = await self.state(thread_id)
             await self.journal_snapshot(snapshot)
             await self.remember(snapshot)
-            await self.record_session(snapshot, previous_telemetry)
             state = dict(snapshot.values) if snapshot else {}
             state.update(status="failed", reply=interrupted_reply(state, exc))
-            return self.response(state)
+            result = self.response(state)
+            await self.archive_reply(state, result)
+            await self.record_session(snapshot, previous_telemetry)
+            return result
         snapshot = await self.state(thread_id)
         await self.journal_snapshot(snapshot)
         await self.remember(snapshot)
+        result = self.response(snapshot.values)
+        await self.archive_reply(snapshot.values, result)
         await self.record_session(snapshot, previous_telemetry)
         telemetry = snapshot.values.get("telemetry", {})
         logger.info(
@@ -373,7 +399,6 @@ class Runtime:
                 "output_tokens": telemetry.get("output_tokens", 0),
             },
         )
-        result = self.response(snapshot.values)
         from agentic.observability.tracing import current
 
         prior = current.get()
@@ -398,6 +423,7 @@ class Runtime:
     async def chat(self, payload, user_id, emit=None):
         identify(user_id, payload.session_id)
         async with self.store.session(payload.session_id, user_id) as session:
+            await self.prepare_session(session, user_id)
             old = await self.state(session["thread_id"])
             previous = old.values if old else {}
             action = previous.get("pending_action")
@@ -430,12 +456,17 @@ class Runtime:
                         + "\n".join(trace)
                     ),
                 )
-            memory = previous.get("session_memory")
+            memory = None
+            if hasattr(self.store, "model_context"):
+                memory = await self.store.model_context(payload.session_id, user_id, session["generation"])
             if self.memory:
                 recall = await self.memory.recall(
-                    session, previous, old.created_at if old else None
+                    session, {**previous, "model_context": memory}, old.created_at if old else None
                 )
                 memory, text = recall.state(), recall.render()
+                if hasattr(self.store, "save_model_context"):
+                    await self.store.save_model_context(payload.session_id, user_id, session["generation"], memory,
+                                                        self.settings.SESSION_MEMORY_TTL_SECONDS)
                 if text and self.memory.reads:
                     # Các lượt cũ hơn và bản ghi đã chạm tới lấy từ Redis; cửa sổ nguyên văn vẫn thuộc checkpoint.
                     history.insert(
@@ -456,61 +487,23 @@ class Runtime:
                 )
             thread_id = str(uuid4())
             annotate(business_run_id=thread_id, graph_thread_id=thread_id)
-            initial = {
-                "trace_context": durable_context(),
-                "messages": [*history, HumanMessage(content=payload.message)],
-                "user_id": user_id,
-                "session_id": payload.session_id,
-                "run_id": thread_id,
-                "tool_outputs": [],
-                "tool_count": 0,
-                "session_generation": session["generation"],
-                "research_answer": None,
-                "research_count": 0,
-                "sources": [],
-                "candidate": None,
-                "pending_action": None,
-                "clarification": None,
-                "illustrations": [],
-                "research_handoff": None,
-                "status": "running",
-                "error": None,
-                "catalog_choice": catalog_choice.carried(previous),
-                "prepared_reply": None,
-                "food_gap": food_gap.carried(previous),
-                "food_choices": [c.model_dump(mode="json") for c in payload.food_choices]
+            initial = initial_state(
+                trace_context=durable_context(),
+                messages=[*history, HumanMessage(content=payload.message)],
+                user_id=user_id,
+                session_id=payload.session_id,
+                run_id=thread_id,
+                generation=session["generation"],
+                previous=previous,
+                food_choices=[c.model_dump(mode="json") for c in payload.food_choices]
                 if payload.food_choices
                 else None,
-                "replying_to_form": previous.get("status") == "needs_input",
-                "graph_context": None,
-                "graph_retrieval_attempted": False,
-                "graph_context_run_id": None,
-                "graph_context_domains": [],
-                "context_graph": None,
-                "context_graph_run_id": None,
-                "prev_run_id": previous.get("run_id"),
-                "action_decision": None,
-                "edited_fields": [],
-                "turn": None,
-                "fast_read_plan": None,
-                "fast_read_complete": False,
-                "telemetry": {},
-                "execution_records": [],
-                "jev_events": [],
-                "jev_rejections": {},
-                "model_auth_failed": False,
-                "session_memory": memory,
-                "safety": None,
-                "user_context": None,
-                "user_context_run_id": None,
-                "personal_reads_done": False,
-                "research_evidence": None,
-                "route_trace": [],
-                "mode": payload.mode,
-                "suggested_mode": None,
-            }
+                memory=None,
+                mode=payload.mode,
+            )
             await self.graph.aupdate_state(self.config(thread_id), initial, as_node="__start__")
             await self.store.bind(payload.session_id, thread_id)
+            await self.archive(await self.state(thread_id))
             if emit:
                 # Sự kiện đầu tiên: client cần run_id để huỷ lượt này.
                 await emit({"type": "run", "run_id": thread_id})
@@ -523,6 +516,7 @@ class Runtime:
         identify(user_id, payload.session_id)
         annotate(action_id=payload.action_id, decision=payload.decision)
         async with self.store.session(payload.session_id, user_id, create=False) as session:
+            await self.prepare_session(session, user_id)
             try:
                 from uuid import UUID
 
@@ -624,20 +618,15 @@ class Runtime:
 
     async def history(self, session_id, user_id):
         async with self.store.session(session_id, user_id, create=False) as session:
+            await self.prepare_session(session, user_id)
             snapshot = await self.state(session["thread_id"])
             values = snapshot.values if snapshot else {}
             msgs = [
                 {"role": m.type, "content": m.content, "name": getattr(m, "name", None)}
                 for m in visible(values.get("messages", []))
             ]
-            if self.memory:
-                # Redis giữ các lượt đã ra khỏi cửa sổ checkpoint; trạng thái/việc chờ vẫn thuộc checkpoint.
-                stored = await self.memory.transcript(
-                    session, values, snapshot.created_at if snapshot else None
-                )
-                annotate(memory_message_count=len(stored or []), memory_checkpoint_count=len(msgs))
-                if stored and self.memory.reads and len(stored) >= len(msgs):
-                    msgs = stored
+            if hasattr(self.store, "transcript"):
+                msgs = await self.store.transcript(session_id, user_id)
             # Câu trả lời lưu từ trước khi có bước lọc markup có thể chứa lời gọi tool được in ra.
             msgs = [
                 {**m, "content": strip_tool_markup(m["content"])}

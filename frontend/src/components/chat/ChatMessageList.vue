@@ -50,6 +50,15 @@ watch(
   { deep: true },
 )
 
+// Câu trả lời đang stream dài dần: cuộn theo, trừ khi người dùng đã kéo lên đọc đoạn trước.
+watch(
+  () => props.messages[props.messages.length - 1]?.content.length,
+  () => {
+    const el = containerRef.value
+    if (props.isStreaming && el && el.scrollHeight - el.scrollTop - el.clientHeight < 160) scrollToBottom()
+  },
+)
+
 // Các lựa chọn chỉ còn trả lời được ở lượt agent mới nhất.
 const lastMessageId = computed(() => props.messages[props.messages.length - 1]?.id)
 
@@ -82,10 +91,10 @@ function badge(url: string): string {
   <div ref="containerRef" class="thread">
     <div class="col720">
       <template v-for="msg in messages" :key="msg.id">
-        <div v-if="msg.role === 'human'" class="um">{{ msg.content }}</div>
+        <div v-if="msg.role === 'human'" class="um um-enter">{{ msg.content }}</div>
 
         <div v-else class="am msg-enter">
-          <HfLogo :size="28" class="avatar" />
+          <span class="spark" :class="{ live: msg.status === 'streaming' }"><HfLogo :size="28" class="avatar" /></span>
           <div class="body">
             <span v-if="msg.status === 'confirmed' || msg.status === 'rejected'" class="state" :class="msg.status === 'confirmed' ? 'ok' : 'no'">
               <Check v-if="msg.status === 'confirmed'" :size="12" :stroke-width="3" aria-hidden="true" />
@@ -163,12 +172,13 @@ function badge(url: string): string {
       </Transition>
 
       <!-- Chỉ báo tiến độ trước khi có token câu trả lời -->
-      <div v-if="isStreaming && messages[messages.length - 1]?.status !== 'streaming'" class="am">
-        <HfLogo :size="28" class="avatar" />
+      <div v-if="isStreaming && messages[messages.length - 1]?.status !== 'streaming'" class="am msg-enter">
+        <span class="spark live"><HfLogo :size="28" class="avatar" /></span>
         <div class="body">
-          <div class="steps" aria-live="polite">
-            <div><span class="dot run" aria-hidden="true" /><b>{{ activeNodeLabel || 'Đang xử lý…' }}</b></div>
-          </div>
+          <Transition mode="out-in" enter-from-class="step-from" leave-to-class="step-to"
+                      enter-active-class="step-move" leave-active-class="step-move">
+            <span :key="activeNodeLabel" class="think" aria-live="polite">{{ activeNodeLabel || 'Đang suy nghĩ…' }}</span>
+          </Transition>
         </div>
       </div>
     </div>
@@ -183,11 +193,33 @@ function badge(url: string): string {
   padding: 12px 16px; font-size: 15px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .am { display: flex; gap: 14px; align-items: flex-start; font-size: 16px; line-height: 1.7; color: var(--hf-text); }
-.avatar { margin-top: 2px; }
+.spark { margin-top: 2px; }
 .body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 10px; }
 .md.stopped { color: var(--hf-sub-2); }
-.caret { display: inline-block; width: 8px; height: 18px; background: var(--hf-ink); vertical-align: -3px; margin-left: 2px; animation: blink 1s steps(1) infinite; }
-@keyframes blink { 50% { opacity: 0; } }
+/* Chấm nhịp đập ở cuối câu trả lời đang stream (thay con trỏ khối). */
+.caret {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--hf-ink); margin-left: 4px;
+  vertical-align: 1px; animation: pulse 1.1s ease-in-out infinite;
+}
+@keyframes pulse { 0%, 100% { transform: scale(.7); opacity: .45; } 50% { transform: scale(1); opacity: 1; } }
+/* Vòng sáng xoay quanh avatar khi trợ lý đang suy nghĩ hoặc viết. */
+.spark { position: relative; flex: none; display: inline-flex; border-radius: 50%; }
+.spark.live::before {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%; padding: 2px;
+  background: conic-gradient(from 0deg, transparent 0 30%, var(--hf-acc), var(--hf-violet), var(--hf-blue), transparent 85%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: spin 1.4s linear infinite;
+}
+/* Nhãn bước đang chạy: chữ có ánh sáng quét qua, đổi bước thì trượt lên. */
+.think {
+  align-self: flex-start; margin-top: 3px; font-size: 15px; font-weight: 500;
+  background: linear-gradient(90deg, var(--hf-faint) 0%, var(--hf-ink) 45%, var(--hf-faint) 90%) 0 0 / 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 1.6s linear infinite;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+.step-move { transition: opacity 180ms ease, transform 180ms ease; }
+.step-from { opacity: 0; transform: translateY(6px); }
+.step-to { opacity: 0; transform: translateY(-6px); }
 .state {
   align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700;
   border-radius: 999px; padding: 3px 10px; line-height: 1.4;
@@ -223,17 +255,12 @@ function badge(url: string): string {
   display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--hf-sub);
 }
 .pending { margin-left: 42px; }
-.steps {
-  display: flex; flex-direction: column; gap: 8px; background: var(--hf-card); border: 1px solid var(--hf-press);
-  border-radius: 16px; padding: 12px 14px; font-size: 13.5px; align-self: flex-start;
-}
-.steps div { display: flex; align-items: center; gap: 10px; }
-.dot { width: 18px; height: 18px; border-radius: 50%; flex: none; display: inline-flex; }
-.dot.run { border: 2px solid var(--hf-press); border-top-color: var(--hf-ink); animation: spin .9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* Câu trả lời mới hiện mờ dần một lần; bong bóng được cập nhật (stream -> bản cuối) giữ nguyên node và không chạy lại hiệu ứng. */
-.msg-enter { animation: msg-enter 180ms ease-out; }
-@keyframes msg-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.msg-enter { animation: msg-enter 320ms cubic-bezier(.2, .8, .2, 1); }
+@keyframes msg-enter { from { opacity: 0; transform: translateY(10px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+.um-enter { animation: um-enter 260ms cubic-bezier(.2, .8, .2, 1); transform-origin: right bottom; }
+@keyframes um-enter { from { opacity: 0; transform: translateY(8px) scale(.97); } to { opacity: 1; transform: none; } }
 .md :deep(p) { margin: 0 0 10px; }
 .md :deep(p:last-child) { margin-bottom: 0; }
 .md :deep(ul) { list-style: disc; padding-left: 20px; margin: 4px 0 10px; }
@@ -246,5 +273,9 @@ function badge(url: string): string {
   .thread { padding: 20px 16px 8px; }
   .pending { margin-left: 0; }
 }
-@media (prefers-reduced-motion: reduce) { .msg-enter, .caret, .dot.run { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .msg-enter, .um-enter, .caret, .spark.live::before, .think { animation: none; }
+  .think { color: var(--hf-sub); background: none; }
+  .step-move { transition: none; }
+}
 </style>

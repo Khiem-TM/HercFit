@@ -28,6 +28,15 @@ const chatMode = ref<ChatMode>('normal')
 let streamController: AbortController | null = null
 // run_id của lượt đang stream (sự kiện "run" đầu tiên), để nút dừng huỷ được lượt ở server.
 let streamRunId: string | null = null
+let viewGeneration = 0
+let historyController: AbortController | null = null
+
+function changeView(): number {
+  historyController?.abort()
+  historyController = null
+  isLoadingHistory.value = false
+  return ++viewGeneration
+}
 
 const MODE_KEY = 'hercfit.chatMode.'
 
@@ -91,6 +100,8 @@ export function useChat() {
   }
 
   function createNewSession(): void {
+    if (isStreaming.value) return
+    changeView()
     activeSessionId.value = crypto.randomUUID()
     chatMode.value = 'normal'
     messages.value = []
@@ -101,22 +112,30 @@ export function useChat() {
 
   async function selectSession(sessionId: string): Promise<void> {
     if (isStreaming.value) return
+    const generation = changeView()
+    const controller = new AbortController()
+    historyController = controller
+    const current = () => generation === viewGeneration && activeSessionId.value === sessionId
     activeSessionId.value = sessionId
+    messages.value = []
+    activeNode.value = null
     chatMode.value = storedMode(sessionId)
     isLoadingHistory.value = true
     error.value = null
     pendingAction.value = null
     try {
-      const resp = await authFetch(`/api/v1/chat/history/${encodeURIComponent(sessionId)}`)
+      const resp = await authFetch(`/api/v1/chat/history/${encodeURIComponent(sessionId)}`, { signal: controller.signal })
+      if (!current()) return
       if (!resp.ok) {
         messages.value = []
         return
       }
       const data = await resp.json()
+      if (!current()) return
       const rawMessages = Array.isArray(data.messages) ? data.messages : []
       const mapped: ChatMessage[] = rawMessages.map(
-        (m: { role: string; content: string; name?: string | null; created_at?: string | null }, idx: number) => ({
-          id: `${sessionId}-${idx}`,
+        (m: { id?: string; role: string; content: string; name?: string | null; created_at?: string | null }, idx: number) => ({
+          id: m.id || `${sessionId}-${idx}`,
           role: m.role === 'human' ? 'human' : 'ai',
           content: m.content,
           name: m.name || null,
@@ -154,9 +173,12 @@ export function useChat() {
       }
       messages.value = mapped
     } catch {
-      error.value = 'Không thể tải lịch sử hội thoại.'
+      if (current()) error.value = 'Không thể tải lịch sử hội thoại.'
     } finally {
-      isLoadingHistory.value = false
+      if (current()) {
+        isLoadingHistory.value = false
+        historyController = null
+      }
     }
   }
 
@@ -178,10 +200,14 @@ export function useChat() {
     }
   }
 
-  /** `extra.food_choices`: lựa chọn trên thẻ món thiếu; server chỉ dùng khi thẻ đó đang mở. */
-  async function sendMessage(rawText: string, extra: { food_choices?: FoodChoice[] } = {}): Promise<void> {
+  /**
+   * `extra.food_choices`: lựa chọn trên thẻ món thiếu; server chỉ dùng khi thẻ đó đang mở.
+   * `extra.speak`: lớp giọng nói (useVoice) nhận câu trả lời cuối của lượt, một lần (worker viết lại nó thành lời
+   * nói nên cần bản cuối có thẩm quyền, không cần từng token).
+   */
+  async function sendMessage(rawText: string, extra: { food_choices?: FoodChoice[]; speak?: (text: string) => void } = {}): Promise<void> {
     const text = rawText.trim()
-    if (!text || isStreaming.value) return
+    if (!text || isStreaming.value || isConfirming.value || isLoadingHistory.value) return
 
     if (!activeSessionId.value) {
       activeSessionId.value = crypto.randomUUID()
@@ -206,6 +232,11 @@ export function useChat() {
     streamController = controller
     // Chỉ số của bong bóng trợ lý đang được điền bằng token stream, nếu có.
     let streamingIndex = -1
+    let spoken = false
+    const speak = (content: string) => {
+      spoken = true
+      extra.speak?.(content)
+    }
 
     try {
       const resp = await authFetch('/api/v1/chat/stream', {
@@ -289,6 +320,7 @@ export function useChat() {
               if (streamingIndex >= 0) messages.value.splice(streamingIndex, 1, final)
               else messages.value.push(final)
               streamingIndex = -1
+              if (!spoken) speak(final.content)
             } else if (event.type === 'error') {
               const errMsg =
                 event.reply || event.detail || 'Đã xảy ra lỗi khi xử lý yêu cầu.'
@@ -307,6 +339,7 @@ export function useChat() {
               if (streamingIndex >= 0) messages.value.splice(streamingIndex, 1, failed)
               else messages.value.push(failed)
               streamingIndex = -1
+              if (!spoken) speak(errMsg)
             }
           } catch {
             // Bỏ qua frame SSE sai định dạng
@@ -324,6 +357,7 @@ export function useChat() {
         const msg = err instanceof Error ? err.message : 'Lỗi kết nối với Agent.'
         error.value = msg
         if (streamingIndex >= 0) messages.value[streamingIndex].status = 'failed'
+        if (!spoken) speak(msg)
       }
     } finally {
       if (streamController === controller) {
@@ -355,13 +389,13 @@ export function useChat() {
   }
 
   /** Sau khi lưu thành công: tải ảnh của người dùng hoặc nhập ảnh tra cứu đã chọn lên Cloudinary. */
-  async function attachImage(action: PendingAction, result: ChatResponse, extras: ConfirmExtras): Promise<void> {
+  async function attachImage(action: PendingAction, result: ChatResponse, extras: ConfirmExtras, current: () => boolean): Promise<void> {
     const kind = MEDIA_TARGET[action.tool]
     const wantsPhoto = Boolean(extras.photo) && (kind === 'meals' || kind === 'trainings')
     const wantsImport = Boolean(extras.imageSource) && (kind === 'foods' || kind === 'exercises')
     if (!kind || (!wantsPhoto && !wantsImport)) return
     const saved = savedRecord(result, action.action_id)
-    const note = (content: string, failed = false) => messages.value.push({
+    const note = (content: string, failed = false) => current() && messages.value.push({
       id: crypto.randomUUID(), role: 'ai', content, status: failed ? 'failed' : 'completed', timestamp: new Date().toISOString(),
     })
     if (!saved) {
@@ -369,7 +403,7 @@ export function useChat() {
       return
     }
     isSavingImage.value = true
-    activeNode.value = 'media'
+    if (current()) activeNode.value = 'media'
     try {
       const endpoint = `/api/media/${kind}/${saved.id}/image`
       let resp: Response
@@ -396,9 +430,13 @@ export function useChat() {
     }
   }
 
-  async function confirmAction(decision: 'approve' | 'reject', extras: ConfirmExtras = {}): Promise<void> {
-    if (!pendingAction.value || isConfirming.value) return
+  /** `speak`: lớp giọng nói nhận câu trả lời sau khi duyệt hoặc huỷ bằng lời nói. */
+  async function confirmAction(decision: 'approve' | 'reject', extras: ConfirmExtras = {}, speak?: (text: string) => void): Promise<void> {
+    if (!pendingAction.value || isConfirming.value || isStreaming.value || isLoadingHistory.value) return
     const action = pendingAction.value
+    const generation = viewGeneration
+    const sessionId = activeSessionId.value
+    const current = () => generation === viewGeneration && activeSessionId.value === sessionId
     isConfirming.value = true
     error.value = null
     activeNode.value = decision === 'approve' ? 'execution' : 'answer'
@@ -424,33 +462,38 @@ export function useChat() {
       }
 
       const result: ChatResponse = await resp.json()
-      pendingAction.value = result.pending_action || null
-      // Yêu cầu người dùng vừa trả lời không còn cần xác nhận; huy hiệu của nó cho biết đã quyết định gì.
-      const asked = messages.value.find((m) => m.status === 'pending_confirmation' && m.pending_action?.action_id === action.action_id)
-      if (asked) asked.status = decision === 'reject' ? 'rejected' : result.status === 'failed' ? 'completed' : 'confirmed'
+      speak?.(result.reply)
+      if (current()) {
+        pendingAction.value = result.pending_action || null
+        // Yêu cầu người dùng vừa trả lời không còn cần xác nhận; huy hiệu của nó cho biết đã quyết định gì.
+        const asked = messages.value.find((m) => m.status === 'pending_confirmation' && m.pending_action?.action_id === action.action_id)
+        if (asked) asked.status = decision === 'reject' ? 'rejected' : result.status === 'failed' ? 'completed' : 'confirmed'
 
-      messages.value.push({
-        id: result.run_id || crypto.randomUUID(),
-        role: 'ai',
-        content: result.reply,
-        sources: result.sources || [],
-        pending_action: result.pending_action || null,
-        clarification: normalizeClarification(result.clarification),
-        illustrations: result.illustrations || [],
-        status: result.status,
-        timestamp: new Date().toISOString(),
-      })
+        messages.value.push({
+          id: result.run_id || crypto.randomUUID(),
+          role: 'ai',
+          content: result.reply,
+          sources: result.sources || [],
+          pending_action: result.pending_action || null,
+          clarification: normalizeClarification(result.clarification),
+          illustrations: result.illustrations || [],
+          status: result.status,
+          timestamp: new Date().toISOString(),
+        })
+      }
 
       if (decision === 'approve' && result.status !== 'failed') {
-        await attachImage(action, result, extras)
+        await attachImage(action, result, extras, current)
       }
 
       await loadSessions()
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Xác nhận thao tác thất bại.'
+      const msg = err instanceof Error ? err.message : 'Xác nhận thao tác thất bại.'
+      if (current()) error.value = msg
+      speak?.(msg)
     } finally {
       isConfirming.value = false
-      activeNode.value = null
+      if (current()) activeNode.value = null
     }
   }
 

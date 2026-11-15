@@ -1,7 +1,8 @@
 """Bộ nhớ phiên Redis: tầng nóng dựng lại được, nằm trên checkpoint PostgreSQL.
 
-Checkpoint vẫn có thẩm quyền về phê duyệt, khôi phục và cửa sổ
-nguyên văn. Redis giữ toàn bộ bản ghi của mỗi phiên, một bản tóm tắt cuốn chiếu của
+Checkpoint có thẩm quyền về phê duyệt và khôi phục. Transcript người dùng ở
+agent_transcript_messages; summary bền vững ở agent_model_context. Redis giữ cửa sổ
+ngữ cảnh model, một bản tóm tắt cuốn chiếu của
 các lượt đã ra khỏi cửa sổ và các bản ghi mà cuộc trò chuyện đã chạm tới.
 Các lời gọi trên đường xử lý request chạy trong advisory lock của phiên, bị giới hạn bởi
 REDIS_TIMEOUT_MS và không bao giờ ném lỗi: sự cố chỉ làm mất phần bộ nhớ bổ sung.
@@ -91,7 +92,7 @@ class Recall:
         return render_memory(self.summary, self.gap, self.entities, MEMORY_CHARS) or None
 
     def state(self):
-        # Bản sao bền vững trong checkpoint: mất Redis không làm mất bản tóm tắt.
+        # Runtime lưu bản sao có hạn dùng trong agent_model_context.
         return {
             "summary": self.summary,
             "upto_seq": self.upto_seq,
@@ -172,6 +173,8 @@ class SessionMemory:
     @observed("memory.record", output=False)
     async def record_run(self, values, at=None):
         """Upsert lượt của lượt chạy. Bên gọi đang giữ khoá phiên."""
+        if self.mode == "off":
+            return False
         values = values or {}
         if not values.get("session_id") or not values.get("user_id") or not turn_from_state(values):
             return False
@@ -273,7 +276,7 @@ class SessionMemory:
             turn["seq"] = seq
         messages = [m for turn in turns for m in turn["messages"]]
         human = next((m for m in messages if m["role"] == "human"), None)
-        restored = values.get("session_memory") or {}
+        restored = values.get("model_context") or {}
         async with self.redis.pipeline(transaction=True) as pipe:
             pipe.unlink(*k.data)
             pipe.hset(
@@ -308,7 +311,7 @@ class SessionMemory:
                 ),
             )
             if restored.get("summary"):
-                # Bản sao trong checkpoint bao phủ những gì có trước cửa sổ này.
+                # Bản sao từ kho model context bao phủ phần có trước cửa sổ này.
                 pipe.hset(
                     k.summary,
                     mapping={
@@ -351,12 +354,14 @@ class SessionMemory:
 
     @observed("memory.recall", "retriever", output=False)
     async def recall(self, session, previous, at=None):
-        """Bộ nhớ ngoài cửa sổ checkpoint. Quay về dùng bản sao riêng của checkpoint."""
+        """Bộ nhớ model; runtime cung cấp bản sao riêng có kiểm tra generation/TTL."""
+        if self.mode == "off":
+            return Recall(status="disabled")
         started = perf_counter()
         previous = previous or {}
         recall = await self._guard(
             "recall", lambda: self._recall(session, previous, at)
-        ) or Recall.from_state(previous.get("session_memory"), "unavailable")
+        ) or Recall.from_state(previous.get("model_context"), "unavailable")
         annotate(
             status=recall.status,
             duration_ms=round((perf_counter() - started) * 1000, 3),
@@ -370,7 +375,7 @@ class SessionMemory:
     async def _recall(self, session, previous, at):
         k, meta, summary, entities = await self._current(session, previous, at)
         if not meta:
-            return Recall.from_state(previous.get("session_memory"), "empty")
+            return Recall.from_state(previous.get("model_context"), "empty")
         upto, covered = int(summary.get("upto_seq", 0)), int(summary.get("covered_messages", 0))
         outside = outside_messages(int(meta["message_count"]), covered, self.window)
         gap = []
@@ -435,7 +440,7 @@ class SessionMemory:
 
     async def forget(self, session_id):
         k = self._keys(session_id)
-        await self._guard("forget", lambda: self.redis.unlink(*k.data, k.lock))
+        return await self._guard("forget", lambda: self.redis.unlink(*k.data, k.lock)) is not None
 
     async def purge_deleted(self, store):
         """Xoá bộ nhớ của các phiên đã xoá mà lệnh xoá chưa tới được Redis."""

@@ -12,6 +12,7 @@ from typing import Any, Iterable
 from uuid import UUID as PyUUID
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Date,
     DateTime,
@@ -47,6 +48,7 @@ class HealthPoint(Base):
     local_date: Mapped[date] = mapped_column(Date, nullable=False)
     value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     remote_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    revision: Mapped[int] = mapped_column(BigInteger, default=1, server_default="1", nullable=False)
     written_by_hercfit: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

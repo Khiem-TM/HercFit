@@ -228,12 +228,6 @@ class AuthService:
         self._set_refresh_cookie(response, new_raw)
         return response
 
-    async def refresh_with_cookie(self, refresh_token: str | None, *, redirect_uri: str | None = None) -> Response:
-        """Hợp đồng GET cũ: bắt đầu OAuth khi chưa có cookie, ngược lại thì xoay token."""
-        if not refresh_token:
-            return self.start_google_login(redirect_uri)
-        return await self.refresh(refresh_token)
-
     async def logout(self, refresh_token: str | None) -> LogoutResponse:
         """Thu hồi phiên refresh hiện tại và xoá cookie refresh token."""
         if refresh_token:

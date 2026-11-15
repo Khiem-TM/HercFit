@@ -1,6 +1,7 @@
 from hashlib import sha256
 from time import monotonic
 
+import jwt
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -38,6 +39,15 @@ async def authenticated(
 ):
     if not credentials:
         raise HTTPException(401, "Bearer JWT required")
+    # This is a deny-only prefilter. Backend.identity still verifies signature,
+    # issuer, audience, expiry and the account. A delegated tool credential must
+    # never be used to read the owner's transcript or start another assistant.
+    try:
+        claims = jwt.decode(credentials.credentials, options={"verify_signature": False})
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Invalid user credential") from None
+    if claims.get("token_type") != "access":
+        raise HTTPException(403, "Chat requires the account owner's access token")
     try:
         user = await _verified_user(request, credentials.credentials)
     except BackendError as exc:

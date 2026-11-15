@@ -23,6 +23,9 @@ CARD_KEYS = frozenset(
     {"today", "profile", "body", "athlete", "running", "training_4w", "inventory"}
 )
 TIMEZONE = "Asia/Ho_Chi_Minh"
+# Nguồn ngữ cảnh cá nhân của một lượt: thẻ hồ sơ (decide_step), sự kiện KG kiểu cũ (retrieve_graph_context), context
+# graph của câu hỏi (nút context_graph), các lần đọc backend của nút context.
+SOURCES = ("card", "kg_facts", "context_graph", "backend_reads")
 TOPICS = (
     "running",
     "strength",
@@ -82,6 +85,13 @@ NON_ADVICE_INTENTS = {
 # đường ngữ cảnh cá nhân để câu trả lời cũng có tri thức. Các tuyến lập kế hoạch, ghi nhật ký và mục tiêu có thể
 # ghi và vẫn là tuyến tool.
 REVIEW_DOMAINS = {"coaching", "metrics", "progress", "health", "profile"}
+
+
+def sources(settings) -> frozenset[str]:
+    """Các nguồn ngữ cảnh cá nhân đang bật; mặc định cả bốn (hành vi như trước). Chỉ settings CONTEXT_SOURCES, dùng
+    cho thí nghiệm Phase 6, thu hẹp được danh sách này."""
+    chosen = getattr(settings, "CONTEXT_SOURCES", None)
+    return frozenset(SOURCES if chosen is None else chosen)
 
 
 def today() -> date:

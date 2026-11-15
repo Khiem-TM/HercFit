@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID as PyUUID
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -26,6 +27,14 @@ from domains.shared.models.basemodel import BaseModel
 
 def _json():
     return mapped_column(JSONB(none_as_null=True), default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+
+
+class HealthPushCleanup(Base):
+    __tablename__ = "health_push_cleanup"
+
+    user_id: Mapped[PyUUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    data_type: Mapped[str] = mapped_column(String(48), primary_key=True)
+    remote_name: Mapped[str] = mapped_column(String(300), primary_key=True)
 
 
 class HealthConnection(BaseModel):
@@ -61,6 +70,7 @@ class HealthConnection(BaseModel):
     # Nhóm người dùng tắt đồng bộ ({"hrv": false}) và tần suất đồng bộ nền (migration 0030).
     sync_groups: Mapped[dict[str, bool]] = _json()
     sync_frequency: Mapped[str] = mapped_column(String(10), default="hourly", server_default="hourly", nullable=False)
+    sync_generation: Mapped[int] = mapped_column(BigInteger, default=1, server_default="1", nullable=False)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)

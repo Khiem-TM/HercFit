@@ -103,7 +103,8 @@ async def orphans(user_id: UUID, data_type: str, points: list[kinds.HealthPoint]
 async def pushed_names(user_id: UUID) -> set[str]:
     """Tên các điểm HercFit đã tạo cho buổi gym / bữa ăn (không gồm phiên đồng hồ được gắn vào gym)."""
     async with get_db_session() as session:
-        rows = await session.execute(text("SELECT unnest(names) FROM google_pushes WHERE user_id = :u AND owned"),
+        rows = await session.execute(text("SELECT unnest(names) FROM google_pushes WHERE user_id = :u AND owned "
+                                         "UNION SELECT remote_name FROM health_push_cleanup WHERE user_id = :u"),
                                      {"u": user_id})
         return {name for (name,) in rows}
 
@@ -112,11 +113,14 @@ async def pull(client: GoogleHealthClient, user_id: UUID, granted: list[str], st
                zone: str, skip: frozenset[str] = frozenset()) -> dict[str, dict[str, Any]]:
     """Đồng bộ [start, end) cho mọi loại đọc được, trừ các loại người dùng đã tắt (`skip`);
     trả về trạng thái từng loại cho `sync_cursor`."""
+    from integrations.google_health import fencing
+
     async with get_db_session() as session:
         before = await views.kg_facts(session, user_id, start, end - timedelta(days=1))
     pushed = await pushed_names(user_id)
     status: dict[str, dict[str, Any]] = {}
     for t in readable(granted, skip):
+        await fencing.before_request()
         try:
             points, complete = await fetch(client, t, start, end, zone)
             own: set[str] = set()
@@ -136,9 +140,11 @@ async def pull(client: GoogleHealthClient, user_id: UUID, granted: list[str], st
         rows = [point.row(user_id, written_by_hercfit=point.remote_name in own)
                 for point in points if point.remote_name not in skipped]
         async with get_db_session() as session:
+            await fencing.check(session)
             written, removed = await HealthPointRow.replace_window(session, user_id, t.id, start, end, rows)
         status[t.id] = {"through": (end - timedelta(days=1)).isoformat(), "error": None, "rows": written,
                         "removed": removed}
     async with get_db_session() as session:
+        await fencing.check(session)
         await views.publish_kg(session, user_id, start, end - timedelta(days=1), before=before.keys())
     return status

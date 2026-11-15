@@ -77,6 +77,14 @@ async def execute_idempotent(request, service, invoke, response):
     return replay(status_code, content, headers)
 
 
+async def prune(session, days: int) -> int:
+    """Xoá dòng sổ idempotency cũ hơn `days` ngày (client chỉ thử lại trong vài phút); trả về số dòng đã xoá."""
+    result = await session.execute(text(
+        "DELETE FROM api_idempotency WHERE created_at < now() - make_interval(days => :days)"
+    ), {"days": days})
+    return result.rowcount or 0
+
+
 def replay(status, body, headers):
     if status == 204:
         return Response(status_code=204, headers=headers)
