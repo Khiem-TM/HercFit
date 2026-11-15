@@ -14,6 +14,13 @@ export function escapeHtml(value: string): string {
 
 const LINK_ATTRS = 'target="_blank" rel="noopener noreferrer"'
 
+// Câu trả lời không hiển thị icon (✅ ⚠️ 😊...), kể cả lịch sử cũ và token đang stream; mũi tên chữ (→) vẫn giữ.
+const ICONS = /[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}]+ */gu
+
+function withoutIcons(text: string): string {
+  return text.replace(ICONS, '').replace(/(?<=\S) +(?=[.,!?…])/g, '')
+}
+
 function inline(text: string): string {
   return text
     .replace(/`([^`\n]+)`/g, '<code>$1</code>')
@@ -24,7 +31,7 @@ function inline(text: string): string {
 }
 
 export function renderMarkdown(source: string): string {
-  const lines = escapeHtml((source || '').replace(/\r\n?/g, '\n')).split('\n')
+  const lines = escapeHtml(withoutIcons(source || '').replace(/\r\n?/g, '\n')).split('\n')
   const html: string[] = []
   let list: 'ul' | 'ol' | null = null
   let paragraph: string[] = []

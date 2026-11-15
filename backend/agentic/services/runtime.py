@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import monotonic, time
@@ -55,6 +56,15 @@ class RunningTurn:
 
 
 RECOVER_APPROVED = "Lượt xử lý chưa hoàn tất. Có thể thử xác nhận lại cùng action_id để khôi phục thao tác đã duyệt."
+
+
+# Emoji và ký hiệu hình (✅ ⚠️ 😊 ⭐...); mũi tên chữ (→) và dấu chấm giữa (·) vẫn giữ vì là một phần câu chữ.
+ICONS = re.compile("[\U0001f000-\U0001faff⌀-⏿☀-➿⬀-⯿️‍⃣]+ *")
+
+
+def strip_icons(text: str) -> str:
+    """Câu trả lời gửi frontend không chứa icon, kể cả khi model tự thêm."""
+    return re.sub(r"(?<=\S) +(?=[.,!?…])", "", ICONS.sub("", text)).strip()
 
 
 def interrupted_reply(state, exc) -> str:
@@ -222,7 +232,7 @@ class Runtime(MemoryLifecycle):
     def response(self, state):
         pending = state.get("pending_action")
         is_pending = state.get("status") == "pending_confirmation"
-        reply = (
+        reply = strip_icons(
             "Vui lòng kiểm tra và xác nhận thao tác trước khi lưu."
             if is_pending
             else state.get("reply") or state.get("error") or ""
