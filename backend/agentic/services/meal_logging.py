@@ -17,6 +17,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from domains.catalog.services.catalog_search import accented
 from domains.shared.models.catalog import normalize_food_text
 
 INTENT = "LOG_FOOD"
@@ -119,23 +120,50 @@ def names(meal: dict, resolved: dict | None = None, index: int = 0) -> list[str]
     return list(seen.values())
 
 
+def name_matches(query: str, row: dict) -> bool:
+    """Tên người dùng gõ trùng tên hoặc alias của bản ghi.
+
+    Bỏ dấu làm mất nghĩa ("thịt bò kho" và "thịt bò khô" cùng thành "thit bo kho"), nên câu gõ có dấu được so có dấu;
+    câu gõ không dấu mới so không dấu. Alias lưu dạng không dấu (foods_aliases.normalized_alias) nên so không dấu."""
+    plain = normalize_food_text(query)
+    if not plain:
+        return False
+    names = [name for name in (row.get("name_vi"), row.get("name_en")) if name]
+    typed = accented(query)
+    if typed == plain:
+        hit = plain in {normalize_food_text(name) for name in names}
+    else:
+        hit = typed in {accented(name) for name in names}
+    return hit or plain in (row.get("aliases") or ())
+
+
+def name_contains(query: str, row: dict) -> bool:
+    """Tên hoặc alias của bản ghi chứa mọi từ người dùng nói ("trứng" trong "Trứng gà ta luộc"); cùng quy tắc dấu với
+    name_matches. Dùng để phân biệt "catalog chưa có món" với "có món gần đúng, người dùng chọn"."""
+    plain = normalize_food_text(query)
+    if not plain:
+        return False
+    typed = accented(query)
+    fold = normalize_food_text if typed == plain else accented
+    words = set(fold(query).split())
+    names = [name for name in (row.get("name_vi"), row.get("name_en")) if name]
+    return any(words <= set(fold(name).split()) for name in names) or any(
+        set(plain.split()) <= set(alias.split()) for alias in row.get("aliases") or ()
+    )
+
+
 def _exact(query: str, unit: str, rows: list[dict]) -> dict | None:
-    """Bản ghi duy nhất trùng tên chuẩn hoá mà đơn vị người dùng nói dùng được.
+    """Bản ghi duy nhất trùng tên (name_matches) mà đơn vị người dùng nói dùng được.
 
     Catalog có tên trùng: "Phở bò tái" có một bản có khẩu phần "1 tô" (món) và một bản không có (thực phẩm), cùng
     tính theo 100 g. "1 tô" chỉ quy đổi được bằng bản có khẩu phần; gam/ml thì ưu tiên bản không có khẩu phần như
     trước khi mọi món chuyển về 100 g. Còn lại nhiều bản dùng được là mơ hồ và để model hoặc người dùng chọn."""
-    key = normalize_food_text(query)
     hits = [
         row
         for row in rows
         if isinstance(row, dict)
         and row.get("id")
-        and key
-        in {
-            normalize_food_text(row.get("name_vi") or ""),
-            normalize_food_text(row.get("name_en") or ""),
-        }
+        and name_matches(query, row)
         and measure(row, 1, unit) is not None
     ]
     if len(hits) > 1 and unit != "SERVING":

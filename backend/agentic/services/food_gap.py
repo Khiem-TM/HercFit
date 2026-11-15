@@ -12,7 +12,6 @@ from typing import Any
 
 from agentic.agents.state import RouteDecision
 from agentic.services import meal_logging
-from domains.shared.models.catalog import normalize_food_text
 
 INTENT = meal_logging.INTENT
 MAX_ITEMS = 5
@@ -21,22 +20,20 @@ LOGGING_INTENTS = {INTENT, 'catalog_lookup'}
 DEFAULT_INSTRUCTION = 'Ghi bữa ăn theo yêu cầu gốc của người dùng.'
 
 
-def _names(row: dict) -> set[str]:
-    return {normalize_food_text(row.get('name_vi') or ''), normalize_food_text(row.get('name_en') or '')} - {''}
-
-
 def missing(meal: dict, index: int, rows: Any, resolved: dict | None = None) -> list[dict]:
-    """Các món của bữa không trùng tên bản ghi nào (bất kể đơn vị) mà người dùng chưa chọn trên thẻ."""
+    """Các món của bữa không trùng tên bản ghi nào (bất kể đơn vị) mà người dùng chưa chọn trên thẻ.
+
+    Catalog có bản ghi chứa tên người dùng nói ("trứng" → "Trứng gà ta luộc") thì món được đánh dấu choose: câu trả lời
+    mời chọn trong danh mục thay vì báo "chưa có" (lượt c9171da7 báo chưa có "trứng" khi catalog có 20 món trứng)."""
     resolved = resolved or {}
-    known = set()
-    for row in rows if isinstance(rows, list) else []:
-        if isinstance(row, dict):
-            known |= _names(row)
+    known = [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
     gaps = []
     for position, item in enumerate(meal.get('items') or []):
         key = meal_logging.item_key(index, position)
-        if key not in resolved and normalize_food_text(item.get('food') or '') not in known:
-            gaps.append(gap_item(key, item.get('food'), item.get('quantity'), item.get('unit')))
+        food = str(item.get('food') or '')
+        if key not in resolved and not any(meal_logging.name_matches(food, row) for row in known):
+            similar = any(meal_logging.name_contains(food, row) for row in known)
+            gaps.append(gap_item(key, item.get('food'), item.get('quantity'), item.get('unit'), choose=similar))
     return gaps
 
 
