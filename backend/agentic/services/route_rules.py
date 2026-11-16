@@ -279,7 +279,9 @@ def tool_budget(state, ctx):
 
 
 def safety_block(state, ctx):
-    if ctx.verdict is None or ctx.verdict.level != "block":
+    if ctx.verdict is None or (
+        ctx.verdict.level != "block" and ctx.verdict.category != "red_flag_symptom"
+    ):
         return None
     # Điểm dừng an toàn do code quyết định: không gọi tool, không tra cứu, không sinh kế hoạch cho yêu cầu này.
     return Pre(
@@ -706,6 +708,13 @@ def plan_mode_only(decision, ctx):
     )
     if not redirect:
         return None
+    if ctx.verdict is not None:
+        # A Plan invitation is a prepared reply and bypasses answer()'s safety
+        # guidance. Medical cautions must reach the safety-aware answer instead.
+        decision.action, decision.next_agent, decision.missing_fields = "answer", "orchestrator", []
+        decision.personalize, decision.topic = False, None
+        decision.instruction = ctx.verdict.guidance
+        return Applied(decision, "safety_before_plan")
     # Chế độ ghi nhanh không tư vấn từ trí nhớ của model: mời người dùng hỏi lại ở chế độ Plan.
     decision.action, decision.next_agent, decision.missing_fields = "answer", "orchestrator", []
     decision.personalize, decision.topic = False, None
