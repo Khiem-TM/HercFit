@@ -142,4 +142,15 @@ async function save(target: PlanEntry) {
 .dlg p { margin: 0; font-size: 14px; line-height: 1.55; }
 .dlg .hf-err { margin: 0; }
 .end { justify-content: flex-end; }
+/* Điện thoại: hộp xác nhận là tấm trượt ở đáy, ngay trên thanh tab dưới. */
+@media (max-width: 760px) {
+  .empty { padding: 24px; }
+  .ex { grid-template-columns: 32px minmax(0, 1fr); gap: 12px; }
+  .ex .hf-pill { display: none; }
+  .num { width: 32px; height: 32px; }
+  .dlgwrap { align-items: flex-end; padding: 0; bottom: var(--hf-tabbar-h); }
+  .dlg { max-width: none; border-radius: 26px 26px 0 0; padding: 22px 18px 18px; animation: dlg-up var(--hf-dur-slow) var(--hf-ease-out); }
+  .dlg h2 { font-size: 20px; }
+  @keyframes dlg-up { from { transform: translateY(100%); } }
+}
 </style>

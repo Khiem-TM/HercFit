@@ -2,6 +2,7 @@
 import { computed, useTemplateRef } from 'vue'
 import { LayoutDashboard, Orbit, PanelLeftClose, Plus } from 'lucide-vue-next'
 import type { SessionSummary, UserProfile } from '@/types/api'
+import HfAvatar from '@/components/app/HfAvatar.vue'
 import HfLogo from '@/components/app/HfLogo.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import ChatHistoryList from './ChatHistoryList.vue'
@@ -30,7 +31,6 @@ defineExpose({
 })
 
 const displayName = computed(() => props.user?.nick_name || props.user?.fullname || 'Bạn')
-const initial = computed(() => (displayName.value.trim()[0] || 'B').toUpperCase())
 </script>
 
 <template>
@@ -59,11 +59,11 @@ const initial = computed(() => (displayName.value.trim()[0] || 'B').toUpperCase(
       <span class="new-dot"><Plus :size="14" :stroke-width="2.4" aria-hidden="true" /></span>
       Cuộc trò chuyện mới
     </button>
-    <button type="button" class="snav" @click="emit('open-dashboard')">
+    <button type="button" class="snav desk" @click="emit('open-dashboard')">
       <LayoutDashboard :size="18" :stroke-width="1.8" class="nav-icon" aria-hidden="true" />
       Dashboard
     </button>
-    <button type="button" class="snav" @click="emit('open-map')">
+    <button type="button" class="snav desk" @click="emit('open-map')">
       <Orbit :size="18" :stroke-width="1.8" class="nav-icon" aria-hidden="true" />
       Bản đồ dữ liệu
     </button>
@@ -79,10 +79,7 @@ const initial = computed(() => (displayName.value.trim()[0] || 'B').toUpperCase(
 
     <div class="foot">
       <button type="button" class="snav me" title="Hồ sơ & kết nối" @click="emit('open-user-modal')">
-        <span class="avatar">
-          <img v-if="user?.avatar_url" :src="user.avatar_url" :alt="displayName" referrerpolicy="no-referrer" />
-          <template v-else>{{ initial }}</template>
-        </span>
+        <HfAvatar :user="user" />
         <span class="me-text">
           <span class="me-name">{{ displayName }}</span>
           <span class="me-sub">Hồ sơ &amp; kết nối</span>
@@ -114,12 +111,13 @@ const initial = computed(() => (displayName.value.trim()[0] || 'B').toUpperCase(
 .recent { padding: 18px 10px 6px; font-size: 12px; }
 .foot { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--hf-press); padding-top: 8px; margin-top: 4px; }
 .me { min-height: 52px; flex: 1; min-width: 0; padding: 0 8px; }
-.avatar {
-  width: 32px; height: 32px; border-radius: 50%; background: var(--hf-line); flex: none; overflow: hidden;
-  display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700;
-}
-.avatar img { width: 100%; height: 100%; object-fit: cover; }
 .me-text { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
 .me-name, .me-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .me-sub { font-size: 12px; color: var(--hf-muted); font-weight: 400; }
+/* Điện thoại: ngăn kéo chỉ còn lịch sử và hồ sơ; Dashboard và Bản đồ đã nằm ở thanh tab dưới. */
+@media (max-width: 760px) {
+  .side { width: 100%; padding: calc(var(--hf-safe-top) + 12px) 12px calc(var(--hf-safe-bottom) + 12px); }
+  .desk { display: none; }
+  .snav { min-height: 46px; font-size: 15px; }
+}
 </style>

@@ -206,4 +206,10 @@ defineExpose({ open: () => { open.value = true } })
 .acts { padding: 10px 0 0 38px; }
 .acts .hf-btn:not(.pri) { background: var(--hf-card); }
 .acts .hf-btn:not(.pri):hover:not(:disabled) { background: var(--hf-press); }
+/* Điện thoại: hộp thư là một tấm rộng gần hết màn hình ngay dưới thanh đầu trang, không bám theo vị trí chuông. */
+@media (max-width: 760px) {
+  .inbox { position: fixed; left: 8px; right: 8px; top: calc(var(--hf-safe-top) + 56px); width: auto; transform-origin: top center; }
+  .list { max-height: calc(100dvh - var(--hf-safe-top) - var(--hf-tabbar-h) - 150px); overscroll-behavior-y: contain; }
+  .acts { padding-left: 0; }
+}
 </style>

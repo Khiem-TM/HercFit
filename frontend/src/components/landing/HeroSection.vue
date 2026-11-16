@@ -47,7 +47,7 @@ function handleStart(): void {
       </div>
 
       <div
-        class="relative w-full max-w-4xl h-[480px] md:h-[580px] flex items-center justify-center -my-space-md"
+        class="relative w-full max-w-4xl h-[480px] md:h-[580px] flex items-center justify-center mt-space-sm -mb-space-md md:-my-space-md"
       >
         <svg
           class="absolute inset-0 w-full h-full pointer-events-none opacity-40"

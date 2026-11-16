@@ -269,9 +269,17 @@ function badge(url: string): string {
 .md :deep(strong) { color: var(--hf-ink); font-weight: 700; }
 .md :deep(code) { font-family: var(--hf-mono); font-size: 13px; background: var(--hf-fill); padding: 1px 5px; border-radius: 5px; }
 .md :deep(a) { color: var(--hf-ink); text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
+/* Điện thoại: câu trả lời và thẻ dùng trọn chiều ngang (dấu HercFit nằm trên một hàng riêng), kéo quá mép không làm trang nảy. */
 @media (max-width: 760px) {
-  .thread { padding: 20px 16px 8px; }
+  .thread { padding: 12px 14px 8px; overscroll-behavior-y: contain; }
+  .col720 { gap: 22px; }
+  .um { max-width: 86%; padding: 10px 14px; }
+  .am { flex-direction: column; gap: 8px; font-size: 15.5px; line-height: 1.65; }
+  .am > .body { width: 100%; }
+  .spark { margin-top: 0; }
+  .spark .avatar { width: 24px; height: 24px; }
   .pending { margin-left: 0; }
+  .plan .hf-btn { flex: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .msg-enter, .um-enter, .caret, .spark.live::before, .think { animation: none; }

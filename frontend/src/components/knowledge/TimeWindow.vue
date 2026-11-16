@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, shallowRef, useTemplateRef, watch } from 'vue'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import type { DayRange } from '@/composables/useKnowledgeGraph'
+import { useMobile } from '@/composables/useMobile'
 import { hubColor, type HubCounts, type KnowledgeHub, type KnowledgeWindow } from '@/types/knowledge'
 import { dayDiff, daysBetween, rangeLength, recentRange, sameRange } from './timeWindow'
 
@@ -16,6 +17,7 @@ const props = defineProps<{
   failed?: boolean
 }>()
 const emit = defineEmits<{ 'update:modelValue': [range: DayRange]; retry: [] }>()
+const { isMobile } = useMobile()
 
 type Grip = 'start' | 'end' | 'band' | 'edge'
 const STACK: KnowledgeHub[] = ['body', 'nutrition', 'training', 'conversation']
@@ -60,7 +62,9 @@ const bars = computed(() => {
 
 const ticks = computed(() => days.value.flatMap((day, i) => {
   const at = (i + .5) / count.value * 100
-  return day.endsWith('-01') && at > 9 && at < 88 ? [{ day, at, label: `Th${Number(day.slice(5, 7))}` }] : []
+  // Nhãn tháng tránh hai nhãn ở mép trục; trục trên điện thoại hẹp nên khoảng tránh rộng hơn.
+  const edge = isMobile.value ? 18 : 9
+  return day.endsWith('-01') && at > edge && at < 97 - edge ? [{ day, at, label: `Th${Number(day.slice(5, 7))}` }] : []
 }))
 const activePreset = computed(() => presets.find(preset => sameRange(draft.value, preset.days
   ? recentRange(props.min, props.max, preset.days) : { start: props.min, end: props.max }))?.days)

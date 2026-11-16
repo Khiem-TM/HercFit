@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, shallowRef, useTemplateRef } from 'vue'
-import { LayoutDashboard, PanelLeftOpen } from 'lucide-vue-next'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
+import { LayoutDashboard, PanelLeftOpen, SquarePen } from 'lucide-vue-next'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmptyState from '@/components/chat/ChatEmptyState.vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
@@ -9,11 +9,13 @@ import VoiceDock from '@/components/chat/VoiceDock.vue'
 import UserSettingsModal from '@/components/chat/UserSettingsModal.vue'
 import NotificationBell from '@/components/notifications/NotificationBell.vue'
 import HfToast from '@/components/app/HfToast.vue'
+import MobileTabBar, { type MobileTab } from '@/components/app/MobileTabBar.vue'
 import { AnimatePresence, motion } from 'motion-v'
-import { collapseWidth, presence } from '@/motion'
+import { collapseWidth, drawerLeft, fade, presence } from '@/motion'
 import type { DashboardTab } from '@/components/dashboard/DashboardModal.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useChat } from '@/composables/useChat'
+import { useMobile } from '@/composables/useMobile'
 import { onArrival } from '@/composables/useNotifications'
 import { useThemeDefault } from '@/composables/useTheme'
 import { useVoice } from '@/composables/useVoice'
@@ -46,9 +48,14 @@ const {
   askInPlan,
 } = useChat()
 const { voiceState, userLevel, agentLevel, caption, muted, toggleVoice, stopVoice, toggleMute } = useVoice()
+const { isMobile, keyboardOpen, viewportHeight } = useMobile()
 
 const DashboardModal = defineAsyncComponent(() => import('@/components/dashboard/DashboardModal.vue'))
 const isDashboardOpen = ref(false)
+// Điện thoại: Dashboard là các trang của thanh tab dưới, mở một lần rồi giữ nguyên (ẩn khi về khung chat) để chuyển
+// tab không phải tải lại dữ liệu và vẫn giữ vị trí cuộn.
+const dashboardOpened = ref(false)
+watch(isDashboardOpen, open => { if (open) dashboardOpened.value = true })
 const dashboardTab = ref<DashboardTab>('today')
 const isUserModalOpen = ref(false)
 // Màn hình đồng ý của Google Health quay về /chat?integration=google-health&result=...
@@ -116,11 +123,20 @@ function consumeIntegrationReturn(): void {
   window.history.replaceState({}, '', window.location.pathname)
 }
 
-// Màn hình hẹp: thanh bên ẩn sẵn để khung chat có đủ chỗ.
-const isSidebarCollapsed = shallowRef(typeof window !== 'undefined' && window.innerWidth <= 760)
+// Điện thoại: thanh bên là ngăn kéo phủ lên khung chat, ẩn sẵn và tự đóng sau khi chọn.
+const isSidebarCollapsed = shallowRef(isMobile.value)
 const sidebar = useTemplateRef<InstanceType<typeof ChatSidebar>>('sidebar')
 const openSidebarButton = useTemplateRef<HTMLButtonElement>('openSidebarButton')
-const sidebarMotion = presence(collapseWidth(268))
+const sidebarMotion = computed(() => presence(isMobile.value ? drawerLeft : collapseWidth(268)))
+const closeDrawer = () => { if (isMobile.value) isSidebarCollapsed.value = true }
+
+function selectTab(tab: MobileTab): void {
+  if (tab === 'chat') isDashboardOpen.value = false
+  else openDashboard(tab)
+}
+
+// Bàn phím ảo mở (iOS không co bố cục): khung ứng dụng cao bằng vùng nhìn thấy và trang không bị đẩy lên theo ô nhập.
+watch([keyboardOpen, viewportHeight], () => { if (isMobile.value && keyboardOpen.value) window.scrollTo(0, 0) })
 
 async function hideSidebar(): Promise<void> {
   isSidebarCollapsed.value = true
@@ -155,8 +171,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="hf shell" :class="{ blur: isDashboardOpen }">
+  <div class="hf shell" :class="{ blur: isDashboardOpen && !isMobile, tabbed: isMobile && !keyboardOpen }"
+       :style="isMobile && keyboardOpen ? { height: `${viewportHeight}px` } : undefined">
     <AnimatePresence :initial="false">
+    <motion.button v-if="isMobile && !isSidebarCollapsed" key="scrim" type="button" class="hf-scrim drawer-scrim"
+                   aria-label="Đóng thanh bên" v-bind="presence(fade)" @click="hideSidebar" />
     <motion.div v-if="!isSidebarCollapsed" key="sidebar" class="side-wrap" v-bind="sidebarMotion">
     <ChatSidebar
       ref="sidebar"
@@ -164,10 +183,10 @@ onUnmounted(() => {
       :active-session-id="activeSessionId"
       :user="user"
       :is-streaming="isStreaming"
-      @new-chat="createNewSession"
-      @select-session="selectSession"
+      @new-chat="createNewSession(); closeDrawer()"
+      @select-session="selectSession($event); closeDrawer()"
       @delete-session="deleteSession"
-      @open-user-modal="openSettings('profile')"
+      @open-user-modal="openSettings('profile'); closeDrawer()"
       @open-dashboard="openDashboard('today')"
       @open-map="openDashboard('map')"
       @collapse="hideSidebar"
@@ -196,7 +215,11 @@ onUnmounted(() => {
         </div>
         <div class="head-right">
           <NotificationBell ref="bell" @ask="askAboutHealth" @settings="openSettings('notifications')" />
-          <button v-if="isSidebarCollapsed" type="button" class="hf-btn sm" @click="openDashboard('today')">
+          <button v-if="isMobile" type="button" class="hf-ib clear" style="width: 40px; height: 40px" title="Cuộc trò chuyện mới"
+                  aria-label="Cuộc trò chuyện mới" :disabled="isStreaming || !hasMessages" @click="createNewSession">
+            <SquarePen :size="18" :stroke-width="1.8" aria-hidden="true" />
+          </button>
+          <button v-else-if="isSidebarCollapsed" type="button" class="hf-btn sm" @click="openDashboard('today')">
             <LayoutDashboard :size="16" aria-hidden="true" />Dashboard
           </button>
         </div>
@@ -281,8 +304,9 @@ onUnmounted(() => {
   </div>
 
   <DashboardModal
-    v-if="isDashboardOpen"
+    v-if="isDashboardOpen || (isMobile && dashboardOpened)"
     v-model:tab="dashboardTab"
+    :hidden="!isDashboardOpen"
     :busy="isStreaming || isConfirming"
     :revision="messages.length + Number(isStreaming) + Number(isConfirming) + sessions.length"
     @close="isDashboardOpen = false"
@@ -299,6 +323,8 @@ onUnmounted(() => {
     :integration-result="integrationResult"
     @close="isUserModalOpen = false"
   />
+
+  <MobileTabBar v-if="isMobile && !keyboardOpen" :active="isDashboardOpen ? dashboardTab : 'chat'" @select="selectTab" />
 
   <HfToast :message="toast.text" :action="toast.action" @action="toast.run?.()" />
 </template>
@@ -317,8 +343,23 @@ onUnmounted(() => {
 .composer-wrap { padding: 8px 24px 16px; flex: none; }
 .col720 { max-width: 720px; margin: 0 auto; width: 100%; }
 .disclaimer { text-align: center; font-size: 12px; color: var(--hf-muted); margin: 10px 0 0; }
+/*
+ * Điện thoại: khung chat nằm trên thanh tab dưới (MobileTabBar); thanh bên thành ngăn kéo trượt từ trái, phủ lên chat.
+ * Bàn phím ảo mở thì thanh tab ẩn (.tabbed mất) để ô soạn tin nằm sát bàn phím.
+ */
 @media (max-width: 760px) {
-  .composer-wrap { padding: 8px 12px 12px; }
+  .shell { width: 100%; }
+  .shell.tabbed { padding-bottom: var(--hf-tabbar-h); }
+  .drawer-scrim { z-index: 55; }
+  .side-wrap { position: fixed; inset: 0 auto 0 0; z-index: 56; width: min(86vw, 320px); box-shadow: 0 0 60px var(--hf-shadow-2); }
+  .chat-head { padding: calc(var(--hf-safe-top) + 6px) 8px 6px; min-height: 0; gap: 4px; }
+  .head-left { gap: 2px; flex: 1; }
+  .head-right { gap: 0; }
+  .title { padding: 0 6px; font-size: 16px; }
+  .error-wrap { padding: 0 12px; }
+  .chat > .empty { justify-content: flex-start; padding: 0; }
+  .composer-wrap { padding: 6px 12px 8px; }
+  .disclaimer { font-size: 11px; margin-top: 6px; }
 }
 @media (prefers-reduced-motion: reduce) { .shell { transition: none; } }
 </style>

@@ -146,6 +146,7 @@ async function endPlan() {
 .session { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--hf-fill-2); border-radius: 16px; padding: 12px 14px; }
 .s-name { font-weight: 600; font-size: 14px; }
 .empty { align-items: flex-start; padding: 40px; }
+@media (max-width: 760px) { .empty { padding: 24px; } }
 .empty-title { font-size: 26px; font-weight: 700; }
 .empty p { margin: 0; font-size: 15px; line-height: 1.55; }
 .note { margin: 12px 0 0; }

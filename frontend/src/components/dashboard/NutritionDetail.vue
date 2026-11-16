@@ -84,6 +84,7 @@ const goalName = computed(() => goalChoices.find(choice => choice.id === props.t
 
 <style scoped>
 .empty { align-items: flex-start; padding: 40px; }
+@media (max-width: 760px) { .empty { padding: 24px; } }
 .empty p { margin: 0; }
 .meal { gap: 6px; }
 .meal-name { margin: 0; font-size: 17px; }

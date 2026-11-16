@@ -2,11 +2,13 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 import { CalendarDays, Plug, RefreshCw, UserRound, X } from 'lucide-vue-next'
 import { AnimatePresence, motion } from 'motion-v'
-import { indicatorTransition, modalTransition, presence } from '@/motion'
+import { fade, indicatorTransition, modalTransition, presence } from '@/motion'
 import { useAuth } from '@/composables/useAuth'
+import { useMobile } from '@/composables/useMobile'
 import { createHealthApi } from '@/features/health-integration/api'
 import { syncOnOpen } from '@/features/health-integration/openSync'
 import { goalChoices } from '@/features/onboarding/model'
+import HfAvatar from '@/components/app/HfAvatar.vue'
 import HfLogo from '@/components/app/HfLogo.vue'
 import HfToast from '@/components/app/HfToast.vue'
 import HeartDetail from './HeartDetail.vue'
@@ -24,8 +26,12 @@ type SettingsTab = 'profile' | 'integrations' | 'notifications'
 
 const MapTab = defineAsyncComponent(() => import('./MapTab.vue'))
 
-/** Dashboard dạng hộp thoại lớn trên khung chat: Hôm nay · Tiến độ · Kế hoạch · Bản đồ. */
-const props = defineProps<{ busy: boolean; revision: number }>()
+/**
+ * Dashboard dạng hộp thoại lớn trên khung chat: Hôm nay · Tiến độ · Kế hoạch · Bản đồ. Trên điện thoại nó là các trang
+ * toàn màn hình của thanh tab dưới (MobileTabBar): không có hàng tab và nút đóng riêng, và được giữ nguyên (hidden)
+ * khi người dùng về khung chat.
+ */
+const props = defineProps<{ busy: boolean; revision: number; hidden?: boolean }>()
 const emit = defineEmits<{
   close: []
   settings: [tab: SettingsTab]
@@ -36,13 +42,14 @@ const emit = defineEmits<{
 const tab = defineModel<DashboardTab>('tab', { default: 'today' })
 
 const data = useDashboardData()
-const { currentGoal, authFetch } = useAuth()
+const { user, currentGoal, authFetch } = useAuth()
+const { isMobile } = useMobile()
 const detail = shallowRef<'' | 'ready' | 'workout' | 'nutrition' | 'heart'>('')
 const mapOpened = shallowRef(tab.value === 'map')
 const toast = shallowRef('')
 // Đóng = chạy hiệu ứng ra trước (AnimatePresence), xong mới báo cho trang cha gỡ Dashboard.
 const shown = shallowRef(true)
-const close = () => { shown.value = false }
+const close = () => { if (isMobile.value) emit('close'); else shown.value = false }
 const dialog = useTemplateRef<HTMLElement>('dialog')
 let toastTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -50,6 +57,12 @@ const TABS: { id: DashboardTab; label: string }[] = [
   { id: 'today', label: 'Hôm nay' }, { id: 'progress', label: 'Tiến độ' }, { id: 'plan', label: 'Kế hoạch' }, { id: 'map', label: 'Bản đồ' },
 ]
 const TITLES: Record<DashboardTab, string> = { today: 'Dashboard', progress: 'Tiến độ', plan: 'Kế hoạch', map: 'Bản đồ dữ liệu' }
+// Điện thoại: trang Hôm nay mở đầu bằng lời chào theo buổi và tên gọi của người dùng.
+const greeting = computed(() => {
+  const hour = Number(clockTime(new Date().toISOString()).slice(0, 2))
+  return hour < 11 ? 'Chào buổi sáng' : hour < 14 ? 'Chào buổi trưa' : hour < 18 ? 'Chào buổi chiều' : 'Chào buổi tối'
+})
+const firstName = computed(() => user.value?.nick_name || user.value?.fullname?.trim().split(/\s+/).pop() || 'bạn')
 
 function pick(next: DashboardTab) {
   tab.value = next
@@ -103,7 +116,7 @@ watch(() => props.busy, (busy, was) => { if (was && !busy) schedule(1500, 5000) 
 watch(() => props.revision, () => { if (!props.busy) schedule(900) })
 
 function keydown(event: KeyboardEvent) {
-  if (event.key !== 'Escape' || event.defaultPrevented) return
+  if (event.key !== 'Escape' || event.defaultPrevented || props.hidden) return
   if (document.querySelector('.hf-smodal')) return  // hộp thoại Hồ sơ & kết nối đang mở phía trên
   if (detail.value) detail.value = ''
   else close()
@@ -127,14 +140,26 @@ onUnmounted(() => {
 <template>
   <Teleport to="body">
     <AnimatePresence @exit-complete="emit('close')">
-    <div v-if="shown" class="hf dash-root">
+    <div v-if="shown" v-show="!hidden" class="hf dash-root">
       <motion.button type="button" class="hf-scrim scrim" aria-label="Đóng Dashboard" v-bind="presence(modalTransition.scrim)"
                      @click="close" />
       <div class="center">
-      <motion.div ref="dialog" class="modal" role="dialog" aria-modal="true" aria-label="Dashboard HercFit" tabindex="-1"
-                  v-bind="presence(modalTransition.panel)">
-        <header class="mh">
-          <div class="row1">
+      <motion.div ref="dialog" class="modal" role="dialog" :aria-modal="!isMobile" aria-label="Dashboard HercFit" tabindex="-1"
+                  v-bind="presence(isMobile ? fade : modalTransition.panel)">
+        <header class="mh" :class="{ covered: isMobile && detail }">
+          <div v-if="isMobile" class="mtop">
+            <div class="mtitle">
+              <p v-if="tab === 'today'" class="hello">{{ greeting }},</p>
+              <h1>{{ tab === 'today' ? firstName : TITLES[tab] }}</h1>
+            </div>
+            <button type="button" class="hf-ib" aria-label="Cập nhật dữ liệu" @click="refresh">
+              <RefreshCw :size="19" :stroke-width="1.8" :class="{ 'hf-spin': data.loading.value }" aria-hidden="true" />
+            </button>
+            <button type="button" class="me" aria-label="Hồ sơ & kết nối" @click="emit('settings', 'profile')">
+              <HfAvatar :user="user" :size="44" />
+            </button>
+          </div>
+          <div v-else class="row1">
             <div class="brand"><HfLogo :size="30" /><span>HercFit</span></div>
             <nav class="tabs" aria-label="Điều hướng Dashboard">
               <button v-for="item in TABS" :key="item.id" type="button" class="tab" :class="{ on: tab === item.id }"
@@ -159,7 +184,7 @@ onUnmounted(() => {
             </div>
           </div>
           <div class="row2">
-            <h1>{{ TITLES[tab] }}</h1>
+            <h1 v-if="!isMobile">{{ TITLES[tab] }}</h1>
             <div class="chips">
               <span class="hf-chip"><CalendarDays :size="15" aria-hidden="true" />Hôm nay, {{ ddmmyyyy(data.today) }}</span>
               <span v-if="goalLabel" class="hf-chip">Mục tiêu: <b class="ink">{{ goalLabel }}</b></span>
@@ -229,12 +254,26 @@ h1 { margin: 0; font-size: 40px; line-height: 1.05; font-weight: 700; letter-spa
 .body { position: relative; flex: 1; min-height: 0; }
 .pane { position: absolute; inset: 0; overflow-y: auto; padding: 4px 28px 28px; }
 .body > .layer { position: absolute; inset: 0; overflow-y: auto; background: var(--hf-stage); padding: 4px 28px 28px; z-index: 2; }
+/*
+ * Điện thoại: trang toàn màn hình nằm trên thanh tab dưới. Đầu trang là tiêu đề lớn (hoặc lời chào) với nút cập nhật và
+ * ảnh đại diện; các chip thành một hàng cuộn ngang. Trang chi tiết phủ cả đầu trang như một màn hình mới.
+ */
 @media (max-width: 760px) {
+  .dash-root { bottom: var(--hf-tabbar-h); }
+  .scrim { display: none; }
   .center { inset: 0; }
-  .modal { width: 100%; border-radius: 0; }
-  .mh { padding: 14px 16px 10px; }
-  .pane, .body > .layer { padding: 4px 16px 24px; }
-  .tabs { margin: 0; order: 3; width: 100%; }
-  h1 { font-size: 30px; }
+  .modal { width: 100%; border-radius: 0; box-shadow: none; }
+  .mh { padding: calc(var(--hf-safe-top) + 14px) 16px 10px; gap: 12px; }
+  .mh.covered { display: none; }
+  .mtop { display: flex; align-items: center; gap: 8px; }
+  .mtitle { flex: 1; min-width: 0; }
+  .hello { margin: 0 0 2px; font-size: 14px; font-weight: 500; color: var(--hf-muted); }
+  h1 { font-size: 30px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .me { border: 0; padding: 0; background: transparent; border-radius: 50%; display: flex; flex: none; }
+  .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; width: calc(100% + 32px); }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips .hf-chip { flex: none; }
+  .pane, .body > .layer { padding: 4px 16px 24px; overscroll-behavior-y: contain; }
+  .body > .layer { padding-top: calc(var(--hf-safe-top) + 12px); }
 }
 </style>

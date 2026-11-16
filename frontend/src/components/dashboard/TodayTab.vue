@@ -291,6 +291,7 @@ const addWater = () => quick('water', () => props.data.logWater(WATER_ML), `Đã
 <style scoped>
 .today { display: flex; flex-direction: column; gap: 16px; }
 .hr-row { display: flex; align-items: flex-end; gap: 12px 28px; flex-wrap: wrap; }
+#b5 { display: flex; align-items: center; gap: 6px; }
 .err-text { display: flex; gap: 10px; align-items: center; }
 .dash { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 16px; align-items: start; }
 .headline { display: flex; align-items: center; gap: 18px; }
@@ -341,7 +342,16 @@ const addWater = () => quick('water', () => props.data.logWater(WATER_ML), `Đã
 .dc.up { border: 2px dashed var(--hf-line-3); color: var(--hf-faint); }
 .dc.rest { background: var(--hf-fill); color: var(--hf-faint); }
 @media (max-width: 1180px) { .dash { grid-template-columns: minmax(0, 1fr); } .dash > .pcard { order: -1; } }
-@media (max-width: 760px) { .sigs { grid-template-columns: minmax(0, 1fr); } .macro { grid-template-columns: minmax(0, 1fr); } }
+/* Điện thoại: các thẻ của hôm nay đi trước, thẻ hồ sơ (mô hình cơ thể) xuống cuối; ba tín hiệu vẫn nằm một hàng. */
+@media (max-width: 760px) {
+  .dash > .pcard { order: 0; }
+  .sigs { gap: 6px; }
+  .sig { padding: 10px; border-radius: 14px; }
+  .macro { grid-template-columns: minmax(0, 1fr); }
+  .explain p, .para { font-size: 14.5px; }
+  .dc { width: 34px; height: 34px; }
+  .quick-meals .hf-btn, .quick-water .hf-btn { min-height: 38px; padding: 0 14px; font-size: 13px; }
+}
 .quick-meals { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
 .quick-meals li, .quick-water { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
 .quick-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }

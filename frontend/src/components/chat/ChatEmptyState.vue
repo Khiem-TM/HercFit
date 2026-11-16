@@ -26,5 +26,11 @@ const displayName = computed(() => props.user?.nick_name || props.user?.fullname
 .hello { margin: 20px 0 0; font-size: 16px; color: var(--hf-muted); }
 h1 { margin: 6px 0 28px; font-size: 32px; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em; color: var(--hf-ink); }
 .slot { width: 100%; text-align: left; }
-@media (max-width: 760px) { h1 { font-size: 26px; } }
+/* Điện thoại: lời chào ở giữa phần trống, ô soạn tin neo sát đáy như trong một cuộc trò chuyện. */
+@media (max-width: 760px) {
+  .empty.hf-stagger { flex: 1; padding: 0 12px 8px; }
+  .empty > :first-child { margin-top: auto; }
+  h1 { font-size: 26px; margin-bottom: 0; text-wrap: balance; }
+  .slot { margin-top: auto; padding-top: 24px; }
+}
 </style>

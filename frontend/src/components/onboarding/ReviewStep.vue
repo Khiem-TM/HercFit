@@ -14,7 +14,7 @@ defineProps<{errors:FieldErrors; existingGoal?:string}>()
     <details class="data-flow">
       <summary>Dữ liệu của bạn đi đâu</summary>
       <ul>
-        <li><strong>FPT AI</strong> (model ngôn ngữ): tin nhắn và dữ liệu bạn ghi trong HercFit cần cho câu trả lời; dữ liệu thiết bị chỉ khi bạn bật chia sẻ với trợ lý.</li>
+        <li><strong>OpenRouter và nhà cung cấp model được định tuyến</strong> (model ngôn ngữ): tin nhắn và dữ liệu bạn ghi trong HercFit cần cho câu trả lời; dữ liệu thiết bị chỉ khi bạn bật chia sẻ với trợ lý.</li>
         <li><strong>Tavily</strong> (tìm kiếm web): chỉ câu hỏi kiến thức công khai, đã bỏ số đo và thông tin định danh.</li>
         <li><strong>Jev</strong> (kiểm định câu trả lời, khi được bật): tin nhắn mới nhất và nguồn công khai, đã che thông tin định danh.</li>
         <li><strong>Langfuse</strong> (truy vết vận hành, khi được bật): ID được thay bằng bí danh; họ tên, email và số đo sức khoẻ bị che.</li>

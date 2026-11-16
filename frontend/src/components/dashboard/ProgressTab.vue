@@ -2,6 +2,7 @@
 import { computed, shallowRef } from 'vue'
 import { motion } from 'motion-v'
 import { indicatorTransition } from '@/motion'
+import { useMobile } from '@/composables/useMobile'
 import { num } from '@/components/knowledge/health/healthFormat'
 import BarChart, { type BarColumn } from './charts/BarChart.vue'
 import DotChart, { type DotColumn } from './charts/DotChart.vue'
@@ -12,6 +13,7 @@ import type { DashboardData } from './useDashboardData'
 /** Xu hướng theo khoảng 7 / 28 / 90 ngày. Ngày không có dữ liệu là trống, không bao giờ là 0. */
 const props = defineProps<{ data: DashboardData }>()
 const emit = defineEmits<{ settings: [tab: 'profile' | 'integrations' | 'notifications']; prefill: [text: string]; 'create-plan': [] }>()
+const { isMobile } = useMobile()
 
 type Topic = 'body' | 'nutrition' | 'activity' | 'recovery'
 const TOPICS: [Topic, string][] = [['body', 'Cơ thể'], ['nutrition', 'Dinh dưỡng'], ['activity', 'Vận động'], ['recovery', 'Phục hồi']]
@@ -329,7 +331,8 @@ const donut = computed(() => {
 
 const barX = computed(() => {
   const n = days.value.length
-  const step = n <= 7 ? 1 : n <= 31 ? 2 : 10
+  // Điện thoại: trục hẹp nên nhãn ngày thưa hơn để không đè lên nhau.
+  const step = n <= 7 ? 1 : n <= 31 ? (isMobile.value ? 5 : 2) : (isMobile.value ? 20 : 10)
   const labels = []
   for (let i = n - 1; i >= 0; i -= step) labels.push({ index: i, label: ddmm(days.value[i]) })
   return labels
@@ -437,6 +440,7 @@ function choose(next: Topic) { topic.value = next; hover.value = -1 }
 .progress { display: flex; flex-direction: column; gap: 16px; }
 .filters { display: flex; gap: 12px; flex-wrap: wrap; justify-content: space-between; }
 .empty { align-items: flex-start; padding: 40px; }
+@media (max-width: 760px) { .empty { padding: 24px; } }
 .empty-title { font-size: 26px; font-weight: 700; }
 .empty p { margin: 0; font-size: 15px; max-width: 560px; line-height: 1.55; }
 .stat { gap: 10px; }

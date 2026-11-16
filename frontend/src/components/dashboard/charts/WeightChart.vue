@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
+import { useMobile } from '@/composables/useMobile'
 import { ddmm, signed, vn, WEEKDAY_LONG, weekday } from '../format'
 
 /**
@@ -7,6 +8,7 @@ import { ddmm, signed, vn, WEEKDAY_LONG, weekday } from '../format'
  * đóng) khi khoảng từ 28 ngày. Tăng/giảm không được tô màu tốt/xấu.
  */
 const props = defineProps<{ days: string[]; values: (number | null)[] }>()
+const { isMobile } = useMobile()
 
 const mode = shallowRef<'line' | 'candle'>('line')
 const hover = shallowRef(-1)
@@ -78,7 +80,8 @@ const hoverY = computed(() => {
   return hover.value >= 0 ? props.values[hover.value] : null
 })
 const xLabels = computed(() => {
-  const step = n.value <= 7 ? 1 : n.value <= 31 ? 2 : 10
+  // Điện thoại: trục hẹp nên nhãn ngày thưa hơn để không đè lên nhau.
+  const step = n.value <= 7 ? 1 : n.value <= 31 ? (isMobile.value ? 5 : 2) : (isMobile.value ? 20 : 10)
   const labels = []
   for (let i = n.value - 1; i >= 0; i -= step) labels.push({ i, label: ddmm(props.days[i]) })
   return labels

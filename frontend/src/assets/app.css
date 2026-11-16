@@ -62,6 +62,11 @@
   --hf-scrim: rgba(18, 18, 20, .36);
   --hf-shadow: rgba(0, 0, 0, .06);
   --hf-shadow-2: rgba(0, 0, 0, .30);
+
+  /* Điện thoại: vùng an toàn quanh tai thỏ / thanh home và chiều cao thanh tab dưới (MobileTabBar). */
+  --hf-safe-top: env(safe-area-inset-top, 0px);
+  --hf-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --hf-tabbar-h: calc(60px + var(--hf-safe-bottom));
 }
 
 :root.dark {
@@ -330,7 +335,27 @@ label.hf-srow { cursor: pointer; }
 .hf-sv { font-family: var(--hf-digits); font-weight: 900; font-size: 52px; line-height: .9; letter-spacing: -0.02em; }
 .hf-sv2 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
 @media (max-width: 1060px) { .hf-c4, .hf-c5, .hf-c6, .hf-c7, .hf-c8 { grid-column: span 12; } }
-@media (max-width: 760px) { .hf-card { padding: 20px; border-radius: 22px; } }
+
+/*
+ * ---------- điện thoại (≤ 760px; useMobile.ts dùng cùng mốc) ----------
+ * Thẻ gọn hơn, chữ số lớn vừa màn hình, nút hành động chia đều chiều ngang, ô nhập 16px (iOS không tự phóng to khi
+ * chạm vào ô), dòng cài đặt xuống hàng khi phần điều khiển rộng, toast hiện phía trên để không che thanh tab.
+ */
+@media (max-width: 760px) {
+  .hf-card { padding: 18px; border-radius: 22px; gap: 14px; }
+  .hf-grid, .hf-stack { gap: 12px; }
+  .hf-big { font-size: 26px; }
+  .hf-sv { font-size: 44px; }
+  .hf-sv2 { font-size: 22px; }
+  .hf-acts .hf-btn { flex: 1 1 auto; }
+  .hf-inp, .hf-nsel { font-size: 16px; }
+  .hf-srow { flex-wrap: wrap; gap: 10px 16px; }
+  .hf-srow > :first-child { flex: 1 1 180px; min-width: 0; }
+  .hf-toast-wrap { top: calc(var(--hf-safe-top) + 10px); bottom: auto; }
+  .hf-toast { padding: 10px 16px; }
+  /* Nút quay lại của trang chi tiết luôn trong tầm ngón tay khi cuộn. */
+  .hf-back { position: sticky; top: calc(var(--hf-safe-top) + 8px); z-index: 3; box-shadow: 0 4px 16px var(--hf-shadow-2); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .hf-sk, .hf-spin { animation: none; }

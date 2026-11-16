@@ -2,9 +2,10 @@
 import { computed, nextTick, reactive, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { Download, Loader2, LogOut, Trash2, X } from 'lucide-vue-next'
 import { AnimatePresence, motion } from 'motion-v'
-import { indicatorTransition, modalTransition, presence } from '@/motion'
+import { indicatorTransition, modalTransition, presence, sheetUp } from '@/motion'
 import type { BodyMetricRead } from '@/types/api'
 import { useAuth } from '@/composables/useAuth'
+import { useMobile } from '@/composables/useMobile'
 import { type ThemeMode, useTheme } from '@/composables/useTheme'
 import { activityChoices, goalChoices, todayInVietnam } from '@/features/onboarding/model'
 import HealthIntegrationPanel from '@/components/chat/HealthIntegrationPanel.vue'
@@ -27,6 +28,7 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 const { user, latestBodyMetric, currentGoal, authFetch, updateProfile, recordBodyMetric, fetchProfileDetails,
         exportData, eraseAccount, logout } = useAuth()
 const { mode: themeMode, setMode: setThemeMode } = useTheme()
+const { isMobile } = useMobile()
 
 const TABS: { id: SettingsTab; label: string; sub: string }[] = [
   { id: 'profile', label: 'Thông tin cá nhân', sub: 'Tên, tuổi, số đo và mục tiêu tập luyện' },
@@ -42,6 +44,12 @@ const PLACES = ['Phòng gym đầy đủ dụng cụ', 'Tại nhà – tạ đơ
 
 const activeTab = ref<SettingsTab>('profile')
 const current = computed(() => TABS.find(tab => tab.id === activeTab.value) ?? TABS[0])
+
+/** Điện thoại: hàng tab cuộn ngang, tab vừa chọn được đưa vào giữa tầm nhìn. */
+function pick(id: SettingsTab, event: MouseEvent) {
+  activeTab.value = id
+  ;(event.currentTarget as HTMLElement).scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+}
 const dialog = useTemplateRef<HTMLElement>('dialog')
 const saving = ref(false)
 const formError = ref<string | null>(null)
@@ -225,14 +233,16 @@ async function handleErase(): Promise<void> {
                      @click="emit('close')" />
       <div class="center">
       <motion.div ref="dialog" class="smodal" role="dialog" aria-modal="true" aria-label="Hồ sơ và kết nối" tabindex="-1"
-                  v-bind="presence(modalTransition.panel)">
+                  v-bind="presence(isMobile ? sheetUp : modalTransition.panel)">
         <nav class="snavcol" aria-label="Mục cài đặt">
           <h2>Hồ sơ &amp; kết nối</h2>
-          <button v-for="tab in TABS" :key="tab.id" type="button" class="stab" :class="{ on: activeTab === tab.id }"
-                  :aria-current="activeTab === tab.id ? 'page' : undefined" @click="activeTab = tab.id">
-            <motion.span v-if="activeTab === tab.id" layout-id="settings-tab" class="stab-ind" :transition="indicatorTransition" />
-            <span class="stab-label">{{ tab.label }}</span>
-          </button>
+          <div class="stabs">
+            <button v-for="tab in TABS" :key="tab.id" type="button" class="stab" :class="{ on: activeTab === tab.id }"
+                    :aria-current="activeTab === tab.id ? 'page' : undefined" @click="pick(tab.id, $event)">
+              <motion.span v-if="activeTab === tab.id" layout-id="settings-tab" class="stab-ind" :transition="indicatorTransition" />
+              <span class="stab-label">{{ tab.label }}</span>
+            </button>
+          </div>
         </nav>
         <div class="sbody">
           <div class="hf-hd shead">
@@ -364,6 +374,7 @@ async function handleErase(): Promise<void> {
 }
 .snavcol { width: 232px; flex: none; background: var(--hf-fill-3); padding: 22px 12px; display: flex; flex-direction: column; gap: 4px; }
 .snavcol h2 { margin: 0 12px 14px; font-size: 20px; font-weight: 700; }
+.stabs { display: flex; flex-direction: column; gap: 4px; }
 .stab { position: relative; display: flex; align-items: center; gap: 10px; border: 0; background: transparent; border-radius: 12px; padding: 0 12px; min-height: 44px; font-size: 14px; font-weight: 500; color: var(--hf-sub); text-align: left; width: 100%; white-space: nowrap;
   transition: background-color var(--hf-dur-fast) var(--hf-ease-out), color var(--hf-dur-fast) var(--hf-ease-out); }
 .stab:hover:not(.on) { background: var(--hf-hover); }
@@ -394,11 +405,29 @@ async function handleErase(): Promise<void> {
 .msg { margin: 12px 0 0; font-size: 13px; }
 .msg.ok { color: var(--hf-ok-text); }
 .msg.error { color: var(--hf-bad); }
+/*
+ * Điện thoại: trang toàn màn hình trượt lên từ đáy. Tiêu đề lớn và nút đóng ở trên cùng, các mục là hàng viên thuốc cuộn
+ * ngang, thanh lưu neo ở đáy (chừa vùng an toàn của thanh home).
+ */
 @media (max-width: 760px) {
-  .smodal { width: 100%; height: 100%; border-radius: 0; flex-direction: column; }
-  .snavcol { width: auto; flex-direction: row; overflow-x: auto; padding: 10px 12px; }
-  .snavcol h2 { display: none; }
+  .smodal { position: relative; width: 100%; height: 100%; border-radius: 0; flex-direction: column; box-shadow: none; }
+  .snavcol { width: auto; background: transparent; padding: calc(var(--hf-safe-top) + 18px) 16px 10px; gap: 14px; }
+  .snavcol h2 { margin: 0; font-size: 26px; letter-spacing: -0.02em; padding-right: 52px; }
+  .stabs { flex-direction: row; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+  .stabs::-webkit-scrollbar { display: none; }
+  .stab { width: auto; flex: none; min-height: 38px; padding: 0 14px; border-radius: 999px; background: var(--hf-fill); }
+  .stab.on { color: var(--hf-on-ink); }
+  .stab-ind { border-radius: 999px; background: var(--hf-ink); box-shadow: none; }
+  .shead { position: absolute; top: calc(var(--hf-safe-top) + 12px); right: 12px; padding: 0; }
+  .shead > div { display: none; }
+  .sbody { min-height: 0; }
   .fgrid, .measure { grid-template-columns: minmax(0, 1fr); }
-  .sscroll { padding: 4px 16px 20px; }
+  .measure .fgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 10px; }
+  .measure .figure { display: none; }
+  .sscroll { padding: 0 16px 20px; overscroll-behavior-y: contain; }
+  .sfoot { padding: 10px 16px calc(var(--hf-safe-bottom) + 10px); flex-wrap: wrap; }
+  .sfoot .hf-btn { flex: 1; }
+  .foot-msg { flex-basis: 100%; }
+  .erase .hf-inp { min-width: 0; flex-basis: 100%; }
 }
 </style>

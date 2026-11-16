@@ -78,4 +78,6 @@ const title = computed(() => (props.assessment ? `${longDate(props.assessment.da
 .tiny { font-size: 12px; line-height: 1.5; margin: 0; }
 .method { margin-top: 16px; }
 .list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.5; }
+/* Điện thoại: cột nhãn không bị cột giá trị (kèm mức nền) ép hẹp. */
+@media (max-width: 760px) { .hf-kv { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); } }
 </style>

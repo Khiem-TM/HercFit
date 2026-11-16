@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 import { ArrowUp, Mic, Sparkles, Square } from 'lucide-vue-next'
+import { useMobile } from '@/composables/useMobile'
 import type { VoiceState } from '@/composables/useVoice'
 import type { ChatMode } from '@/types/api'
 
@@ -16,6 +17,8 @@ const emit = defineEmits<{
   (e: 'stop'): void
   (e: 'voice'): void
 }>()
+
+const { isMobile } = useMobile()
 
 /** Chế độ trò chuyện: người dùng chủ động bật Plan thay vì để trợ lý đoán. */
 const mode = defineModel<ChatMode>('mode', { default: 'normal' })
@@ -86,7 +89,7 @@ function handleKeydown(event: KeyboardEvent): void {
       id="chat-composer"
       ref="textareaRef"
       v-model="draft"
-      rows="2"
+      :rows="isMobile ? 1 : 2"
       :disabled="disabled || isStreaming"
       :placeholder="isStreaming ? 'Trợ lý đang trả lời…' : mode === 'plan'
         ? 'Hỏi chuyên sâu, nhờ phân tích hoặc lập kế hoạch tập…'
@@ -96,6 +99,8 @@ function handleKeydown(event: KeyboardEvent): void {
     />
 
     <div class="tools">
+      <!-- Điện thoại: các chip thành một hàng phía trên, ô nhập một dòng nằm cùng hàng với nút micro và nút gửi. -->
+      <div class="chips">
       <button
         type="button"
         class="tchip"
@@ -110,7 +115,7 @@ function handleKeydown(event: KeyboardEvent): void {
       </button>
       <button type="button" class="tchip" :disabled="disabled || isStreaming" @click="prefill('Ghi bữa ăn: ')">Ghi bữa ăn</button>
       <button type="button" class="tchip" :disabled="disabled || isStreaming" @click="prefill('Ghi buổi tập: ')">Ghi buổi tập</button>
-      <span class="grow" />
+      </div>
       <button
         v-if="voiceState"
         type="button"
@@ -150,10 +155,12 @@ textarea {
   border: 0; outline: none; resize: none; font-size: 16px; line-height: 1.5; min-height: 52px; max-height: 160px;
   background: transparent; color: var(--hf-ink); font-family: inherit; width: 100%;
 }
+/* Khung .composer đã đổi viền khi focus; ô nhập bên trong không vẽ thêm viền focus chung của .hf. */
+textarea:focus-visible { outline: none; }
 textarea::placeholder { color: var(--hf-faint); }
 textarea:disabled { opacity: .6; }
 .tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.grow { flex: 1; }
+.chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1; min-width: 0; }
 .tchip {
   display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--hf-line); background: var(--hf-card);
   border-radius: 999px; padding: 0 12px; min-height: 36px; font-size: 13px; font-weight: 500; color: var(--hf-sub);
@@ -171,4 +178,18 @@ textarea:disabled { opacity: .6; }
   display: inline-flex; align-items: center; justify-content: center; flex: none;
 }
 .mic:hover { background: var(--hf-fill-3); }
+@media (max-width: 760px) {
+  .composer {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 8px 6px;
+    border-radius: 22px; padding: 10px 10px 10px 14px;
+  }
+  .tools { display: contents; }
+  .chips { grid-area: 1 / 1 / 2 / -1; flex-wrap: nowrap; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .tchip { flex: none; min-height: 34px; }
+  textarea { grid-area: 2 / 1; min-height: 0; max-height: 120px; padding: 7px 0; }
+  .mic { grid-area: 2 / 2; }
+  .send, .tools > .hf-btn { grid-area: 2 / 3; }
+  .send, .mic { width: 38px; height: 38px; border-radius: 50%; }
+}
 </style>

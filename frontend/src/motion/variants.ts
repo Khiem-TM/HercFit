@@ -81,6 +81,20 @@ export const sheetRight: Variants = {
   exit: { opacity: 0, x: DISTANCE.md, transition: leave() },
 }
 
+/** Ngăn kéo lịch sử trên điện thoại: trượt từ mép trái, phủ lên khung chat (không đẩy bố cục). */
+export const drawerLeft: Variants = {
+  initial: { x: '-100%' },
+  animate: { x: 0, transition: out(DURATION.slow) },
+  exit: { x: '-100%', transition: leave(DURATION.base) },
+}
+
+/** Trang toàn màn hình trên điện thoại (Hồ sơ & kết nối): trượt lên từ đáy như một trang modal của ứng dụng. */
+export const sheetUp: Variants = {
+  initial: { y: '100%' },
+  animate: { y: 0, transition: out(DURATION.slow) },
+  exit: { y: '100%', transition: leave(DURATION.base) },
+}
+
 /** Bước tiếp theo/quay lại (Onboarding): hướng truyền qua `custom` (1 tiến, -1 lùi). */
 export const stepSlide: Variants = {
   initial: (direction: number) => ({ opacity: 0, x: DISTANCE.md * direction }),
