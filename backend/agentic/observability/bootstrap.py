@@ -73,7 +73,9 @@ def main():
         sys.exit(
             "Đặt LANGFUSE_PUBLIC_KEY và LANGFUSE_SECRET_KEY (backend/.env hoặc agentic/.env) trước; không dán secret vào log."
         )
-    if args.check:
+    # One resource manager per public key: a preliminary bare client would pin
+    # exporter settings (including masking) before Observer configures them.
+    if args.check and not args.smoke:
         from langfuse import Langfuse
 
         client = Langfuse(
@@ -87,6 +89,8 @@ def main():
         if not config.enabled:
             sys.exit("Đặt LANGFUSE_TRACING=true để chạy smoke.")
         client, trace_id = asyncio.run(smoke(config))
+        if args.check:
+            print(json.dumps({"auth_ok": bool(client.auth_check())}))
         # Chỉ báo thành công khi đọc lại được từ Langfuse, không phải chỉ vì đã xếp hàng.
         observations = []
         for attempt in range(15):

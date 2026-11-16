@@ -73,6 +73,8 @@ async def run_node(fn, state, node, settings: AgentSettings):
         # Số đo lần thử vật lý chỉ có khi node gọi model; các khoá tính phí cũ luôn có mặt như trước.
         if key not in ATTEMPT_COUNTERS or key in metrics or key in telemetry:
             telemetry[key] = telemetry.get(key, 0) + metrics.get(key, 0)
+    if metrics.get("model_requests"):
+        telemetry["model_requests"] = [*telemetry.get("model_requests", []), *metrics["model_requests"]][-200:]
     merge_jev_metrics(telemetry, metrics.get("jev_events", []))
     agent = roster.active.get()
     if metrics.get("agents"):

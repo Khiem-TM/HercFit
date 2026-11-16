@@ -147,6 +147,9 @@ BRANCH_COUNTERS = (
     "model_ms",
     "llm_cost",
     "llm_cost_unknown_calls",
+    "llm_estimated_cost",
+    "cached_input_tokens",
+    "reasoning_tokens",
     "llm_usage_unknown_calls",
     "llm_attempts",
     "llm_attempt_errors",
@@ -166,6 +169,8 @@ def merge_branches(telemetry, branches, limit=60):
         for key in BRANCH_COUNTERS:
             if key in branch:
                 merged[key] = merged.get(key, 0) + branch[key]
+        if branch.get("model_requests"):
+            merged["model_requests"] = [*merged.get("model_requests", []), *branch["model_requests"]][-200:]
         if branch.get("agents"):
             merged["agents"] = merge_agents(merged.get("agents"), branch["agents"])
         nodes = branch.get("nodes") or []
@@ -194,10 +199,13 @@ class _Usage(BaseCallbackHandler):
         # Lần thử vật lý ở tầng LangChain (model chính + từng model dự phòng) và lỗi của chúng theo loại.
         self.attempts = 0
         self.errors = []
+        self.records = []
+        self.started = {}
 
     def on_chat_model_start(self, serialized, messages, *, metadata=None, **kwargs):
         metadata = metadata or {}
         self.attempts += 1
+        self.started[kwargs.get("run_id")] = perf_counter()
         if metadata.get("hercfit_model"):
             self.served = (metadata.get("hercfit_provider"), metadata["hercfit_model"])
 
@@ -205,25 +213,54 @@ class _Usage(BaseCallbackHandler):
         from agentic.observability.outcomes import provider_kind
 
         self.errors.append(provider_kind(error))
+        partial = kwargs.get("response")
+        if partial and partial.generations:
+            self.on_llm_end(partial, **{k: v for k, v in kwargs.items() if k != "response"})
+        else:
+            self.records.append({"model": self.served[1] if self.served else None,
+                                 "provider": self.served[0] if self.served else None,
+                                 "cost": None, "usage_available": False,
+                                 "input_tokens": 0, "output_tokens": 0})
 
     def on_llm_end(self, response, **kwargs):
-        usage = (response.llm_output or {}).get("token_usage", {})
-        if not usage:
-            for group in response.generations:
-                for generation in group:
-                    usage = (
-                        getattr(getattr(generation, "message", None), "usage_metadata", None) or {}
-                    )
-                    if usage:
-                        break
+        usage = (response.llm_output or {}).get("token_usage") or {}
+        metadata = {}
+        for group in response.generations:
+            for generation in group:
+                message = generation.message
+                metadata = getattr(message, "response_metadata", {}) or {}
+                if not usage:
+                    usage = getattr(message, "usage_metadata", None) or {}
                 if usage:
                     break
-        if ("input_tokens" in usage or "prompt_tokens" in usage) and (
+            if usage:
+                break
+        available = ("input_tokens" in usage or "prompt_tokens" in usage) and (
             "output_tokens" in usage or "completion_tokens" in usage
-        ):
-            self.available = True
-        self.input_tokens += usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0
-        self.output_tokens += usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0
+        )
+        incoming = usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0
+        outgoing = usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0
+        self.available |= available
+        self.input_tokens += incoming
+        self.output_tokens += outgoing
+        cost = metadata.get("openrouter_cost", usage.get("cost"))
+        cost = cost if type(cost) in (int, float) and math.isfinite(cost) and cost >= 0 else None
+        input_details = usage.get("input_token_details", usage.get("prompt_tokens_details")) or {}
+        output_details = usage.get("output_token_details", usage.get("completion_tokens_details")) or {}
+        served_model = metadata.get("openrouter_model") or (self.served[1] if self.served else None)
+        provider = self.served[0] if self.served else None
+        if served_model:
+            self.served = (provider, served_model)
+        self.records.append({
+            "model": served_model, "provider": provider,
+            "endpoint": metadata.get("openrouter_provider"),
+            "generation_id": metadata.get("openrouter_generation_id"),
+            "input_tokens": incoming, "output_tokens": outgoing,
+            "cached_input_tokens": input_details.get("cache_read", input_details.get("cached_tokens", 0)) or 0,
+            "reasoning_tokens": output_details.get("reasoning", output_details.get("reasoning_tokens", 0)) or 0,
+            "cost": cost, "usage_available": available,
+            "duration_ms": round((perf_counter() - self.started.get(kwargs.get("run_id"), perf_counter())) * 1000, 3),
+        })
 
 
 class _MeasuredModel:
@@ -295,27 +332,30 @@ class _MeasuredModel:
                     "models": {usage.served[1]: 1} if usage.served else {},
                 }
                 metrics["agents"] = merge_agents(metrics.get("agents"), {self.agent: entry})
-            price = self.price
-            if usage.served and self.prices is not None:
-                # Model dự phòng (nâng cấp) trả lời thì tính theo giá của chính nó; chưa cấu hình giá là chưa biết.
-                price = self.prices.get(f"{usage.served[0]}/{usage.served[1]}")
-            if (
-                available
-                and isinstance(price, dict)
-                and all(
-                    type(price.get(k)) in (int, float) and math.isfinite(price[k]) and price[k] >= 0
-                    for k in ("input_per_million", "output_per_million")
-                )
-            ):
-                cost = (
-                    (usage.input_tokens if usage.available else metadata["input_tokens"])
-                    * price["input_per_million"]
-                    + (usage.output_tokens if usage.available else metadata["output_tokens"])
-                    * price["output_per_million"]
-                ) / 1e6
-                metrics["llm_cost"] = metrics.get("llm_cost", 0) + cost
-            else:
-                metrics["llm_cost_unknown_calls"] = metrics.get("llm_cost_unknown_calls", 0) + 1
+            records = usage.records or [{
+                "model": usage.served[1] if usage.served else None,
+                "provider": usage.served[0] if usage.served else None,
+                "input_tokens": input_tokens, "output_tokens": output_tokens,
+                "cost": None, "usage_available": available,
+            }]
+            for record in records:
+                for key in ("cached_input_tokens", "reasoning_tokens"):
+                    metrics[key] = metrics.get(key, 0) + record.get(key, 0)
+                if record["cost"] is not None:
+                    metrics["llm_cost"] = metrics.get("llm_cost", 0) + record["cost"]
+                else:
+                    metrics["llm_cost_unknown_calls"] = metrics.get("llm_cost_unknown_calls", 0) + 1
+                    price = (self.prices or {}).get(f"{record['provider']}/{record['model']}") or self.price
+                    if record["usage_available"] and isinstance(price, dict) and all(
+                        type(price.get(k)) in (int, float) and math.isfinite(price[k]) and price[k] >= 0
+                        for k in ("input_per_million", "output_per_million")
+                    ):
+                        estimated = (record["input_tokens"] * price["input_per_million"]
+                                     + record["output_tokens"] * price["output_per_million"]) / 1e6
+                        metrics["llm_estimated_cost"] = metrics.get("llm_estimated_cost", 0) + estimated
+            metrics.setdefault("model_requests", []).extend(records)
+            from agentic.observability import annotate
+            annotate(model_requests=records)
 
 
 # Retry nội bộ của SDK OpenAI (max_retries) không đi qua callback LangChain; SDK chỉ ghi log INFO

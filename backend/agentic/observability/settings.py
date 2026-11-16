@@ -38,7 +38,7 @@ class ObservabilitySettings(BaseSettings):
     LANGFUSE_PROPAGATION_SECRET: SecretStr | None = None
     LANGFUSE_FLUSH_SECONDS: float = Field(default=3, gt=0, le=30)
     # Giá đã kiểm chứng cho đo chi phí cục bộ, ví dụ
-    # {"fpt/DeepSeek-V4-Flash": {"input_per_million": 0.0, "output_per_million": 0.0}}
+    # {"openrouter/deepseek/deepseek-v4-flash": {"input_per_million": 0.09, "output_per_million": 0.18}}
     MODEL_PRICES: dict[str, dict[str, float]] = Field(default_factory=dict)
 
     # 'explicit' khi đặt trong biến môi trường, 'derived' khi tính từ secret key.
