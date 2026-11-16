@@ -1,14 +1,16 @@
 from typing import Literal
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 
 from agentic.core.app.env_sources import JevDotEnvSettingsSource, canonical_source
 from agentic.core.paths import AGENTIC_ROOT, BACKEND_ROOT
+from agentic.core.providers.openrouter_policy import AGENT_MODELS, DEFAULT_MODEL
+from agentic.core.providers.settings import OpenRouterSettings
 from agentic.core.roster import AGENTS
 
 
-class AgentSettings(BaseSettings):
+class AgentSettings(OpenRouterSettings):
     # Giá trị riêng của agent ghi đè giá trị mặc định dùng chung, khớp với cả hai file Compose.
     # Biến môi trường tường minh của tiến trình vẫn có độ ưu tiên cao nhất.
     model_config = SettingsConfigDict(
@@ -21,45 +23,43 @@ class AgentSettings(BaseSettings):
     AGENT_PORT: int = 8081
     BACKEND_BASE_URL: str = "http://localhost:8080"
     BACKEND_TIMEOUT_SECONDS: float = 15
-    DEFAULT_PROVIDER: Literal["fpt", "openai", "openai_compatible"] = "fpt"
-    DEFAULT_MODEL: str = "DeepSeek-V4-Flash"
+    DEFAULT_PROVIDER: Literal["openrouter", "openai", "openai_compatible"] = "openrouter"
+    DEFAULT_MODEL: str = DEFAULT_MODEL
     DECISION_MODEL: str | None = None
     RESPONSE_MODEL: str | None = None
     TOOL_MODEL: str | None = None
     RESEARCH_MODEL: str | None = None
     MODEL_API_KEY: SecretStr | None = None
     OPENAI_API_KEY: SecretStr | None = None
-    FPT_API_KEY: SecretStr | None = None
-    FPT_BASE_URL: str = "https://mkp-api.fptcloud.com"
     MODEL_BASE_URL: str = "https://api.openai.com/v1"
     MODEL_TIMEOUT_SECONDS: float = 30
     # Timeout theo vai trò: các lần gọi routing/tool/clarify trả về JSON nhỏ và nên
     # chuyển dự phòng nhanh; trước đây một lần gọi bị treo tốn 30 s hai lần (đuôi ≈60 s).
-    ROUTING_TIMEOUT_SECONDS: float = Field(default=12, gt=0)
+    ROUTING_TIMEOUT_SECONDS: float = Field(default=30, gt=0)
     # Tool có thể dựng payload nhiều món trong 29–45 s; timeout ngắn gây thử lại lệnh đã duyệt.
     TOOL_TIMEOUT_SECONDS: float = Field(default=60, gt=0)
-    RESPONSE_TIMEOUT_SECONDS: float = Field(default=30, gt=0)
-    RESEARCH_TIMEOUT_SECONDS: float = Field(default=45, gt=0)
-    MODEL_MAX_RETRIES: int = Field(default=1, ge=0, le=3)
+    RESPONSE_TIMEOUT_SECONDS: float = Field(default=90, gt=0)
+    RESEARCH_TIMEOUT_SECONDS: float = Field(default=60, gt=0)
+    MODEL_MAX_RETRIES: int = Field(default=2, ge=0, le=2)
     CLARIFY_MODEL: str | None = None
-    # Model riêng của từng agent, JSON {"nutrition": "gemma-4-26B-A4B-it", ...} (tên agent: core/roster.py). Agent vắng
+    # Model riêng của từng agent, JSON {"nutrition": "google/gemma-4-26b-a4b-it", ...} (tên agent: core/roster.py). Agent vắng
     # mặt dùng model của vai trò; lỗi, timeout hoặc output sai schema của model riêng nâng lên model của vai trò.
-    AGENT_MODELS: dict[str, str] = Field(default_factory=dict)
+    AGENT_MODELS: dict[str, str] = Field(default_factory=lambda: dict(AGENT_MODELS))
     # Timeout của model riêng (trần, không bao giờ dài hơn timeout của vai trò): gemma-4-26B từng treo tới hết 60 s của
     # vai trò tool với prompt coach ~16k token (ma trận 07/11); cắt sớm để nâng lên model của vai trò kịp thời.
     AGENT_MODEL_TIMEOUT_SECONDS: float = Field(default=20, gt=0)
     # Tin nhắn nhiều ý (RouteDecision.tasks) chạy song song ở các agent chuyên trách; False: luôn tuần tự như trước.
     PARALLEL_AGENTS: bool = True
     # Endpoint tương thích OpenAI thứ hai (tuỳ chọn), dùng khi endpoint chính lỗi hoặc timeout.
-    FALLBACK_PROVIDER: Literal["fpt", "openai", "openai_compatible"] | None = None
+    FALLBACK_PROVIDER: Literal["openrouter", "openai", "openai_compatible"] | None = None
     FALLBACK_MODEL: str | None = None
     FALLBACK_BASE_URL: str | None = None
     FALLBACK_API_KEY: SecretStr | None = None
     # Stream token câu trả lời tới client (chỉ model trả lời được stream; các lần gọi tool và
-    # định tuyến không stream để cơ chế khôi phục lời gọi tool của nhà cung cấp vẫn hoạt động).
+    # định tuyến không stream để kiểm tra schema trước khi thực thi).
     STREAM_RESPONSE_TOKENS: bool = True
     # Yêu cầu nhà cung cấp gửi số liệu sử dụng trong phản hồi stream (stream_options.include_usage).
-    MODEL_STREAM_USAGE: bool = False
+    MODEL_STREAM_USAGE: bool = True
     SSE_HEARTBEAT_SECONDS: float = Field(default=15, gt=0)
     # Lớp hội thoại giọng nói (LiveKit): thiếu một trong ba thì POST /chat/voice/token trả 503.
     LIVEKIT_URL: str | None = None
@@ -77,12 +77,6 @@ class AgentSettings(BaseSettings):
     PLAN_RUN_TIMEOUT_SECONDS: float = Field(default=300, gt=0)
     CONFIRMATION_TTL_SECONDS: int = Field(default=1800, gt=0)
     RESEARCH_SOURCE_DOMAINS: list[str] = []
-    # DeepSeek trên FPT suy nghĩ ~9k token cho mỗi lần trích xuất ở mức mặc định (25-70 s); "low" giữ
-    # nguyên các khẳng định trong 5-12 s. Chỉ áp dụng cho client tra cứu FPT (None để tắt).
-    RESEARCH_REASONING_EFFORT: Literal["low", "medium", "high"] | None = "low"
-    # 'medium' giúp model gọi tool dựng thẻ xác nhận; 'low' từng chỉ viết bản xem trước bằng chữ.
-    # None dùng mức mặc định của model.
-    TOOL_REASONING_EFFORT: Literal["low", "medium", "high"] | None = "medium"
     # Dùng chung với backend (backend/.env): ký các lệnh finalize tra cứu đã kiểm chứng.
     RESEARCH_ATTESTATION_SECRET: SecretStr | None = None
     # Dùng chung với backend (backend/.env): chứng minh service này khi đổi token người dùng
@@ -227,13 +221,13 @@ class AgentSettings(BaseSettings):
 
     @property
     def model_api_key(self):
-        if self.DEFAULT_PROVIDER == "fpt":
-            return self.FPT_API_KEY
+        if self.DEFAULT_PROVIDER == "openrouter":
+            return self.OPENROUTER_API_KEY
         return self.MODEL_API_KEY or self.OPENAI_API_KEY
 
     @property
     def model_base_url(self):
-        return self.FPT_BASE_URL if self.DEFAULT_PROVIDER == "fpt" else self.MODEL_BASE_URL
+        return self.OPENROUTER_BASE_URL if self.DEFAULT_PROVIDER == "openrouter" else self.MODEL_BASE_URL
 
     @property
     def session_lease_seconds(self):

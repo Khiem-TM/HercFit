@@ -3,7 +3,8 @@ from langchain_openai import ChatOpenAI
 
 from agentic.core import roster
 from agentic.core.app.config import AgentSettings
-from agentic.core.providers.fpt import FPTChatOpenAI
+from agentic.core.providers.openrouter import OpenRouterChatOpenAI
+from agentic.core.providers.openrouter_policy import chat_options
 from agentic.services import mode
 
 ROLE_TIMEOUTS = {
@@ -17,7 +18,7 @@ ROLE_TIMEOUTS = {
 
 
 def _present(value):
-    # Adapter FPT dựng output có cấu trúc bằng function calling: model không gọi hàm thì parser trả None.
+    # Function calling must yield a validated object before a fallback is considered successful.
     if value is None:
         raise ValueError("Structured output missing")
     return value
@@ -36,7 +37,7 @@ class WithFallback:
         if self.strict:
             primary = primary | RunnableLambda(_present)
         return primary.with_fallbacks(
-            [model.with_structured_output(*args, **kwargs) for model in self.fallbacks]
+            [model.with_structured_output(*args, **kwargs) | RunnableLambda(_present) for model in self.fallbacks]
         )
 
     def bind_tools(self, *args, **kwargs):
@@ -82,21 +83,8 @@ class Models:
             timeout = min(
                 timeout, cap
             )  # model riêng của agent: lỗi sớm để nâng cấp, không chờ hết timeout vai trò
-        model_class = FPTChatOpenAI if provider == "fpt" else ChatOpenAI
-        effort = (
-            (
-                policy.efforts.get(role)
-                or getattr(
-                    settings,
-                    {"research": "RESEARCH_REASONING_EFFORT", "tool": "TOOL_REASONING_EFFORT"}.get(
-                        role, ""
-                    ),
-                    None,
-                )
-            )
-            if provider == "fpt"
-            else None
-        )
+        model_class = OpenRouterChatOpenAI if provider == "openrouter" else ChatOpenAI
+        options = {"extra_body": chat_options(name)} if provider == "openrouter" else {}
         return model_class(
             model=name,
             api_key=api_key,
@@ -107,7 +95,7 @@ class Models:
             stream_usage=bool(streaming_role and settings.MODEL_STREAM_USAGE),
             disable_streaming=not streaming_role,
             metadata={"hercfit_provider": provider, "hercfit_model": name, "model_role": role},
-            **({"reasoning_effort": effort} if effort else {}),
+            **options,
         )
 
     def get(self, role):
@@ -130,9 +118,9 @@ class Models:
             fallbacks = []
             fallback_name = settings.FALLBACK_MODEL
             if fallback_name:
-                provider = settings.FALLBACK_PROVIDER or "openai_compatible"
+                provider = settings.FALLBACK_PROVIDER or settings.DEFAULT_PROVIDER
                 base_url = settings.FALLBACK_BASE_URL or (
-                    settings.FPT_BASE_URL if provider == "fpt" else settings.MODEL_BASE_URL
+                    settings.OPENROUTER_BASE_URL if provider == "openrouter" else settings.MODEL_BASE_URL
                 )
                 key = settings.FALLBACK_API_KEY or settings.model_api_key
                 fallbacks.append(self._client(provider, fallback_name, key, base_url, role, policy))

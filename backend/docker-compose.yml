@@ -33,6 +33,8 @@ services:
     env_file:
       - path: .env
         required: false
+      - path: agentic/.env
+        required: false
     environment:
       MODE: ${MODE:-dev}
       # Release của trace và lần chạy eval (dev_up.sh xuất commit hiện tại).

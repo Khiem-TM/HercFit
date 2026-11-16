@@ -4,7 +4,7 @@
 # Chạy từ gốc repo với một file biến riêng của môi trường triển khai (không commit), ví dụ deploy.env:
 #   docker compose -p hercfit-prod -f backend/docker-compose.prod.yml --env-file deploy.env up -d --build
 # Biến bắt buộc trong deploy.env: POSTGRES_PASSWORD, AGENT_DB_PASSWORD, KG_DB_PASSWORD, NEO4J_PASSWORD, JWT_SECRET_KEY,
-# AGENT_SERVICE_SECRET, HERCFIT_DOMAIN. Cấu hình ứng dụng còn lại (FPT_API_KEY, TAVILY_API_KEY, OAuth Google,
+# AGENT_SERVICE_SECRET, HERCFIT_DOMAIN. Cấu hình ứng dụng còn lại (OPENROUTER_API_KEY, TAVILY_API_KEY, OAuth Google,
 # TOKEN_ENCRYPTION_KEY, Cloudinary, Langfuse...) đặt trong backend/.env.prod (git-ignored, không vào image).
 #
 # Thứ tự khởi động: postgres → migrate (alembic + migration agent, bằng role chủ sở hữu) → db-roles (role tối thiểu,

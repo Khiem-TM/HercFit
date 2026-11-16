@@ -38,8 +38,6 @@ class ModePolicy:
     lean_tools: bool = False
     # Hướng dẫn huấn luyện/sức khoẻ dài trong prompt của tool và câu trả lời.
     guidance: bool = True
-    # Effort suy luận theo vai trò model (None: theo cấu hình); chỉ áp cho nhà cung cấp FPT.
-    efforts: dict = field(default_factory=dict)
     # Timeout client model theo vai trò (giây), ghi đè cấu hình khi lớn hơn.
     timeouts: dict = field(default_factory=dict)
     research_seconds: float = 60
@@ -60,14 +58,11 @@ POLICIES = {
         personal_card=False,
         lean_tools=True,
         guidance=False,
-        # Tool giữ 'medium': ở 'low' model từng viết bản xem trước bằng chữ thay vì gọi create_meals (02/11).
-        efforts={"response": "low"},
     ),
     PLAN: ModePolicy(
         PLAN,
         deep=True,
         shortcuts=False,
-        efforts={"research": "medium", "response": "high"},
         # Router ở chế độ Plan nhận prompt dài hơn (cá nhân hoá + lập kế hoạch) và suy luận lâu hơn: đo trên Langfuse
         # 13/11 là 9–21 s với 2–3,5k token đầu ra, vượt ROUTING_TIMEOUT_SECONDS = 12 s; ba lần thử đều hết giờ thì
         # lượt chạy thất bại sau ~38 s (OpenAITimeoutError ở node orchestrator).
