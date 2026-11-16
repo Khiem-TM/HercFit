@@ -66,7 +66,8 @@ const goalLabel = computed(() => {
 const sync = computed(() => {
   const status = connection.value?.status
   if (data.loading.value || data.healthLoading.value) return { text: 'Đang tải dữ liệu…', dot: 'var(--hf-ghost)', warn: false }
-  if (status === 'NEEDS_REAUTH' || status === 'ERROR' || data.failed.value.length) {
+  if (status === 'NEEDS_REAUTH') return { text: 'Cần kết nối lại Google Health', dot: 'var(--hf-warn-dot)', warn: true }
+  if (status === 'ERROR' || data.failed.value.length) {
     const last = connection.value?.last_success_at
     return { text: last ? `Tải lỗi · dữ liệu lúc ${stamp(last)}` : 'Không tải được dữ liệu mới', dot: 'var(--hf-warn-dot)', warn: true }
   }

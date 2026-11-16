@@ -67,7 +67,13 @@ const addWater = () => quick('water', () => props.data.logWater(WATER_ML), `Đã
 
 <template>
   <div class="today">
-    <div v-if="stale" class="hf-err" role="status">
+    <!-- Google từ chối làm mới token (invalid_grant): tải lại không giúp được, người dùng phải cấp quyền lại. -->
+    <div v-if="connection?.status === 'NEEDS_REAUTH'" class="hf-err" role="status">
+      <span class="err-text"><AlertCircle :size="18" aria-hidden="true" />
+        Kết nối Google Health đã hết hạn nên chưa có dữ liệu thiết bị mới. Đang hiển thị dữ liệu đã lưu{{ connection.last_success_at ? ` — đồng bộ lần cuối ${stamp(connection.last_success_at)}` : '' }}.</span>
+      <button type="button" class="hf-btn on-card" @click="emit('settings', 'integrations')">Kết nối lại</button>
+    </div>
+    <div v-else-if="stale" class="hf-err" role="status">
       <span class="err-text"><AlertCircle :size="18" aria-hidden="true" />
         Không tải được một phần dữ liệu mới. Đang hiển thị dữ liệu đã lưu{{ connection?.last_success_at ? ` — thiết bị đồng bộ lần cuối ${stamp(connection.last_success_at)}` : '' }}.</span>
       <button type="button" class="hf-btn on-card" @click="data.refresh()">Thử lại</button>
