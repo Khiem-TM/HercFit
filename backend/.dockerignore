@@ -46,3 +46,6 @@ tests
 
 # Source books, prepared bundles and tokenizer cache; mounted into the ingestion worker.
 agentic/embedding/ingestion/data
+
+# Local migration snapshots and catalog cache may contain credentials.
+.cache/

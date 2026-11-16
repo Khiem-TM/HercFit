@@ -10,10 +10,10 @@ from agentic.embedding.core import EmbeddingClient
 RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}
 
 
-class FPTEmbeddingClient(EmbeddingClient):
+class IngestionEmbeddingClient(EmbeddingClient):
     async def embed(self, texts, *, input_type="passage"):
         if not self.settings.EMBEDDING_API_KEY:
-            raise ValueError("Set FPT_API_KEY or EMBEDDING_API_KEY in the environment")
+            raise ValueError("Set OPENROUTER_API_KEY or EMBEDDING_API_KEY in the environment")
         retries = self.settings.KNOWLEDGE_EMBEDDING_RETRIES
         for attempt in range(retries):
             try:

@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
 from agentic.embedding.core import BACKEND_ROOT, EmbeddingSettings
@@ -23,11 +23,6 @@ class IngestionSettings(EmbeddingSettings):
         extra="ignore",
         env_ignore_empty=True,
     )
-    FPT_API_KEY: SecretStr | None = None
-    FPT_BASE_URL: str = "https://mkp-api.fptcloud.com"
-    EMBEDDING_MODEL: str = "multilingual-e5-large"
-    EMBEDDING_DIMENSION: int = 1024
-    EMBEDDING_REVISION: str = "e5-prefix-v1"
     EMBEDDING_TIMEOUT_SECONDS: float = Field(default=30, gt=0, le=45)
     KNOWLEDGE_INGEST_ROOT: str = str(DATA_ROOT / "input")
     KNOWLEDGE_MAX_FILE_BYTES: int = 20_000_000
@@ -38,11 +33,6 @@ class IngestionSettings(EmbeddingSettings):
     KNOWLEDGE_REQUEST_INTERVAL: float = Field(default=0.2, ge=0)
     KNOWLEDGE_TOKENIZER_PATH: str = str(DATA_ROOT / ".cache/e5-tokenizer.json")
 
-    @model_validator(mode="after")
-    def fpt_defaults(self):
-        self.EMBEDDING_BASE_URL = self.EMBEDDING_BASE_URL or self.FPT_BASE_URL
-        self.EMBEDDING_API_KEY = self.EMBEDDING_API_KEY or self.FPT_API_KEY
-        return self
 
 
 @lru_cache

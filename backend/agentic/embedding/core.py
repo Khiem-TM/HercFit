@@ -10,9 +10,15 @@ from pathlib import Path
 from time import monotonic
 
 import httpx
-from pydantic import Field, SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, SecretStr, model_validator
 
+from agentic.core.providers.openrouter_policy import (
+    EMBEDDING_MODEL,
+    RERANK_MODEL,
+    provider_options,
+    response_metadata,
+)
+from agentic.core.providers.settings import OpenRouterSettings
 from agentic.observability import annotate, observed
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -24,22 +30,18 @@ QUERY_CACHE_SECONDS = 3600
 E5_MODEL = "multilingual-e5-large"
 
 
-class EmbeddingSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=str(BACKEND_ROOT / ".env"), extra="ignore", env_ignore_empty=True
-    )
-
+class EmbeddingSettings(OpenRouterSettings):
     RAG_ENABLED: bool = False
     EMBEDDING_BASE_URL: str = ""
-    EMBEDDING_MODEL: str = ""
-    EMBEDDING_DIMENSION: int = Field(default=0, ge=0)
+    EMBEDDING_MODEL: str = EMBEDDING_MODEL
+    EMBEDDING_DIMENSION: int = Field(default=1024, gt=0)
     EMBEDDING_API_KEY: SecretStr | None = None
-    EMBEDDING_REVISION: str = "1"
+    EMBEDDING_REVISION: str = "e5-ctx-openrouter-v1"
     EMBEDDING_TIMEOUT_SECONDS: float = Field(default=15, gt=0)
-    # Xếp hạng lại bằng cross-encoder trên cùng nhà cung cấp và khoá (FPT: bge-reranker-v2-m3 tại /v1/rerank).
+    # Rerank and embedding share OpenRouter credentials and the API base.
     RERANK_ENABLED: bool = False
-    RERANK_MODEL: str = "bge-reranker-v2-m3"
-    RERANK_PATH: str = "v1/rerank"
+    RERANK_MODEL: str = RERANK_MODEL
+    RERANK_PATH: str = "rerank"
     RERANK_TIMEOUT_SECONDS: float = Field(default=5, gt=0, le=30)
     # Số ứng viên đã hợp nhất gửi cho reranker, và độ sâu của mỗi danh sách dense/từ khoá.
     RAG_CANDIDATES: int = Field(default=24, ge=1, le=64)
@@ -49,6 +51,23 @@ class EmbeddingSettings(BaseSettings):
     # tests/evaluation/rag_eval.py); điểm rerank áp dụng khi rerank thành công, nếu không thì dùng cosine.
     RAG_MIN_RERANK_SCORE: float | None = Field(default=None, ge=0, le=1)
     RAG_MIN_DENSE_SIMILARITY: float | None = Field(default=None, ge=-1, le=1)
+
+    EMBEDDING_TOKENIZER_PATH: str = str(
+        BACKEND_ROOT / "agentic/embedding/ingestion/data/.cache/e5-tokenizer.json"
+    )
+    RAG_CALIBRATED_PROFILE: str | None = None
+
+    @model_validator(mode="after")
+    def provider_defaults(self):
+        self.EMBEDDING_BASE_URL = self.EMBEDDING_BASE_URL or self.OPENROUTER_BASE_URL
+        self.EMBEDDING_API_KEY = self.EMBEDDING_API_KEY or self.OPENROUTER_API_KEY
+        return self
+
+    def check_calibration(self):
+        if (self.RAG_CALIBRATED_PROFILE != self.profile_id
+                or self.RAG_MIN_DENSE_SIMILARITY is None
+                or (self.RERANK_ENABLED and self.RAG_MIN_RERANK_SCORE is None)):
+            raise ValueError("Calibrate thresholds for this profile before activation")
 
     def check_embedding(self):
         if not self.EMBEDDING_BASE_URL or not self.EMBEDDING_MODEL or not self.EMBEDDING_DIMENSION:
@@ -93,9 +112,9 @@ def is_english(text):
     return text.isascii() and VIETNAMESE_WORDS.isdisjoint(re.findall(r"[a-z]+", text.lower()))
 
 
-def record_usage(model, provider, tokens):
+def record_usage(model, provider, tokens, cost=None):
     """Gắn model và số token (khi nhà cung cấp trả về) vào span đang mở; giá chưa biết."""
-    annotate(hercfit_model=model, hercfit_provider=provider, cost_status="unknown")
+    annotate(hercfit_model=model, hercfit_provider=provider, cost_status="reported" if cost is not None else "unknown", openrouter_cost=cost)
     if type(tokens) is int and tokens >= 0:
         annotate(
             usage_metadata={"input_tokens": tokens, "output_tokens": 0, "total_tokens": tokens}
@@ -125,6 +144,7 @@ class EmbeddingClient(ProviderClient):
     def __init__(self, settings, transport=None):
         super().__init__(settings, settings.EMBEDDING_TIMEOUT_SECONDS, transport)
         self.cache = OrderedDict()
+        self.tokenizer = None
 
     async def embed(self, texts, *, input_type="query"):
         if not texts or len(texts) > 32:
@@ -154,12 +174,20 @@ class EmbeddingClient(ProviderClient):
         if model.rsplit("/", 1)[-1] == E5_MODEL:
             prefix = input_type + ": "
             texts = [prefix + text.removeprefix(prefix) for text in texts]
+            if self.tokenizer is None:
+                from agentic.embedding.ingestion.tokenization import E5Tokenizer
+                self.tokenizer = E5Tokenizer(self.settings.EMBEDDING_TOKENIZER_PATH).tokenizer
+            if any(len(self.tokenizer.encode(text).ids) > 512 for text in texts):
+                raise ValueError("E5 input exceeds 512 tokens; split or shorten the query")
         annotate(model=model, input_count=len(texts))
-        response = await self.http.post("embeddings", json={"model": model, "input": texts})
+        response = await self.http.post("embeddings", json={
+            "model": model, "input": texts, "provider": provider_options(model)
+        })
         response.raise_for_status()
         data = response.json()
         usage = data.get("usage") or {}
-        record_usage(model, "embedding", usage.get("prompt_tokens", usage.get("total_tokens")))
+        annotate(**response_metadata(data))
+        record_usage(model, "openrouter", usage.get("prompt_tokens", usage.get("total_tokens")), usage.get("cost"))
         rows = sorted(data["data"], key=lambda r: r["index"])
         if [r["index"] for r in rows] != list(range(len(texts))):
             raise ValueError("Embedding response indices mismatch")
@@ -189,7 +217,8 @@ class RerankClient(ProviderClient):
         annotate(model=model, input_count=len(documents))
         response = await self.http.post(
             self.settings.RERANK_PATH,
-            json={"model": model, "query": query, "documents": documents, "top_n": len(documents)},
+            json={"model": model, "query": query, "documents": documents, "top_n": len(documents),
+                  "provider": provider_options(model)},
         )
         response.raise_for_status()
         data = response.json()
@@ -211,5 +240,6 @@ class RerankClient(ProviderClient):
             scores[index] = float(score)
         if len(scores) != len(documents):
             raise ValueError("Incomplete rerank result")
-        record_usage(model, "rerank", (data.get("usage") or {}).get("total_tokens"))
+        annotate(**response_metadata(data))
+        record_usage(model, "openrouter", (data.get("usage") or {}).get("total_tokens"), (data.get("usage") or {}).get("cost"))
         return [scores[i] for i in range(len(documents))]

@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from sqlalchemy import text
 
-from agentic.embedding.ingestion.client import FPTEmbeddingClient
+from agentic.embedding.ingestion.client import IngestionEmbeddingClient
 from agentic.embedding.ingestion.config import settings
 from agentic.embedding.ingestion.preparation import embedding_text
 from agentic.embedding.ingestion.repository import publish_ready
@@ -177,7 +177,7 @@ async def fail(job, exc):
 
 async def run(once=False):
     cfg = settings()
-    client = FPTEmbeddingClient(cfg)
+    client = IngestionEmbeddingClient(cfg)
     try:
         await client.embed(["Embedding preflight"])
         while True:

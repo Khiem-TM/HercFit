@@ -28,6 +28,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # Copy backend source code, owned by the unprivileged runtime user
 COPY --chown=app:app . /app
+# Pinned E5 tokenizer, shared by runtime query validation and ingestion. No weights.
+RUN python -c "from agentic.embedding.ingestion.tokenization import fetch_tokenizer; fetch_tokenizer('/app/agentic/embedding/ingestion/data/.cache/e5-tokenizer.json')"
 USER app
 
 # =============================================================================

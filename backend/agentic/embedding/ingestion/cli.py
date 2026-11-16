@@ -55,9 +55,9 @@ async def main(args):
 async def preflight(cfg):
     """Gọi thật embedding (query và passage) và rerank; chỉ in model, số chiều, endpoint và profile."""
     from agentic.embedding.core import RerankClient
-    from agentic.embedding.ingestion.client import FPTEmbeddingClient
+    from agentic.embedding.ingestion.client import IngestionEmbeddingClient
 
-    client, reranker = FPTEmbeddingClient(cfg), RerankClient(cfg)
+    client, reranker = IngestionEmbeddingClient(cfg), RerankClient(cfg)
     try:
         query = await client.embed(["Phục hồi sau chạy marathon"], input_type="query")
         passage = await client.embed(["Recovery after marathon running."], input_type="passage")
@@ -68,7 +68,7 @@ async def preflight(cfg):
         emit(
             {
                 "status": "ok",
-                "provider": "fpt",
+                "provider": "openrouter",
                 "model": cfg.EMBEDDING_MODEL,
                 "dimension": len(query[0]),
                 "passage_dimension": len(passage[0]),
@@ -99,6 +99,7 @@ async def database_command(args, cfg):
             elif args.command in REVIEW_ACTIONS:
                 await repository.review(session, UUID(args.revision), args.command, args.reviewer)
             elif args.command == "activate":
+                cfg.check_calibration()
                 await repository.activate(session, cfg.profile_id)
             elif args.command == "reindex":
                 await repository.reindex(session, cfg)

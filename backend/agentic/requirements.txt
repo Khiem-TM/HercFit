@@ -15,3 +15,6 @@ redis==8.1.0
 
 # Explicit observability API contract
 langfuse==5.1.0
+
+# Exact E5 input-limit validation at query time.
+tokenizers==0.23.3
