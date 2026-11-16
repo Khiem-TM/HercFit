@@ -21,7 +21,7 @@ Tài liệu kiến trúc, luồng dữ liệu, đánh giá và kịch bản demo
 - Python 3.12 (CI dùng 3.12; 3.13 cũng chạy được)
 - [`uv`](https://docs.astral.sh/uv/) (lệnh lint dùng `uvx ruff@0.17.4`)
 - `psql` (không bắt buộc; thiếu thì test quyền database bị bỏ qua)
-- Khoá dịch vụ: OAuth client Google (đăng nhập); khoá model FPT AI Marketplace. Tavily, Langfuse, Cloudinary, Google
+- Khoá dịch vụ: OAuth client Google (đăng nhập); khoá model OpenRouter. Tavily, Langfuse, Cloudinary, Google
   Health là tuỳ chọn khi phát triển.
 
 ## Chạy môi trường phát triển
@@ -40,7 +40,7 @@ Tài liệu kiến trúc, luồng dữ liệu, đánh giá và kịch bản demo
    | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | `backend/.env` | bắt buộc để đăng nhập; redirect `http://localhost:5173/auth/callback` |
    | `POSTGRES_*` | `backend/.env` | giá trị mẫu khớp container dev |
    | `MODE` | `backend/agentic/.env` | bắt buộc: `dev` hoặc `prod` |
-   | `FPT_API_KEY` | `backend/agentic/.env` | bắt buộc để agent trả lời |
+   | `OPENROUTER_API_KEY` | `backend/.env` | bắt buộc để agent trả lời |
    | `TAVILY_API_KEY` | `backend/agentic/.env` | tra cứu web; bắt buộc khi `MODE=prod` |
    | `TOKEN_ENCRYPTION_KEY` | `backend/.env` | khi dùng Google Health |
 
@@ -83,3 +83,5 @@ cd backend && uvx ruff@0.17.4 check . --config agentic/ruff.toml
 cd backend && MODE=dev python -c "import agentic.core.app.main, app, worker"
 cd frontend && npm ci && npm run type-check && npx vite build
 ```
+
+Hướng dẫn chuyển provider, kiểm định model và đổi profile RAG: [OpenRouter migration](OPENROUTER_MIGRATION.md).
