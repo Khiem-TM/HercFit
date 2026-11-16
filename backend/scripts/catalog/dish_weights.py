@@ -10,7 +10,7 @@ Model nhìn ảnh chỉ chép bảng; code tính tổng và kiểm tra:
 * ``rejected``: còn lại (không đọc được, tổng lệch, mật độ vô lý). Món bị loại không được chọn vào catalog.
 
     python -m scripts.catalog.dish_weights download                   # tải infographic (miễn phí)
-    python -m scripts.catalog.dish_weights extract --codes HAN-113016,SFF-112032 --model Qwen2.5-VL-7B-Instruct
+    python -m scripts.catalog.dish_weights extract --codes HAN-113016,SFF-112032 --model google/gemma-4-31b-it
     python -m scripts.catalog.dish_weights extract --codes-file codes.txt
 """
 from __future__ import annotations
@@ -29,15 +29,15 @@ from scripts.catalog.common import (
     NIN_BASE,
     USER_AGENT,
     chat_json,
-    fpt_client,
     image_part,
+    model_client,
     read_json,
     write_json,
 )
 
 IMAGES = CACHE / "infographics"
 OUT = CACHE / "dish_weights.json"
-DEFAULT_MODEL = "Qwen2.5-VL-7B-Instruct"
+DEFAULT_MODEL = "google/gemma-4-31b-it"
 KCAL_TOLERANCE = 0.05
 MIN_DENSITY, MAX_DENSITY = 10, 600
 
@@ -157,7 +157,7 @@ async def extract(codes: list[str], model: str, out: Path, concurrency: int) -> 
                 results[code] = {"code": code, "name_vi": rows[code]["name_vi"], "status": "error",
                                  "reason": f"{type(exc).__name__}: {exc}"[:200], "model": None}
 
-    async with fpt_client() as client:
+    async with model_client() as client:
         await asyncio.gather(*(one(client, code) for code in todo))
     write_json(out, results)
     picked = [results[code] for code in codes if code in results]

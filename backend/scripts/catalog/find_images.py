@@ -1,6 +1,6 @@
 """Bước 4: ảnh thật, chính diện cho từng mục catalog.
 
-``search`` (tốn credit Tavily + FPT) với mỗi mục:
+``search`` (tốn credit Tavily + OpenRouter) với mỗi mục:
 
 1. Lấy ứng viên: ảnh mặt trước bao bì của Open Food Facts cho sản phẩm đóng gói, còn lại Tavily ``/search`` có
    ``include_images``. Chưa có ứng viên đạt ``GOOD_SCORE`` thì tìm thêm bằng tên tiếng Anh.
@@ -35,8 +35,8 @@ from scripts.catalog.common import (
     CACHE,
     HERE,
     chat_json,
-    fpt_client,
     image_part,
+    model_client,
     read_json,
     write_json,
 )
@@ -45,7 +45,7 @@ OUT = CACHE / "images.json"
 CANDIDATES = CACHE / "candidates"
 CROPS = CACHE / "crops"
 OVERRIDES = HERE / "image_overrides.json"
-MODEL = "gemma-4-31B-it"
+MODEL = "google/gemma-4-31b-it"
 MAX_CANDIDATES = 8
 IMAGES_PER_CALL = 4
 GOOD_SCORE = 12  # quality 4, góc trên/chéo, một suất: đủ tốt để không tìm thêm
@@ -157,7 +157,7 @@ async def judge_group(client: httpx.AsyncClient, item: dict, group: list[dict]) 
 
 
 async def judge(client: httpx.AsyncClient, item: dict, usable: list[dict]) -> list[dict]:
-    """FPT nhận tối đa 4 ảnh mỗi request, nên ứng viên được chấm theo nhóm 4."""
+    """Giữ nhóm 4 ảnh để ổn định ngân sách và cách chấm giữa các lần chạy."""
     shown = usable[:MAX_CANDIDATES]
     scored = []
     for start in range(0, len(shown), IMAGES_PER_CALL):
@@ -165,7 +165,7 @@ async def judge(client: httpx.AsyncClient, item: dict, usable: list[dict]) -> li
     return scored
 
 
-async def search_one(fpt, tavily, item: dict, results: dict) -> None:
+async def search_one(model_client_http, tavily, item: dict, results: dict) -> None:
     """Thêm ứng viên theo từng nguồn (ảnh OFF, truy vấn tiếng Việt, truy vấn tiếng Anh) tới khi có ảnh đủ tốt."""
     key = item["key"]
     hint = {"dish": "món ăn", "food": "thực phẩm", "product": "sản phẩm"}[item["kind"]]
@@ -189,7 +189,7 @@ async def search_one(fpt, tavily, item: dict, results: dict) -> None:
         judged = {c["path"] for c in scored}
         fresh = [c for c in usable if c["path"] not in judged][:MAX_CANDIDATES - len(scored)]
         if fresh:
-            scored += await judge(fpt, item, fresh)
+            scored += await judge(model_client_http, item, fresh)
     results[key] = {"key": key, "name_vi": item["name_vi"], "kind": item["kind"], "tavily_queries": used,
                     "candidates": scored}
 
@@ -244,15 +244,15 @@ async def search(items_path: Path, limit: int | None, concurrency: int) -> None:
     semaphore = asyncio.Semaphore(concurrency)
     tavily_key = agent_settings.TAVILY_API_KEY.get_secret_value()
 
-    async def one(fpt, tavily, item):
+    async def one(model_client_http, tavily, item):
         async with semaphore:
             try:
-                await search_one(fpt, tavily, item, results)
+                await search_one(model_client_http, tavily, item, results)
             except Exception as exc:  # một mục lỗi không dừng cả lượt; chạy lại sẽ thử tiếp
                 print(f"{item['key']}: {type(exc).__name__}: {exc}"[:200])
 
-    async with fpt_client() as fpt, httpx.AsyncClient(headers={"Authorization": f"Bearer {tavily_key}"}) as tavily:
-        await asyncio.gather(*(one(fpt, tavily, item) for item in todo))
+    async with model_client() as model_client_http, httpx.AsyncClient(headers={"Authorization": f"Bearer {tavily_key}"}) as tavily:
+        await asyncio.gather(*(one(model_client_http, tavily, item) for item in todo))
     write_json(OUT, results)
     chosen = choose({key: results[key] for key in (item["key"] for item in todo) if key in results}, {})
     queries = sum(results[item["key"]]["tavily_queries"] for item in todo if item["key"] in results)

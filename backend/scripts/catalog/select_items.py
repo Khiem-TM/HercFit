@@ -1,6 +1,6 @@
 """Bước 3: gắn nhãn và chọn ~500 mục cho catalog v2.
 
-``annotate`` hỏi LLM (DeepSeek-V4-Flash qua FPT) cho từng nguồn:
+``annotate`` hỏi LLM (deepseek/deepseek-v4-flash qua OpenRouter) cho từng nguồn:
 
 * độ phổ biến 1–5 trong bữa ăn hằng ngày của người Việt và cờ ``keep``;
 * tên tiếng Việt tự nhiên, tên tiếng Anh, tối đa 5 alias, một category trong bộ cố định;
@@ -25,9 +25,9 @@ import unicodedata
 
 from pydantic import BaseModel, Field, ValidationError
 
-from scripts.catalog.common import CACHE, HERE, chat_json, fpt_client, read_json, write_json
+from scripts.catalog.common import CACHE, HERE, chat_json, model_client, read_json, write_json
 
-MODEL = "DeepSeek-V4-Flash"
+MODEL = "deepseek/deepseek-v4-flash"
 BATCH = 30
 CONCURRENCY = 4
 
@@ -201,7 +201,7 @@ async def annotate(kind: str, limit: int | None, keys: list[str]) -> None:
     semaphore = asyncio.Semaphore(CONCURRENCY)
     items = list(todo.items())
     batches = [dict(items[start:start + BATCH]) for start in range(0, len(items), BATCH)]
-    async with fpt_client() as client:
+    async with model_client() as client:
         for result in await asyncio.gather(*(annotate_batch(client, prompt, batch, categories, semaphore)
                                              for batch in batches)):
             results.update(result)
