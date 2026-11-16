@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from agentic.components.context_filter import model_graph_context
 from agentic.core import roster
 from agentic.core.context import request_context
-from agentic.core.providers.fpt import strip_tool_markup
+from agentic.core.providers.tool_markup import strip_tool_markup
 from agentic.observability import annotate, observed
 from agentic.observability import metrics as ops
 from agentic.prompts.layout import layout

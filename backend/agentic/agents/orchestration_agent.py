@@ -15,7 +15,7 @@ from agentic.agents.adaptive_router import (
 from agentic.agents.state import GOAL_INTENTS, RouteDecision
 from agentic.components.context_filter import compact_evidence, model_graph_context
 from agentic.core.app.schemas.response import Clarification
-from agentic.core.providers.fpt import strip_tool_markup
+from agentic.core.providers.tool_markup import strip_tool_markup
 from agentic.prompts.layout import layout
 from agentic.prompts.registry import get_prompt
 from agentic.security.content_filter import assess

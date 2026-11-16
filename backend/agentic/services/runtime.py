@@ -13,7 +13,7 @@ from langgraph.types import Command
 from agentic.agents.state import initial_state
 from agentic.core.app.config import AgentSettings
 from agentic.core.app.schemas.response import ChatResponse, Clarification, FoodGap
-from agentic.core.providers.fpt import ToolMarkupFilter, strip_tool_markup
+from agentic.core.providers.tool_markup import ToolMarkupFilter, strip_tool_markup
 from agentic.observability import (
     annotate,
     durable_context,
