@@ -53,7 +53,7 @@ const RIGHT = [
 .item {
   border: 0; background: transparent; padding: 0; height: 100%; min-width: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  font-size: 11px; font-weight: 500; color: var(--hf-faint); white-space: nowrap;
+  font-size: 11px; font-weight: 500; color: var(--hf-muted); white-space: nowrap;
   transition: color var(--hf-dur-fast) var(--hf-ease-out);
 }
 .item.on { color: var(--hf-ink); font-weight: 700; }

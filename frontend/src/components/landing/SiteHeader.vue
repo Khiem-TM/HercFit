@@ -7,11 +7,11 @@ import ThemeToggle from "@/components/ThemeToggle.vue";
 const { isAuthenticated, loginWithGoogle } = useAuth();
 const menuOpen = shallowRef(false);
 const links = [
-  { label: "Archive", href: "#archive" },
-  { label: "Agents", href: "#agents" },
-  { label: "Knowledge graph", href: "#knowledge" },
-  { label: "Protocols", href: "#protocols" },
-  { label: "Access", href: "#access" },
+  { label: "Tổng quan", href: "#archive" },
+  { label: "Agent", href: "#agents" },
+  { label: "Tri thức", href: "#knowledge" },
+  { label: "Quy trình", href: "#protocols" },
+  { label: "Bắt đầu", href: "#access" },
 ];
 
 function handleEnterChat(): void {
@@ -36,27 +36,18 @@ function handleEnterChat(): void {
       <a
         class="flex items-center gap-space-sm shrink-0"
         href="#archive"
-        aria-label="Mythic — về đầu trang"
+        aria-label="HercFit — về đầu trang"
         @click="menuOpen = false"
       >
         <span
           class="font-label-code text-label-code text-primary tracking-[0.2em] font-medium"
-          >MYTHIC</span
+          >HERCFIT</span
         >
         <span
           class="font-label-telemetry text-label-telemetry text-outline tracking-widest hidden sm:inline-block"
-          >// OLYMPUS KINETIC</span
+          >// AI NUTRITION &amp; TRAINING</span
         >
       </a>
-      <div
-        class="hidden xl:flex items-center gap-space-xs px-space-sm py-space-xs border border-outline-variant/50 bg-surface-container-lowest shrink-0"
-      >
-        <span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
-        <span
-          class="font-label-telemetry text-[9px] text-on-surface-variant tracking-wider"
-          >SYS.PREVIEW // 4 AGENTS</span
-        >
-      </div>
       <nav
         class="hidden lg:flex items-center gap-5 font-label-code text-[10px] tracking-[0.14em] uppercase"
         aria-label="Điều hướng chính"
@@ -70,26 +61,15 @@ function handleEnterChat(): void {
         >
       </nav>
       <div class="flex items-center gap-space-md">
-        <span
-          class="hidden 2xl:block font-label-telemetry text-[9px] text-outline border border-outline-variant/40 px-space-sm py-space-xs tracking-widest"
-          >OBS.LAT 37.9838° N</span
-        >
         <button
           type="button"
-          class="hidden sm:inline-flex items-center gap-2 px-3.5 py-1.5 bg-primary text-background font-label-code text-[10px] uppercase tracking-[0.18em] font-medium border border-primary hover:bg-background hover:text-primary transition-colors"
+          class="inline-flex items-center gap-2 px-3.5 py-1.5 bg-primary text-background font-label-code text-[11px] uppercase tracking-[0.16em] font-medium border border-primary hover:bg-background hover:text-primary transition-colors whitespace-nowrap"
           @click="handleEnterChat"
         >
-          {{ isAuthenticated ? "VÀO CHAT AI" : "ĐĂNG NHẬP GOOGLE" }}
+          <UserRound :size="14" :stroke-width="1.8" aria-hidden="true" />
+          {{ isAuthenticated ? "VÀO TRỢ LÝ" : "ĐĂNG NHẬP" }}
         </button>
         <ThemeToggle class="!h-8 !w-8 !rounded-full" />
-        <button
-          type="button"
-          class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center hover:opacity-90 transition-opacity"
-          aria-label="Đăng nhập Google OAuth"
-          @click="handleEnterChat"
-        >
-          <UserRound :size="17" :stroke-width="1.6" />
-        </button>
         <button
           class="lg:hidden text-primary p-2"
           type="button"

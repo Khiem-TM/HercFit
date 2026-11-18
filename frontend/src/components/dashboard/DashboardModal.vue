@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 import { CalendarDays, Plug, RefreshCw, UserRound, X } from 'lucide-vue-next'
 import { AnimatePresence, motion } from 'motion-v'
 import { fade, indicatorTransition, modalTransition, presence } from '@/motion'
 import { useAuth } from '@/composables/useAuth'
+import { domOf, useDialogFocus } from '@/composables/useDialogFocus'
 import { useMobile } from '@/composables/useMobile'
 import { createHealthApi } from '@/features/health-integration/api'
 import { syncOnOpen } from '@/features/health-integration/openSync'
@@ -31,7 +32,8 @@ const MapTab = defineAsyncComponent(() => import('./MapTab.vue'))
  * toàn màn hình của thanh tab dưới (MobileTabBar): không có hàng tab và nút đóng riêng, và được giữ nguyên (hidden)
  * khi người dùng về khung chat.
  */
-const props = defineProps<{ busy: boolean; revision: number; hidden?: boolean }>()
+/** `covered`: hộp thoại Hồ sơ & kết nối đang mở phía trên, Dashboard thành nền (inert). */
+const props = defineProps<{ busy: boolean; revision: number; hidden?: boolean; covered?: boolean }>()
 const emit = defineEmits<{
   close: []
   settings: [tab: SettingsTab]
@@ -51,6 +53,7 @@ const toast = shallowRef('')
 const shown = shallowRef(true)
 const close = () => { if (isMobile.value) emit('close'); else shown.value = false }
 const dialog = useTemplateRef<HTMLElement>('dialog')
+const focus = useDialogFocus(() => domOf(dialog.value))
 let toastTimer: ReturnType<typeof setTimeout> | undefined
 
 const TABS: { id: DashboardTab; label: string }[] = [
@@ -78,7 +81,7 @@ const goalLabel = computed(() => {
 })
 const sync = computed(() => {
   const status = connection.value?.status
-  if (data.loading.value || data.healthLoading.value) return { text: 'Đang tải dữ liệu…', dot: 'var(--hf-ghost)', warn: false }
+  if (data.loading.value) return { text: 'Đang tải dữ liệu…', dot: 'var(--hf-ghost)', warn: false }
   if (status === 'NEEDS_REAUTH') return { text: 'Cần kết nối lại Google Health', dot: 'var(--hf-warn-dot)', warn: true }
   if (status === 'ERROR' || data.failed.value.length) {
     const last = connection.value?.last_success_at
@@ -97,9 +100,9 @@ function say(message: string) {
   toastTimer = setTimeout(() => { toast.value = '' }, 2800)
 }
 
+const REFRESHED = { ok: 'Đã cập nhật dữ liệu', partial: 'Đã cập nhật, nhưng một phần dữ liệu chưa tải được', failed: 'Không tải được dữ liệu mới' }
 async function refresh() {
-  await data.refresh()
-  say('Đã cập nhật dữ liệu')
+  say(REFRESHED[await data.refresh()])
 }
 
 function chat(text: string) {
@@ -117,6 +120,7 @@ watch(() => props.revision, () => { if (!props.busy) schedule(900) })
 
 function keydown(event: KeyboardEvent) {
   if (event.key !== 'Escape' || event.defaultPrevented || props.hidden) return
+  if (document.querySelector('dialog[open]')) return
   if (document.querySelector('.hf-smodal')) return  // hộp thoại Hồ sơ & kết nối đang mở phía trên
   if (detail.value) detail.value = ''
   else close()
@@ -125,27 +129,25 @@ onMounted(async () => {
   window.addEventListener('keydown', keydown)
   // "Khi mở ứng dụng": lượt đồng bộ của lần tải trang này xong thì đọc lại dữ liệu.
   void syncOnOpen(createHealthApi((url, init) => authFetch(url, init))).then(synced => { if (synced) void data.refresh() })
-  await nextTick()
-  // Phần tử motion: lấy DOM qua $el khi ref trỏ vào component.
-  const node = dialog.value as unknown as HTMLElement & { $el?: HTMLElement }
-  ;(node?.$el ?? node)?.focus?.({ preventScroll: true })
+  await focus.open()
 })
 onUnmounted(() => {
   timers.forEach(clearTimeout)
   clearTimeout(toastTimer)
   window.removeEventListener('keydown', keydown)
+  focus.close()
 })
 </script>
 
 <template>
   <Teleport to="body">
     <AnimatePresence @exit-complete="emit('close')">
-    <div v-if="shown" v-show="!hidden" class="hf dash-root">
+    <div v-if="shown" v-show="!hidden" class="hf dash-root" :inert="covered">
       <motion.button type="button" class="hf-scrim scrim" aria-label="Đóng Dashboard" v-bind="presence(modalTransition.scrim)"
                      @click="close" />
       <div class="center">
       <motion.div ref="dialog" class="modal" role="dialog" :aria-modal="!isMobile" aria-label="Dashboard HercFit" tabindex="-1"
-                  v-bind="presence(isMobile ? fade : modalTransition.panel)">
+                  v-bind="presence(isMobile ? fade : modalTransition.panel)" @keydown="!isMobile && focus.keydown($event)">
         <header class="mh" :class="{ covered: isMobile && detail }">
           <div v-if="isMobile" class="mtop">
             <div class="mtitle">
@@ -203,7 +205,7 @@ onUnmounted(() => {
             <ProgressTab :data="data" @settings="emit('settings', $event)" @prefill="chat" @create-plan="emit('create-plan')" />
           </div></Transition>
           <Transition name="hf-fade"><div v-show="tab === 'plan'" class="pane">
-            <PlanTab :data="data" @create-plan="emit('create-plan')" @ask="emit('ask', $event)" />
+            <PlanTab :data="data" @done="say" @create-plan="emit('create-plan')" />
           </div></Transition>
           <Transition name="hf-fade"><div v-if="mapOpened" v-show="tab === 'map'" class="pane">
             <MapTab :busy="busy" :revision="revision" @ask="emit('ask', $event)" />
@@ -212,7 +214,7 @@ onUnmounted(() => {
           <Transition name="hf-sheet"><ReadinessDetail v-if="tab === 'today' && detail === 'ready'" :assessment="data.health.value?.assessment ?? null"
                            :connection="connection" @back="detail = ''" @ask="emit('ask', $event)" @logged="data.refresh()" /></Transition>
           <Transition name="hf-sheet"><WorkoutDetail v-if="tab === 'today' && detail === 'workout'" :plan="data.plan.value" :today="data.today"
-                         @back="detail = ''" @done="say" @changed="data.refresh()" /></Transition>
+                         @back="detail = ''" @done="say" @completed="data.applyPlanCompletion" @changed="data.refresh()" /></Transition>
           <Transition name="hf-sheet"><NutritionDetail v-if="tab === 'today' && detail === 'nutrition'" :meals="data.mealsToday.value"
                            :targets="data.targets.value" @back="detail = ''" @prefill="chat" /></Transition>
           <Transition name="hf-sheet"><HeartDetail v-if="tab === 'today' && detail === 'heart'"

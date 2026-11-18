@@ -9,19 +9,22 @@ const REJECT_EXACT = new Set(['không', 'thôi', 'không lưu', 'đừng lưu', 
 // Có các từ này thì câu không còn là một lệnh duyệt đơn thuần: để chat xử lý.
 const NEGATION = ['không', 'đừng', 'chưa', 'khoan', 'thôi']
 const EDIT = ['nhưng', 'đổi', 'sửa', 'thêm', 'bớt', 'thành', 'là']
+// Nhận dạng giọng nói thường không ghi dấu "?": câu có từ để hỏi ("lưu để làm gì", "lưu ở đâu") là câu hỏi, không phải lệnh.
+const QUESTION = ['gì', 'đâu', 'sao', 'nào', 'nghĩa', 'mấy', 'bao', 'ai', 'à', 'hả', 'hở', 'ư', 'chứ', 'nhỉ', 'hông']
 const MAX_WORDS = 6
 
 /**
  * 'approve' / 'reject' khi câu nói là một lệnh ngắn ("Xác nhận.", "ok mình đồng ý", "huỷ nhé");
- * câu dài, câu hỏi, câu có phủ định, số hoặc yêu cầu sửa trả về null và đi vào chat như một tin nhắn thường.
+ * câu dài, câu hỏi (có hoặc không có dấu "?"), câu có phủ định, số hoặc yêu cầu sửa trả về null và đi vào chat như một
+ * tin nhắn thường để trợ lý trả lời; thẻ vẫn chờ người dùng quyết định.
  */
 export function voiceDecision(spoken: string): 'approve' | 'reject' | null {
   const raw = spoken.normalize('NFC').toLowerCase()
-  // Nhận dạng hay nghe "xác nhận" thành "xác nhậm", "sác nhận" (lần thử 15/11).
-  const command = raw.replace(/[.,!?…]/g, ' ').replace(/(^|\s)[xs]ác nh\S*/g, '$1xác nhận').replace(/\s+/g, ' ').trim()
+  // Nhận dạng hay nghe "xác nhận" thành "xác nhậm", "sác nhận", "sao nhận" (lần thử 15/11).
+  const command = raw.replace(/[.,!?…]/g, ' ').replace(/(^|\s)(?:[xs]ác|sao) nh\S*/g, '$1xác nhận').replace(/\s+/g, ' ').trim()
   const words = command.split(' ')
   const has = (phrase: string) => ` ${command} `.includes(` ${phrase} `)
-  if (!command || words.length > MAX_WORDS || raw.includes('?') || /\d/.test(command) || EDIT.some(has)) return null
+  if (!command || words.length > MAX_WORDS || raw.includes('?') || /\d/.test(command) || EDIT.some(has) || QUESTION.some(has)) return null
   if (REJECT.some(has) || REJECT_EXACT.has(command.replace(/ (nhé|nha|ạ|đi)$/, ''))) return 'reject'
   if (NEGATION.some(has)) return null
   return APPROVE.some(has) ? 'approve' : null

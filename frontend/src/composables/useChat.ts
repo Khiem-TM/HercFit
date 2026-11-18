@@ -19,6 +19,8 @@ const messages = ref<ChatMessage[]>([])
 const isStreaming = ref<boolean>(false)
 const isConfirming = ref<boolean>(false)
 const isLoadingHistory = ref<boolean>(false)
+/** Lỗi tải lịch sử của phiên đang mở (khác cuộc trò chuyện mới trống): giao diện hiện nút thử lại. */
+const historyError = ref<string | null>(null)
 const activeNode = ref<string | null>(null)
 const pendingAction = ref<PendingAction | null>(null)
 const isSavingImage = ref<boolean>(false)
@@ -35,8 +37,13 @@ function changeView(): number {
   historyController?.abort()
   historyController = null
   isLoadingHistory.value = false
+  historyError.value = null
   return ++viewGeneration
 }
+
+const HISTORY_FAILED = 'Không tải được cuộc trò chuyện này.'
+// Stream đóng mà chưa có sự kiện kết thúc (message / needs_input / pending_confirmation / error).
+const STREAM_CUT = 'Kết nối bị ngắt trước khi trợ lý trả lời xong.'
 
 const MODE_KEY = 'hercfit.chatMode.'
 
@@ -128,6 +135,7 @@ export function useChat() {
       if (!current()) return
       if (!resp.ok) {
         messages.value = []
+        historyError.value = HISTORY_FAILED
         return
       }
       const data = await resp.json()
@@ -173,13 +181,18 @@ export function useChat() {
       }
       messages.value = mapped
     } catch {
-      if (current()) error.value = 'Không thể tải lịch sử hội thoại.'
+      if (current()) historyError.value = HISTORY_FAILED
     } finally {
       if (current()) {
         isLoadingHistory.value = false
         historyController = null
       }
     }
+  }
+
+  /** Nút "Thử lại" khi tải lịch sử lỗi. */
+  async function retryHistory(): Promise<void> {
+    if (activeSessionId.value) await selectSession(activeSessionId.value)
   }
 
   async function deleteSession(sessionId: string): Promise<void> {
@@ -207,7 +220,7 @@ export function useChat() {
    */
   async function sendMessage(rawText: string, extra: { food_choices?: FoodChoice[]; speak?: (text: string) => void } = {}): Promise<void> {
     const text = rawText.trim()
-    if (!text || isStreaming.value || isConfirming.value || isLoadingHistory.value) return
+    if (!text || isStreaming.value || isConfirming.value || isLoadingHistory.value || historyError.value) return
 
     if (!activeSessionId.value) {
       activeSessionId.value = crypto.randomUUID()
@@ -233,6 +246,7 @@ export function useChat() {
     // Chỉ số của bong bóng trợ lý đang được điền bằng token stream, nếu có.
     let streamingIndex = -1
     let spoken = false
+    let finished = false
     const speak = (content: string) => {
       spoken = true
       extra.speak?.(content)
@@ -300,6 +314,7 @@ export function useChat() {
               event.type === 'needs_input' ||
               event.type === 'pending_confirmation'
             ) {
+              finished = true
               const pending: PendingAction | null = event.pending_action || null
               pendingAction.value = pending
               const final: ChatMessage = {
@@ -321,7 +336,14 @@ export function useChat() {
               else messages.value.push(final)
               streamingIndex = -1
               if (!spoken) speak(final.content)
+            } else if (event.type === 'cancelled') {
+              // Server đã dừng lượt (lệnh dừng từ nơi khác, ví dụ nói chen khi dùng giọng nói).
+              finished = true
+              if (streamingIndex >= 0) messages.value[streamingIndex].status = 'stopped'
+              else messages.value.push({ id: crypto.randomUUID(), role: 'ai', content: '', status: 'stopped', timestamp: new Date().toISOString() })
+              streamingIndex = -1
             } else if (event.type === 'error') {
+              finished = true
               const errMsg =
                 event.reply || event.detail || 'Đã xảy ra lỗi khi xử lý yêu cầu.'
               // Banner dành cho lỗi ngoài một lượt chạy (HTTP, xác thực, dịch vụ ngừng); câu trả lời
@@ -347,6 +369,13 @@ export function useChat() {
         }
       }
 
+      if (!finished) {
+        // Giữ phần đã nhận, đánh dấu bị ngắt; người dùng gửi lại được từ tin nhắn đó.
+        if (streamingIndex >= 0) messages.value[streamingIndex].status = 'interrupted'
+        else messages.value.push({ id: crypto.randomUUID(), role: 'ai', content: '', status: 'interrupted', timestamp: new Date().toISOString() })
+        streamingIndex = -1
+        if (!spoken) speak(STREAM_CUT)
+      }
       await loadSessions()
     } catch (err) {
       if (controller.signal.aborted) {
@@ -369,15 +398,17 @@ export function useChat() {
     }
   }
 
-  /** Huỷ câu trả lời đang chạy: báo server dừng lượt (nếu đã biết run_id) rồi đóng stream. Lỗi khi huỷ (lượt vừa
-   *  xong, đang lưu thao tác đã xác nhận) không chặn việc đóng stream; server vẫn dừng khi thấy client rời đi. */
+  /** Huỷ câu trả lời đang chạy: gửi lệnh dừng lượt cho server (nếu đã biết run_id) và đóng stream ngay, không chờ
+   *  server trả lời. Lỗi khi huỷ (lượt vừa xong, đang lưu thao tác đã xác nhận) bị bỏ qua; server vẫn dừng khi thấy
+   *  client rời đi. */
   async function stopStreaming(): Promise<void> {
     const controller = streamController
     const runId = streamRunId
-    if (runId) {
-      await authFetch(`/api/v1/chat/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => undefined)
-    }
+    const cancel = runId
+      ? authFetch(`/api/v1/chat/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => undefined)
+      : undefined
     controller?.abort()
+    await cancel
   }
 
   /** Bản ghi đã lưu của hành động đã duyệt (output của lệnh ghi mang action_id của nó). */
@@ -512,6 +543,8 @@ export function useChat() {
     isConfirming,
     isSavingImage,
     isLoadingHistory,
+    historyError,
+    retryHistory,
     activeNode,
     activeNodeLabel,
     pendingAction,

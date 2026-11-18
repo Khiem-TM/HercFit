@@ -104,7 +104,7 @@ function decide(decision: 'approve' | 'reject') {
     </div>
 
     <footer class="cff">
-      <span class="note">Chỉ lưu khi bạn bấm xác nhận.</span>
+      <span class="note">Chỉ lưu khi bạn xác nhận.</span>
       <button type="button" class="hf-btn ghost" :disabled="busy" @click="decide('reject')">{{ destructive ? 'Giữ lại' : 'Từ chối' }}</button>
       <button type="button" class="hf-btn" :class="destructive ? 'dng' : 'pri'" :disabled="busy" @click="decide('approve')">
         <Loader2 v-if="busy" :size="14" class="hf-spin" aria-hidden="true" />{{ confirmLabel }}

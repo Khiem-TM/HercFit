@@ -171,7 +171,7 @@ onUnmounted(() => timers.forEach(clearTimeout))
 .gchip[aria-pressed="true"] { background: var(--hf-ink); color: var(--hf-on-ink); border-color: var(--hf-ink); }
 .gchip:disabled { opacity: .45; }
 .gdot { width: 9px; height: 9px; border-radius: 50%; }
-.gcount { font-size: 13px; color: var(--hf-faint); font-variant-numeric: tabular-nums; }
+.gcount { font-size: 13px; color: var(--hf-muted); font-variant-numeric: tabular-nums; }
 .gchip[aria-pressed="true"] .gcount { color: #C9C9CF; }
 .timeline { padding: 18px 20px; gap: 12px; }
 .graph { padding: 12px; position: relative; gap: 8px; }

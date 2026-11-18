@@ -2,6 +2,7 @@
 import { computed, shallowRef, watch } from 'vue'
 import { useMobile } from '@/composables/useMobile'
 import { ddmm, signed, vn, WEEKDAY_LONG, weekday } from '../format'
+import { follows, indexAfterKey, indexAt } from './scrub'
 
 /**
  * Cân nặng theo ngày đo, kiểu biểu đồ chứng khoán: đường nối các ngày có đo, hoặc nến tuần (mở, cao, thấp,
@@ -43,6 +44,18 @@ const area = computed(() => `${line.value} L${X(last.value.index).toFixed(1)} 30
 const change = computed(() => Math.round((last.value.value - first.value.value) * 10) / 10)
 const changePct = computed(() => Math.round(((change.value / first.value.value) * 100) * 10) / 10)
 const label = (i: number) => `${WEEKDAY_LONG[weekday(props.days[i])]}, ${ddmm(props.days[i])}`
+
+// Chế độ đường: chọn ngày bằng chạm/rê trên vùng vẽ hoặc phím mũi tên (scrub.ts), không phải bằng từng cột.
+const current = computed(() => (hover.value >= 0 ? hover.value : last.value.index))
+function point(event: PointerEvent) {
+  if (event.type === 'pointerdown' || follows(event)) hover.value = indexAt(event, n.value)
+}
+function key(event: KeyboardEvent) {
+  const next = event.key === 'Escape' ? -1 : indexAfterKey(event, current.value, n.value)
+  if (next == null) return
+  event.preventDefault()
+  hover.value = next
+}
 
 const candles = computed(() => {
   const groups = new Map<number, number[]>()
@@ -117,11 +130,8 @@ const xLabels = computed(() => {
           <span v-for="p in points" :key="p.index" class="pt" :class="{ on: hover === p.index }" :style="{ left: xp(p.index), top: tp(p.value) }" />
           <span class="hl" :style="{ left: xp(high.index), top: tp(high.value) }">Cao {{ vn(high.value, 1) }}</span>
           <span class="hl dn" :style="{ left: xp(low.index), top: tp(low.value) }">Thấp {{ vn(low.value, 1) }}</span>
-          <div class="cols">
-            <button v-for="(day, index) in days" :key="day" type="button" class="c"
-                    :aria-label="`${label(index)}: ${values[index] != null ? `${vn(values[index], 1)} kg` : 'không có lần đo'}`"
-                    @mouseenter="hover = index" @focus="hover = index" @click="hover = index" />
-          </div>
+          <div class="cols" tabindex="0" role="slider" aria-label="Cân nặng: chọn ngày" aria-valuemin="1" :aria-valuemax="n"
+               :aria-valuenow="current + 1" :aria-valuetext="info" @pointerdown="point" @pointermove="point" @keydown="key" />
           <div v-if="hover >= 0" class="vx" :style="{ left: xp(hover) }" />
         </template>
         <template v-else>
@@ -178,8 +188,8 @@ const xLabels = computed(() => {
 .pt.on { width: 12px; height: 12px; background: var(--hf-blue); box-shadow: 0 0 0 5px rgba(37, 99, 235, .18); z-index: 2; }
 .hl { position: absolute; transform: translate(-50%, -170%); font-size: 10px; font-weight: 600; background: var(--hf-card); border: 1px solid var(--hf-press); border-radius: 6px; padding: 1px 6px; white-space: nowrap; pointer-events: none; }
 .hl.dn { transform: translate(-50%, 60%); }
-.cols { position: absolute; inset: 0; display: flex; }
-.c { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; padding: 0; margin: 0; cursor: crosshair; }
+.cols { position: absolute; inset: 0; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: crosshair; border-radius: 6px; }
+.cols:focus-visible { outline: 2px solid var(--hf-ink); outline-offset: 4px; }
 .vx { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--hf-ink); pointer-events: none; }
 .hy { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--hf-ink); pointer-events: none; }
 .cd { position: absolute; top: 0; bottom: 0; transform: translateX(-50%); border: 0; background: transparent; padding: 0; margin: 0; border-radius: 6px; }

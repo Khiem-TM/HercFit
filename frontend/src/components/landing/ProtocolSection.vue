@@ -8,12 +8,12 @@
     >
       <span
         class="font-label-telemetry text-label-telemetry text-outline uppercase tracking-widest block mb-space-xs"
-        >// THE LOOP OF CONTINUOUS TRANSCENDENCE</span
+        >// MỘT LƯỢT CHAT</span
       >
       <h2
         class="font-headline-lg text-primary uppercase font-bold tracking-tight text-headline-lg-mobile md:text-headline-lg"
       >
-        QUY TRÌNH TỰ ĐỘNG HÓA VÔ TẬN
+        TỪ CÂU NÓI ĐẾN BẢN GHI
       </h2>
     </div>
 
@@ -24,24 +24,24 @@
         <div
           class="font-label-telemetry text-label-telemetry text-outline mb-space-sm flex justify-between"
         >
-          <span>STAGE 01</span>
-          <span>INIT</span>
+          <span>BƯỚC 01</span>
+          <span>ROUTE</span>
         </div>
         <h4
           class="font-headline-sm text-headline-sm text-primary uppercase mb-space-xs"
         >
-          SCAN BIOMETRICS
+          ĐỊNH TUYẾN
         </h4>
         <p
           class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed"
         >
-          Thu thập liên tục 48 thông số chuyển hóa, tải áp lực thần kinh và chỉ
-          số phục hồi HRV.
+          Câu gõ hoặc nói đi qua luật của code trước: câu ghi đơn giản khớp danh
+          mục đi đường nhanh, câu nhiều việc được tách cho các agent.
         </p>
         <div
-          class="mt-space-lg pt-space-sm border-t border-outline-variant/20 font-label-telemetry text-[9px] text-outline"
+          class="mt-space-lg pt-space-sm border-t border-outline-variant/20 font-label-telemetry text-[10px] text-outline"
         >
-          INPUT // SENSOR ARRAYS
+          INPUT // CHAT · GIỌNG NÓI
         </div>
       </div>
 
@@ -51,24 +51,24 @@
         <div
           class="font-label-telemetry text-label-telemetry text-outline mb-space-sm flex justify-between"
         >
-          <span>STAGE 02</span>
-          <span>EVAL</span>
+          <span>BƯỚC 02</span>
+          <span>TOOLS</span>
         </div>
         <h4
           class="font-headline-sm text-headline-sm text-primary uppercase mb-space-xs"
         >
-          AGENT CONSENSUS
+          AGENT XỬ LÝ
         </h4>
         <p
           class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed"
         >
-          4 tác tử phân tích đồng thời, loại trừ mâu thuẫn giữa kích thích phát
-          triển và khả năng phục hồi.
+          Agent chuyên trách chỉ gọi tool của miền mình. Thiếu thông tin thì hỏi
+          lại bằng thẻ có lựa chọn thay vì tự đoán.
         </p>
         <div
-          class="mt-space-lg pt-space-sm border-t border-outline-variant/20 font-label-telemetry text-[9px] text-outline"
+          class="mt-space-lg pt-space-sm border-t border-outline-variant/20 font-label-telemetry text-[10px] text-outline"
         >
-          ARBITRATION // ZERO-CONFLICT
+          TOOLS // THEO MIỀN
         </div>
       </div>
 
@@ -78,24 +78,24 @@
         <div
           class="font-label-telemetry text-label-telemetry text-outline mb-space-sm flex justify-between"
         >
-          <span>STAGE 03</span>
-          <span>EXEC</span>
+          <span>BƯỚC 03</span>
+          <span>HITL</span>
         </div>
         <h4
           class="font-headline-sm text-headline-sm text-primary uppercase mb-space-xs"
         >
-          REAL-TIME ADAPTATION
+          XÁC NHẬN
         </h4>
         <p
           class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed"
         >
-          Thay đổi bài tập, khối lượng vi chất và thời điểm nạp calo ngay giữa
-          chu kỳ vận động.
+          Lệnh ghi dừng ở thẻ xác nhận có phiên bản và hạn dùng: xem lại, sửa,
+          duyệt hoặc từ chối, bằng nút hoặc bằng câu nói.
         </p>
         <div
-          class="mt-space-lg pt-space-sm border-t border-outline-variant/20 font-label-telemetry text-[9px] text-outline"
+          class="mt-space-lg pt-space-sm border-t border-outline-variant/20 font-label-telemetry text-[10px] text-outline"
         >
-          LATENCY // SUB-SECOND
+          HUMAN-IN-THE-LOOP
         </div>
       </div>
 
@@ -105,24 +105,24 @@
         <div
           class="font-label-telemetry text-label-telemetry text-primary mb-space-sm flex justify-between"
         >
-          <span>STAGE 04</span>
-          <span>PEAK</span>
+          <span>BƯỚC 04</span>
+          <span>COMMIT</span>
         </div>
         <h4
           class="font-headline-sm text-headline-sm text-primary uppercase mb-space-xs"
         >
-          TRANSCENDENCE
+          GHI &amp; QUAN SÁT
         </h4>
         <p
           class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed"
         >
-          Đạt đến trạng thái thể chất thần thánh: cơ bắp bất khả xâm phạm và tâm
-          trí minh triết tuyệt đối.
+          Ghi idempotent kèm khoá phiên bản, đồ thị tri thức cập nhật qua
+          outbox. Mỗi lượt có trace và kết cục để đo lường, đánh giá.
         </p>
         <div
-          class="mt-space-lg pt-space-sm border-t border-primary/20 font-label-telemetry text-[9px] text-primary"
+          class="mt-space-lg pt-space-sm border-t border-primary/20 font-label-telemetry text-[10px] text-primary"
         >
-          TARGET // THE OLYMPIAN
+          IDEMPOTENCY · LANGFUSE
         </div>
       </div>
     </div>

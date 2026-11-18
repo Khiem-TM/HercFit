@@ -8,6 +8,7 @@ from agentic.embedding.retrieval.router import router as embedding_router
 from api.dependencies import JournalServiceDep, PlanServiceDep
 from domains.analytics.routers.assistant_router import router as assistant_router
 from domains.analytics.routers.context_router import router as context_router
+from domains.analytics.routers.dashboard_router import router as dashboard_router
 from domains.analytics.routers.progress_router import router as progress_router
 from domains.body.routers.body_metrics_router import router as body_metrics_router
 from domains.catalog.routers.exercise_router import router as exercise_router
@@ -111,7 +112,7 @@ for domain_router in (
 for domain_router in (
     auth_router, privacy_router, profile_router, body_metrics_router, goal_router, media_router,
     _preview_router, food_router, exercise_router, plan_router, training_plan_router,
-    meal_router, training_router, progress_router, training_analytics_router, nutrition_router,
+    meal_router, training_router, progress_router, dashboard_router, training_analytics_router, nutrition_router,
     integration_router, health_router, assistant_router,
 ):
     api_router.include_router(domain_router)

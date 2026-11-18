@@ -117,7 +117,7 @@ const BARS = [0.45, 0.75, 1, 0.75, 0.45]
   margin: 0; font-size: 15px; line-height: 1.45; color: var(--hf-text); overflow: hidden;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
-.cap:not(.user):not(.agent) { color: var(--hf-faint); font-size: 14px; }
+.cap:not(.user):not(.agent) { color: var(--hf-muted); font-size: 14px; }
 .who { font-weight: 700; color: var(--hf-ink); margin-right: 6px; }
 .cap.agent .who { color: var(--hf-plan); }
 

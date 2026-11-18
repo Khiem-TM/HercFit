@@ -7,6 +7,7 @@ import { num } from '@/components/knowledge/health/healthFormat'
 import BarChart, { type BarColumn } from './charts/BarChart.vue'
 import DotChart, { type DotColumn } from './charts/DotChart.vue'
 import WeightChart from './charts/WeightChart.vue'
+import { ESTIMATE_METHOD, estimateOut } from './energyOut'
 import { ddmm, hoursMinutes, localDate, shift, signed, vn, WEEKDAY_LONG, weekday } from './format'
 import type { DashboardData } from './useDashboardData'
 
@@ -27,12 +28,13 @@ const range = shallowRef(28)
 const recovery = shallowRef<'sleep' | 'hrv' | 'rhr'>('sleep')
 const hover = shallowRef(-1)
 
-const today = props.data.today
-const days = computed(() => Array.from({ length: range.value }, (_, index) => shift(today, index - range.value + 1)))
+// Đọc qua computed: sang ngày mới (ứng dụng mở qua đêm) thì các khoảng thời gian dịch theo.
+const today = computed(() => props.data.today)
+const days = computed(() => Array.from({ length: range.value }, (_, index) => shift(today.value, index - range.value + 1)))
 const label = (iso: string) => `${WEEKDAY_LONG[weekday(iso)]}, ${ddmm(iso)}`
 const readout = (iso: string, text: string | null) => `${label(iso)} · ${text ?? 'Không có dữ liệu'}`
-const rangeText = computed(() => `${ddmm(days.value[0])} – ${ddmm(today)}/${today.slice(0, 4)}`)
-const xLabels = computed<[string, string, string]>(() => [ddmm(days.value[0]), ddmm(days.value[Math.floor(days.value.length / 2)]), ddmm(today)])
+const rangeText = computed(() => `${ddmm(days.value[0])} – ${ddmm(today.value)}/${today.value.slice(0, 4)}`)
+const xLabels = computed<[string, string, string]>(() => [ddmm(days.value[0]), ddmm(days.value[Math.floor(days.value.length / 2)]), ddmm(today.value)])
 const avg = (values: number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : null)
 const health = computed(() => props.data.health.value)
 const hasDevice = computed(() => {
@@ -143,10 +145,22 @@ const view = computed<View>(() => {
   if (topic.value === 'nutrition') {
     const past = days.value.slice(0, -1)
     const logged = past.filter(day => intake(day) != null)
-    const both = logged.filter(day => num(progressByDay.value.get(day)?.calories_out_actual) != null)
-    const diff = avg(both.map(day => (intake(day) as number) - (num(progressByDay.value.get(day)?.calories_out_actual) as number)))
-    const canDiff = hasDevice.value && both.length >= 3
-    const todayKcal = intake(today)
+    // Không trộn hai nguồn: đủ 3 ngày có số thiết bị thì chỉ dùng thiết bị, nếu không thì ước tính cho mọi ngày.
+    const bmr = num(props.data.targets.value?.bmr_kcal)
+    const deviceDays = logged.flatMap(day => {
+      const kcal = num(progressByDay.value.get(day)?.calories_out_actual)
+      return kcal != null ? [{ day, kcal }] : []
+    })
+    const fromDevice = deviceDays.length >= 3
+    const both = fromDevice ? deviceDays : logged.flatMap(day => {
+      const out = estimateOut(progressByDay.value.get(day), bmr)
+      return out ? [{ day, kcal: out.kcal }] : []
+    })
+    const diff = avg(both.map(({ day, kcal }) => (intake(day) as number) - kcal))
+    const outAvg = avg(both.map(item => item.kcal))
+    const canDiff = both.length >= 3
+    const outSource = fromDevice ? 'tiêu hao từ thiết bị' : `tiêu hao ước tính (${ESTIMATE_METHOD})`
+    const todayKcal = intake(today.value)
     const max = Math.max(2600, Math.ceil(Math.max(...days.value.map(day => intake(day) ?? 0), target.value ?? 0) / 200) * 200)
     if (!logged.length && todayKcal == null) {
       return { stats: [], title: '', sub: '', details: [], chart: 'none', empty: { title: 'Chưa có bữa ăn nào được ghi',
@@ -158,7 +172,9 @@ const view = computed<View>(() => {
       stats: [
         { label: 'Năng lượng nạp trung bình', value: vn(avg(logged.map(day => intake(day) as number))), unit: 'kcal/ngày', sub: `${logged.length}/${past.length} ngày có ghi nhận · không tính hôm nay` },
         { label: 'Chênh lệch nạp – tiêu hao', value: canDiff && diff != null ? signed(Math.round(diff), 0) : '—', unit: canDiff ? 'kcal/ngày' : '',
-          sub: canDiff ? `Trung bình ${both.length} ngày đủ cả hai dữ liệu` : 'Chưa đủ dữ liệu tiêu hao từ thiết bị' },
+          sub: canDiff ? `Trung bình ${both.length} ngày · ${outSource}`
+            : bmr == null && !deviceDays.length ? 'Cần hoàn thiện hồ sơ hoặc kết nối thiết bị để có số tiêu hao'
+            : 'Cần ít nhất 3 ngày đã ghi bữa ăn' },
         { label: 'Mục tiêu năng lượng', value: target.value ? vn(target.value) : '—', unit: target.value ? 'kcal/ngày' : '', sub: target.value ? 'Hệ thống tính từ hồ sơ' : 'Cần hoàn thiện hồ sơ' },
       ],
       title: 'Năng lượng nạp theo ngày', sub: `Đơn vị kcal · ${rangeText.value}`, chart: 'dots',
@@ -167,12 +183,14 @@ const view = computed<View>(() => {
         target: target.value ? { value: target.value, label: `Mục tiêu ${vn(target.value)} kcal` } : null,
         columns: days.value.map(day => {
           const kcal = intake(day)
-          return { value: kcal, readout: readout(day, kcal != null ? `${vn(kcal)} kcal${day === today ? ' (hôm nay, chưa hết ngày)' : ''}` : null) }
+          return { value: kcal, readout: readout(day, kcal != null ? `${vn(kcal)} kcal${day === today.value ? ' (hôm nay, chưa hết ngày)' : ''}` : null) }
         }),
       },
       details: [
         { label: 'Ngày có ghi nhận', sub: 'không tính hôm nay', value: `${logged.length} / ${past.length}` },
-        { label: 'Ngày đủ cả nạp và tiêu hao', sub: 'dùng để tính chênh lệch', value: String(hasDevice.value ? both.length : 0) },
+        { label: 'Ngày đủ cả nạp và tiêu hao', sub: 'dùng để tính chênh lệch', value: String(both.length) },
+        { label: 'Tiêu hao trung bình', sub: both.length ? (fromDevice ? 'từ thiết bị' : 'ước tính') : 'chưa có dữ liệu',
+          value: outAvg != null ? `${vn(Math.round(outAvg))} kcal` : '—' },
         { label: 'Hôm nay', sub: `${props.data.targets.value?.today.meal_count ?? 0} bữa đã ghi`, value: todayKcal != null ? `${vn(todayKcal)} kcal` : '—' },
         { label: 'Protein hôm nay', sub: 'đã ghi / mục tiêu', value: `${vn(protein ?? 0)}${proteinTarget ? ` / ${vn(proteinTarget)}` : ''} g` },
       ],
@@ -181,7 +199,7 @@ const view = computed<View>(() => {
   if (topic.value === 'activity') {
     const sessions = trainingsIn.value
     const minutes = sessions.reduce((sum, item) => sum + (item.duration_seconds ?? 0) / 60, 0)
-    const last7 = Array.from({ length: 7 }, (_, index) => daily.value.get(shift(today, -1 - index))?.steps ?? null).filter((v): v is number => v != null)
+    const last7 = Array.from({ length: 7 }, (_, index) => daily.value.get(shift(today.value, -1 - index))?.steps ?? null).filter((v): v is number => v != null)
     const stepAvg = avg(last7)
     if (!sessions.length && !steps.value.some(value => value != null) && !hasDevice.value) {
       return { stats: [], title: '', sub: '', details: [], chart: 'none', empty: { title: 'Chưa có buổi vận động nào',
@@ -206,7 +224,7 @@ const view = computed<View>(() => {
           const value = steps.value[index]
           return value != null
             ? { segments: [{ value, color: blue }], title: label(day), aria: `${ddmm(day)}: ${vn(value)} bước`,
-                rows: [{ color: blue, value: vn(value), label: day === today ? 'bước · hôm nay, chưa hết ngày' : 'bước' }] }
+                rows: [{ color: blue, value: vn(value), label: day === today.value ? 'bước · hôm nay, chưa hết ngày' : 'bước' }] }
             : { segments: [], title: label(day), aria: `${ddmm(day)}: không có dữ liệu`, rows: [] }
         }),
       },
@@ -305,7 +323,7 @@ const donut = computed(() => {
   const day = days.value[index]
   const meals = mealsByDay.value.get(day)
   const kcal = intake(day)
-  const title = `${label(day)}${day === today ? ' · hôm nay' : ''}`
+  const title = `${label(day)}${day === today.value ? ' · hôm nay' : ''}`
   if (!meals || !(meals.p || meals.c || meals.f)) {
     return { title, sub: kcal != null ? 'Chưa có đủ chi tiết macro cho ngày này' : 'Không có bữa ăn được ghi trong ngày này', has: false, kcal: '', segs: [], rows: [] }
   }
@@ -325,7 +343,7 @@ const donut = computed(() => {
   const rows = ([['Protein', meals.p, kp, macros?.protein_g, MACRO.p], ['Carb', meals.c, kc, macros?.carbohydrate_g, MACRO.c],
                  ['Chất béo', meals.f, kf, macros?.fat_g, MACRO.f]] as [string, number, number, number | undefined, string][])
     .map(([name, grams, energy, goal, color]) => ({ name, color, pct: `${Math.round((energy / total) * 100)}%`, text: `${vn(grams)}${goal ? ` / ${vn(goal)}` : ''} g` }))
-  return { title, sub: day === today ? 'Đã ghi nhận đến hiện tại, chưa hết ngày' : 'Phân bổ năng lượng theo macro',
+  return { title, sub: day === today.value ? 'Đã ghi nhận đến hiện tại, chưa hết ngày' : 'Phân bổ năng lượng theo macro',
            has: true, kcal: vn(kcal ?? meals.kcal), segs, rows }
 })
 
@@ -347,7 +365,7 @@ const sleepSummary = computed(() => {
   if (session.minutes_to_fall_asleep != null) parts.push(`chờ ngủ ${session.minutes_to_fall_asleep} phút`)
   if (session.minutes_awake != null) parts.push(`thức ${session.minutes_awake} phút`)
   if (num(session.efficiency_pct) != null) parts.push(`hiệu quả ${vn(session.efficiency_pct, 1)}%`)
-  return { label: `${pick === today ? 'Đêm gần nhất · ' : 'Đêm '}${ddmm(shift(pick, -1))}`,
+  return { label: `${pick === today.value ? 'Đêm gần nhất · ' : 'Đêm '}${ddmm(shift(pick, -1))}`,
            time: `${clockOf(session.start_at)} → ${clockOf(session.end_at)}`, rest: `· ${parts.join(' · ')}` }
 })
 function clockOf(iso: string) {
@@ -380,10 +398,13 @@ function choose(next: Topic) { topic.value = next; hover.value = -1 }
     </div>
 
     <div v-else class="hf-grid hf-stagger">
-      <div v-for="stat in view.stats" :key="stat.label" class="hf-card hf-c4 stat">
-        <div class="hf-lbl">{{ stat.label }}</div>
-        <div class="stat-row"><span :class="stat.small ? 'hf-sv2' : 'hf-sv'">{{ stat.value }}</span><span class="hf-mut stat-unit">{{ stat.unit }}</span></div>
-        <div class="hf-mut small">{{ stat.sub }}</div>
+      <!-- Desktop: ba thẻ là ô của lưới (display: contents). Điện thoại: một hàng cuộn ngang để biểu đồ lên màn hình đầu. -->
+      <div class="stats hf-stagger" role="group" aria-label="Tóm tắt">
+        <div v-for="stat in view.stats" :key="stat.label" class="hf-card hf-c4 stat">
+          <div class="hf-lbl">{{ stat.label }}</div>
+          <div class="stat-row"><span :class="stat.small ? 'hf-sv2' : 'hf-sv'">{{ stat.value }}</span><span class="hf-mut stat-unit">{{ stat.unit }}</span></div>
+          <div class="hf-mut small">{{ stat.sub }}</div>
+        </div>
       </div>
 
       <div class="hf-card hf-c8">
@@ -443,7 +464,18 @@ function choose(next: Topic) { topic.value = next; hover.value = -1 }
 @media (max-width: 760px) { .empty { padding: 24px; } }
 .empty-title { font-size: 26px; font-weight: 700; }
 .empty p { margin: 0; font-size: 15px; max-width: 560px; line-height: 1.55; }
+.stats { display: contents; }
 .stat { gap: 10px; }
+@media (max-width: 760px) {
+  .stats {
+    grid-column: span 12; display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory;
+    margin: 0 -16px; padding: 0 16px; scroll-padding-inline: 16px; scrollbar-width: none; overscroll-behavior-x: contain;
+  }
+  .stats::-webkit-scrollbar { display: none; }
+  /* Thẻ hẹp hơn khung: thẻ kế tiếp lộ một phần, cho biết còn nội dung để vuốt. */
+  .stats .stat { flex: 0 0 min(78%, 300px); scroll-snap-align: start; gap: 8px; }
+  .stats .hf-sv { font-size: 36px; }
+}
 .stat-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .stat-unit { font-size: 15px; font-weight: 600; }
 .small { font-size: 13px; }

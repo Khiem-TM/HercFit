@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
+import { follows, indexAfterKey, indexAt } from './scrub'
 
 /**
  * Biểu đồ cột (có thể chồng nhiều phần): lưới, dải khuyến nghị hoặc đường mức nền, và hộp chi tiết khi trỏ
- * hay chọn bằng bàn phím. Cột không có dữ liệu chỉ có gạch nhỏ ở đáy.
+ * hay chọn bằng bàn phím. Cột không có dữ liệu chỉ có gạch nhỏ ở đáy. Chọn ngày bằng chạm/rê trên vùng vẽ hoặc phím
+ * mũi tên (scrub.ts), không phải bằng từng cột.
  */
 export interface BarColumn {
   segments: { value: number; color: string }[]
@@ -32,6 +34,18 @@ const n = computed(() => props.columns.length)
 const tip = computed(() => (hover.value >= 0 ? props.columns[hover.value] : null))
 const tipLeft = computed(() => `${(((hover.value + 0.5) / n.value) * 100).toFixed(2)}%`)
 const tipShift = computed(() => (hover.value / n.value > 0.55 ? 'translateX(calc(-100% - 16px))' : 'translateX(16px)'))
+// Bàn phím bắt đầu từ ngày cuối khi chưa chọn ngày nào.
+const current = computed(() => (hover.value >= 0 ? hover.value : n.value - 1))
+
+function point(event: PointerEvent) {
+  if (event.type === 'pointerdown' || follows(event)) hover.value = indexAt(event, n.value)
+}
+function key(event: KeyboardEvent) {
+  const next = event.key === 'Escape' ? -1 : indexAfterKey(event, current.value, n.value)
+  if (next == null) return
+  event.preventDefault()
+  hover.value = next
+}
 </script>
 
 <template>
@@ -43,21 +57,22 @@ const tipShift = computed(() => (hover.value / n.value > 0.55 ? 'translateX(calc
       <div class="bcy" aria-hidden="true">
         <span v-for="line in grid" :key="line.value" class="hf-mono" :style="{ bottom: pct(line.value) }">{{ line.label }}</span>
       </div>
-      <div class="bcp">
+      <div class="bcp" tabindex="0" role="slider" :aria-label="`${legend.map(item => item.label).join(', ')}: chọn ngày`"
+           aria-valuemin="1" :aria-valuemax="n" :aria-valuenow="current + 1" :aria-valuetext="columns[current]?.aria"
+           @pointerdown="point" @pointermove="point" @keydown="key">
         <div v-for="line in grid" :key="line.value" class="bcg" :style="{ bottom: pct(line.value) }" />
         <div v-if="band" class="bcband" :style="{ bottom: pct(band.from), height: pct(band.to - band.from) }" />
         <div v-if="base" class="bcbase" :style="{ bottom: pct(base.value) }"><span>{{ base.label }}</span></div>
         <div class="bccols">
-          <button v-for="(column, index) in columns" :key="index" type="button" class="bcc"
-                  :class="{ miss: !column.segments.length, hv: hover === index, dimb: hover >= 0 && hover !== index }"
-                  :aria-label="column.aria" @mouseenter="hover = index" @focus="hover = index" @click="hover = index">
+          <span v-for="(column, index) in columns" :key="index" class="bcc" aria-hidden="true"
+                :class="{ miss: !column.segments.length, hv: hover === index, dimb: hover >= 0 && hover !== index }">
             <span class="bcbar">
               <i v-for="(segment, part) in column.segments.filter(item => item.value > 0)" :key="part"
                  :style="{ height: pct(segment.value), background: segment.color }" />
             </span>
-          </button>
+          </span>
         </div>
-        <div v-if="tip" class="bctip" :style="{ left: tipLeft, transform: tipShift }" role="status">
+        <div v-if="tip" class="bctip" :style="{ left: tipLeft, transform: tipShift }" aria-hidden="true">
           <div class="hf-mut tip-title">{{ tip.title }}</div>
           <template v-if="tip.rows.length">
             <div v-for="row in tip.rows" :key="row.label" class="tip-row"><span class="swatch" :style="{ background: row.color }" />
@@ -84,14 +99,15 @@ const tipShift = computed(() => (hover.value / n.value > 0.55 ? 'translateX(calc
 .bcw { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; margin-top: 6px; }
 .bcy { position: relative; height: 260px; }
 .bcy span { position: absolute; right: 0; transform: translateY(50%); font-size: 11px; color: var(--hf-muted); }
-.bcp { position: relative; height: 260px; }
+.bcp { position: relative; height: 260px; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: crosshair; border-radius: 6px; }
+.bcp:focus-visible { outline: 2px solid var(--hf-ink); outline-offset: 4px; }
 .bcg { position: absolute; left: 0; right: 0; border-top: 1px solid var(--hf-line-2); }
 .bcband { position: absolute; left: 0; right: 0; background: rgba(20, 20, 22, .05); border-top: 1px dashed var(--hf-line-3); border-bottom: 1px dashed var(--hf-line-3); }
 :root.dark .bcband { background: rgba(255, 255, 255, .05); }
 .bcbase { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--hf-ink); pointer-events: none; z-index: 1; }
 .bcbase span { position: absolute; right: 0; top: -22px; font-size: 11px; background: var(--hf-card); padding: 2px 6px; border-radius: 6px; }
 .bccols { position: absolute; inset: 0; display: flex; gap: 2px; }
-.bcc { position: relative; flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; padding: 0; margin: 0; border-radius: 6px; }
+.bcc { position: relative; flex: 1; min-width: 0; height: 100%; border-radius: 6px; }
 .bcc.hv { background: rgba(20, 20, 22, .05); }
 :root.dark .bcc.hv { background: rgba(255, 255, 255, .06); }
 .bcc.miss::after { content: ''; position: absolute; bottom: 0; left: 30%; right: 30%; height: 2px; border-radius: 2px; background: var(--hf-line-3); }

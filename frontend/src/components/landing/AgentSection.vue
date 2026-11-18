@@ -1,45 +1,47 @@
 <script setup lang="ts">
-defineProps<{ selectedAgent: string }>();
-defineEmits<{ select: [agent: string] }>();
+/**
+ * Kiến trúc multi-agent như đang chạy (backend/agentic/core/roster.py): supervisor phân loại một lần rồi giao cho agent
+ * sở hữu miền dữ liệu; research tra nguồn, synthesizer viết câu trả lời. Chỉ mô tả việc hệ thống làm, không số liệu.
+ */
 const agents = [
   {
-    name: "ARES",
-    category: "KINETIC",
+    name: "SUPERVISOR",
+    category: "ĐIỀU PHỐI",
     description:
-      "Tự động hóa giáo án kháng lực & tải cơ học tối ưu theo phản hồi cơ địa thời gian thực.",
+      "Luật định tuyến do code sở hữu chạy trước và sau lời gọi model: đường nhanh cho câu ghi đơn giản, chặn an toàn, hỏi lại khi thiếu thông tin, tách câu nhiều việc cho các agent chạy song song.",
     metrics: [
-      ["MECHANICAL LOAD", "DYNAMIC Ψ"],
-      ["ADAPTATION CYCLE", "< 140MS"],
+      ["ĐỊNH TUYẾN", "LUẬT + MODEL"],
+      ["NHIỀU VIỆC", "SONG SONG"],
     ],
   },
   {
-    name: "DEMETER",
-    category: "BIOENERGETIC",
+    name: "NUTRITION",
+    category: "DINH DƯỠNG",
     description:
-      "Tự động hóa dinh dưỡng vi lượng, khả năng hấp thụ tế bào & điều hòa chu kỳ đồng hóa protein tối tân.",
+      "Bữa ăn và món ăn theo gam/ml từ danh mục có ảnh. Món chưa có trong danh mục được hỏi lại; macro do AI gợi ý luôn được gắn nhãn ước tính, tách khỏi số liệu có nguồn.",
     metrics: [
-      ["CELLULAR BIOAVAIL", "99.2%"],
-      ["GLYCEMIC STABILITY", "LOCKED"],
+      ["MIỀN", "MEALS · FOODS"],
+      ["GHI", "QUA THẺ XÁC NHẬN"],
     ],
   },
   {
-    name: "HERMES",
-    category: "SYNAPSE",
+    name: "TRAINING · COACH",
+    category: "TẬP LUYỆN",
     description:
-      "Đồ thị tri thức hợp nhất 2.4 triệu công trình nghiên cứu y sinh với cơ sở dữ liệu sinh trắc cá nhân.",
+      "Nhật ký buổi tập và bài tập, calo theo MET của Compendium of Physical Activities; coach lập lịch tập theo mục tiêu, lịch chỉ được lưu khi bạn duyệt.",
     metrics: [
-      ["CONNECTED NODES", "2.4M PUB"],
-      ["CROSS-INFERENCE", "REAL-TIME"],
+      ["MIỀN", "TRAININGS · PLANS"],
+      ["CALO", "MET · ACSM"],
     ],
   },
   {
-    name: "HYPNOS",
-    category: "SOMATIC",
+    name: "BODY · DAILY HEALTH",
+    category: "SỨC KHOẺ",
     description:
-      "Tái thiết nhịp sinh học, phục hồi hệ thần kinh trung ương và tối đa hóa biên độ biến thiên tim (HRV).",
+      "Số đo, tiến độ và dữ liệu thiết bị từ Google Health (chỉ khi bạn cho phép). Đánh giá sẵn sàng hằng ngày do code tính tất định; agent chỉ đọc và giải thích.",
     metrics: [
-      ["HRV AMPLITUDE", "+38.5 MS"],
-      ["REM ARCHITECTURE", "SYNCHRONOUS"],
+      ["MIỀN", "METRICS · HEALTH"],
+      ["QUYỀN", "CHỈ ĐỌC THIẾT BỊ"],
     ],
   },
 ];
@@ -54,13 +56,13 @@ const agents = [
       class="flex flex-col md:flex-row md:items-end justify-between mb-space-xl gap-space-md"
     >
       <div>
-        <span class="eyebrow">// AUTONOMOUS DIVISION</span>
-        <h2 class="section-heading">4 THẦN TÁC TỬ CHUYÊN BIỆT</h2>
+        <span class="eyebrow">// MULTI-AGENT · LANGGRAPH</span>
+        <h2 class="section-heading">AGENT CHUYÊN TRÁCH THEO MIỀN</h2>
       </div>
       <p class="font-body-sm text-body-sm text-on-surface-variant max-w-sm">
-        Bốn cấu trúc trí tuệ nhân tạo phối hợp đồng bộ, biến cơ thể sinh học
-        thành thực thể tối thượng thông qua dữ liệu thần học và sinh trắc chuẩn
-        xác.
+        Supervisor phân loại yêu cầu một lần rồi giao cho agent sở hữu miền dữ
+        liệu đó; mỗi agent có thể chạy model riêng. Research tra nguồn đã kiểm
+        chứng, synthesizer viết câu trả lời cuối.
       </p>
     </div>
     <div
@@ -69,8 +71,7 @@ const agents = [
       <article
         v-for="(agent, index) in agents"
         :key="agent.name"
-        class="agent-card bg-surface p-space-lg flex flex-col justify-between min-h-[320px] lg:min-h-[360px] hover:bg-surface-container-low transition-colors duration-200"
-        :class="{ 'is-selected': selectedAgent === agent.name }"
+        class="agent-card bg-surface p-space-lg flex flex-col justify-between min-h-[300px] lg:min-h-[340px] hover:bg-surface-container-low transition-colors duration-200"
       >
         <div class="flex flex-col gap-space-md">
           <div
@@ -93,7 +94,7 @@ const agents = [
           </p>
         </div>
         <div
-          class="space-y-space-sm pt-space-md mt-8 border-t border-outline-variant/20 font-label-code text-[10px] text-outline"
+          class="space-y-space-sm pt-space-md mt-8 border-t border-outline-variant/20 font-label-code text-[11px] text-outline"
         >
           <div
             v-for="metric in agent.metrics"
@@ -101,28 +102,10 @@ const agents = [
             class="flex justify-between gap-3"
           >
             <span>{{ metric[0] }}</span
-            ><span class="text-primary">{{ metric[1] }}</span>
+            ><span class="text-primary text-right">{{ metric[1] }}</span>
           </div>
-          <a
-            href="#access"
-            class="inline-flex items-center gap-2 text-primary uppercase tracking-widest pt-2 hover:underline underline-offset-4"
-            :aria-label="`Chọn giao thức ${agent.name}`"
-            @click="$emit('select', agent.name)"
-            >{{
-              selectedAgent === agent.name
-                ? "PROTOCOL SELECTED"
-                : "ACTIVATE PROTOCOL"
-            }}
-            <span aria-hidden="true">[↗]</span></a
-          >
         </div>
       </article>
     </div>
   </section>
 </template>
-
-<style scoped>
-.is-selected {
-  box-shadow: inset 0 0 0 1px light-dark(#676964, #8f918c);
-}
-</style>

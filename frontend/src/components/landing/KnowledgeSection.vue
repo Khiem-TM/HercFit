@@ -12,7 +12,7 @@ import { Network } from "lucide-vue-next";
         class="lg:col-span-5 relative flex flex-col justify-between overflow-hidden border border-outline-variant/30 bg-surface-container-lowest min-h-[520px] p-space-md group"
       >
         <img
-          alt="Sculptor Carving Himself from Corinthian Column - Celestial Nebula"
+          alt="Tượng điêu khắc tự tạc mình từ cột đá, nền tinh vân"
           class="absolute inset-0 w-full h-full object-cover object-center filter contrast-125 brightness-95 select-none pointer-events-none transition-transform duration-700 group-hover:scale-105"
           decoding="async"
           height="1024"
@@ -26,13 +26,13 @@ import { Network } from "lucide-vue-next";
         <div
           class="relative z-10 w-full flex justify-between font-label-telemetry text-label-telemetry text-outline backdrop-blur-sm bg-background/40 px-space-sm py-1 border border-outline-variant/30"
         >
-          <span>SPECIMEN // CHISEL OF SELF</span><span>FIG 08.B</span>
+          <span>KNOWLEDGE LAYER</span><span>FIG 02</span>
         </div>
         <div
           class="relative z-10 w-full border-t border-outline-variant/40 pt-space-sm mt-auto backdrop-blur-sm bg-background/50 px-space-sm py-1.5 flex justify-between items-center font-label-code text-[10px] text-on-surface-variant"
         >
-          <span>CORINTHIAN ORDER RECONSTRUCTION</span
-          ><span class="text-primary font-medium">[AUTONOMY]</span>
+          <span>POSTGRES → OUTBOX → NEO4J</span
+          ><span class="text-primary font-medium">[GRAPH]</span>
         </div>
       </div>
 
@@ -42,17 +42,18 @@ import { Network } from "lucide-vue-next";
         <div>
           <span
             class="font-label-telemetry text-label-telemetry text-outline uppercase tracking-widest block mb-space-xs"
-            >// OBSERVATORY KNOWLEDGE MAPPING</span
+            >// KNOWLEDGE GRAPH · CONTEXT GRAPH · RAG</span
           >
           <h2
             class="font-headline-lg text-primary uppercase font-bold tracking-tight mb-space-md text-headline-lg-mobile md:text-headline-lg"
           >
-            SINH THÁI ĐỒ THỊ ĐA CHIỀU
+            TRI THỨC CÓ CẤU TRÚC, CÓ NGUỒN
           </h2>
           <p class="font-body-md text-body-md text-on-surface-variant max-w-xl">
-            Tương tự như cấu trúc các chòm sao trên bầu trời đêm của đài quan
-            sát, mỗi điểm dữ liệu sinh học được ánh xạ vào một mạng lưới vô hạn,
-            xóa bỏ phương thức phán đoán chủ quan.
+            Nhật ký của bạn được chiếu thành đồ thị để trả lời câu hỏi có quan
+            hệ (“tuần này tập nhiều hơn thì ngủ có kém đi không?”); kiến thức dinh
+            dưỡng, vận động đến từ tài liệu đã duyệt và nguồn được phân hạng, kèm
+            trích dẫn trong câu trả lời.
           </p>
         </div>
 
@@ -67,21 +68,22 @@ import { Network } from "lucide-vue-next";
                 <span class="text-outline font-label-telemetry">[01]</span>
                 <span
                   class="text-primary uppercase tracking-wider font-headline-sm text-headline-sm registry-title"
-                  >HORMONAL PULSATILITY</span
+                  >KNOWLEDGE GRAPH</span
                 >
               </div>
               <div
                 class="flex items-center gap-space-lg text-on-surface-variant text-[11px] flex-wrap"
               >
-                <span>CORTISOL / TESTOSTERONE RATIO</span>
-                <span class="text-primary">[SYNCHRONIZED]</span>
+                <span>POSTGRES OUTBOX → NEO4J</span>
+                <span class="text-primary">[PROJECTION]</span>
               </div>
             </summary>
             <p
               class="pb-space-md pl-8 pr-3 font-body-sm text-body-sm text-on-surface-variant max-w-xl"
             >
-              Theo dõi nhịp biến đổi của dữ liệu nội tiết để nhìn thấy xu hướng
-              trong cùng một bối cảnh sinh học.
+              Mỗi bản ghi nhật ký phát một sự kiện outbox trong cùng giao dịch
+              ghi; kg-worker chiếu sang Neo4j theo phiên bản, sự kiện chỉ được
+              xác nhận sau khi đồ thị đã commit.
             </p>
           </details>
 
@@ -93,21 +95,23 @@ import { Network } from "lucide-vue-next";
                 <span class="text-outline font-label-telemetry">[02]</span>
                 <span
                   class="text-primary uppercase tracking-wider font-headline-sm text-headline-sm registry-title"
-                  >MYOFIBRILLAR HYPERTROPHY</span
+                  >CONTEXT GRAPH</span
                 >
               </div>
               <div
                 class="flex items-center gap-space-lg text-on-surface-variant text-[11px] flex-wrap"
               >
-                <span>TENSION-TIME INTEGRATION</span>
-                <span class="text-primary">[OPTIMIZED]</span>
+                <span>TEXT → CYPHER CHỈ ĐỌC</span>
+                <span class="text-primary">[VALIDATED]</span>
               </div>
             </summary>
             <p
               class="pb-space-md pl-8 pr-3 font-body-sm text-body-sm text-on-surface-variant max-w-xl"
             >
-              Kết nối tải trọng, số lần lặp và thời gian chịu lực thành lịch sử
-              vận động có thể so sánh.
+              Mỗi câu hỏi rút một đồ thị con theo ý định: dùng mẫu truy vấn có
+              sẵn hoặc để Context Agent viết Cypher. Chủ sở hữu và khoảng thời
+              gian do code gán làm tham số; validator và policy chặn truy vấn
+              ngoài phạm vi.
             </p>
           </details>
 
@@ -119,21 +123,23 @@ import { Network } from "lucide-vue-next";
                 <span class="text-outline font-label-telemetry">[03]</span>
                 <span
                   class="text-primary uppercase tracking-wider font-headline-sm text-headline-sm registry-title"
-                  >MITOCHONDRIAL RESCUE</span
+                  >HYBRID RAG</span
                 >
               </div>
               <div
                 class="flex items-center gap-space-lg text-on-surface-variant text-[11px] flex-wrap"
               >
-                <span>ATP RESYNTHESIS EFFICIENCY</span>
-                <span class="text-primary">[ACTIVE]</span>
+                <span>PGVECTOR + FULL-TEXT · RRF</span>
+                <span class="text-primary">[RERANKED]</span>
               </div>
             </summary>
             <p
               class="pb-space-md pl-8 pr-3 font-body-sm text-body-sm text-on-surface-variant max-w-xl"
             >
-              Đặt dữ liệu vận động cạnh thông tin dinh dưỡng và phục hồi để khám
-              phá mối liên hệ.
+              Truy hồi lai trên tài liệu đã duyệt: tìm kiếm vector và toàn văn
+              PostgreSQL gộp bằng Reciprocal Rank Fusion, xếp hạng lại, có ngưỡng
+              liên quan. Dưới ngưỡng thì trả lời rõ là cơ sở tri thức chưa bao
+              quát.
             </p>
           </details>
 
@@ -145,21 +151,23 @@ import { Network } from "lucide-vue-next";
                 <span class="text-outline font-label-telemetry">[04]</span>
                 <span
                   class="text-primary uppercase tracking-wider font-headline-sm text-headline-sm registry-title"
-                  >CIRCADIAN ALIGNMENT</span
+                  >NGUỒN PHÂN HẠNG</span
                 >
               </div>
               <div
                 class="flex items-center gap-space-lg text-on-surface-variant text-[11px] flex-wrap"
               >
-                <span>MELATONIN KINETICS</span>
-                <span class="text-primary">[LOCKED]</span>
+                <span>SOURCE REGISTRY</span>
+                <span class="text-primary">[CODE-OWNED]</span>
               </div>
             </summary>
             <p
               class="pb-space-md pl-8 pr-3 font-body-sm text-body-sm text-on-surface-variant max-w-xl"
             >
-              Quan sát thời gian ngủ, hoạt động và nghỉ ngơi theo chu kỳ ngày
-              đêm của bạn.
+              Độ tin cậy của nguồn web đến từ sổ đăng ký nhà xuất bản do code
+              quản lý (cơ quan y tế, cơ sở dữ liệu dinh dưỡng, hiệp hội chuyên
+              môn), không từ nhãn của model. Nguồn không rõ chỉ là văn bản bổ
+              trợ.
             </p>
           </details>
         </div>
@@ -176,18 +184,18 @@ import { Network } from "lucide-vue-next";
             <div class="flex flex-col">
               <span
                 class="font-label-telemetry text-label-telemetry text-outline uppercase tracking-wider"
-                >KNOWLEDGE MATRIX DENSITY</span
+                >CÂU TRẢ LỜI CÓ TRÍCH NGUỒN</span
               >
               <span class="font-body-sm text-body-sm text-on-surface"
-                >2,419,820 Peer-reviewed studies indexed &amp;
-                operationalized</span
+                >Câu hỏi tư vấn được tổng hợp từ dữ liệu của bạn và tài liệu
+                đã truy hồi; mỗi ý dựa trên nguồn nào thì ghi nguồn đó.</span
               >
             </div>
           </div>
           <a
             class="font-label-code text-label-code text-primary uppercase shrink-0 hover:underline underline-offset-4"
             href="#protocols"
-            >[EXPLORE ENGINE]</a
+            >[XEM QUY TRÌNH]</a
           >
         </div>
       </div>

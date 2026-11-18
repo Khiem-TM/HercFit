@@ -1,9 +1,12 @@
-import { computed, onUnmounted, shallowRef } from 'vue'
+import { computed, onUnmounted, shallowRef, watch } from 'vue'
+import { useDocumentVisibility, useIntervalFn } from '@vueuse/core'
 import { useAuth } from '@/composables/useAuth'
-import type { BodyMetricRead } from '@/types/api'
-import type { TrainingPlan } from '@/features/plan/model'
-import { useHealthData } from '@/components/knowledge/health/useHealthData'
-import { useNutritionTargets } from '@/components/knowledge/dashboard/useNutritionTargets'
+import type {
+  BodyMetricRead, DailyAssessment, DailyHealth, DeviceWorkout, HealthConnection, HealthOverview, HealthProfile,
+  HealthSample, NutritionTargets, ProgressDay, SleepSession,
+} from '@/types/api'
+import type { CompletionResult, TrainingPlan } from '@/features/plan/model'
+import type { HealthData } from '@/components/knowledge/health/useHealthData'
 import { createHealthApi } from '@/features/health-integration/api'
 import { localDate, shift, TZ } from './format'
 import { repeatMealPayload } from './today'
@@ -44,69 +47,123 @@ export interface TrainingRow {
 
 export const HISTORY_DAYS = 90
 
+/** Kết quả một lần làm mới: đủ, thiếu một phần, hay không tải được gì. */
+export type RefreshOutcome = 'ok' | 'partial' | 'failed'
+
+/** GET /api/dashboard (backend/domains/analytics/routers/dashboard_router.py): mỗi phần null khi lỗi hoặc không được đọc. */
+interface DashboardResponse {
+  start_date: string
+  end_date: string
+  connection: HealthConnection | null
+  profile: HealthProfile | null
+  overview: HealthOverview | null
+  daily: DailyHealth[] | null
+  sleep: SleepSession[] | null
+  workouts: DeviceWorkout[] | null
+  samples: HealthSample[] | null
+  progress: { days: ProgressDay[] } | null
+  assessment: DailyAssessment | null
+  targets: NutritionTargets | null
+  plan: TrainingPlan | null
+  previous_plan: TrainingPlan | null
+  meals: MealRow[] | null
+  trainings: TrainingRow[] | null
+  metrics: BodyMetricRead[] | null
+  /** Phần đọc lỗi ở lần này. */
+  errors: string[]
+}
+type Section = Exclude<keyof DashboardResponse, 'start_date' | 'end_date' | 'errors' | 'previous_plan'>
+const SECTIONS: Section[] = ['connection', 'progress', 'targets', 'plan', 'meals', 'trainings', 'metrics', 'profile',
+  'overview', 'daily', 'sleep', 'workouts', 'samples', 'assessment']
+
 /**
- * Mọi dữ liệu Dashboard đọc: sức khoẻ 90 ngày (Google Health + đánh giá hôm nay), lịch tập, mục tiêu dinh dưỡng,
- * bữa ăn, số đo và buổi tập. Lần tải lại giữ dữ liệu cũ trên màn hình cho tới khi có dữ liệu mới.
+ * Mọi dữ liệu Dashboard trong một request (/api/dashboard): sức khoẻ 90 ngày, đánh giá hôm nay, lịch tập, mục tiêu
+ * dinh dưỡng, bữa ăn, số đo và buổi tập. Phần nào lỗi thì giữ bản tải thành công gần nhất của phần đó trên màn hình.
+ * "Hôm nay" được tính lại khi làm mới, khi trang hiện lại và qua nửa đêm (ứng dụng mở qua đêm).
  */
 export function useDashboardData() {
   const { authFetch } = useAuth()
-  const today = localDate(new Date())
-  const start = shift(today, 1 - HISTORY_DAYS)
-  const health = useHealthData(() => HISTORY_DAYS)
-  const revision = shallowRef(0)
-  const nutrition = useNutritionTargets(() => String(revision.value))
-
+  const day = shallowRef(localDate(new Date()))
+  const snapshot = shallowRef<DashboardResponse | null>(null)
   const plan = shallowRef<TrainingPlan | null>(null)
   const previousPlan = shallowRef<TrainingPlan | null>(null)
-  const meals = shallowRef<MealRow[]>([])
-  const metrics = shallowRef<BodyMetricRead[]>([])
-  const trainings = shallowRef<TrainingRow[]>([])
   const loading = shallowRef(true)
+  // Lần đọc đầu đã xong (thành công hay lỗi): trước đó tab Hôm nay hiện khung chờ, sau đó không chớp khi làm mới.
+  const settled = shallowRef(false)
   const failed = shallowRef<string[]>([])
+  const loaded = new Set<string>()
   let controller: AbortController | undefined
 
-  async function read<T>(name: string, url: string, fallback: T, signal: AbortSignal, errors: string[]): Promise<T> {
-    try {
-      const response = await authFetch(url, { signal })
-      if (response.status === 404) return fallback
-      if (!response.ok) throw new Error(String(response.status))
-      return await response.json() as T
-    } catch {
-      if (!signal.aborted) errors.push(name)
-      return fallback
-    }
+  /** Ngày địa phương đã sang ngày mới thì cập nhật và trả true. */
+  function rollDay(): boolean {
+    const now = localDate(new Date())
+    if (now === day.value) return false
+    day.value = now
+    return true
   }
 
-  async function load() {
+  async function refresh(): Promise<RefreshOutcome> {
     controller?.abort()
     const current = new AbortController()
     controller = current
     loading.value = true
-    const errors: string[] = []
-    const from = `${start}T00:00:00+07:00`
-    const range = (extra: Record<string, string> = {}) => new URLSearchParams({ recorded_from: from, limit: '200', ...extra })
-    const [active, ended, mealRows, metricRows, trainingRows] = await Promise.all([
-      read<TrainingPlan | null>('plan', '/api/training-plans/current', null, current.signal, errors),
-      read<TrainingPlan | null>('plan', '/api/training-plans/previous', null, current.signal, errors),
-      read<MealRow[]>('meals', `/api/meals?${range({ timezone: TZ })}`, [], current.signal, errors),
-      // Không giới hạn ngày: vòng đo có thể được đo từ lâu.
-      read<BodyMetricRead[]>('metrics', '/api/body-metrics?limit=200', [], current.signal, errors),
-      read<TrainingRow[]>('trainings', `/api/trainings?${range({ timezone: TZ })}`, [], current.signal, errors),
-    ])
-    if (current.signal.aborted) return
-    plan.value = active
-    previousPlan.value = active ? null : ended
-    meals.value = mealRows
-    metrics.value = metricRows
-    trainings.value = trainingRows
-    failed.value = [...new Set(errors)]
-    loading.value = false
+    rollDay()
+    let outcome: RefreshOutcome = 'ok'
+    try {
+      const query = new URLSearchParams({ days: String(HISTORY_DAYS), timezone: TZ })
+      const response = await authFetch(`/api/dashboard?${query}`, { signal: current.signal })
+      if (!response.ok) throw new Error(String(response.status))
+      const body = await response.json() as DashboardResponse
+      if (current.signal.aborted) return 'ok'
+      const kept = { ...body } as Record<string, unknown>
+      const previous = snapshot.value as Record<string, unknown> | null
+      for (const name of body.errors) if (previous) kept[name] = previous[name]
+      if (body.errors.includes('plan') && previous) kept.previous_plan = previous.previous_plan
+      snapshot.value = kept as unknown as DashboardResponse
+      if (!body.errors.includes('plan')) {
+        plan.value = body.plan
+        previousPlan.value = body.previous_plan
+      }
+      SECTIONS.filter(name => !body.errors.includes(name)).forEach(name => loaded.add(name))
+      failed.value = body.errors
+      outcome = body.errors.length ? 'partial' : 'ok'
+    } catch {
+      if (current.signal.aborted) return 'ok'
+      // Cả request lỗi: mọi phần giữ bản cũ (nếu có).
+      failed.value = [...SECTIONS]
+      outcome = 'failed'
+    } finally {
+      if (controller === current) {
+        loading.value = false
+        settled.value = true
+      }
+    }
+    return outcome
   }
 
-  async function refresh() {
-    revision.value += 1
-    await Promise.all([load(), health.refresh()])
-  }
+  const meals = computed(() => snapshot.value?.meals ?? [])
+  const trainings = computed(() => snapshot.value?.trainings ?? [])
+  const metrics = computed(() => snapshot.value?.metrics ?? [])
+  const targets = computed(() => snapshot.value?.targets ?? null)
+
+  /** Cùng dạng useHealthData trả về, cho các thẻ sức khoẻ dùng chung. */
+  const health = computed<HealthData | null>(() => {
+    const data = snapshot.value
+    if (!data) return null
+    const days: string[] = []
+    for (let current = data.start_date; current <= data.end_date; current = shift(current, 1)) days.push(current)
+    const from = `${data.start_date}T00:00:00+07:00`
+    return {
+      start: data.start_date, end: data.end_date, days,
+      connection: data.connection, profile: data.profile, overview: data.overview,
+      daily: data.daily ?? [], sleep: data.sleep ?? [], workouts: data.workouts ?? [], samples: data.samples ?? [],
+      progress: data.progress?.days ?? [],
+      // Số đo thiết bị trong khoảng ngày: server trả chung danh sách số đo (không đọc hai lần).
+      measurements: (data.metrics ?? []).filter(metric => metric.source === 'GOOGLE_HEALTH'
+        && new Date(metric.recorded_at) >= new Date(from)),
+      assessment: data.assessment,
+    }
+  })
 
   // Ghi nhanh từ tab Hôm nay: mỗi lần bấm là một lệnh ghi mới (khoá idempotency mới); lỗi ném ra cho nơi gọi báo.
   const healthApi = createHealthApi((url, init) => authFetch(url, init))
@@ -126,18 +183,34 @@ export function useDashboardData() {
     await refresh()
   }
 
-  void load()
+  void refresh()
+  // Trang hiện lại (mở lại tab, mở khoá máy) hoặc đồng hồ qua nửa đêm: sang ngày mới thì tải lại.
+  watch(useDocumentVisibility(), visible => { if (visible === 'visible' && rollDay()) void refresh() })
+  useIntervalFn(() => { if (rollDay()) void refresh() }, 60_000)
   onUnmounted(() => controller?.abort())
 
-  const mealsToday = computed(() => meals.value.filter(meal => localDate(meal.consumed_at) === today)
+  const mealsToday = computed(() => meals.value.filter(meal => localDate(meal.consumed_at) === day.value)
     .sort((a, b) => a.consumed_at.localeCompare(b.consumed_at)))
 
+  function applyPlanCompletion(result: CompletionResult) {
+    const current = plan.value
+    if (!current?.entries.some(entry => entry.id === result.entry.id)) return
+    plan.value = { ...current, entries: current.entries.map(entry => entry.id === result.entry.id ? result.entry : entry) }
+  }
+
   return {
-    today, start, health: health.data, healthLoading: health.loading, healthFailed: health.failed,
-    targets: nutrition.targets, plan, previousPlan, meals, mealsToday, metrics, trainings,
-    loading: computed(() => loading.value || (health.loading.value && !health.data.value)),
-    failed: computed(() => [...failed.value, ...health.failed.value]),
-    refresh, reloadPlan: load, logMealAgain, logWater,
+    planLoading: loading, applyPlanCompletion,
+    // Getter: computed và template đọc data.today vẫn theo dõi được khi sang ngày mới.
+    get today() { return day.value },
+    get start() { return shift(day.value, 1 - HISTORY_DAYS) },
+    health, targets, plan, previousPlan, meals, mealsToday, metrics, trainings,
+    /** Đang có request (nút làm mới quay). */
+    loading,
+    settled,
+    failed,
+    // Phần lỗi chưa từng tải được: không có dữ liệu cũ nào đang hiển thị thay cho nó.
+    missing: computed(() => failed.value.filter(name => !loaded.has(name))),
+    refresh, reloadPlan: refresh, logMealAgain, logWater,
   }
 }
 

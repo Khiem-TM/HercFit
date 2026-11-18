@@ -4,6 +4,7 @@
  */
 import type { BodyMetricRead, DailyAssessment, HealthConnection, MetricReading, NutritionTargets } from '@/types/api'
 import type { PlanEntry, TrainingPlan } from '@/features/plan/model'
+import { prescriptionSummary, type Prescription } from '@/features/plan/exercises'
 import { num } from '@/components/knowledge/health/healthFormat'
 import { ddmm, hoursMinutes, longDate, monday, shift, TZ, vn, WEEKDAY_LONG, WEEKDAY_SHORT, weekday } from './format'
 import type { MealRow } from './useDashboardData'
@@ -159,23 +160,8 @@ export function workoutView(plan: TrainingPlan | null, today: string): WorkoutVi
 
 /** Mô tả ngắn một bài trong lịch: "Sức mạnh · 4 hiệp × 8–12 lần · 50 kg". */
 export function exerciseLine(item: Record<string, any>): string {
-  const p = item.prescription || {}
-  if (p.kind === 'STRENGTH') {
-    const sets = (p.sets || []) as Record<string, any>[]
-    const parts = sets.map(set => {
-      const reps = set.reps_max && set.reps_max !== set.reps_min ? `${set.reps_min}–${set.reps_max}` : set.reps_min
-      const load = set.load?.mode === 'KG' ? ` · ${vn(set.load.value, 1)} kg` : ''
-      const hold = set.duration_seconds ? `giữ ${set.duration_seconds} giây` : `${reps ?? '?'} lần`
-      return `${set.count ?? 1} hiệp × ${hold}${load}`
-    })
-    return ['Sức mạnh', ...parts].join(' · ')
-  }
-  if (p.kind === 'ENDURANCE') {
-    const seconds = (p.steps || []).reduce((sum: number, step: Record<string, any>) => sum + (step.duration_seconds || 0) * (step.repeat || 1), 0)
-    return ['Sức bền', seconds ? `${Math.round(seconds / 60)} phút` : null].filter(Boolean).join(' · ')
-  }
-  if (p.kind === 'SPORT') return ['Thể thao', p.duration_seconds ? `${Math.round(p.duration_seconds / 60)} phút` : null].filter(Boolean).join(' · ')
-  return ''
+  const p = item.prescription as Prescription | undefined
+  return p ? [exerciseKind(item), prescriptionSummary(p)].filter(Boolean).join(' · ') : ''
 }
 
 export function exerciseKind(item: Record<string, any>): string {

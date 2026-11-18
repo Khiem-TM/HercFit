@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { watch } from "vue";
-import { useAccessRequest } from "../../composables/useAccessRequest";
 import { useAuth } from "@/composables/useAuth";
 
-const props = defineProps<{ selectedAgent: string }>();
-const { email, saved, error, submit, reset, remove } = useAccessRequest();
 const { isAuthenticated, loginWithGoogle } = useAuth();
-watch(() => props.selectedAgent, reset);
+
+// Những gì có ngay sau khi đăng nhập; mỗi dòng là một tính năng đang chạy, không phải lời hứa.
+const features = [
+  ["CHAT · GIỌNG NÓI", "Ghi bữa ăn, buổi tập, số đo bằng tiếng Việt; duyệt thẻ bằng nút hoặc câu “xác nhận”."],
+  ["DASHBOARD", "Hôm nay, tiến độ, kế hoạch tập và bản đồ dữ liệu cá nhân."],
+  ["THÔNG BÁO", "Cảnh báo chỉ số theo ngưỡng của Bộ Y tế, WHO và hội chuyên môn; không phải chẩn đoán."],
+  ["DỮ LIỆU CỦA BẠN", "Google Health chỉ dùng khi bạn cho phép; xuất hoặc xoá toàn bộ dữ liệu trong cài đặt."],
+];
 
 function handleOAuthLogin(): void {
   if (isAuthenticated.value) {
@@ -30,10 +33,10 @@ function handleOAuthLogin(): void {
         class="border border-outline-variant/40 relative grid grid-cols-1 lg:grid-cols-12 overflow-hidden bg-surface-container-lowest"
       >
         <div
-          class="lg:col-span-5 relative min-h-[480px] lg:min-h-[580px] overflow-hidden border-b lg:border-b-0 lg:border-r border-outline-variant/40 group"
+          class="lg:col-span-5 relative min-h-[360px] lg:min-h-[560px] overflow-hidden border-b lg:border-b-0 lg:border-r border-outline-variant/40 group"
         >
           <img
-            alt="Celestial Mythic Sculpture"
+            alt="Tượng cẩm thạch vươn lên, nền trời"
             class="absolute inset-0 w-full h-full object-cover object-center filter grayscale contrast-125 brightness-95 select-none pointer-events-none transition-transform duration-700 group-hover:scale-105"
             decoding="async"
             height="1024"
@@ -49,17 +52,17 @@ function handleOAuthLogin(): void {
           >
             <span
               class="backdrop-blur-sm bg-background/50 px-space-sm py-1 border border-outline-variant/30"
-              >ARCHIVE // CANON 09</span
+              >FIG 04</span
             ><span
               class="backdrop-blur-sm bg-background/50 px-space-sm py-1 border border-outline-variant/30"
-              >ASCENSION</span
+              >BẮT ĐẦU</span
             >
           </div>
           <div
-            class="absolute bottom-0 left-0 right-0 z-10 p-space-md border-t border-outline-variant/40 backdrop-blur-sm bg-background/50 flex justify-between items-center font-label-code text-[10px] text-on-surface-variant"
+            class="absolute bottom-0 left-0 right-0 z-10 p-space-md border-t border-outline-variant/40 backdrop-blur-sm bg-background/50 flex justify-between items-center font-label-code text-[11px] text-on-surface-variant"
           >
-            <span>DIVINE ARCHITECTURE</span
-            ><span class="text-primary font-medium">[IMMORTAL]</span>
+            <span>HERCFIT</span
+            ><span class="text-primary font-medium">[GOOGLE OAUTH]</span>
           </div>
         </div>
         <div
@@ -69,96 +72,60 @@ function handleOAuthLogin(): void {
             <div>
               <span
                 class="font-label-telemetry text-label-telemetry text-outline uppercase tracking-widest block mb-space-xs"
-                >[RESTRICTED SANCTUM // ALPHA REGISTRY]</span
+                >[BẮT ĐẦU]</span
               >
               <h3
                 class="font-headline-lg text-primary uppercase tracking-tight font-bold leading-tight text-headline-lg-mobile md:text-headline-lg"
               >
-                BUILD YOUR BODY,<br />BUILD YOUR CONSISTENCY
+                GHI BỮA ĂN ĐẦU TIÊN<br />TRONG MỘT CÂU
               </h3>
               <div class="w-12 h-px bg-outline-variant/60 my-space-md"></div>
               <p
-                class="font-quote-editorial text-[18px] text-primary italic leading-relaxed"
+                class="font-body-md text-body-md text-on-surface-variant leading-relaxed"
               >
-                “Mỗi bước chuyển động là sự rèn giũa thể xác, mỗi ngày kiên định
-                là sự tạo tác thần thể.”
-              </p>
-              <p
-                class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed mt-space-sm"
-              >
-                Quyền truy cập hạn chế vào hệ thống giải mã sinh học đa tác tử.
-                Vượt qua ngưỡng giới hạn tự nhiên qua sự kỷ luật tuyệt đối và
-                trí tuệ nhân tạo tương hỗ.
+                Đăng nhập bằng Google, khai báo vài thông tin cơ bản (số đo và
+                mục tiêu có thể bổ sung sau), rồi nhắn như với một huấn luyện
+                viên.
               </p>
             </div>
-            <label class="sr-only" for="access-email">Địa chỉ email</label>
-            <p
-              aria-live="polite"
-              class="font-label-telemetry text-label-telemetry text-outline uppercase tracking-wider"
+            <dl
+              class="border-t border-outline-variant/30 divide-y divide-outline-variant/20"
             >
-              PROTOCOL // {{ selectedAgent || "OLYMPUS — ALL AGENTS" }}
-            </p>
+              <div
+                v-for="[label, text] in features"
+                :key="label"
+                class="py-space-sm grid grid-cols-1 sm:grid-cols-[150px_1fr] gap-1 sm:gap-space-md"
+              >
+                <dt
+                  class="font-label-code text-label-code text-primary uppercase tracking-wider"
+                >
+                  {{ label }}
+                </dt>
+                <dd class="font-body-sm text-body-sm text-on-surface-variant">
+                  {{ text }}
+                </dd>
+              </div>
+            </dl>
             <div class="pt-space-xs">
               <button
                 type="button"
                 class="w-full px-space-md py-3.5 bg-primary text-background font-label-code text-label-code uppercase tracking-[0.2em] font-medium border border-primary hover:bg-background hover:text-primary transition-colors flex items-center justify-center gap-2.5"
                 @click="handleOAuthLogin"
               >
-                <span>[ ĐĂNG NHẬP BẰNG GOOGLE // TRUY CẬP TRỢ LÝ AI ]</span>
+                <span>{{
+                  isAuthenticated
+                    ? "[ VÀO TRỢ LÝ ]"
+                    : "[ ĐĂNG NHẬP BẰNG GOOGLE ]"
+                }}</span>
               </button>
-            </div>
-            <form
-              @submit.prevent="submit(selectedAgent)"
-              aria-label="Đăng ký truy cập Olympus"
-              class="w-full flex flex-col sm:flex-row gap-space-xs items-stretch pt-space-sm"
-            >
-              <input
-                @input="reset"
-                autocomplete="email"
-                class="flex-1 px-space-md py-3 bg-surface-container-low border border-outline-variant/60 font-label-code text-label-code text-on-surface placeholder:text-outline focus:outline-none focus:border-primary transition-colors min-w-0 w-full"
-                id="access-email"
-                maxlength="254"
-                name="email"
-                placeholder="YOUR EMAIL // ĐỊA CHỈ EMAIL"
-                :required="true"
-                type="email"
-                v-model="email"
-              /><button
-                :disabled="saved"
-                class="px-space-md py-3 bg-primary text-background font-label-code text-label-code uppercase tracking-[0.2em] font-medium border border-primary hover:bg-background hover:text-primary transition-colors shrink-0"
-                type="submit"
-              >
-                {{ saved ? "SAVED LOCALLY ✓" : "REQUEST ACCESS" }}
-              </button>
-            </form>
-            <div
-              aria-live="polite"
-              class="font-body-sm text-body-sm text-on-surface-variant"
-            >
-              <p class="text-error" role="alert" v-if="error">{{ error }}</p>
-              <div v-else-if="saved">
-                <p>
-                  Đã lưu yêu cầu trên thiết bị này. Email chưa được gửi đến máy
-                  chủ.
-                </p>
-                <button
-                  @click="remove"
-                  class="underline underline-offset-4 mt-2 hover:text-primary"
-                  type="button"
-                >
-                  Xoá yêu cầu đã lưu
-                </button>
-              </div>
-              <p class="text-outline" v-else="">
-                Bản xem trước — yêu cầu chỉ được lưu trong trình duyệt của bạn.
-              </p>
             </div>
           </div>
           <div
-            class="pt-space-lg border-t border-outline-variant/30 mt-space-lg flex flex-wrap items-center justify-between gap-space-sm font-label-telemetry text-[9px] text-outline uppercase tracking-widest"
+            class="pt-space-lg border-t border-outline-variant/30 mt-space-lg flex flex-wrap items-center justify-between gap-space-sm font-label-telemetry text-[10px] text-outline uppercase tracking-widest"
           >
-            <span>ENCRYPTION // 4096-BIT RSA</span
-            ><span>SLOTS REMAINING // 14</span><span>COORD // 37.9838° N</span>
+            <span>ĐĂNG NHẬP // GOOGLE OAUTH</span
+            ><span>TOKEN THIẾT BỊ // MÃ HOÁ KHI LƯU</span
+            ><span>DỮ LIỆU // XUẤT · XOÁ</span>
           </div>
         </div>
       </div>

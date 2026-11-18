@@ -5,6 +5,8 @@ import type { BodyMetricRead, GoalRead, UserProfile } from '@/types/api'
 import { useAuth } from '@/composables/useAuth'
 import ProfileAside from './ProfileAside.vue'
 import { clockTime, longDate, stamp, vn, WEEKDAY_LONG, weekday } from './format'
+import { num } from '@/components/knowledge/health/healthFormat'
+import { energyOut, ESTIMATE_METHOD } from './energyOut'
 import { canRepeatMeal, nutritionView, readinessView, weekView, workoutView } from './today'
 import type { DashboardData, MealRow } from './useDashboardData'
 
@@ -26,8 +28,13 @@ const plan = computed(() => props.data.plan.value)
 const workout = computed(() => workoutView(plan.value, props.data.today))
 const week = computed(() => weekView(plan.value, props.data.today))
 const nutrition = computed(() => nutritionView(props.data.targets.value))
-const stale = computed(() => props.data.failed.value.length > 0 || connection.value?.status === 'NEEDS_REAUTH'
-  || connection.value?.status === 'ERROR')
+// Lỗi tải ở trình duyệt (nguồn lỗi giữ bản đã tải trước, nếu có) khác với lỗi đồng bộ của Google Health ở server.
+const loadError = computed(() => {
+  if (!props.data.failed.value.length) return null
+  return props.data.missing.value.length
+    ? 'Không tải được một phần dữ liệu nên màn hình có thể thiếu số liệu.'
+    : 'Không tải được dữ liệu mới. Đang hiển thị dữ liệu đã tải trước đó.'
+})
 const badge = computed(() => ({ ready: 'b-ready', reduce: 'b-reduce', none: 'b-none' })[readiness.value.kind])
 const entryCount = computed(() => String(workout.value.entry?.items.length ?? 0).padStart(2, '0'))
 const proteinPct = computed(() => (nutrition.value.proteinTarget ? Math.min(100, (nutrition.value.protein / nutrition.value.proteinTarget) * 100) : 0))
@@ -37,6 +44,9 @@ const goal = computed(() => currentGoal.value as GoalRead | null)
 const latest = computed(() => latestBodyMetric.value as BodyMetricRead | null)
 // Nhịp tim hôm nay theo bản gộp ngày của Google; chi tiết từng giờ ở trang Nhịp tim.
 const heart = computed(() => health.value?.daily.find(day => day.local_date === props.data.today) ?? null)
+// Tiêu hao hôm nay: số thiết bị là tổng tới giờ; ước tính là cả ngày (BMR × 1,2 + buổi tập đã ghi).
+const burned = computed(() => energyOut(health.value?.progress.find(day => day.date === props.data.today),
+  num(props.data.targets.value?.bmr_kcal)))
 
 // Ghi nhanh không qua trợ lý. Mỗi lúc chỉ một lệnh đang gửi: các nút bị vô hiệu cho tới khi xong.
 const WATER_ML = 250
@@ -73,13 +83,18 @@ const addWater = () => quick('water', () => props.data.logWater(WATER_ML), `Đã
         Kết nối Google Health đã hết hạn nên chưa có dữ liệu thiết bị mới. Đang hiển thị dữ liệu đã lưu{{ connection.last_success_at ? ` — đồng bộ lần cuối ${stamp(connection.last_success_at)}` : '' }}.</span>
       <button type="button" class="hf-btn on-card" @click="emit('settings', 'integrations')">Kết nối lại</button>
     </div>
-    <div v-else-if="stale" class="hf-err" role="status">
+    <div v-else-if="loadError" class="hf-err" role="status">
+      <span class="err-text"><AlertCircle :size="18" aria-hidden="true" />{{ loadError }}</span>
+      <button type="button" class="hf-btn on-card" :disabled="data.loading.value" @click="data.refresh()">Thử lại</button>
+    </div>
+    <div v-else-if="connection?.status === 'ERROR'" class="hf-err" role="status">
       <span class="err-text"><AlertCircle :size="18" aria-hidden="true" />
-        Không tải được một phần dữ liệu mới. Đang hiển thị dữ liệu đã lưu{{ connection?.last_success_at ? ` — thiết bị đồng bộ lần cuối ${stamp(connection.last_success_at)}` : '' }}.</span>
-      <button type="button" class="hf-btn on-card" @click="data.refresh()">Thử lại</button>
+        Google Health đồng bộ lỗi nên chưa có dữ liệu thiết bị mới{{ connection.last_success_at ? `; lần đồng bộ thành công gần nhất ${stamp(connection.last_success_at)}` : '' }}.</span>
+      <button type="button" class="hf-btn on-card" @click="emit('settings', 'integrations')">Xem kết nối</button>
     </div>
 
-    <div v-if="data.loading.value" class="hf-grid" aria-busy="true" aria-label="Đang tải dữ liệu">
+    <!-- Khung chờ chỉ ở lần đọc đầu; làm mới sau đó giữ nội dung, nút làm mới quay. -->
+    <div v-if="!data.settled.value" class="hf-grid" aria-busy="true" aria-label="Đang tải dữ liệu">
       <div v-for="(span, index) in [7, 5, 7, 5]" :key="index" :class="['hf-card', `hf-c${span}`]" style="min-height: 280px">
         <div class="hf-sk" style="width: 40%; height: 14px" /><div class="hf-sk" style="width: 70%; height: 40px" />
         <div class="hf-sk" style="width: 90%; height: 14px" /><div class="hf-sk" style="width: 60%; height: 14px" />
@@ -214,6 +229,10 @@ const addWater = () => quick('water', () => props.data.logWater(WATER_ML), `Đã
               <button v-else type="button" class="hf-btn" @click="emit('detail', 'nutrition')">Xem mục tiêu</button>
             </div>
           </template>
+          <div v-if="burned" class="burned">
+            <span>Tiêu hao hôm nay: <b>{{ vn(burned.kcal) }} kcal</b></span>
+            <span class="hf-mut">{{ burned.source === 'device' ? 'Từ thiết bị · tính tới giờ' : `Ước tính cả ngày · ${ESTIMATE_METHOD}` }}</span>
+          </div>
           <ul v-if="meals.length" class="quick-meals" aria-label="Bữa đã ghi hôm nay">
             <li v-for="meal in meals" :key="meal.id">
               <span class="quick-name"><b>{{ meal.name }}</b>
@@ -339,8 +358,8 @@ const addWater = () => quick('water', () => props.data.logWater(WATER_ML), `Đã
 .dc.done { background: var(--hf-ink); color: var(--hf-on-ink); }
 .dc.missed { border: 2px solid var(--hf-acc); color: var(--hf-acc); }
 .dc.today { border: 2px dashed var(--hf-ink); color: var(--hf-ink); }
-.dc.up { border: 2px dashed var(--hf-line-3); color: var(--hf-faint); }
-.dc.rest { background: var(--hf-fill); color: var(--hf-faint); }
+.dc.up { border: 2px dashed var(--hf-line-3); color: var(--hf-muted); }
+.dc.rest { background: var(--hf-fill); color: var(--hf-muted); }
 @media (max-width: 1180px) { .dash { grid-template-columns: minmax(0, 1fr); } .dash > .pcard { order: -1; } }
 /* Điện thoại: các thẻ của hôm nay đi trước, thẻ hồ sơ (mô hình cơ thể) xuống cuối; ba tín hiệu vẫn nằm một hàng. */
 @media (max-width: 760px) {
@@ -356,6 +375,9 @@ const addWater = () => quick('water', () => props.data.logWater(WATER_ML), `Đã
 .quick-meals li, .quick-water { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
 .quick-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .quick-water { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hf-line); }
+.burned { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap;
+  margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--hf-line); font-size: 14px; }
+.burned .hf-mut { font-size: 12px; }
 .quick-msg { margin: 8px 0 0; font-size: 13px; }
 .quick-msg.error { color: var(--hf-err-text); }
 </style>

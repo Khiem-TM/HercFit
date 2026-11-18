@@ -5,12 +5,20 @@ import type { AlertGroup, NotificationPreferences } from '@/types/api'
 import { useNotifications } from '@/composables/useNotifications'
 import HfLogo from '@/components/app/HfLogo.vue'
 
-/** Tab "Thông báo AI": mọi thay đổi lưu ngay (PUT /api/v2/notifications/preferences). */
+/**
+ * Tab "Thông báo AI": mọi thay đổi lưu ngay (PUT /api/v2/notifications/preferences, gửi cả bộ tuỳ chọn). Các lần lưu
+ * chạy lần lượt: thay đổi đến khi đang lưu được gộp vào lần gửi kế tiếp, nên server luôn nhận ý định mới nhất sau cùng
+ * và phản hồi cũ không ghi đè lựa chọn mới trên màn hình.
+ */
 const { api, runReview } = useNotifications()
 const prefs = shallowRef<NotificationPreferences | null>(null)
 const busy = shallowRef(false)
+const saving = shallowRef(false)
 const message = shallowRef<string | null>(null)
 const failed = shallowRef(false)
+// Bản server đã xác nhận, và các thay đổi chưa gửi.
+let confirmed: NotificationPreferences | null = null
+let queued: Partial<NotificationPreferences> = {}
 
 const GROUPS: { id: AlertGroup; label: string }[] = [
   { id: 'heart', label: 'Nhịp tim' }, { id: 'oxygen', label: 'SpO2' }, { id: 'sleep', label: 'Giấc ngủ' },
@@ -24,7 +32,7 @@ const reviewTimes = computed(() => [...new Set([...REVIEW_TIMES, prefs.value?.da
 
 async function load() {
   try {
-    prefs.value = await api.preferences()
+    prefs.value = confirmed = await api.preferences()
   } catch (error) {
     failed.value = true
     message.value = error instanceof Error ? error.message : 'Không đọc được tuỳ chọn.'
@@ -32,21 +40,28 @@ async function load() {
 }
 
 async function save(patch: Partial<NotificationPreferences>) {
-  if (!prefs.value) return
-  const before = prefs.value
-  prefs.value = { ...before, ...patch }
-  busy.value = true
-  try {
-    prefs.value = await api.savePreferences({ ...before, ...patch })
-    failed.value = false
-    message.value = null
-  } catch (error) {
-    prefs.value = before
-    failed.value = true
-    message.value = error instanceof Error ? error.message : 'Không lưu được tuỳ chọn.'
-  } finally {
-    busy.value = false
+  if (!prefs.value || !confirmed) return
+  prefs.value = { ...prefs.value, ...patch }
+  queued = { ...queued, ...patch }
+  if (saving.value) return
+  saving.value = true
+  failed.value = false
+  message.value = 'Đang lưu…'
+  let error: unknown = null
+  while (Object.keys(queued).length) {
+    const batch = queued
+    queued = {}
+    try {
+      confirmed = await api.savePreferences({ ...confirmed, ...batch })
+    } catch (caught) {
+      // Chỉ bỏ thay đổi của lần gửi lỗi (trên màn hình trở lại giá trị cũ); thay đổi đến sau vẫn được gửi.
+      error = caught
+    }
+    prefs.value = { ...confirmed, ...queued }
   }
+  saving.value = false
+  failed.value = error != null
+  message.value = error == null ? 'Đã lưu.' : error instanceof Error ? error.message : 'Không lưu được tuỳ chọn.'
 }
 
 const checked = (event: Event) => (event.target as HTMLInputElement).checked
@@ -82,7 +97,7 @@ onMounted(load)
       <label class="hf-srow"><span><b>Bật thông báo chủ động</b><small>HercFit tự kiểm tra chỉ số của bạn theo ngưỡng của Bộ Y tế, WHO và
         hội chuyên môn. Lời thông báo do trợ lý AI viết từ các con số đã tính (chỉ khi bạn cho trợ lý dùng dữ liệu thiết bị),
         không phải chẩn đoán y khoa. Tắt bất cứ lúc nào.</small></span>
-        <span class="hf-sw"><input type="checkbox" :checked="prefs.enabled" :disabled="busy" @change="save({ enabled: checked($event) })"><i /></span></label>
+        <span class="hf-sw"><input type="checkbox" :checked="prefs.enabled" @change="save({ enabled: checked($event) })"><i /></span></label>
       <div v-if="!prefs.enabled" class="hf-info">Đang tắt: các cài đặt bên dưới được lưu nhưng chưa có thông báo nào được gửi.</div>
 
       <div class="hf-fsec">Cảnh báo chỉ số</div>
@@ -168,7 +183,7 @@ onMounted(load)
           <div class="hf-acts"><span class="hf-btn pri sm">Hỏi thêm</span><span class="hf-btn sm on-card">Đã xem</span></div>
         </div>
       </div>
-      <button type="button" class="hf-btn brief" :disabled="busy || !prefs.enabled" :aria-busy="busy" @click="reviewNow">Tạo đánh giá hôm nay</button>
+      <button type="button" class="hf-btn brief" :disabled="busy || saving || !prefs.enabled" :aria-busy="busy" @click="reviewNow">Tạo đánh giá hôm nay</button>
     </template>
     <p v-if="message" class="msg" :class="{ bad: failed }" role="status">{{ message }}</p>
   </div>

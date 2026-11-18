@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, shallowRef, useTemplateRef, watch } from 'vue'
+import { computed, reactive, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { Download, Loader2, LogOut, Trash2, X } from 'lucide-vue-next'
 import { AnimatePresence, motion } from 'motion-v'
 import { indicatorTransition, modalTransition, presence, sheetUp } from '@/motion'
 import type { BodyMetricRead } from '@/types/api'
 import { useAuth } from '@/composables/useAuth'
+import { domOf, useDialogFocus } from '@/composables/useDialogFocus'
 import { useMobile } from '@/composables/useMobile'
 import { type ThemeMode, useTheme } from '@/composables/useTheme'
 import { activityChoices, goalChoices, todayInVietnam } from '@/features/onboarding/model'
@@ -51,6 +52,7 @@ function pick(id: SettingsTab, event: MouseEvent) {
   ;(event.currentTarget as HTMLElement).scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
 }
 const dialog = useTemplateRef<HTMLElement>('dialog')
+const focus = useDialogFocus(() => domOf(dialog.value))
 const saving = ref(false)
 const formError = ref<string | null>(null)
 const saved = ref<string | null>(null)
@@ -64,9 +66,13 @@ const form = reactive({
   height: '', weight: '', fat: '', muscle: '', chest: '', waist: '', hip: '',
   goal: '', activity: '', experience: '', place: '',
 })
-// Giá trị lúc mở hộp thoại: chỉ gửi những gì đã đổi (số đo là một lần đo mới).
+// Giá trị server của từng ô (không phải nội dung form): chỉ gửi những gì đã đổi (số đo là một lần đo mới).
 let initial = { ...form }
 const trainingProfile = shallowRef<Record<string, unknown> | null>(null)
+// Số đo và hồ sơ tập tải sau khi form đã mở; chưa tải xong thì chưa cho lưu. Mỗi lần mở là một thế hệ mới:
+// phản hồi của lần mở trước không được chạm vào form hiện tại.
+const loadingExtras = ref(false)
+let openGeneration = 0
 
 function text(value: unknown, digits = 1): string {
   const parsed = num(value as number | string | null)
@@ -74,26 +80,39 @@ function text(value: unknown, digits = 1): string {
 }
 
 async function loadExtras() {
-  const [metrics, training] = await Promise.all([
-    authFetch('/api/body-metrics?limit=100').then(r => (r.ok ? r.json() as Promise<BodyMetricRead[]> : [])).catch(() => []),
-    authFetch('/api/training/profile').then(r => (r.ok ? r.json() : null)).catch(() => null),
-  ])
-  const sorted = [...metrics].sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))
-  const latest = (field: keyof BodyMetricRead) => sorted.find(metric => num(metric[field] as number | string | null) != null)?.[field]
-  form.height = text(latest('height_cm'), 1)
-  form.fat = text(latest('body_fat_pct'), 1)
-  form.muscle = text(latest('muscle_mass_kg'), 1)
-  form.chest = text(latest('chest_cm'), 1)
-  form.waist = text(latest('waist_cm'), 1)
-  form.hip = text(latest('hip_cm'), 1)
-  trainingProfile.value = training?.profile ?? null
-  form.experience = training?.configured ? String(training.profile.experience_level ?? '') : ''
-  const equipment = (training?.profile?.equipment ?? []) as string[]
-  form.place = PLACES.find(place => equipment.includes(place)) ?? ''
-  initial = { ...form }
+  const generation = openGeneration
+  loadingExtras.value = true
+  try {
+    const [metrics, training] = await Promise.all([
+      authFetch('/api/body-metrics?limit=100').then(r => (r.ok ? r.json() as Promise<BodyMetricRead[]> : [])).catch(() => []),
+      authFetch('/api/training/profile').then(r => (r.ok ? r.json() : null)).catch(() => null),
+    ])
+    if (generation !== openGeneration) return
+    const sorted = [...metrics].sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))
+    const latest = (field: keyof BodyMetricRead) => sorted.find(metric => num(metric[field] as number | string | null) != null)?.[field]
+    const equipment = (training?.profile?.equipment ?? []) as string[]
+    const loaded: Partial<typeof form> = {
+      height: text(latest('height_cm'), 1), fat: text(latest('body_fat_pct'), 1), muscle: text(latest('muscle_mass_kg'), 1),
+      chest: text(latest('chest_cm'), 1), waist: text(latest('waist_cm'), 1), hip: text(latest('hip_cm'), 1),
+      experience: training?.configured ? String(training.profile.experience_level ?? '') : '',
+      place: PLACES.find(place => equipment.includes(place)) ?? '',
+    }
+    trainingProfile.value = training?.profile ?? null
+    // Ô người dùng đã sửa trong lúc chờ giữ nguyên nội dung đã gõ; mọi ô nhận giá trị server làm mốc so sánh.
+    for (const [field, value] of Object.entries(loaded) as [keyof typeof form, string][]) {
+      if (form[field] === initial[field]) (form as Record<string, string>)[field] = value
+      ;(initial as Record<string, string>)[field] = value
+    }
+  } finally {
+    if (generation === openGeneration) loadingExtras.value = false
+  }
 }
 
+// Đóng: trả focus về nút đã mở hộp thoại, sau khi trang cha bỏ `inert` khỏi nền (flush 'post').
+watch(() => props.open, isOpen => { if (!isOpen) focus.close() }, { flush: 'post' })
+
 watch(() => props.open, async isOpen => {
+  openGeneration += 1
   if (!isOpen) return
   activeTab.value = props.initialTab ?? 'profile'
   formError.value = saved.value = null
@@ -107,9 +126,7 @@ watch(() => props.open, async isOpen => {
     fat: '', muscle: '', chest: '', waist: '', hip: '', experience: '', place: '',
   })
   initial = { ...form }
-  await nextTick()
-  const node = dialog.value as unknown as HTMLElement & { $el?: HTMLElement }
-  ;(node?.$el ?? node)?.focus?.({ preventScroll: true })
+  await focus.open()
   await loadExtras()
 }, { immediate: true })
 
@@ -139,13 +156,26 @@ function validate(): string | null {
 
 async function save() {
   formError.value = validate()
-  if (formError.value || saving.value) return
+  if (formError.value || saving.value || loadingExtras.value) return
   saving.value = true
   saved.value = null
   const changed = (field: keyof typeof form) => form[field] !== initial[field]
   const value = (field: keyof typeof form) => (form[field] === '' ? null : Number(String(form[field]).replace(',', '.')))
+  // Mỗi phần lưu xong thì giá trị đó thành mốc mới: lần thử lại sau lỗi không ghi lặp (ví dụ một lần đo trùng).
+  const done: string[] = []
+  const settle = (label: string, fields: (keyof typeof form)[]) => {
+    done.push(label)
+    for (const field of fields) (initial as Record<string, string>)[field] = form[field]
+  }
+  const PROFILE_FIELDS: (keyof typeof form)[] = ['fullname', 'nick_name', 'age', 'sex', 'activity']
+  const METRIC_FIELDS: (keyof typeof form)[] = ['weight', 'height', 'fat', 'muscle', 'chest', 'waist', 'hip']
+  if (![...PROFILE_FIELDS, ...METRIC_FIELDS, 'goal', 'experience', 'place'].some(field => changed(field as keyof typeof form))) {
+    saving.value = false
+    saved.value = 'Không có thay đổi nào cần lưu.'
+    return
+  }
   try {
-    if (['fullname', 'nick_name', 'age', 'sex', 'activity'].some(field => changed(field as keyof typeof form))) {
+    if (PROFILE_FIELDS.some(changed)) {
       const info = (user.value?.personal_info ?? {}) as Record<string, any>
       const activity = { ...(info.activity ?? {}) }
       if (form.activity) activity.level = form.activity
@@ -154,13 +184,17 @@ async function save() {
         fullname: form.fullname.trim(), nick_name: form.nick_name.trim() || null, age: form.age ? Number(form.age) : null,
         sex: form.sex || null, ...(changed('activity') ? { personal_info: { activity } } : {}),
       })
+      settle('thông tin cá nhân', PROFILE_FIELDS)
     }
     const metricFields = { weight: 'weight_kg', height: 'height_cm', fat: 'body_fat_pct', muscle: 'muscle_mass_kg',
                            chest: 'chest_cm', waist: 'waist_cm', hip: 'hip_cm' } as const
     const metric = Object.fromEntries(Object.entries(metricFields)
       .filter(([field]) => changed(field as keyof typeof form) && form[field as keyof typeof form] !== '')
       .map(([field, column]) => [column, value(field as keyof typeof form)]))
-    if (Object.keys(metric).length) await recordBodyMetric(metric)
+    if (Object.keys(metric).length) {
+      await recordBodyMetric(metric)
+      settle('số đo', METRIC_FIELDS.filter(field => form[field] !== ''))
+    }
     if (changed('goal') && form.goal) {
       const goal = currentGoal.value
       const response = goal
@@ -170,6 +204,7 @@ async function save() {
                                                   body: JSON.stringify({ title: goalChoices.find(choice => choice.id === form.goal)?.title ?? 'Mục tiêu',
                                                                          start_date: todayInVietnam(), goal_types: [form.goal], targets: {} }) })
       if (!response.ok) throw new Error('Không lưu được mục tiêu.')
+      settle('mục tiêu', ['goal'])
     }
     if (changed('experience') || changed('place')) {
       const base = { ...(trainingProfile.value ?? {}) } as Record<string, any>
@@ -178,13 +213,16 @@ async function save() {
       base.equipment = form.place ? [...others, form.place] : others
       const response = await authFetch('/api/training/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(base) })
       if (!response.ok) throw new Error('Không lưu được kinh nghiệm và điều kiện tập.')
+      settle('kinh nghiệm và điều kiện tập', ['experience', 'place'])
+      trainingProfile.value = base
     }
-    await fetchProfileDetails()
-    initial = { ...form }
     saved.value = 'Đã lưu hồ sơ.'
   } catch (err) {
-    formError.value = err instanceof Error ? err.message : 'Lưu hồ sơ thất bại.'
+    const reason = err instanceof Error ? err.message : 'Lưu hồ sơ thất bại.'
+    formError.value = done.length ? `Đã lưu ${done.join(', ')}. ${reason} Bấm Lưu để thử lại phần còn lại.` : reason
   } finally {
+    // Đọc lại hồ sơ để phần đã lưu hiện đúng ở nơi khác (Dashboard, mục tiêu dinh dưỡng), kể cả khi lưu một phần.
+    if (done.length) await fetchProfileDetails().catch(() => undefined)
     saving.value = false
   }
 }
@@ -233,7 +271,7 @@ async function handleErase(): Promise<void> {
                      @click="emit('close')" />
       <div class="center">
       <motion.div ref="dialog" class="smodal" role="dialog" aria-modal="true" aria-label="Hồ sơ và kết nối" tabindex="-1"
-                  v-bind="presence(isMobile ? sheetUp : modalTransition.panel)">
+                  v-bind="presence(isMobile ? sheetUp : modalTransition.panel)" @keydown="focus.keydown">
         <nav class="snavcol" aria-label="Mục cài đặt">
           <h2>Hồ sơ &amp; kết nối</h2>
           <div class="stabs">
@@ -348,8 +386,9 @@ async function handleErase(): Promise<void> {
           <div v-if="activeTab === 'profile'" class="sfoot">
             <span v-if="formError" class="foot-msg bad" role="alert">{{ formError }}</span>
             <span v-else-if="saved" class="foot-msg ok" role="status">{{ saved }}</span>
+            <span v-else-if="loadingExtras" class="foot-msg hf-mut" role="status">Đang tải số đo đã lưu…</span>
             <button type="button" class="hf-btn" @click="emit('close')">Huỷ</button>
-            <button type="submit" form="profile-form" class="hf-btn pri" :disabled="saving">
+            <button type="submit" form="profile-form" class="hf-btn pri" :disabled="saving || loadingExtras">
               <Loader2 v-if="saving" :size="16" class="hf-spin" />{{ saving ? 'Đang lưu…' : 'Lưu thay đổi' }}</button>
           </div>
           <div v-else-if="activeTab !== 'account'" class="sfoot between">

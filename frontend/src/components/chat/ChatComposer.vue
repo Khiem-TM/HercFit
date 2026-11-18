@@ -75,7 +75,8 @@ function prefill(text: string): void {
 defineExpose({ prefill })
 
 function handleKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Enter' && !event.shiftKey) {
+  // Enter khi bộ gõ (IME) đang ghép chữ là để chốt chữ, không phải để gửi.
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault()
     handleSend()
   }
@@ -90,7 +91,7 @@ function handleKeydown(event: KeyboardEvent): void {
       ref="textareaRef"
       v-model="draft"
       :rows="isMobile ? 1 : 2"
-      :disabled="disabled || isStreaming"
+      :disabled="disabled"
       :placeholder="isStreaming ? 'Trợ lý đang trả lời…' : mode === 'plan'
         ? 'Hỏi chuyên sâu, nhờ phân tích hoặc lập kế hoạch tập…'
         : 'Nhắn cho trợ lý HercFit…'"
@@ -157,7 +158,7 @@ textarea {
 }
 /* Khung .composer đã đổi viền khi focus; ô nhập bên trong không vẽ thêm viền focus chung của .hf. */
 textarea:focus-visible { outline: none; }
-textarea::placeholder { color: var(--hf-faint); }
+textarea::placeholder { color: var(--hf-muted); }
 textarea:disabled { opacity: .6; }
 .tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1; min-width: 0; }

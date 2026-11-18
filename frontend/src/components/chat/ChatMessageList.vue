@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
-import { AlertCircle, Check, ImageIcon, Sparkles } from 'lucide-vue-next'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { AlertCircle, ArrowDown, Check, ImageIcon, RotateCcw, Sparkles } from 'lucide-vue-next'
 import type { ChatMessage, FoodChoice, PendingAction } from '@/types/api'
 import HfLogo from '@/components/app/HfLogo.vue'
 import CatalogImage from '@/components/chat/cards/CatalogImage.vue'
@@ -33,9 +33,15 @@ function questionBefore(msg: ChatMessage): string | null {
   return null
 }
 
+// Các lựa chọn chỉ còn trả lời được ở lượt agent mới nhất.
+const lastMessageId = computed(() => props.messages[props.messages.length - 1]?.id)
+
 const containerRef = ref<HTMLElement | null>(null)
+// Người dùng đã kéo lên đọc đoạn trước và có nội dung mới bên dưới: hiện nút "Tin mới" thay vì kéo họ xuống.
+const hasUnseen = ref(false)
 
 function scrollToBottom(): void {
+  hasUnseen.value = false
   nextTick(() => {
     const el = containerRef.value
     if (el) {
@@ -44,23 +50,43 @@ function scrollToBottom(): void {
   })
 }
 
+/** Đo trước khi DOM cập nhật (watch chạy trước render): người dùng có đang ở gần cuối luồng không. */
+function nearBottom(): boolean {
+  const el = containerRef.value
+  return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 160
+}
+
+function onScroll(): void {
+  if (hasUnseen.value && nearBottom()) hasUnseen.value = false
+}
+
+onMounted(scrollToBottom)
+
+// Tin mới, đổi trạng thái hay đổi bước: cuộn theo nếu đang ở gần cuối hoặc chính người dùng vừa gửi tin.
 watch(
   () => [props.messages.length, props.isStreaming, props.activeNodeLabel],
-  () => scrollToBottom(),
-  { deep: true },
+  () => {
+    if (nearBottom() || props.messages[props.messages.length - 1]?.role === 'human') scrollToBottom()
+    else hasUnseen.value = true
+  },
 )
 
 // Câu trả lời đang stream dài dần: cuộn theo, trừ khi người dùng đã kéo lên đọc đoạn trước.
 watch(
   () => props.messages[props.messages.length - 1]?.content.length,
   () => {
-    const el = containerRef.value
-    if (props.isStreaming && el && el.scrollHeight - el.scrollTop - el.clientHeight < 160) scrollToBottom()
+    if (!props.isStreaming) return
+    if (nearBottom()) scrollToBottom()
+    else hasUnseen.value = true
   },
 )
 
-// Các lựa chọn chỉ còn trả lời được ở lượt agent mới nhất.
-const lastMessageId = computed(() => props.messages[props.messages.length - 1]?.id)
+/** Tin nhắn cuối dừng giữa chừng hoặc lỗi: gửi lại đúng câu hỏi trước nó. */
+function resendable(msg: ChatMessage): string | null {
+  if (msg.id !== lastMessageId.value || !['failed', 'interrupted', 'stopped'].includes(msg.status ?? '')) return null
+  return questionBefore(msg)
+}
+
 
 // Khi form đang mở, bong bóng chat hiển thị lời dẫn của nó; các câu hỏi nằm trong form.
 function asksForm(msg: ChatMessage): boolean {
@@ -88,7 +114,7 @@ function badge(url: string): string {
 </script>
 
 <template>
-  <div ref="containerRef" class="thread">
+  <div ref="containerRef" class="thread" @scroll.passive="onScroll">
     <div class="col720">
       <template v-for="msg in messages" :key="msg.id">
         <div v-if="msg.role === 'human'" class="um um-enter">{{ msg.content }}</div>
@@ -107,7 +133,7 @@ function badge(url: string): string {
             </div>
             <div v-else-if="msg.content || msg.status === 'streaming'" :aria-busy="msg.status === 'streaming'">
               <!-- renderMarkdown escape toàn bộ HTML trước rồi mới sinh các thẻ trong danh sách cho phép cố định. -->
-              <div class="md" :class="{ stopped: msg.status === 'stopped' }"
+              <div class="md" :class="{ stopped: msg.status === 'stopped' || msg.status === 'interrupted' }"
                    v-html="renderMarkdown(asksForm(msg) && msg.clarification?.intro ? msg.clarification.intro : msg.content)" />
               <span v-if="msg.status === 'streaming'" class="caret" aria-hidden="true" />
             </div>
@@ -117,6 +143,9 @@ function badge(url: string): string {
               <div class="md" v-html="renderMarkdown(msg.content)" />
             </details>
             <span v-if="msg.status === 'stopped'" class="state no">Đã dừng</span>
+            <span v-else-if="msg.status === 'interrupted'" class="state no" role="status">Bị ngắt kết nối giữa chừng</span>
+            <button v-if="resendable(msg)" type="button" class="hf-btn sm resend" :disabled="isStreaming || isConfirming"
+                    @click="emit('send', resendable(msg) as string)"><RotateCcw :size="14" aria-hidden="true" />Gửi lại câu hỏi</button>
 
             <!-- Ảnh minh hoạ từ tra cứu (ảnh trên web; chỉ được lưu sau khi xác nhận nhập) -->
             <figure v-if="msg.illustrations && msg.illustrations.length" class="ill">
@@ -182,11 +211,15 @@ function badge(url: string): string {
         </div>
       </div>
     </div>
+    <button v-if="hasUnseen" type="button" class="hf-btn sm jump" @click="scrollToBottom">
+      <ArrowDown :size="14" aria-hidden="true" />Tin mới</button>
   </div>
 </template>
 
 <style scoped>
-.thread { flex: 1; overflow-y: auto; padding: 32px 24px 8px; }
+.thread { position: relative; flex: 1; overflow-y: auto; padding: 32px 24px 8px; }
+.jump { position: sticky; bottom: 8px; z-index: 2; display: flex; width: fit-content; margin: 8px auto 0; box-shadow: 0 6px 20px var(--hf-shadow-2); }
+.resend { align-self: flex-start; }
 .col720 { max-width: 720px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 28px; }
 .um {
   align-self: flex-end; max-width: 80%; background: var(--hf-bubble); color: var(--hf-ink); border-radius: 20px;

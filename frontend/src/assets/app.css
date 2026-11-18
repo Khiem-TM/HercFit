@@ -28,7 +28,7 @@
   --hf-sub: #3F3F45;
   --hf-sub-2: #55555B;
   --hf-muted: #66666C;
-  --hf-faint: #8A8A90;
+  --hf-faint: #8A8A90;       /* chỉ để trang trí (viền, vạch, sóng): chưa đủ tương phản 4,5:1 cho chữ; chữ phụ dùng --hf-muted */
   --hf-ghost: #A1A1AA;
   --hf-body: #CDCED5;          /* màu da của mô hình cơ thể 3D */
   --hf-track: #E6E6E9;       /* chấm chưa tô */

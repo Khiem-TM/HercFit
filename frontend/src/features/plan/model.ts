@@ -1,5 +1,7 @@
 /** Lịch tập: bản nháp sửa trên thẻ xác nhận và tiến độ checklist ở thanh bên Kế hoạch. */
 
+import type { PlanItem } from './exercises'
+
 type Row = Record<string, any>
 
 /* ---------- Bản nháp trên thẻ xác nhận ---------- */
@@ -47,7 +49,7 @@ export interface PlanEntry {
   note: string | null
   is_rest: boolean
   completed_at: string | null
-  items: Row[]
+  items: PlanItem[]
 }
 
 export interface TrainingPlan {

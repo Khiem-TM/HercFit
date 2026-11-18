@@ -175,7 +175,7 @@ defineExpose({ open: () => { open.value = true } })
 .sev-warn .ic { color: var(--hf-warn-dot); }
 .sev-urgent .ic { color: var(--hf-bad); }
 .text { min-width: 0; flex: 1; }
-.sev { margin: 0 0 2px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--hf-faint); }
+.sev { margin: 0 0 2px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--hf-muted); }
 .sev-warn .sev { color: var(--hf-warn-text); }
 .sev-urgent .sev { color: var(--hf-bad); }
 .title { margin: 0; font-size: 14px; font-weight: 600; color: var(--hf-ink); }
@@ -197,12 +197,12 @@ defineExpose({ open: () => { open.value = true } })
 .dims li { display: flex; justify-content: space-between; gap: 6px; background: var(--hf-card); border-radius: 10px; padding: 6px 8px; font-size: 12px; }
 .dims li.good b { color: var(--hf-ok-text); }
 .dims li.poor b { color: var(--hf-bad); }
-.dims li.missing { color: var(--hf-faint); }
+.dims li.missing { color: var(--hf-muted); }
 .point { margin: 6px 0 0; font-size: 13px; line-height: 1.45; padding-left: 14px; position: relative; }
 .point::before { content: '–'; position: absolute; left: 0; color: var(--hf-faint); }
 .point.good::before { content: '+'; color: var(--hf-ok); }
 .tip { margin: 8px 0 0; font-size: 13px; background: var(--hf-card); border-radius: 10px; padding: 8px 10px; }
-.when { margin: 6px 0 0; font-size: 11px; color: var(--hf-faint); font-family: var(--hf-mono); }
+.when { margin: 6px 0 0; font-size: 11px; color: var(--hf-muted); font-family: var(--hf-mono); }
 .acts { padding: 10px 0 0 38px; }
 .acts .hf-btn:not(.pri) { background: var(--hf-card); }
 .acts .hf-btn:not(.pri):hover:not(:disabled) { background: var(--hf-press); }

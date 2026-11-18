@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
-import { LayoutDashboard, PanelLeftOpen, SquarePen } from 'lucide-vue-next'
+import { Loader2, LayoutDashboard, PanelLeftOpen, SquarePen } from 'lucide-vue-next'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
 import ChatEmptyState from '@/components/chat/ChatEmptyState.vue'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
@@ -32,6 +32,8 @@ const {
   isStreaming,
   isConfirming,
   isLoadingHistory,
+  historyError,
+  retryHistory,
   activeNodeLabel,
   pendingAction,
   hasMessages,
@@ -125,6 +127,8 @@ function consumeIntegrationReturn(): void {
 
 // Điện thoại: thanh bên là ngăn kéo phủ lên khung chat, ẩn sẵn và tự đóng sau khi chọn.
 const isSidebarCollapsed = shallowRef(isMobile.value)
+// Đổi cỡ cửa sổ qua mốc điện thoại: ngăn kéo không được mở sẵn che khung chat; về desktop thì thanh bên hiện lại.
+watch(isMobile, mobile => { isSidebarCollapsed.value = mobile })
 const sidebar = useTemplateRef<InstanceType<typeof ChatSidebar>>('sidebar')
 const openSidebarButton = useTemplateRef<HTMLButtonElement>('openSidebarButton')
 const sidebarMotion = computed(() => presence(isMobile.value ? drawerLeft : collapseWidth(268)))
@@ -171,8 +175,9 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <!-- Dashboard hoặc Hồ sơ & kết nối phủ lên: khung chat thành nền (inert), không Tab hay bấm tới được. -->
   <div class="hf shell" :class="{ blur: isDashboardOpen && !isMobile, tabbed: isMobile && !keyboardOpen }"
-       :style="isMobile && keyboardOpen ? { height: `${viewportHeight}px` } : undefined">
+       :style="isMobile && keyboardOpen ? { height: `${viewportHeight}px` } : undefined" :inert="isDashboardOpen || isUserModalOpen">
     <AnimatePresence :initial="false">
     <motion.button v-if="isMobile && !isSidebarCollapsed" key="scrim" type="button" class="hf-scrim drawer-scrim"
                    aria-label="Đóng thanh bên" v-bind="presence(fade)" @click="hideSidebar" />
@@ -229,8 +234,22 @@ onUnmounted(() => {
         <div class="hf-err" role="alert">{{ error }}</div>
       </div>
 
+      <!-- Đang tải / tải lỗi lịch sử: không giống một cuộc trò chuyện mới trống -->
+      <div v-if="!hasMessages && (isLoadingHistory || historyError)" class="empty">
+        <div v-if="historyError" class="history-state" role="alert">
+          <p>{{ historyError }}</p>
+          <div class="history-acts">
+            <button type="button" class="hf-btn pri" @click="retryHistory">Thử lại</button>
+            <button type="button" class="hf-btn" @click="createNewSession">Cuộc trò chuyện mới</button>
+          </div>
+        </div>
+        <div v-else class="history-state hf-mut" role="status">
+          <Loader2 :size="20" class="hf-spin" aria-hidden="true" />Đang tải cuộc trò chuyện…
+        </div>
+      </div>
+
       <!-- Trống / cuộc trò chuyện mới -->
-      <div v-if="!hasMessages" class="empty">
+      <div v-else-if="!hasMessages" class="empty">
         <ChatEmptyState :user="user">
           <template #composer>
             <VoiceDock
@@ -247,7 +266,7 @@ onUnmounted(() => {
               v-else
               ref="composer"
               :mode="chatMode"
-              :disabled="isConfirming || isLoadingHistory"
+              :disabled="isConfirming || isLoadingHistory || !!historyError"
               :is-streaming="isStreaming"
               :voice-state="voiceState"
               @send="sendMessage"
@@ -288,7 +307,7 @@ onUnmounted(() => {
               v-else
               ref="composer"
               :mode="chatMode"
-              :disabled="isConfirming || isLoadingHistory"
+              :disabled="isConfirming || isLoadingHistory || !!historyError"
               :is-streaming="isStreaming"
               :voice-state="voiceState"
               @send="sendMessage"
@@ -307,6 +326,7 @@ onUnmounted(() => {
     v-if="isDashboardOpen || (isMobile && dashboardOpened)"
     v-model:tab="dashboardTab"
     :hidden="!isDashboardOpen"
+    :covered="isUserModalOpen"
     :busy="isStreaming || isConfirming"
     :revision="messages.length + Number(isStreaming) + Number(isConfirming) + sessions.length"
     @close="isDashboardOpen = false"
@@ -324,7 +344,7 @@ onUnmounted(() => {
     @close="isUserModalOpen = false"
   />
 
-  <MobileTabBar v-if="isMobile && !keyboardOpen" :active="isDashboardOpen ? dashboardTab : 'chat'" @select="selectTab" />
+  <MobileTabBar v-if="isMobile && !keyboardOpen" :active="isDashboardOpen ? dashboardTab : 'chat'" :inert="isUserModalOpen" @select="selectTab" />
 
   <HfToast :message="toast.text" :action="toast.action" @action="toast.run?.()" />
 </template>
@@ -340,6 +360,9 @@ onUnmounted(() => {
 .head-right { display: flex; align-items: center; gap: 6px; flex: none; }
 .error-wrap { max-width: 720px; width: 100%; margin: 4px auto 0; padding: 0 24px; }
 .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow-y: auto; padding: 24px 0; }
+.history-state { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 24px; margin: auto 0; font-size: 15px; text-align: center; }
+.history-state p { margin: 0; color: var(--hf-ink); }
+.history-acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .composer-wrap { padding: 8px 24px 16px; flex: none; }
 .col720 { max-width: 720px; margin: 0 auto; width: 100%; }
 .disclaimer { text-align: center; font-size: 12px; color: var(--hf-muted); margin: 10px 0 0; }

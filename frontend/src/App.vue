@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Loader2 } from "lucide-vue-next";
 import { AnimatePresence, MotionConfig, motion } from "motion-v";
 import SiteHeader from "./components/landing/SiteHeader.vue";
@@ -9,13 +9,13 @@ import KnowledgeSection from "./components/landing/KnowledgeSection.vue";
 import ProtocolSection from "./components/landing/ProtocolSection.vue";
 import AccessSection from "./components/landing/AccessSection.vue";
 import SiteFooter from "./components/landing/SiteFooter.vue";
-import ChatPage from "./views/ChatPage.vue";
 import { useAuth } from "./composables/useAuth";
 
 import { authenticatedDestination } from './features/onboarding/model';
 import { pageTransition, presence, reveal } from './motion';
 const OnboardingPage = defineAsyncComponent(() => import('./views/OnboardingPage.vue'));
-const selectedAgent = shallowRef("");
+// Khung chat tải riêng: trang giới thiệu không phải mang theo mã của ứng dụng.
+const ChatPage = defineAsyncComponent(() => import('./views/ChatPage.vue'));
 const currentPath = ref(window.location.pathname);
 const { user, isAuthenticated, isLoading, error, bootstrapAuth, loginWithGoogle } = useAuth();
 
@@ -78,7 +78,7 @@ onBeforeUnmount(() => {
   >
     <Loader2 class="h-7 w-7 animate-spin text-primary" />
     <p class="mt-3 font-label-code text-xs uppercase tracking-[0.2em] text-outline">
-      ĐANG XÁC THỰC GOOGLE OAUTH // OLYMPUS...
+      ĐANG XÁC THỰC GOOGLE OAUTH // HERCFIT...
     </p>
   </div>
 
@@ -130,14 +130,11 @@ onBeforeUnmount(() => {
     <main id="main-content" class="pt-16 relative overflow-hidden">
       <HeroSection />
       <motion.div v-bind="reveal">
-        <AgentSection
-          :selected-agent="selectedAgent"
-          @select="selectedAgent = $event"
-        />
+        <AgentSection />
       </motion.div>
       <motion.div v-bind="reveal"><KnowledgeSection /></motion.div>
       <motion.div v-bind="reveal"><ProtocolSection /></motion.div>
-      <motion.div v-bind="reveal"><AccessSection :selected-agent="selectedAgent" /></motion.div>
+      <motion.div v-bind="reveal"><AccessSection /></motion.div>
     </main>
     <SiteFooter />
     <div class="grain-overlay" aria-hidden="true"></div>

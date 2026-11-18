@@ -200,6 +200,8 @@ export interface ProgressDay {
   date: string
   meal_count: number
   calories_in: { actual: Numeric; known_total: Numeric; missing_count: number }
+  /** Calo các buổi tập trong ngày (buổi trên Google + gym HercFit chưa gắn với phiên đồng hồ). */
+  exercise_calories: { actual: Numeric; known_total: Numeric; missing_count: number }
   calories_out_actual: Numeric
 }
 
@@ -464,7 +466,8 @@ export interface ChatMessage {
    * Trạng thái chỉ ở client: 'streaming' khi token đang tới, 'stopped' sau khi người dùng huỷ, và 'confirmed' /
    * 'rejected' cho yêu cầu xác nhận mà người dùng đã trả lời.
    */
-  status?: ChatStatus | 'streaming' | 'stopped' | 'confirmed' | 'rejected'
+  /** 'interrupted': stream đóng trước sự kiện kết thúc (mất kết nối); phần đã nhận được giữ. */
+  status?: ChatStatus | 'streaming' | 'stopped' | 'interrupted' | 'confirmed' | 'rejected'
   timestamp: string
 }
 

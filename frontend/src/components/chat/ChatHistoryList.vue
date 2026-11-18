@@ -16,6 +16,9 @@ const emit = defineEmits<{
 }>()
 
 const openSessionId = shallowRef<string | null>(null)
+// Xoá không hoàn tác được: bấm "Xóa hội thoại" mở bước xác nhận ngay trong menu.
+const confirming = shallowRef(false)
+const confirmButton = useTemplateRef<HTMLButtonElement>('confirmButton')
 const trigger = shallowRef<HTMLButtonElement | null>(null)
 const menu = useTemplateRef<HTMLDivElement>('menu')
 const deleteButton = useTemplateRef<HTMLButtonElement>('deleteButton')
@@ -43,7 +46,14 @@ function activityTime(session: SessionSummary): number {
 
 function closeMenu(restoreFocus = false): void {
   openSessionId.value = null
+  confirming.value = false
   if (restoreFocus) trigger.value?.focus()
+}
+
+async function askDelete(): Promise<void> {
+  confirming.value = true
+  await nextTick()
+  confirmButton.value?.focus()
 }
 
 async function toggleMenu(sessionId: string, event: MouseEvent): Promise<void> {
@@ -151,8 +161,8 @@ onUnmounted(() => {
       tabindex="-1"
       class="hf history-menu"
       :style="position"
-      @keydown.down.prevent="deleteButton?.focus()"
-      @keydown.up.prevent="deleteButton?.focus()"
+      @keydown.down.prevent="(confirming ? confirmButton : deleteButton)?.focus()"
+      @keydown.up.prevent="(confirming ? confirmButton : deleteButton)?.focus()"
     >
       <div class="menu-head">
         <Clock3 :size="16" class="menu-icon" aria-hidden="true" />
@@ -162,7 +172,14 @@ onUnmounted(() => {
           <p v-else class="menu-time">Chưa có thông tin</p>
         </div>
       </div>
-      <button ref="deleteButton" type="button" class="menu-delete" :disabled="isStreaming" @click="deleteSession">
+      <div v-if="confirming" class="menu-confirm" role="alert">
+        <p>Xóa vĩnh viễn hội thoại này? Không thể hoàn tác.</p>
+        <div class="confirm-acts">
+          <button type="button" class="hf-btn sm" @click="confirming = false">Huỷ</button>
+          <button ref="confirmButton" type="button" class="hf-btn sm dng" :disabled="isStreaming" @click="deleteSession">Xóa</button>
+        </div>
+      </div>
+      <button v-else ref="deleteButton" type="button" class="menu-delete" :disabled="isStreaming" @click="askDelete">
         <Trash2 :size="16" aria-hidden="true" />
         Xóa hội thoại
       </button>
@@ -214,4 +231,7 @@ onUnmounted(() => {
 }
 .menu-delete:hover:not(:disabled) { background: var(--hf-err-bg); }
 .menu-delete:disabled { opacity: .4; }
+.menu-confirm { padding: 10px 10px 6px; }
+.menu-confirm p { margin: 0 0 10px; font-size: 13px; line-height: 1.45; color: var(--hf-ink); }
+.confirm-acts { display: flex; justify-content: flex-end; gap: 6px; }
 </style>

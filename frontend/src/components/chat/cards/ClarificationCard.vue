@@ -183,5 +183,5 @@ function shown(questionIndex: number) {
 .rv:first-child { border-top: 0; }
 .rv span { font-size: 12px; color: var(--hf-muted); }
 .rv b { font-size: 14px; font-weight: 600; white-space: pre-line; line-height: 1.5; }
-.rv b.skipped { color: var(--hf-faint); font-weight: 500; font-style: italic; }
+.rv b.skipped { color: var(--hf-muted); font-weight: 500; font-style: italic; }
 </style>

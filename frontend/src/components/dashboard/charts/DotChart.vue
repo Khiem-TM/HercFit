@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
+import { follows, indexAfterKey, indexAt } from './scrub'
 
 /**
  * Biểu đồ cột chấm: mỗi ngày một cột. `bar` tô từ đáy tới giá trị (năng lượng), `dot` chỉ tô một chấm ở mức
- * giá trị (nhịp tim nghỉ). Ngày trống có gạch nhỏ ở đáy và không bao giờ được vẽ như 0.
+ * giá trị (nhịp tim nghỉ). Ngày trống có gạch nhỏ ở đáy và không bao giờ được vẽ như 0. Chọn ngày bằng cách chạm/rê
+ * trên vùng vẽ hoặc phím mũi tên (scrub.ts), không phải bằng từng cột (90 cột trên điện thoại chỉ rộng ~3 px).
  */
 export interface DotColumn { value: number | null; readout: string }
 
@@ -42,6 +44,17 @@ const cells = computed(() => props.columns.map(column => {
   return Array.from({ length: props.rows }, (_, row) => props.rows - 1 - row < filled)
 }))
 const targetPos = computed(() => (props.target ? `${Math.min(100, (props.target.value / props.max) * 100).toFixed(1)}%` : '0%'))
+const cursor = computed(() => `${(((shown.value + 0.5) / props.columns.length) * 100).toFixed(2)}%`)
+
+function point(event: PointerEvent) {
+  if (event.type === 'pointerdown' || follows(event)) hover.value = indexAt(event, props.columns.length)
+}
+function key(event: KeyboardEvent) {
+  const next = indexAfterKey(event, shown.value, props.columns.length)
+  if (next == null) return
+  event.preventDefault()
+  hover.value = next
+}
 </script>
 
 <template>
@@ -50,14 +63,15 @@ const targetPos = computed(() => (props.target ? `${Math.min(100, (props.target.
     <div class="plot-row">
       <div class="yaxis hf-mut"><span>{{ yTop }}</span><span>{{ yBottom }}</span></div>
       <div class="plot-wrap">
-        <div class="plot" :class="size">
+        <div class="plot" :class="size" tabindex="0" role="slider" :aria-label="`${legend}: chọn ngày`"
+             aria-valuemin="1" :aria-valuemax="columns.length" :aria-valuenow="shown + 1" :aria-valuetext="columns[shown]?.readout"
+             @pointerdown="point" @pointermove="point" @keydown="key">
           <div v-if="target" class="tline" :style="{ bottom: targetPos }"><span>{{ target.label }}</span></div>
-          <button v-for="(column, index) in columns" :key="index" type="button" class="col"
-                  :class="{ miss: column.value == null, hv: index === shown && hover >= 0 }"
-                  :title="column.readout" :aria-label="column.readout"
-                  @mouseenter="hover = index" @focus="hover = index" @click="hover = index">
+          <span v-for="(column, index) in columns" :key="index" class="col" aria-hidden="true"
+                :class="{ miss: column.value == null, hv: index === shown && hover >= 0 }">
             <span v-for="(on, row) in cells[index]" :key="row" class="cell"><span class="hf-dt" :class="{ on }" /></span>
-          </button>
+          </span>
+          <span v-if="hover >= 0" class="cursor" :style="{ left: cursor }" aria-hidden="true" />
         </div>
         <div class="xaxis hf-mut"><span>{{ xLabels[0] }}</span><span>{{ xLabels[1] }}</span><span>{{ xLabels[2] }}</span></div>
       </div>
@@ -76,8 +90,11 @@ const targetPos = computed(() => (props.target ? `${Math.min(100, (props.target.
 .plot-row { display: flex; gap: 10px; min-width: 0; }
 .yaxis { display: flex; flex-direction: column; justify-content: space-between; font-size: 11px; text-align: right; width: 44px; flex: none; padding: 3px 0; height: 240px; }
 .plot-wrap { flex: 1; min-width: 0; }
-.plot { display: flex; gap: 6px; height: 240px; position: relative; }
-.col { flex: 1; min-width: 0; display: flex; flex-direction: column; border-radius: 8px; position: relative; border: 0; background: transparent; padding: 3px 0; margin: 0; }
+.plot { display: flex; gap: 6px; height: 240px; position: relative; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: crosshair; border-radius: 8px; }
+.plot:focus-visible { outline: 2px solid var(--hf-ink); outline-offset: 4px; }
+.col { flex: 1; min-width: 0; display: flex; flex-direction: column; border-radius: 8px; position: relative; padding: 3px 0; }
+/* Vạch ngày đang xem: vẫn thấy rõ khi mỗi cột chỉ rộng vài pixel. */
+.cursor { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--hf-ink); opacity: .35; pointer-events: none; }
 .col.hv { background: var(--hf-fill); }
 .col.miss::after { content: ''; position: absolute; bottom: 3px; left: 20%; right: 20%; height: 2px; border-radius: 2px; background: var(--hf-line-3); }
 .cell { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }

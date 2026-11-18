@@ -23,11 +23,11 @@ function handleStart(): void {
     >
       <div class="flex items-center gap-space-sm">
         <span class="w-1.5 h-1.5 bg-primary rounded-none"></span>
-        <span>PROTOCOL // OLYMPUS KINETIC</span>
+        <span>HERCFIT // NHẬT KÝ DINH DƯỠNG &amp; TẬP LUYỆN</span>
       </div>
       <div class="text-right">
-        <span>ARCHIVAL DISCIPLINE</span>
-        <span class="text-on-surface-variant ml-2">// VER 4.09.AI</span>
+        <span>LANGGRAPH · FASTAPI</span>
+        <span class="text-on-surface-variant ml-2">// VUE 3</span>
       </div>
     </div>
 
@@ -36,14 +36,19 @@ function handleStart(): void {
     >
       <div class="text-center z-10 max-w-5xl hf-stagger">
         <span
-          class="font-label-code text-label-code tracking-[0.3em] uppercase text-on-surface-variant block mb-space-sm"
-          >AUTONOMOUS MULTI-AGENT PHYSIOLOGY</span
+          class="font-label-code text-label-code tracking-[0.3em] uppercase text-on-surface-variant block mb-space-md md:mb-space-lg"
+          >TRỢ LÝ MULTI-AGENT TIẾNG VIỆT</span
         >
         <h1
           class="font-display-hero uppercase tracking-tighter text-primary font-bold leading-none drop-shadow-2xl hero-heading text-display-hero-mobile md:text-display-hero"
         >
-          SCULPTING THE DIVINE ARCHITECTURE
+          GHI BẰNG LỜI, LƯU KHI XÁC NHẬN
         </h1>
+        <p class="mx-auto mt-space-md max-w-2xl font-body-lg text-body-lg text-on-surface-variant">
+          Nhắn “trưa nay ăn một bát phở bò” hoặc “vừa chạy 5 km”: HercFit tra danh mục, tính năng lượng và chỉ ghi vào
+          nhật ký sau khi bạn xem lại thẻ xác nhận. Câu hỏi tư vấn được trả lời từ dữ liệu của chính bạn và nguồn có
+          trích dẫn.
+        </p>
       </div>
 
       <div
@@ -108,7 +113,7 @@ function handleStart(): void {
             x="220"
             y="244"
           >
-            T12: KINETIC FLUX
+            NODE: SUPERVISOR
           </text>
           <circle cx="590" cy="360" style="fill: rgb(var(--c-primary))" r="3"></circle>
           <text
@@ -119,7 +124,7 @@ function handleStart(): void {
             x="600"
             y="364"
           >
-            BIO: RESISTANCE 98.4%
+            HITL: CONFIRM → WRITE
           </text>
         </svg>
 
@@ -127,7 +132,7 @@ function handleStart(): void {
           class="relative z-10 h-full w-full max-w-md flex items-center justify-center"
         >
           <img
-            alt="Classical Marble Sculpture Torso Back View"
+            alt="Tượng cẩm thạch cổ điển, nhìn từ phía sau"
             class="max-h-full w-auto object-contain filter grayscale contrast-125 brightness-95 select-none pointer-events-none drop-shadow-[0_25px_35px_rgb(var(--c-shadow)/calc(0.9*var(--shadow-k)))]"
             decoding="async"
             fetchpriority="high"
@@ -149,18 +154,18 @@ function handleStart(): void {
             >
               <span
                 class="font-label-telemetry text-label-telemetry text-outline tracking-widest uppercase"
-                >[EPIGRAM SEC.01]</span
+                >[NGUYÊN TẮC 01]</span
               >
               <p
                 class="font-quote-editorial text-[13px] leading-5 text-primary italic"
               >
-                “Mỗi cơ thể là một bức tượng vĩnh cửu được đẽo gọt bởi trí tuệ
-                nhân tạo.”
+                “Agent đề xuất, bạn quyết định: không lệnh ghi nào chạy khi
+                chưa được xác nhận.”
               </p>
               <div class="w-full h-px bg-outline-variant/40 my-1"></div>
               <span
-                class="font-label-code text-[9px] uppercase tracking-wider text-on-surface-variant"
-                >ETERNAL SCULPTURE // MMXXIV</span
+                class="font-label-code text-[10px] uppercase tracking-wider text-on-surface-variant"
+                >HUMAN-IN-THE-LOOP</span
               >
             </div>
           </div>
@@ -178,25 +183,26 @@ function handleStart(): void {
               <div
                 class="flex justify-between items-center font-label-telemetry text-label-telemetry text-outline"
               >
-                <span>VITAL HARMONICS</span>
+                <span>STACK</span>
                 <span class="w-1.5 h-1.5 bg-primary"></span>
               </div>
               <div class="space-y-1 font-label-code text-label-code">
-                <div class="flex justify-between text-on-surface">
-                  <span class="text-outline">VO2 MAX REF</span>
-                  <span>72.4 ML/KG</span>
+                <div class="flex justify-between gap-3 text-on-surface">
+                  <span class="text-outline">AGENT</span>
+                  <span>LangGraph</span>
                 </div>
-                <div class="flex justify-between text-on-surface">
-                  <span class="text-outline">HYPERTROPHY COEFF</span>
-                  <span>1.487 ψ</span>
+                <div class="flex justify-between gap-3 text-on-surface">
+                  <span class="text-outline">API</span>
+                  <span>FastAPI · PostgreSQL</span>
                 </div>
-                <div class="flex justify-between text-on-surface">
-                  <span class="text-outline">METABOLIC EQUILIB</span>
-                  <span>OPTIMAL [0.94]</span>
+                <div class="flex justify-between gap-3 text-on-surface">
+                  <span class="text-outline">GRAPH</span>
+                  <span>Neo4j</span>
                 </div>
-              </div>
-              <div class="w-full h-1 bg-surface-variant mt-1 overflow-hidden">
-                <div class="h-full bg-primary w-[88%]"></div>
+                <div class="flex justify-between gap-3 text-on-surface">
+                  <span class="text-outline">VECTOR</span>
+                  <span>pgvector</span>
+                </div>
               </div>
             </div>
           </div>
@@ -211,13 +217,13 @@ function handleStart(): void {
           class="w-full sm:w-auto px-space-lg py-3.5 bg-primary text-background font-label-code text-label-code uppercase tracking-[0.2em] font-medium border border-primary hover:bg-background hover:text-primary transition-all duration-200 text-center"
           @click="handleStart"
         >
-          [ KHỞI CHẠY HỆ THỐNG / ENTER SANCTUM ]
+          {{ isAuthenticated ? "[ VÀO TRỢ LÝ ]" : "[ BẮT ĐẦU VỚI GOOGLE ]" }}
         </button>
         <a
           class="w-full sm:w-auto px-space-lg py-3.5 bg-transparent text-primary font-label-code text-label-code uppercase tracking-[0.2em] border border-outline-variant hover:border-primary transition-all duration-200 text-center flex items-center justify-center gap-space-xs"
           href="#agents"
         >
-          <span>KHÁM PHÁ AGENTS</span>
+          <span>XEM KIẾN TRÚC</span>
           <span class="font-label-telemetry">→</span>
         </a>
       </div>
@@ -226,10 +232,10 @@ function handleStart(): void {
     <div
       class="w-full grid grid-cols-2 md:grid-cols-4 gap-space-md pt-space-md border-t border-outline-variant/30 font-label-telemetry text-label-telemetry uppercase text-outline"
     >
-      <div>COGNITIVE VECTOR // 01</div>
-      <div>NEURAL EQUILIBRIUM // ACTIVE</div>
-      <div class="text-left md:text-right">CELLULAR REFINEMENT // REALTIME</div>
-      <div class="text-right">OLYMPUS CORE // 100%</div>
+      <div>HITL // MỌI LỆNH GHI</div>
+      <div>IDEMPOTENT // CÓ PHIÊN BẢN</div>
+      <div class="text-left md:text-right">RAG // CÓ TRÍCH NGUỒN</div>
+      <div class="text-right">TRACING // LANGFUSE</div>
     </div>
   </section>
 </template>

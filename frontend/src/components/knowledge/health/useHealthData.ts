@@ -24,12 +24,18 @@ export interface HealthData {
   assessment: DailyAssessment | null
 }
 
-/** Mọi lần đọc Google Health cho một cửa sổ ngày địa phương. Lần tải lại giữ dữ liệu trước trên màn hình. */
+/**
+ * Mọi lần đọc Google Health cho một cửa sổ ngày địa phương. Nguồn nào tải lỗi thì giữ bản tải thành công gần nhất của
+ * nguồn đó (không thay bằng dữ liệu rỗng); `failed` là các nguồn lỗi ở lần tải mới nhất, `missing` là các nguồn lỗi
+ * chưa từng tải được (không có gì cũ để hiển thị).
+ */
 export function useHealthData(windowDays: () => number) {
   const { authFetch } = useAuth()
   const data = shallowRef<HealthData | null>(null)
   const loading = shallowRef(false)
   const failed = shallowRef<string[]>([])
+  const missing = shallowRef<string[]>([])
+  const loaded = new Set<string>()
   let controller: AbortController | undefined
 
   async function refresh() {
@@ -41,27 +47,32 @@ export function useHealthData(windowDays: () => number) {
     const start = shiftDay(end, 1 - windowDays())
     const range = new URLSearchParams({ start_date: start, end_date: end, timezone: dashboardTimezone, limit: '200' })
     const errors: string[] = []
-    async function read<T>(name: string, url: string, fallback: T): Promise<T> {
+    const previous = data.value
+    async function read<T>(name: string, url: string, fallback: T, kept: T | undefined): Promise<T> {
       try {
         const response = await authFetch(url, { signal: current.signal })
         if (!response.ok) throw new Error(String(response.status))
-        return await response.json() as T
+        const body = await response.json() as T
+        if (!current.signal.aborted) loaded.add(name)
+        return body
       } catch {
         if (!current.signal.aborted) errors.push(name)
-        return fallback
+        return loaded.has(name) && kept !== undefined ? kept : fallback
       }
     }
     const [connection, profile, overview, daily, sleep, workouts, samples, progress, metrics, assessment] = await Promise.all([
-      read<HealthConnection | null>('connection', '/api/integrations/google-health', null),
-      read<HealthProfile | null>('profile', `/api/health/profile?timezone=${dashboardTimezone}`, null),
-      read<HealthOverview | null>('overview', `/api/health/overview?days=${windowDays()}&timezone=${dashboardTimezone}`, null),
-      read<DailyHealth[]>('daily', `/api/health/daily?${range}`, []),
-      read<SleepSession[]>('sleep', `/api/health/sleep?${range}`, []),
-      read<DeviceWorkout[]>('workouts', `/api/health/workouts?${range}`, []),
-      read<HealthSample[]>('samples', `/api/health/samples?${range}`, []),
-      read<{ days: ProgressDay[] }>('progress', `/api/progress?${new URLSearchParams({ start_date: start, end_date: end, timezone: dashboardTimezone })}`, { days: [] }),
-      read<BodyMetricRead[]>('measurements', `/api/body-metrics?${new URLSearchParams({ recorded_from: `${start}T00:00:00+07:00`, limit: '200' })}`, []),
-      read<DailyAssessment | null>('assessment', '/api/v2/health/daily-assessment', null),
+      read<HealthConnection | null>('connection', '/api/integrations/google-health', null, previous?.connection),
+      read<HealthProfile | null>('profile', `/api/health/profile?timezone=${dashboardTimezone}`, null, previous?.profile),
+      read<HealthOverview | null>('overview', `/api/health/overview?days=${windowDays()}&timezone=${dashboardTimezone}`, null, previous?.overview),
+      read<DailyHealth[]>('daily', `/api/health/daily?${range}`, [], previous?.daily),
+      read<SleepSession[]>('sleep', `/api/health/sleep?${range}`, [], previous?.sleep),
+      read<DeviceWorkout[]>('workouts', `/api/health/workouts?${range}`, [], previous?.workouts),
+      read<HealthSample[]>('samples', `/api/health/samples?${range}`, [], previous?.samples),
+      read<{ days: ProgressDay[] }>('progress', `/api/progress?${new URLSearchParams({ start_date: start, end_date: end, timezone: dashboardTimezone })}`,
+        { days: [] }, previous ? { days: previous.progress } : undefined),
+      read<BodyMetricRead[]>('measurements', `/api/body-metrics?${new URLSearchParams({ recorded_from: `${start}T00:00:00+07:00`, limit: '200' })}`,
+        [], previous?.measurements),
+      read<DailyAssessment | null>('assessment', '/api/v2/health/daily-assessment', null, previous?.assessment),
     ])
     if (current.signal.aborted) return
     const days: string[] = []
@@ -72,10 +83,11 @@ export function useHealthData(windowDays: () => number) {
       assessment,
     }
     failed.value = errors
+    missing.value = errors.filter(name => !loaded.has(name))
     loading.value = false
   }
 
   watch(windowDays, refresh, { immediate: true })
   onUnmounted(() => controller?.abort())
-  return { data, loading, failed, refresh }
+  return { data, loading, failed, missing, refresh }
 }

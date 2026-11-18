@@ -26,12 +26,12 @@ watch(step, async () => { await nextTick(); heading.value?.focus({preventScroll:
 <template>
   <main class="onboarding-page">
     <div aria-hidden="true" class="grain-overlay pointer-events-none" />
-    <header class="onboarding-header"><a href="/" class="onboarding-brand">MYTHIC <span>// OLYMPUS KINETIC</span></a><button type="button" class="exit-button" :disabled="submitting" @click="logout"><LogOut :size="13" /><span>Đăng xuất</span></button></header>
+    <header class="onboarding-header"><a href="/" class="onboarding-brand">HERCFIT <span>// THIẾT LẬP HỒ SƠ</span></a><button type="button" class="exit-button" :disabled="submitting" @click="logout"><LogOut :size="13" /><span>Đăng xuất</span></button></header>
     <div class="onboarding-layout">
       <aside class="origin-story">
         <div class="story-copy"><p class="eyeline"><Sparkles :size="12" /> YOUR PERSONAL ODYSSEY</p><h1>Khởi đầu<br />một hành trình<br /><em>của riêng bạn.</em></h1><p>Không cần trở thành một vị thần.<br />Chỉ cần tốt hơn chính mình, từng ngày.</p></div>
         <div aria-hidden="true" class="origin-art"><div class="orbit orbit-outer" /><div class="orbit orbit-inner" /><img src="/images/hero-sculpture.png" alt="" /><span class="art-star star-one">✦</span><span class="art-star star-two">✧</span><span class="art-caption">THE BEGINNING OF YOUR ASCENT</span></div>
-        <div class="story-footer"><span>HERC FIT / PERSONAL ARCHIVE</span><span>EST. OLYMPUS</span></div>
+        <div class="story-footer"><span>HERCFIT / HỒ SƠ CÁ NHÂN</span><span>BƯỚC ĐẦU</span></div>
       </aside>
       <section class="onboarding-workspace" aria-label="Thiết lập hồ sơ cá nhân">
         <nav class="step-navigation" aria-label="Các bước thiết lập"><ol><li v-for="(label,index) in steps" :key="label" :class="{current:index===step,complete:index<step}" :aria-current="index===step ? 'step' : undefined"><span class="step-number"><Check v-if="index<step" :size="12" /><template v-else>{{ String(index+1).padStart(2,'0') }}</template></span><span>{{ label }}</span></li></ol></nav>
