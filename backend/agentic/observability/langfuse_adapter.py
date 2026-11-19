@@ -97,6 +97,16 @@ META_KEYS = {
     "research_rounds",
     "citation_rejected_count",
 }
+JEV_ROUTE_KEYS = {
+    "jev_routing_profile",
+    "jev_route_outcome",
+    "jev_route_reason",
+    "jev_template_id",
+    "jev_read_outcome",
+    "jev_read_reason",
+    "jev_answer_status",
+}
+META_KEYS.update(JEV_ROUTE_KEYS)
 META_KEYS.update(
     {
         "jev_mode",
@@ -110,6 +120,10 @@ META_KEYS.update(
         "jev_input_tokens",
         "jev_output_tokens",
         "jev_attempted",
+        "jev_cached",
+        "jev_ledger_status",
+        "jev_threshold",
+        "jev_would_accept",
         "jev_probabilities",
     }
 )
@@ -161,7 +175,7 @@ STATE_KEYS = {
     "chat_outcome",
     "failure_class",
     "chat_duration_ms",
-}
+} | JEV_ROUTE_KEYS
 # Kiểu span cũ (run_type) → kiểu observation của Langfuse.
 OBSERVATION_TYPES = {
     "chain": "chain",

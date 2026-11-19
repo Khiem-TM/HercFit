@@ -63,7 +63,12 @@ MODEL_INTENTS = {
     "ENERGY_BALANCE": "ENERGY_BALANCE",
     "PROFILE_REVIEW": "REVIEW_PROFILE",
     "PROFILE_UPDATE": "UPDATE_PROFILE",
+    # Lệnh ghi mục tiêu của prompt định tuyến v8 (đặt mới và sửa/kết thúc đều là ghi mục tiêu).
+    "GOAL_SET": "SET_GOAL",
+    "GOAL_UPDATE": "SET_GOAL",
 }
+# Ý định ghi của các miền có phân biệt đọc/ghi.
+WRITE_INTENTS = frozenset(write for write, read in DOMAIN_INTENTS.values() if write != read)
 TRAINING_DOMAINS = {"trainings", "exercises", "coaching"}
 # Nhãn router chi tiết hơn được ưu tiên hơn mặc định của miền khi cả hai đều mô tả cơ thể hoặc
 # hồ sơ, ví dụ một lượt sức khoẻ về giấc ngủ là REVIEW_SLEEP, không phải REVIEW_ACTIVITY.
@@ -73,6 +78,10 @@ REFINABLE = {"body", "profile"}
 
 def classify(domain=None, model_intent=None, *, wrote=False, researched=False):
     mapped = MODEL_INTENTS.get(str(model_intent or "").strip().upper())
+    if mapped in WRITE_INTENTS:
+        # Router đã gọi tên một lệnh ghi: lượt vẫn là lệnh ghi khi chưa ghi xong (thẻ chọn món, món còn thiếu đang được
+        # tra trong miền foods, thẻ bị từ chối hay lỗi), không phải một lần xem lại dữ liệu.
+        return mapped
     if researched and not wrote:
         # Câu trả lời tri thức công khai về một miền cá nhân vẫn là một câu hỏi.
         if domain in {"meals", "foods"}:

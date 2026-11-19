@@ -70,6 +70,23 @@ def saved_writes(state) -> list[tuple[str, str | None]]:
 
 def failure_reply(state) -> str:
     saved = saved_writes(state)
+    turn = state.get("turn") or {}
+    if turn.get("plan_task") == "plan_build" and not any(
+        tool == "create_training_plans" for tool, _ in saved
+    ):
+        pending = state.get("pending_action") or {}
+        attempt = (state.get("tool_outputs") or [{}])[-1]
+        uncertain = (
+            state.get("approved") and pending.get("tool") == "create_training_plans"
+            and (attempt.get("status_code") or 500) >= 500
+        )
+        status = (
+            "Chưa xác minh được kết quả lưu lịch mới. Bạn có thể thử xác nhận lại cùng thao tác."
+            if uncertain else "Lịch mới chưa được lưu."
+        )
+        if any(tool == "end_training_plan" for tool, _ in saved):
+            status = "Lịch cũ đã dừng. " + status
+        return f"{status}\n\n{cause(state.get('error'))}"
     lines = [cause(state.get("error"))]
     if saved:
         lines += ["", "Đã lưu:"] + [

@@ -23,6 +23,15 @@ _FOOD = re.compile(
 _EXCLUDE = re.compile(
     r"\b(?:ghi|lưu|thêm|tạo|xoá|xóa|sửa|cập nhật|nhật ký|đã ăn|bài tập|giáo án|lịch tập|kế hoạch tập)\b"
 )
+# Mốc thời gian đã qua ("Bữa tối ngày 15/11 tôi ăn món gì?", "Tối qua ăn gì?", "Tháng 11 món nào nhiều calo nhất?"): câu
+# hỏi đọc nhật ký của người dùng, để router và context graph trả lời. "1/2 bát" là lượng, không phải ngày.
+_PAST = re.compile(
+    r"\b(?:hôm qua|hôm kia|hôm đó|tối đó|(?:sáng|trưa|chiều|tối|đêm) qua|tuần trước|tuần qua|tháng trước|tháng qua"
+    r"|tháng \d{1,2}|vừa rồi|lúc nãy)\b"
+    r"|\b\d{1,2}/\d{1,2}\b(?!\s*(?:bát|chén|đĩa|tô|cốc|ly|suất|phần|quả|miếng|muỗng|thìa|lát|gói|hộp|củ|cái)\b)"
+)
+# Vẫn là xin gợi ý khi có lời khuyên tường minh, kể cả có mốc quá khứ ("hôm qua ăn nhiều, hôm nay nên ăn gì?").
+_ADVICE = re.compile(r"\b(?:gợi ý|đề xuất|tư vấn|nên|thực đơn|recommend|suggest)\b")
 
 LOOKUP_INSTRUCTION = (
     "Gợi ý món: tra catalog để có món thật. Chọn 3–5 tên món hoặc nguyên liệu phổ biến hợp ngữ cảnh (bữa nào, "
@@ -44,6 +53,7 @@ def is_food_suggestion(text):
         and bool(_SUGGEST.search(normalized))
         and bool(_FOOD.search(normalized))
         and not _EXCLUDE.search(normalized)
+        and not (_PAST.search(normalized) and not _ADVICE.search(normalized))
     )
 
 

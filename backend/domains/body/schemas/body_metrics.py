@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import AwareDatetime, Field, model_validator
@@ -73,3 +73,10 @@ class BodyMetricQuery(Pagination):
         if self.recorded_from is not None and self.recorded_to is not None and self.recorded_from > self.recorded_to:
             raise ValueError("recorded_from must not be after recorded_to")
         return self
+
+
+LatestBodyMetricField = Literal["weight_kg", "height_cm", "body_fat_pct"]
+
+
+class LatestBodyMetricQuery(InputSchema):
+    field: LatestBodyMetricField | None = None

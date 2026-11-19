@@ -7,7 +7,12 @@ from fastapi import APIRouter, Response, status
 from api.dependencies import BodyMetricQueryDep, UserDataServiceDep
 from core.idempotency import IdempotentRoute
 from core.transaction import transaction
-from domains.body.schemas.body_metrics import BodyMetricCreate, BodyMetricRead, BodyMetricReplace
+from domains.body.schemas.body_metrics import (
+    BodyMetricCreate,
+    BodyMetricRead,
+    BodyMetricReplace,
+    LatestBodyMetricField,
+)
 
 router = APIRouter(route_class=IdempotentRoute, prefix="/body-metrics", tags=["body-metrics"])
 
@@ -24,8 +29,8 @@ async def list_body_metrics(options: BodyMetricQueryDep, service: UserDataServic
 
 
 @router.get("/latest", response_model=BodyMetricRead)
-async def get_latest_body_metric(service: UserDataServiceDep):
-    return await service.latest_metric()
+async def get_latest_body_metric(service: UserDataServiceDep, field: LatestBodyMetricField | None = None):
+    return await service.latest_metric(field)
 
 
 @router.get("/{metric_id}", response_model=BodyMetricRead)

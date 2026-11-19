@@ -5,14 +5,22 @@ import re
 
 from agentic.prompts.registry import get_questions
 from agentic.prompts.v2.routing import JEV_READ_ROUTES
-from agentic.services.routing import latest_request
+from agentic.services.routing import TEMPLATE_ID, jev_fast_read_plan, latest_request
 from domains.catalog.models.foods import normalize_food_text
 
 JEV_ROUTING_QUESTIONS = get_questions("routing.jev", "v2")
+VERIFY_READ_QUESTIONS = get_questions("routing.verify_read")
+_VERIFY_EXCLUDED = re.compile(
+    r"\b(?:(?<!nap )(?<!an )them|tao|(?<!da )luu|xoa|sua|cap nhat|doi|ghi nhan|xac nhan|"
+    r"add|create|save|delete|remove|update|change|replace|cancel|confirm|"
+    r"va|dong thoi|sau do|roi|kem|tien de|tiep theo|and|also|then|"
+    r"cai do|nhu tren|nhu cu|cach tinh tren|tiep tuc|noi lai|that one|same|again|continue|"
+    r"web|internet|nghien cuu|research|online|bo qua|ignore|system prompt)\b"
+)
+_METRIC_DESCRIPTIONS = {"weight_kg": "cân nặng", "height_cm": "chiều cao", "body_fat_pct": "tỷ lệ mỡ cơ thể"}
 
 
-def jev_routing_projection(state):
-    """Giữ cổng lọc ứng viên rẻ; lịch sử và ảnh chụp dữ liệu cá nhân không bao giờ ra khỏi nó."""
+def _routing_request(state):
     decision = state.get("decision") or {}
     if (
         state.get("tool_outputs")
@@ -28,8 +36,13 @@ def jev_routing_projection(state):
         or decision.get("read_only")
         or ((state.get("turn") or {}).get("run_id") == state.get("run_id") and state.get("turn"))
     ):
-        return None
-    text = latest_request(state).strip()
+        return ""
+    return latest_request(state).strip()
+
+
+def jev_routing_projection(state):
+    """Giữ cổng lọc ứng viên rẻ; lịch sử và ảnh chụp dữ liệu cá nhân không bao giờ ra khỏi nó."""
+    text = _routing_request(state)
     normalized = normalize_food_text(text)
     # Lệnh ghi rõ ràng, yêu cầu ghép, câu hỏi nối tiếp dùng đại từ và yêu cầu tra cứu tường minh
     # đi theo đường cơ sở, không tốn thêm một lần gọi phân loại.
@@ -42,6 +55,10 @@ def jev_routing_projection(state):
         normalized,
     ):
         return None
+    return {"request": _redacted_request(text), "task": "standalone_read", "has_pending_action": False}
+
+
+def _redacted_request(text):
     # Phòng thủ nhiều lớp trước bước che thông tin theo danh tính của service. Không đưa
     # ID người dùng/phiên/lượt chạy, trường hồ sơ, thông tin xác thực backend hay lịch sử vào đây.
     text = re.sub(r"(?i)\bBearer\s+\S+", "[credential]", text)
@@ -52,7 +69,63 @@ def jev_routing_projection(state):
         text,
     )
     text = re.sub(r"(?<!\w)(?:\+?\d[\s().-]*){10,15}(?!\w)", "[phone]", text)
-    return {"request": text, "task": "standalone_read", "has_pending_action": False}
+    return text
+
+
+def proposed_read(state):
+    text = _routing_request(state)
+    if (
+        not text
+        or len(text) > 500
+        or "\n" in text
+        or text.count("?") > 1
+        or state.get("food_choices")
+        or state.get("food_gap")
+        or state.get("catalog_choice")
+        or state.get("replying_to_form")
+        or _VERIFY_EXCLUDED.search(normalize_food_text(text))
+    ):
+        return None
+    plan = jev_fast_read_plan(state)
+    if plan is None:
+        return None
+    if plan.template_id == TEMPLATE_ID:
+        start, end = (plan.arguments[key] for key in ("start_date", "end_date"))
+        # Những biểu thức tương đối đã được code đổi sang khoảng ngày của cùng thao tác.
+        normalized = normalize_food_text(text)
+        if re.search(r"\b(?:hom nay|today)\b", normalized):
+            period = "hôm nay"
+        elif re.search(r"\b(?:hom qua|yesterday)\b", normalized):
+            period = "hôm qua"
+        else:
+            period = f"ngày {start}" if start == end else f"từ {start} đến {end}"
+        description = f"Xem tổng kcal và macro từ nhật ký ăn uống {period} của tôi."
+    elif plan.template_id == "metrics.latest":
+        metric = _METRIC_DESCRIPTIONS[plan.arguments.get("field", "weight_kg")]
+        description = f"Đọc {metric} mới nhất đã lưu của tôi."
+    else:
+        description = "Xem mức dinh dưỡng mục tiêu mỗi ngày hoặc lượng còn lại hôm nay."
+    return plan, {"request": _redacted_request(text), "proposed_read": description}
+
+
+def accepts_proposed_read(evaluation, threshold):
+    probability = ((evaluation.get("answers") or {}).get("equivalent") or {}).get("noul")
+    return (
+        evaluation.get("status") == "ok"
+        and not evaluation.get("reason")
+        and type(probability) in (float, int)
+        and threshold <= probability <= 1
+    )
+
+
+def verify_read_event(state):
+    return next(
+        (
+            event for event in reversed(state.get("jev_events") or [])
+            if event.get("gate") == "routing" and event.get("template")
+        ),
+        None,
+    )
 
 
 def jev_read_domain(evaluation):

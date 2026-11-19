@@ -104,7 +104,7 @@ class ToolAgent:
     def __init__(self, models, store, settings):
         self.models, self.store, self.settings = models, store, settings
 
-    async def invoke(self, state):
+    async def invoke(self, state, *, write_tool=None):
         if state.get("tool_count", 0) >= self.settings.MAX_TOOL_CALLS:
             annotate(budget_exceeded=True, budget_kind="tool")
             return {"status": "needs_input", "error": "Đã đạt giới hạn công cụ của lượt này."}
@@ -127,6 +127,8 @@ class ToolAgent:
         allowed = allowed_tools(decision["domain"])
         if decision.get("read_only"):
             allowed = {name: spec for name, spec in allowed.items() if not spec.write}
+        elif write_tool is not None:
+            allowed = {name: spec for name, spec in allowed.items() if not spec.write or name == write_tool}
         policy = mode.policy(state)
         if policy.lean_tools:
             allowed = logging_tools(allowed, decision["domain"], latest_request(state))
@@ -164,7 +166,30 @@ class ToolAgent:
             [s.as_tool() for s in allowed.values()], parallel_tool_calls=False
         )
         result = await bound.ainvoke(layout(prompt, state.get("messages", []), tail))
-        if not result.tool_calls and self.text_preview(state, result.content):
+        if not result.tool_calls and write_tool == "create_training_plans":
+            annotate(tool_text_preview=True)
+            # Sau khi có bài tập hoặc payload mẫu đã tra, yêu cầu lời gọi tạo bản xem trước.
+            # Nếu chưa tra, bắt buộc chọn một công cụ để Coach có thể đọc danh mục trước.
+            has_catalog = any(
+                output.get("ok") and output.get("output") and (
+                    output["tool"] in {"list_exercises", "get_exercises", "preview_training_template"}
+                    or (
+                        output["tool"] == "resolve_exercises"
+                        and isinstance(output["output"], dict)
+                        and output["output"].get("matches")
+                    )
+                )
+                for output in state.get("tool_outputs", [])
+            )
+            forced = self.models.get("tool").bind_tools(
+                [spec.as_tool() for spec in allowed.values()], parallel_tool_calls=False,
+                tool_choice=write_tool if has_catalog else "required",
+            )
+            result = await forced.ainvoke(layout(prompt, state.get("messages", []), [
+                *tail, "HercFit sẽ xin xác nhận trên thẻ. Tra danh mục nếu thiếu ID bài tập, rồi gọi "
+                "create_training_plans để dựng thẻ. Đừng trả lịch hay lời xin xác nhận bằng văn bản.",
+            ]))
+        elif not result.tool_calls and self.text_preview(state, result.content):
             annotate(tool_text_preview=True)
             if roster.assigned_model(self.settings, "tool"):
                 # Model riêng (nhỏ) của agent viết văn bản thay vì gọi lệnh ghi: lần thử lại nâng lên model của vai trò.
@@ -177,6 +202,8 @@ class ToolAgent:
             )
         calls = result.tool_calls
         if not calls:
+            if write_tool == "create_training_plans":
+                return {"status": "failed", "error": "Chưa tạo được bản xem trước lịch tập mới."}
             recovered = list(state.get("catalog_recovery_domains", []))
             if (
                 not decision.get("read_only")
@@ -205,10 +232,10 @@ class ToolAgent:
                 "error": strip_tool_markup(str(result.content))
                 or "Cần bổ sung dữ liệu để chọn tool.",
             }
-        if any(self.repeats(state, call) for call in calls):
+        if any(self.repeats(state, call) for call in calls if write_tool is None or call["name"] in allowed):
             # Router đã gửi một lệnh ghi đã thực thi quay lại bước tool; xem trước lần hai sẽ lưu nó hai lần.
             return self.saved(state, "repeat")
-        return await self.execute_calls(state, calls, [result])
+        return await self.execute_calls(state, calls, [result], allowed=allowed if write_tool else None)
 
     async def invoke_meal(self, state):
         """Đường nhanh của LOG_FOOD: một lần list_foods rồi create_meals do code dựng, không gọi model.
@@ -604,6 +631,11 @@ class ToolAgent:
                 spec = allowed[name]
                 try:
                     normalized = spec.normalize(clamp_catalog_query(name, args))
+                    dates = state["decision"].get("training_plan_dates")
+                    if name == "create_training_plans" and dates and list(dates) != [
+                        normalized["start_date"], normalized["end_date"]
+                    ]:
+                        raise ValueError(f"Lịch mới cần bắt đầu ngày {dates[0]} và kết thúc ngày {dates[1]}.")
                     if spec.write:
                         candidate = state.get("candidate")
                         research_id = None
@@ -807,6 +839,7 @@ class ToolAgent:
         # Một lệnh ghi đã hoàn tất là bằng chứng cho quyết định điều phối tiếp theo.
         return {
             "pending_action": None,
+            "approved": False,
             "status": "running",
             "error": None,
             "execution_records": records,

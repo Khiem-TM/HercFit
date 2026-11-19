@@ -32,6 +32,7 @@ from agentic.services.failure_reply import NODE_ERROR, failure_reply
 from agentic.services.memory import decisions
 from agentic.services.memory.lifecycle import MemoryLifecycle
 from agentic.services.memory.transcript import visible
+from agentic.services.write_reply import executed_writes
 from agentic.tools.output import carry_over
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ def strip_icons(text: str) -> str:
 
 def interrupted_reply(state, exc) -> str:
     """Chỉ đề nghị xác nhận lại khi lượt bị ngắt đang thực thi một thao tác đã duyệt."""
-    if state.get("approved"):
+    if state.get("approved") and state.get("pending_action"):
         return RECOVER_APPROVED
     return failure_reply({**state, "error": f"{NODE_ERROR}{type(exc).__name__})."})
 
@@ -208,11 +209,15 @@ class Runtime(MemoryLifecycle):
                 await reconcile_checkpoints(
                     self.store.pool, grace_seconds=self.settings.KG_RECONCILE_GRACE_SECONDS
                 )
+                oldest = await self.store.kg_oldest_pending()
             except Exception as exc:
                 logger.warning("kg_reconcile_deferred error_type=%s", type(exc).__name__)
                 ops.incr("worker_failures_total", worker="kg_reconcile", error=type(exc).__name__)
             else:
                 ops.gauge("worker_last_success_ts", time(), worker="kg_reconcile")
+                # kg-worker là tiến trình riêng không có endpoint: tuổi sự kiện outbox lâu nhất chưa chiếu chính là độ
+                # trễ của nó, nên luật worker_stalled_seconds báo cả khi worker treo mà không ném lỗi.
+                ops.gauge("worker_last_success_ts", oldest or time(), worker="kg_projection")
             if self.memory and (
                 purged_at is None or monotonic() - purged_at >= MEMORY_PURGE_SECONDS
             ):
@@ -232,10 +237,17 @@ class Runtime(MemoryLifecycle):
     def response(self, state):
         pending = state.get("pending_action")
         is_pending = state.get("status") == "pending_confirmation"
+        pending_reply = "Vui lòng kiểm tra và xác nhận thao tác trước khi lưu."
+        if is_pending and (state.get("decision") or {}).get("replace_training_plan"):
+            pending_tool = (pending or {}).get("tool")
+            if pending_tool == "end_training_plan":
+                pending_reply = "Để lập lịch mới, vui lòng xác nhận kết thúc lịch hiện tại trước."
+            elif pending_tool == "create_training_plans" and any(
+                output["tool"] == "end_training_plan" for output in executed_writes(state)
+            ):
+                pending_reply = "Lịch cũ đã dừng. Vui lòng kiểm tra lịch mới và xác nhận để lưu."
         reply = strip_icons(
-            "Vui lòng kiểm tra và xác nhận thao tác trước khi lưu."
-            if is_pending
-            else state.get("reply") or state.get("error") or ""
+            pending_reply if is_pending else state.get("reply") or state.get("error") or ""
         )
         return ChatResponse(
             session_id=state["session_id"],

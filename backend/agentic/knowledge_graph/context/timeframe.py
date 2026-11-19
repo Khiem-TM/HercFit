@@ -83,6 +83,18 @@ def _from_text(text, today):
     def dm_range(m):
         return _parse_dm(m[1], m[2], m[3], today), _parse_dm(m[4], m[5], m[6], today)
 
+    # Khoảng mở tới hôm nay ("từ 19/10 đến nay"): phải đứng trước luật một ngày, nếu không chỉ còn đúng ngày 19/10.
+    OPEN_END = r" (?:den|toi) (?:nay|hom nay|bay gio|hien tai)\b"
+
+    @rule(r"tu (?:ngay )?" + ISO + OPEN_END)
+    def iso_until_now(m):
+        return date.fromisoformat(m[1]), today
+
+    @rule(r"tu (?:ngay )?" + DM + OPEN_END)
+    def dm_until_now(m):
+        start = _parse_dm(m[1], m[2], m[3], today)
+        return (start, today) if start else None
+
     @rule(ISO)
     def iso_day(m):
         day = date.fromisoformat(m[1])
@@ -222,4 +234,7 @@ def resolve(question, today, router_start=None, router_end=None, focus=None):
     if start > end:
         start, end = end, start
     start, end = _clamp(start, end, today)
-    return TimeFrame(start, end, _grain(start, end), basis, phrase)
+    # "Gần nhất" là các bản ghi mới nhất trong cửa sổ 90 ngày, không phải trung bình tháng: giữ độ hạt ngày để chọn mẫu
+    # danh sách (meals.list, trainings.list) thay vì mẫu tổng hợp kỳ.
+    grain = "day" if focus == "latest" else _grain(start, end)
+    return TimeFrame(start, end, grain, basis, phrase)

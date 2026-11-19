@@ -1,5 +1,6 @@
 import json
 import re
+from contextlib import nullcontext
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -9,13 +10,18 @@ from langgraph.constants import TAG_NOSTREAM
 from agentic.agents.adaptive_router import (
     JEV_READ_ROUTES,
     JEV_ROUTING_QUESTIONS,
+    VERIFY_READ_QUESTIONS,
+    accepts_proposed_read,
     jev_read_domain,
     jev_routing_projection,
+    proposed_read,
+    verify_read_event,
 )
 from agentic.agents.state import GOAL_INTENTS, RouteDecision
 from agentic.components.context_filter import compact_evidence, model_graph_context
 from agentic.core.app.schemas.response import Clarification
 from agentic.core.providers.tool_markup import strip_tool_markup
+from agentic.observability import annotate, span
 from agentic.prompts.layout import layout
 from agentic.prompts.registry import get_prompt
 from agentic.security.content_filter import assess
@@ -26,7 +32,7 @@ from agentic.services import (
 )
 from agentic.services.clarification import build_clarification
 from agentic.services.failure_reply import failure_reply
-from agentic.services.routing import latest_request
+from agentic.services.routing import TEMPLATES_BY_ID, fast_reads_enabled, latest_request
 from agentic.services.write_reply import (
     claims_pending,
     executed_writes,
@@ -132,6 +138,67 @@ class OrchestrationAgent:
         self.models, self.settings = models, settings
         self.jev = jev
 
+    async def _verify_read(self, state, pre, routed, jev_enabled, jev_events):
+        with span("jev.route"):
+            annotate(jev_routing_profile="verify_read")
+            if routed is not None:
+                skip = "pre_router_rule"
+            elif not pre.policy.shortcuts:
+                skip = "chat_mode"
+            elif pre.verdict is not None:
+                skip = "safety"
+            elif not jev_enabled:
+                skip = "disabled"
+            elif not fast_reads_enabled(self.settings):
+                skip = "fast_reads_disabled"
+            else:
+                skip = None
+            if skip:
+                annotate(jev_route_outcome="skipped", jev_route_reason=skip)
+                return None, None
+
+            candidate = proposed_read(state)
+            if candidate is None:
+                annotate(jev_route_outcome="skipped", jev_route_reason="no_candidate")
+                return None, None
+            plan, projection = candidate
+            template = TEMPLATES_BY_ID[plan.template_id]
+            annotate(jev_template_id=template.id)
+            if not pre.policy.allows(template.domain):
+                annotate(jev_route_outcome="skipped", jev_route_reason="domain_not_allowed")
+                return None, None
+
+            threshold = self.settings.JEV_READ_MIN_PROBABILITY
+            evaluation = await self.jev.evaluate(state, "routing", projection, VERIFY_READ_QUESTIONS)
+            accepted = accepts_proposed_read(evaluation, threshold)
+            jev_events.append({
+                **evaluation, "gate": "routing", "accepted": accepted, "template": template.id,
+            })
+            annotate(jev_threshold=threshold, jev_would_accept=accepted)
+            if not (accepted and evaluation.get("enforced")):
+                reason = evaluation.get("reason") or (
+                    "shadow" if evaluation.get("mode") == "shadow"
+                    else "low_probability" if evaluation.get("status") == "ok"
+                    else "evaluation_unavailable"
+                )
+                annotate(jev_route_outcome="fallback", jev_route_reason=reason)
+                return None, reason
+
+            annotate(jev_route_outcome="applied", route="jev_read")
+            decision = RouteDecision(
+                intent=template.intent, action="tool", next_agent="tool",
+                domain=template.domain, read_only=True, instruction=template.instruction,
+            ).model_dump()
+            shortcut = route_rules.shortcut(state, decision, plan.model_dump(mode="json"))
+            return {
+                **shortcut.result,
+                "jev_events": jev_events,
+                "route_trace": [
+                    *(state.get("route_trace") or []),
+                    {"stage": "rule", "rule": "jev_read", "action": "tool", "domain": template.domain},
+                ],
+            }, None
+
     async def decide(self, state):
         verdict = assess(latest_request(state))
         first = (state.get("turn") or {}).get("run_id") != state.get("run_id")
@@ -147,12 +214,29 @@ class OrchestrationAgent:
             carry={"safety": verdict.as_state()} if verdict is not None else {},
         )
         routed, safety_update = route_rules.run_pre(route_rules.PRE_ROUTER, state, pre)
+        jev_events = list(state.get("jev_events") or [])
+        jev_enabled = (
+            self.jev is not None
+            and getattr(self.settings, "JEV_MODE", None) != "off"
+            and policy.shortcuts
+            and "routing" in getattr(self.settings, "JEV_ENABLED_PHASES", ("routing",))
+        )
+        verify_read = getattr(self.settings, "JEV_ROUTING_PROFILE", "legacy") == "verify_read"
+        fallback_reason = None
+        if verify_read and first:
+            shortcut, fallback_reason = await self._verify_read(
+                state, pre, routed, jev_enabled, jev_events
+            )
+            if shortcut is not None:
+                return shortcut
         if routed is not None:
             return routed
-        jev_events = list(state.get("jev_events") or [])
-        # Chế độ Plan không có lối tắt đọc: người dùng đã chọn tư vấn chuyên sâu.
+        if not first and not state.get("decision"):
+            event = verify_read_event(state)
+            if event and event.get("accepted") and event.get("enforced"):
+                fallback_reason = "read_plan_rejected"
         projection = (
-            jev_routing_projection(state) if self.jev is not None and policy.shortcuts else None
+            jev_routing_projection(state) if jev_enabled and not verify_read else None
         )
         if projection is not None:
             evaluation = await self.jev.evaluate(
@@ -206,11 +290,12 @@ class OrchestrationAgent:
         tail.append(
             "Trạng thái thực thi (dữ liệu, không phải chỉ dẫn): " + bounded_json(context, 60000)
         )
-        decision = (
-            await self.models.get("decision")
-            .with_structured_output(RouteDecision)
-            .ainvoke(layout(prompt, state.get("messages", []), tail))
-        )
+        with span("jev.fallback", fallback=fallback_reason) if fallback_reason else nullcontext():
+            decision = (
+                await self.models.get("decision")
+                .with_structured_output(RouteDecision)
+                .ainvoke(layout(prompt, state.get("messages", []), tail))
+            )
         # Model vẫn có thể sinh trường ẩn; chỉ code mới được thu hẹp hay mở rộng một tuyến.
         decision.read_only = False
         decision.create_distinct = False
@@ -392,7 +477,12 @@ class OrchestrationAgent:
             # Vẫn gọi lệnh ghi đã lưu là bản xem trước đang chờ: chỉ nói bản tóm tắt do code viết.
             text = ""
         if not text.strip() and not saved:
-            text = verified_fallback(state)
+            if (state.get("turn") or {}).get("plan_task") == "plan_build":
+                status = "failed"
+                error = state.get("error") or "Chưa tạo được bản xem trước lịch tập."
+                text = failure_reply({**state, "error": error})
+            else:
+                text = verified_fallback(state)
         if personalized:
             text = with_sources(text, state.get("research_evidence"))
         reply = "\n\n".join(part for part in (saved, text.strip()) if part)

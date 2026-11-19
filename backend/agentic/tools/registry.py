@@ -19,7 +19,12 @@ from agentic.tools.schemas.common import (
 )
 from domains.analytics.schemas.daily_health import DailyAssessmentRead
 from domains.analytics.schemas.progress import ProgressRead
-from domains.body.schemas.body_metrics import BodyMetricCreate, BodyMetricQuery, BodyMetricRead
+from domains.body.schemas.body_metrics import (
+    BodyMetricCreate,
+    BodyMetricQuery,
+    BodyMetricRead,
+    LatestBodyMetricQuery,
+)
 from domains.catalog.schemas.exercises import ExerciseCreate, ExerciseQuery, ExerciseRead
 from domains.catalog.schemas.foods import FoodCreate, FoodQuery, FoodRead
 from domains.goals_plans.schemas.goal import GoalCreate, GoalRead, GoalUpdateRequest
@@ -176,9 +181,10 @@ add(
     "metrics",
     "GET",
     "/body-metrics/latest",
-    Empty,
+    LatestBodyMetricQuery,
     BodyMetricRead,
-    "Read latest measurement; 404 means no measurements.",
+    "Read the latest recorded value of the requested body measurement, defaulting to weight. "
+    "404 means that measurement is absent.",
 )
 add(
     "current_goal",

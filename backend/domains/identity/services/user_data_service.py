@@ -11,7 +11,11 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from domains.body.models.body_metrics import BodyMetric
-from domains.body.schemas.body_metrics import BodyMetricCreate, BodyMetricQuery
+from domains.body.schemas.body_metrics import (
+    BodyMetricCreate,
+    BodyMetricQuery,
+    LatestBodyMetricField,
+)
 from domains.goals_plans.models.goal import Goal
 from domains.goals_plans.schemas.goal import GoalCreate, GoalUpdateRequest
 from domains.identity.models.user import User
@@ -82,9 +86,9 @@ class UserDataService(UserService):
             self.session, user_id=self.user_id, **options.model_dump(),
         )
 
-    async def latest_metric(self) -> Any:
+    async def latest_metric(self, field: LatestBodyMetricField | None = None) -> Any:
         return require_found(
-            await BodyMetric.get_latest_for_user(self.session, user_id=self.user_id), "Body metric",
+            await BodyMetric.latest(self.session, self.user_id, field or "weight_kg"), "Body metric",
         )
 
     async def _google_reading(self, metric_id: UUID):

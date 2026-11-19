@@ -26,6 +26,9 @@ TIMEZONE = "Asia/Ho_Chi_Minh"
 # Nguồn ngữ cảnh cá nhân của một lượt: thẻ hồ sơ (decide_step), sự kiện KG kiểu cũ (retrieve_graph_context), context
 # graph của câu hỏi (nút context_graph), các lần đọc backend của nút context.
 SOURCES = ("card", "kg_facts", "context_graph", "backend_reads")
+# Mặc định từ E5 (2026-11-18, docs/evaluation/E5-context-sources.md): context graph thêm 9 ca đúng, 0 ca sai so với chỉ
+# đọc backend; kg_facts không thêm ca đúng nào (0/1) mà tốn thêm ~1.400 token vào mỗi lượt, nên tắt mặc định (code giữ).
+DEFAULT_SOURCES = ("card", "context_graph", "backend_reads")
 TOPICS = (
     "running",
     "strength",
@@ -88,10 +91,9 @@ REVIEW_DOMAINS = {"coaching", "metrics", "progress", "health", "profile"}
 
 
 def sources(settings) -> frozenset[str]:
-    """Các nguồn ngữ cảnh cá nhân đang bật; mặc định cả bốn (hành vi như trước). Chỉ settings CONTEXT_SOURCES, dùng
-    cho thí nghiệm Phase 6, thu hẹp được danh sách này."""
+    """Các nguồn ngữ cảnh cá nhân đang bật: settings CONTEXT_SOURCES, không có thì DEFAULT_SOURCES."""
     chosen = getattr(settings, "CONTEXT_SOURCES", None)
-    return frozenset(SOURCES if chosen is None else chosen)
+    return frozenset(DEFAULT_SOURCES if chosen is None else chosen)
 
 
 def today() -> date:

@@ -271,12 +271,16 @@ class Worker:
 
     @staticmethod
     async def _notified(conn, timeout):
+        # notifies() giữ khoá của kết nối tới khi generator kết thúc. Vòng stop_after=1 phải tự kết thúc (không
+        # return/break giữa chừng) rồi mới gom tiếp; gọi notifies() lồng bên trong sẽ chờ chính khoá đó mãi mãi.
+        received = False
         async for _ in conn.notifies(timeout=timeout, stop_after=1):
+            received = True
+        if received:
             # Một lô ghi có thể sinh nhiều thông báo: gom hết để chỉ chạy một vòng chiếu.
             async for _ in conn.notifies(timeout=0.02):
                 pass
-            return True
-        return False
+        return received
 
     async def wait(self, listeners, timeout):
         if not listeners:
@@ -284,11 +288,18 @@ class Worker:
             return
         tasks = [asyncio.create_task(self._notified(conn, timeout)) for conn in listeners]
         try:
-            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            # Hạn chót tổng: listener không bao giờ trả về cũng không được chặn poll định kỳ.
+            done, _ = await asyncio.wait(
+                tasks, timeout=timeout + 1, return_when=asyncio.FIRST_COMPLETED
+            )
         finally:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+        for task in done:
+            # Listener chết (Postgres khởi động lại) phải lộ ra để run() kết nối lại, không bị nuốt.
+            if task.exception() is not None:
+                raise task.exception()
 
     async def run(self, *, once=False):
         await self.projector.initialize()
@@ -318,7 +329,16 @@ class Worker:
             if once:
                 return
             # Poll định kỳ vẫn chạy: sự kiện đến lại sau backoff không sinh thông báo mới.
-            await self.wait(listeners, value(self.settings, "KG_WORKER_POLL_SECONDS", 1))
+            poll = value(self.settings, "KG_WORKER_POLL_SECONDS", 1)
+            try:
+                await self.wait(listeners, poll)
+            except Exception as exc:
+                log.warning("kg_worker_listen_failed error_type=%s", type(exc).__name__)
+                metrics.incr("worker_failures_total", worker="kg_worker", error=type(exc).__name__)
+                for conn in listeners:
+                    await conn.close()
+                listeners = []  # kết nối lại ở vòng sau; chờ một nhịp poll để không quay vòng liên tục
+                await asyncio.sleep(poll)
 
     async def verify(self, repair=False):
         """So graph với nguồn: phiên bản aggregate (kg_source_versions), cấu trúc (ON_DAY, REFERS_TO) và tổng hợp Day.
@@ -329,12 +349,12 @@ class Worker:
 
         from .projection import DAY_KINDS
 
-        source = {}
+        source, pending = {}, set()
         for dsn in self.dsns:
             async with await AsyncConnection.connect(
                 dsn, autocommit=True, row_factory=dict_row
             ) as conn:
-                pending = {
+                pending |= {
                     (row["aggregate_type"], row["aggregate_id"])
                     for row in await (
                         await conn.execute(
@@ -342,15 +362,20 @@ class Worker:
                         )
                     ).fetchall()
                 }
-                for row in await (
-                    await conn.execute(
-                        """SELECT aggregate_type, aggregate_id, version, operation FROM kg_source_versions
-                        WHERE source='backend'"""
-                    )
-                ).fetchall():
-                    key = (row["aggregate_type"], row["aggregate_id"])
-                    if key not in pending:  # còn sự kiện chưa giao: chưa thể so
-                        source[key] = row
+        # Phiên bản nguồn của backend chỉ nằm ở database backend; với role tối thiểu (scripts/db_roles.sql) chỉ
+        # hercfit_kg được đọc bảng này, role của agent thì không, dù hai DSN trỏ cùng một database.
+        async with await AsyncConnection.connect(
+            self.coordinator_dsn, autocommit=True, row_factory=dict_row
+        ) as conn:
+            for row in await (
+                await conn.execute(
+                    """SELECT aggregate_type, aggregate_id, version, operation FROM kg_source_versions
+                    WHERE source='backend'"""
+                )
+            ).fetchall():
+                key = (row["aggregate_type"], row["aggregate_id"])
+                if key not in pending:  # còn sự kiện chưa giao: chưa thể so
+                    source[key] = row
         graph = {
             (row["kind"], row["id"]): row
             for row in await self.projector.query(

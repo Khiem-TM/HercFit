@@ -4,7 +4,6 @@ Sự cố knowledge graph hạ xuống đường backend/model hiện có. Khôn
 nào có thể cấp quyền dùng tool hay đổi danh tính đã xác thực của request.
 """
 
-import asyncio
 from time import perf_counter
 
 from agentic.core.context import request_context
@@ -62,23 +61,19 @@ async def retrieve_graph_context(state, domains, *, settings, graph_context=None
         if ctx.user_id != state["user_id"]:
             status = "blocked"
         else:
-            timeout = min(getattr(settings, "KG_RETRIEVAL_TIMEOUT_MS", 150), 150) / 1000
-            context = await asyncio.wait_for(
-                graph_context.retrieve(
-                    authenticated_user_id=ctx.user_id,
-                    session_id=state["session_id"],
-                    message=latest_request(state),
-                    domain_hint=wanted,
-                ),
-                timeout=timeout,
+            # retrieve tự dừng chờ ở hạn chót KG_RETRIEVAL_TIMEOUT_MS và trả status 'timeout' kèm log; bọc thêm
+            # wait_for cùng hạn ở đây sẽ huỷ nó trước khi nó kịp ghi log, làm số timeout bị đếm thiếu.
+            context = await graph_context.retrieve(
+                authenticated_user_id=ctx.user_id,
+                session_id=state["session_id"],
+                message=latest_request(state),
+                domain_hint=wanted,
             )
             data = context.model_dump(mode="json")
             status = data.get("status", "unavailable")
             if status in {"ok", "empty"}:
                 update["graph_context_domains"] = wanted
                 update["graph_context"] = data
-    except TimeoutError:
-        status = "timeout"
     except Exception:
         # Sự cố KG không bao giờ biến một workflow backend/LLM dùng được thành thất bại.
         status = "unavailable"

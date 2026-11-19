@@ -9,6 +9,10 @@ from agentic.core.providers.openrouter_policy import AGENT_MODELS, DEFAULT_MODEL
 from agentic.core.providers.settings import OpenRouterSettings
 from agentic.core.roster import AGENTS
 
+JEV_READ_MODEL = "typesafe/jev-1.14-20261014"
+JEV_READ_DEADLINE_SECONDS = 1.25
+JevPhase = Literal["routing", "local", "final"]
+
 
 class AgentSettings(OpenRouterSettings):
     # Giá trị riêng của agent ghi đè giá trị mặc định dùng chung, khớp với cả hai file Compose.
@@ -84,10 +88,10 @@ class AgentSettings(OpenRouterSettings):
     AGENT_SERVICE_SECRET: SecretStr | None = None
     # Quên output của tool sức khoẻ, thẻ ngữ cảnh và bộ nhớ phiên khi người dùng thu hồi consent.
     CONSENT_PURGE_ENABLED: bool = True
-    # Chỉ để chạy thí nghiệm Phase 6: tắt từng nguồn ngữ cảnh cá nhân (personal_context.sources). Sẽ bị xoá ở L7.1.
+    # Nguồn ngữ cảnh cá nhân của một lượt (personal_context.sources); khớp personal_context.DEFAULT_SOURCES. kg_facts
+    # (thẻ KG tĩnh) tắt mặc định theo E5 2026-11-18; thí nghiệm E5 bật lại từng nguồn qua biến này.
     CONTEXT_SOURCES: list[Literal["card", "kg_facts", "context_graph", "backend_reads"]] = [
         "card",
-        "kg_facts",
         "context_graph",
         "backend_reads",
     ]
@@ -100,8 +104,11 @@ class AgentSettings(OpenRouterSettings):
     JEV_MODEL: str | None = None
     JEV_TIMEOUT_SECONDS: float = Field(default=3, gt=0, le=10)
     JEV_ENFORCE_PERCENT: int = Field(default=100, ge=0, le=100)
+    JEV_ROUTING_PROFILE: Literal["legacy", "verify_read"] = "legacy"
+    JEV_READ_MIN_PROBABILITY: float = Field(default=0.70, ge=0, le=1)
+    JEV_ENABLED_PHASES: list[JevPhase] = ["routing", "local", "final"]
     # Các cổng mà một lượt chạy 'enforce' được phép thay đổi quyết định; cổng còn lại chỉ ghi nhận như 'shadow'.
-    JEV_ENFORCE_PHASES: list[Literal["routing", "local", "final"]] = ["routing", "local", "final"]
+    JEV_ENFORCE_PHASES: list[JevPhase] = ["routing", "local", "final"]
     JEV_POLICY_VERSION: str = Field(default="v1", min_length=1, max_length=64)
     JEV_INPUT_PRICE_PER_MILLION: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     JEV_OUTPUT_PRICE_PER_MILLION: float | None = Field(default=None, ge=0, allow_inf_nan=False)

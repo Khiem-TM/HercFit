@@ -469,6 +469,19 @@ class Store(HistoryStore, ContextStore):
             ).fetchone()
         return row["n"]
 
+    async def kg_oldest_pending(self):
+        """Thời điểm (epoch giây) của sự kiện outbox lâu nhất chưa chiếu lên graph; None khi graph đã theo kịp.
+
+        Tính cả sự kiện đang chờ backoff hay lỗi mãi: chúng cũng giữ cổng read-your-writes đóng."""
+        async with self.pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """SELECT extract(epoch FROM min(occurred_at)) AS oldest FROM kg_outbox
+                    WHERE delivered_at IS NULL"""
+                )
+            ).fetchone()
+        return float(row["oldest"]) if row["oldest"] is not None else None
+
     async def kg_retrieval_gate(self, user_id):
         """Quyền sở hữu/thế hệ SQL hiện tại chặn ngay các episode graph đã cũ."""
         async with self.pool.connection() as conn:

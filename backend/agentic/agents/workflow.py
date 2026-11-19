@@ -1,6 +1,7 @@
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 
+from agentic.agents.adaptive_router import verify_read_event
 from agentic.agents.orchestration_agent import OrchestrationAgent
 from agentic.agents.research_agent import ResearchV2
 from agentic.agents.specialists import SPECIALISTS
@@ -10,16 +11,19 @@ from agentic.core import roster
 from agentic.core.context import request_context
 from agentic.knowledge_graph.context import pipeline as context_pipeline
 from agentic.knowledge_graph.context.graph import ContextGraph
-from agentic.observability import annotate
+from agentic.observability import annotate, span
 from agentic.observability.execution import run_node
 from agentic.observability.telemetry import MeasuredModels
 from agentic.services import delegation, mode, personal_context
 from agentic.services.rag_pipeline import decision_domains, retrieve_graph_context
 from agentic.services.routing import (
+    FastReadPlan,
+    fast_answer_instruction,
     fast_reads_enabled,
     latest_request,
     make_fast_read_plan,
 )
+from agentic.services.write_reply import executed_writes
 from agentic.tools.policy import continue_catalog_lookup
 
 
@@ -85,6 +89,10 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
                 "intent": decision.get("intent"),
                 "domain": decision.get("domain"),
                 "action": decision.get("action"),
+                # Nhu cầu truy hồi router nêu (focus, entities, khoảng ngày): các bước sau có thể thay decision, còn
+                # đây là intent truy hồi gốc của lượt, để đo đúng chất lượng định tuyến cho context graph.
+                "context": decision.get("context"),
+                "plan_task": decision.get("plan_task"),
             }
         plan = None
         if fast_reads_enabled(settings):
@@ -106,6 +114,20 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         return result
 
     async def answer(state):
+        if verify_read_event(state):
+            route = (
+                "jev_read" if (state.get("fast_read_plan") or {}).get("source") == "jev"
+                else "llm_fallback"
+            )
+            with span("jev.answer", route=route) as observation:
+                result = await answer_step(state)
+                annotate(jev_answer_status=result.get("status"))
+                if observation:
+                    observation.add_metadata({"status": result.get("status")})
+                return result
+        return await answer_step(state)
+
+    async def answer_step(state):
         if state.get("model_auth_failed"):
             # Model trả lời dùng chung thông tin xác thực này. Một request khác không thể
             # khắc phục lỗi 401 và sẽ che lỗi gốc bằng lỗi thứ hai.
@@ -150,6 +172,11 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         from langchain_core.messages import AIMessage
 
         reply = "Đã từ chối thao tác; không ghi dữ liệu."
+        if (state.get("decision") or {}).get("replace_training_plan"):
+            if any(output["tool"] == "end_training_plan" for output in executed_writes(state)):
+                reply = "Lịch cũ đã dừng. Bạn đã từ chối lịch mới nên lịch mới chưa được lưu."
+            elif state["pending_action"]["tool"] == "end_training_plan":
+                reply = "Bạn đã từ chối dừng lịch hiện tại. Lượt này chưa thay đổi lịch tập."
         return {
             "approved": False,
             "action_decision": "rejected",
@@ -161,10 +188,57 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
 
     graph.add_node("orchestrator", decide)
 
+    async def jev_read(agent, state, fast_plan):
+        decision = state["decision"]
+        with span("jev.read", "tool", domain=decision.get("domain")) as observation:
+            enabled = (
+                settings.JEV_MODE != "off"
+                and settings.JEV_ROUTING_PROFILE == "verify_read"
+                and "routing" in settings.JEV_ENABLED_PHASES
+                and fast_reads_enabled(settings)
+            )
+            result = await agent.invoke_fast(state) if enabled else None
+            if result is None:
+                annotate(
+                    jev_read_outcome="fallback",
+                    jev_read_reason="invalid_plan" if enabled else "disabled",
+                )
+                # Giữ turn hiện tại để router xử lý lại mà không gọi Jev lần nữa.
+                return {"fast_read_plan": None, "decision": {}}
+
+            plan = FastReadPlan.model_validate(fast_plan)
+            output = result["tool_outputs"][-1]
+            annotate(jev_template_id=plan.template_id, tool=plan.tool)
+            if result["fast_read_complete"]:
+                annotate(jev_read_outcome="empty" if output.get("not_found") else "ok")
+            else:
+                annotate(jev_read_outcome="failed", http_status=output.get("status_code"))
+                if observation:
+                    observation.add_metadata({"status": "failed"})
+                result["status"] = "failed"
+            result["decision"] = {
+                **decision,
+                "action": "answer",
+                "next_agent": "orchestrator",
+                "instruction": fast_answer_instruction(plan),
+            }
+            trace = {"stage": "agent", "agent": agent.name, "domain": decision.get("domain")}
+            result["route_trace"] = [*(state.get("route_trace") or []), trace]
+            return result
+
     async def specialist_step(agent, state):
-        domain = state.get("decision", {}).get("domain")
-        update = await retrieve_graph_context(
-            state, [domain], settings=settings, graph_context=graph_context
+        decision = state.get("decision", {})
+        domain = decision.get("domain")
+        fast_plan = state.get("fast_read_plan") or {}
+        if fast_plan.get("source") == "jev":
+            return await jev_read(agent, state, fast_plan)
+        # Lệnh ghi dựng sẵn (simple_writes) chạy không qua model, nên không ai đọc thẻ KG: bỏ lần đọc graph.
+        update = (
+            {}
+            if decision.get("code_call")
+            else await retrieve_graph_context(
+                state, [domain], settings=settings, graph_context=graph_context
+            )
         )
         # Vết định tuyến ghi agent nhận việc, một lần mỗi lần được giao (vòng tra catalog bên trong không ghi lại).
         trace = state.get("route_trace") or []
@@ -374,6 +448,11 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
     def after_specialist(s):
         if s.get("pending_action"):
             return "confirmation"
+        if (
+            (s.get("fast_read_plan") or {}).get("source") == "jev"
+            and (s.get("decision") or {}).get("action") == "answer"
+        ):
+            return "answer"
         if s.get("status") == "running" and (
             s.get("prepared_reply")
             or (s.get("fast_read_complete") and s.get("decision", {}).get("action") == "answer")

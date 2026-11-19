@@ -17,24 +17,23 @@ active_metrics = ContextVar("agent_node_metrics", default=None)
 def record_jev_result(result):
     """Đo mọi lần thử qua gateway mà không giữ đầu vào hay câu trả lời."""
     metrics = active_metrics.get()
-    if metrics is None:
-        return
-    keys = (
-        "evaluation_id",
-        "phase",
-        "status",
-        "reason",
-        "model",
-        "usage",
-        "cost",
-        "duration_ms",
-        "policy_version",
-        "cached",
-        "mode",
-        "enforced",
-        "attempted",
-    )
-    metrics.setdefault("jev_events", []).append({k: result[k] for k in keys if k in result})
+    if metrics is not None:
+        keys = (
+            "evaluation_id",
+            "phase",
+            "status",
+            "reason",
+            "model",
+            "usage",
+            "cost",
+            "duration_ms",
+            "policy_version",
+            "cached",
+            "mode",
+            "enforced",
+            "attempted",
+        )
+        metrics.setdefault("jev_events", []).append({k: result[k] for k in keys if k in result})
     from agentic.observability import annotate
 
     annotate(
@@ -45,6 +44,7 @@ def record_jev_result(result):
         jev_model=result.get("model"),
         jev_policy_version=result.get("policy_version"),
         jev_attempted=result.get("attempted", False),
+        jev_cached=result.get("cached", False),
         jev_cost=result.get("cost"),
         jev_input_tokens=(result.get("usage") or {}).get("input_tokens"),
         jev_output_tokens=(result.get("usage") or {}).get("output_tokens"),

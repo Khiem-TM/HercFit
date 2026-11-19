@@ -212,7 +212,7 @@ ORDER BY bat_dau DESC LIMIT 10""",
         """MATCH (d:Day) WHERE d.date >= $start AND d.date <= $end
 RETURN d.date AS ngay, d.steps AS buoc, d.active_minutes AS phut_van_dong, d.sleep_minutes AS phut_ngu,
        d.resting_hr_bpm AS nhip_nghi, d.hrv_ms AS hrv_ms, d.total_kcal AS kcal_tieu_hao, d.kcal AS kcal_an
-ORDER BY ngay LIMIT 31""",
+ORDER BY ngay DESC LIMIT 31""",
         grains=frozenset({"day"}),
     ),
     Seed(

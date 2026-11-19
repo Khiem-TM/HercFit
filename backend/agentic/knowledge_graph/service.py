@@ -15,6 +15,8 @@ from itertools import zip_longest
 from time import perf_counter
 from zoneinfo import ZoneInfo
 
+from neo4j import Query
+
 from agentic.observability import annotate, observed
 
 from .driver import create_driver, value
@@ -139,6 +141,8 @@ STOPWORDS = {
     "phu",
     "hop",
 }
+# Giá trị canh: danh sách/map rỗng đổi kiểu tham số và làm Neo4j lập lại kế hoạch; giá trị này không khớp gì.
+SENTINEL = "\x00"
 # Tham số làm ấm có cùng kiểu với lượt thật: owner, map thế hệ phiên không rỗng (danh sách phiên suy từ nó).
 WARM_UP_ARGS = ("kg-warm-up", {"kg-warm-up": 1})
 # Lần đọc bị timeout vẫn chạy tiếp để giữ kết nối trong pool; quá số lượng này thì
@@ -390,12 +394,13 @@ class GraphContextService:
         params = dict(
             owner=owner,
             model_key="model:" + owner,
-            session_ids=list(generations),
-            generations=generations,
+            # Không để list/map rỗng: kiểu tham số khác lần làm ấm buộc Neo4j lập lại kế hoạch (150-700 ms).
+            session_ids=list(generations) or [SENTINEL],
+            generations=generations or {SENTINEL: 0},
             domains=episode_domains,
             any_domain="conversation" in domains,
-            kinds=kinds,
-            terms=terms[:20],
+            kinds=kinds or [SENTINEL],
+            terms=terms[:20] or [SENTINEL],
             fact_limit=fact_limit,
             per_kind=max(2, fact_limit // max(1, len(kinds))),
             episode_limit=max(
@@ -412,7 +417,8 @@ class GraphContextService:
         async with self.driver.session(
             database=value(self.settings, "NEO4J_DATABASE", "neo4j")
         ) as session:
-            return await (await session.run(RETRIEVE, **params)).single()
+            # Timeout phía server: lần đọc bị bỏ chờ (sau 150 ms) không chạy mãi trong pool; kế hoạch vẫn được cache.
+            return await (await session.run(Query(RETRIEVE, timeout=1.0), **params)).single()
 
 
 def _local(value, with_time=True):

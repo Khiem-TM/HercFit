@@ -323,7 +323,7 @@ def plan_lines(tool: str, record: dict) -> list[str]:
     if tool == "end_training_plan":
         return [
             f"Đã kết thúc lịch tập **{name}**",
-            "Các buổi đã tập và nhật ký được giữ nguyên. Bạn có thể nhờ mình lập lịch mới bất cứ lúc nào.",
+            "Các buổi đã tập và nhật ký được giữ nguyên.",
         ]
     entries = [entry for entry in record.get("entries") or [] if not entry.get("is_rest")]
     detail = ", ".join(filter(None, (f"{len(entries)} buổi tập" if entries else "", span)))

@@ -17,7 +17,7 @@ from neo4j.exceptions import ClientError, Neo4jError
 from agentic.observability import annotate
 
 from ..schema import LOCAL
-from ..service import normalize
+from ..service import SENTINEL, normalize
 from . import generator, templates, timeframe
 from .executor import execute, explain
 from .graph import ContextGraph
@@ -32,8 +32,6 @@ GENERATED_TIMEOUT = 1.5
 # Chờ worker chiếu lệnh ghi vừa xong (LISTEN/NOTIFY: thường dưới 100 ms) trước khi trả lời từ graph.
 SYNC_WAIT = 0.3
 SYNC_POLL = 0.05
-# Giá trị canh: danh sách/map rỗng đổi kiểu tham số và làm Neo4j lập lại kế hoạch; giá trị này không khớp gì.
-SENTINEL = "\x00"
 
 
 async def synced(store, owner):

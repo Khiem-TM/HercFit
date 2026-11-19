@@ -4,8 +4,8 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Callable
+from datetime import date, datetime, timedelta
+from typing import Callable, Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from agentic.components.context_filter import model_graph_context as model_graph_context
 from agentic.tools.registry import REGISTRY
 from domains.analytics.schemas.progress import ProgressRead
+from domains.shared.models.catalog import normalize_food_text
 
 TEMPLATE_ID = "progress.explicit_dates"
 TEMPLATE_VERSION = 1
@@ -29,6 +30,7 @@ class FastReadPlan(BaseModel):
     tool: str = "get_progress"
     # Tham số tool đã chuẩn hoá: ngày và múi giờ là chuỗi, số đếm (ngày) là số nguyên.
     arguments: dict[str, str | int]
+    source: Literal["rule", "jev"] = "rule"
 
 
 def registry_fingerprint():
@@ -267,6 +269,123 @@ FAST_TEMPLATES += (
 )
 TEMPLATES_BY_ID = {template.id: template for template in FAST_TEMPLATES}
 
+_READ_REQUEST = re.compile(
+    r"\b(?:xem|cho biet|kiem tra|hien thi|bao nhieu|may|la gi|what|how (?:many|much)|show|see)\b"
+)
+_PERSONAL_READ = re.compile(
+    r"\b(?:toi|minh|em|tui|tao|da luu|da ghi|my|i|me|logged|recorded)\b"
+)
+_BODY_METRIC = re.compile(
+    r"\b(?:can nang|lan can|so do|ky|kg|chieu cao|mo co the|body (?:weight|fat|measurements?)|weight|height)\b"
+)
+_METRIC_FIELDS = {
+    "weight_kg": re.compile(r"\b(?:can nang|lan can|len can|so can|ky|kg|weight)\b"),
+    "height_cm": re.compile(r"\b(?:chieu cao|cao bao nhieu|height)\b"),
+    "body_fat_pct": re.compile(r"\b(?:mo co the|body fat)\b"),
+}
+_LATEST = re.compile(
+    r"\b(?:gan nhat|moi nhat|vua do|moi do|hien tai|bay gio|latest|last recorded|most recent|current)\b"
+)
+_NUTRIENT = re.compile(
+    r"\b(?:calo|kcal|calor(?:ie|ies)|nang luong|macro(?:s)?|dinh duong|protein|dam|carb(?:s)?|chat beo|(?<!body )fat)\b"
+)
+_TARGET = re.compile(
+    r"\b(?:muc tieu|han muc|con lai|con du|con bao nhieu|nap them|duoc nap|duoc an|"
+    r"target|remaining|left|more calories)\b"
+)
+_CONSUMED = re.compile(
+    r"\b(?:da (?:an|nap|tieu thu|ghi|log)|nap tong|luong (?:dam|protein|calo|kcal).{0,20}nap|"
+    r"nhat ky (?:an uong|dinh duong)|tong (?:luong |so )?(?:calo|kcal|dam|protein|macro)|"
+    r"did i (?:eat|log|consume)|i (?:ate|logged|consumed)|logged|consumed)\b"
+)
+_HISTORICAL = re.compile(
+    r"\b(?:hom qua|hom kia|sang nay|toi nay|dem qua|tuan|thang|nam ngoai|"
+    r"cach day|truoc do|yesterday|last (?:night|week|month|year)|ago|this (?:week|month|year))\b"
+)
+_OTHER_WORK = re.compile(
+    r"\b(?:so sanh|chenh lech|tu van|phan tich|thuc don|nen an|giam can|tang can|"
+    r"tieu hao|dot|dong ho|thiet bi|liet ke mon|an gi|cong thuc|bao nhieu mon|"
+    r"compare|advice|recommend|should|burned|burnt|watch|device|recipe|weight loss|meal plan)\b"
+)
+_ISO_DATE = re.compile(r"(?<![\w/])\d{4}-\d{2}-\d{2}(?![\w/])")
+_DATE_LINK = re.compile(r"(?:den|toi|to|through)")
+
+
+def jev_fast_read_plan(state, now=None):
+    """Dựng một thao tác bằng dữ liệu có trong câu. Điểm Jev chỉ dùng để xác nhận thao tác."""
+    raw = latest_request(state).casefold()
+    text = normalize_food_text(raw)
+    if not (
+        state.get("run_id")
+        and _READ_REQUEST.search(text)
+        and _PERSONAL_READ.search(text)
+        and not _OTHER_WORK.search(text)
+        and not re.search(r"\d", _ISO_DATE.sub("", raw))
+    ):
+        return None
+    dates = list(_ISO_DATE.finditer(raw))
+    today = (now or datetime.now(ZoneInfo(TIMEZONE))).astimezone(ZoneInfo(TIMEZONE)).date()
+    current_day = re.search(r"\b(?:hom nay|today)\b", text)
+    prior_day = re.search(r"\b(?:hom qua|yesterday)\b", text)
+    historical = _HISTORICAL.search(re.sub(r"\b(?:hom qua|yesterday)\b", "", text))
+    if historical or (dates and (current_day or prior_day)) or (current_day and prior_day):
+        return None
+    matches = []
+    if _BODY_METRIC.search(text) and _LATEST.search(text) and not (
+        dates or prior_day or _NUTRIENT.search(text)
+    ):
+        fields = [field for field, pattern in _METRIC_FIELDS.items() if pattern.search(text)]
+        if len(fields) > 1:
+            return None
+        arguments = {"field": fields[0]} if fields and fields[0] != "weight_kg" else {}
+        matches.append(("metrics.latest", arguments))
+    if _NUTRIENT.search(text):
+        if _TARGET.search(text):
+            if not dates and not prior_day and not _CONSUMED.search(text):
+                matches.append(("nutrition.targets", {"timezone": TIMEZONE}))
+        elif _CONSUMED.search(text):
+            interval = _jev_interval(raw, dates, today, current_day, prior_day)
+            if interval:
+                start, end = interval
+                matches.append((TEMPLATE_ID, {
+                    "start_date": start.isoformat(), "end_date": end.isoformat(), "timezone": TIMEZONE,
+                }))
+    if len(matches) != 1:
+        return None
+    template_id, arguments = matches[0]
+    template = TEMPLATES_BY_ID[template_id]
+    try:
+        arguments = REGISTRY[template.tool].normalize(arguments)
+    except ValueError:
+        return None
+    return FastReadPlan(
+        run_id=state["run_id"],
+        template_id=template.id,
+        template_version=template.version,
+        registry_fingerprint=registry_fingerprint(),
+        tool=template.tool,
+        arguments=arguments,
+        source="jev",
+    )
+
+
+def _jev_interval(raw, dates, today, current_day, prior_day):
+    if not dates:
+        if current_day or prior_day:
+            day = today - timedelta(days=bool(prior_day))
+            return day, day
+        return None
+    if len(dates) > 2 or (
+        len(dates) == 2
+        and not _DATE_LINK.fullmatch(normalize_food_text(raw[dates[0].end():dates[1].start()]))
+    ):
+        return None
+    try:
+        start, end = (date.fromisoformat(d.group()) for d in (dates[0], dates[-1]))
+    except ValueError:
+        return None
+    return (start, end) if start <= end <= today and (end - start).days < 31 else None
+
 
 def _normalized_request(state):
     return " ".join(latest_request(state).strip().casefold().split())
@@ -351,7 +470,27 @@ def fast_route(state, now=None):
 def verified_fast_plan(state):
     try:
         plan = FastReadPlan.model_validate(state.get("fast_read_plan"))
-        fresh = make_fast_read_plan(state)
+        if plan.source == "jev":
+            decision = state.get("decision") or {}
+            template = TEMPLATES_BY_ID.get(plan.template_id)
+            if not (
+                template
+                and decision.get("read_only") is True
+                and decision.get("action") == "tool"
+                and decision.get("domain") == template.domain
+                and any(
+                    event.get("template") == plan.template_id
+                    and event.get("gate") == "routing"
+                    and event.get("enforced") is True
+                    and event.get("accepted") is True
+                    for event in state.get("jev_events", [])
+                )
+                and not (state.get("pending_action") or state.get("tool_count") or state.get("tool_outputs"))
+            ):
+                return None
+            fresh = jev_fast_read_plan(state)
+        else:
+            fresh = make_fast_read_plan(state)
         return plan if fresh and plan == fresh else None
     except ValueError:
         return None

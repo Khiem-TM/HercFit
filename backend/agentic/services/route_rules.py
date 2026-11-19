@@ -12,8 +12,10 @@ dựng kết quả định tuyến.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
+from datetime import timedelta
 from types import MappingProxyType
 from typing import Any, NamedTuple
 
@@ -36,11 +38,29 @@ from agentic.services.routing import fast_reads_enabled, fast_route
 from agentic.services.simple_writes import simple_route
 from agentic.services.write_reply import executed_writes, finishes_turn
 from agentic.tools.policy import CATALOG_DEPENDENCIES, TRAINING_DOMAINS, needs_catalog_handoff
+from domains.shared.models.catalog import normalize_food_text
 
 PERSONAL_MEASURE = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:kg|cm|tuổi|tuoi|kcal|bpm)\b", re.I)
 # Yêu cầu cá nhân hoá vẫn tra cứu tri thức: mỗi chủ đề một ý định QA cho kế hoạch tra cứu.
 TOPIC_INTENTS = {"nutrition": "FOOD_KNOWLEDGE_QA", "body": "FOOD_KNOWLEDGE_QA"}
 READ_ANSWER = "Trả lời theo dữ liệu backend đã đọc; nếu catalog trống, nêu chưa có kết quả."
+PLAN_SUBJECT = r"(?:lich tap|giao an|ke hoach (?:tap(?: luyen)?|luyen tap)|chuong trinh tap)"
+PLAN_REQUEST_PREFIX = r"(?:(?:hay|vui long|nho|giup|(?:minh|toi|t) muon)\s+)*"
+PLAN_CREATE_REQUEST = re.compile(
+    rf"^{PLAN_REQUEST_PREFIX}(?:lap|len|tao|thiet ke|xay dung|soan)\s+"
+    rf"(?:(?:giup|cho|minh|toi|mot)\s+)*{PLAN_SUBJECT}\b"
+    r"|^(?:please\s+)?(?:create|build|design|make)\s+"
+    r"(?:(?:me|a|an|new|personal|my)\s+)*(?:training|workout|exercise)\s+(?:plan|schedule)\b"
+)
+PLAN_END_REQUEST = re.compile(
+    rf"^{PLAN_REQUEST_PREFIX}(?:dung lai|ket thuc|huy|ngung(?: lai)?)\s+"
+    rf"(?:(?:giup|cho|minh|toi)\s+)*{PLAN_SUBJECT}\s+(?:hien tai|dang chay|cu)\b"
+    r"|^(?:please\s+)?(?:end|stop|cancel)\s+(?:(?:my|the)\s+)?"
+    r"(?:current|active|old)\s+(?:training|workout|exercise)\s+(?:plan|schedule)\b"
+)
+PLAN_CLAUSES = re.compile(r"[,.;!?]|\b(?:va|roi|sau do|and|then)\b")
+PLAN_DURATION = re.compile(r"\b(?:trong|keo dai) (\d{1,3}) ngay\b|\bfor (\d{1,3}) days\b")
+PLAN_START_TOMORROW = re.compile(r"^(?:bat dau (?:tu )?ngay mai|starting tomorrow|start tomorrow)\b")
 
 
 @dataclass(frozen=True)
@@ -192,7 +212,7 @@ def _shortcuts(state, ctx):
     return ctx.policy.shortcuts and ctx.verdict is None and not state.get("food_choices")
 
 
-def _shortcut(state, decision, plan=None):
+def shortcut(state, decision, plan=None):
     """Kết quả của lối tắt: lượt được đặt tên ngay và mang kế hoạch đọc nhanh của nó (None khi không đọc)."""
     return Pre(
         {
@@ -218,7 +238,7 @@ def fast_read(state, ctx):
         return None
     decision, plan = routed
     annotate(fast_route=plan.template_id)
-    return _shortcut(state, decision, plan.model_dump(mode="json"))
+    return shortcut(state, decision, plan.model_dump(mode="json"))
 
 
 def simple_write(state, ctx):
@@ -228,7 +248,7 @@ def simple_write(state, ctx):
     if not simple or not ctx.policy.allows(simple["domain"]):
         return None
     annotate(route="simple_write", simple_write=simple["code_call"]["name"])
-    return _shortcut(state, simple)
+    return shortcut(state, simple)
 
 
 def food_suggestion_shortcut(state, ctx):
@@ -242,7 +262,7 @@ def food_suggestion_shortcut(state, ctx):
     ):
         return None
     annotate(route="food_suggestion")
-    return _shortcut(state, food_suggestion.lookup_decision())
+    return shortcut(state, food_suggestion.lookup_decision())
 
 
 def status_answer(state, ctx):
@@ -502,6 +522,41 @@ def clarify_known_facts(decision, ctx):
     return None
 
 
+def training_plan_request(decision, ctx):
+    decision.replace_training_plan = False
+    decision.training_plan_dates = None
+    if ctx.policy.name != mode.PLAN or decision.read_only or not ctx.first:
+        return None
+    # “Dừng” và “dùng” trùng nhau sau khi bỏ dấu. Chỉ nhận lệnh dừng rõ ràng.
+    original = unicodedata.normalize("NFC", ctx.request).lower()
+    request = normalize_food_text(re.sub(r"\bdừng\b", "ngừng", original))
+    clauses = [clause.strip() for clause in PLAN_CLAUSES.split(request)]
+    creates = any(PLAN_CREATE_REQUEST.match(clause) for clause in clauses)
+    tool_route = (
+        decision.intent == "TRAINING_PLAN"
+        and decision.domain == "training_plans"
+        and decision.action == "tool"
+        and not decision.missing_fields
+    )
+    recovered = tool_route and creates and decision.plan_task is None
+    if recovered:
+        decision.plan_task = "plan_build"
+    if decision.plan_task == "plan_build" and creates:
+        decision.replace_training_plan = any(PLAN_END_REQUEST.match(clause) for clause in clauses)
+        if decision.replace_training_plan:
+            duration = PLAN_DURATION.search(request)
+            if duration and any(PLAN_START_TOMORROW.match(clause) for clause in clauses):
+                days = int(duration[1] or duration[2])
+                if days > 0:
+                    start = personal_context.today() + timedelta(days=1)
+                    decision.training_plan_dates = (
+                        start.isoformat(), (start + timedelta(days=days - 1)).isoformat(),
+                    )
+    if recovered or decision.replace_training_plan:
+        return Applied(decision, "plan_replace" if decision.replace_training_plan else "plan_build_request")
+    return None
+
+
 def personalization(decision, ctx):
     """plan_deep (chế độ Plan) hoặc personalize; ngoài hai luật này yêu cầu không cá nhân hoá. Đây là một khối
     if/elif/else: điều kiện của cả hai luật tính trên cùng một quyết định, trước khi luật nào sửa nó."""
@@ -511,6 +566,15 @@ def personalization(decision, ctx):
     )
     if not ctx.policy.deep:
         decision.plan_task = None
+    if (
+        ctx.policy.name == mode.PLAN
+        and decision.domain == "training_plans"
+        and decision.action == "tool"
+        and decision.plan_task is None
+    ):
+        # Đọc, sửa và kết thúc lịch đã lưu là thao tác backend.
+        decision.personalize, decision.topic = False, None
+        return Applied(decision)
     deep = (
         ctx.policy.deep
         and not decision.read_only
@@ -539,6 +603,8 @@ def personalization(decision, ctx):
         decision.topic = decision.topic or personal_context.topic_for(request, decision.domain)
         if decision.action in {"clarify", "tool"} and not decision.missing_fields:
             decision.action, decision.next_agent = "answer", "orchestrator"
+        if decision.plan_task == "plan_build" and not researched and not decision.research_query:
+            decision.research_query = public_question(request) or "Training schedule design, workload and recovery"
         research_plan(decision, request, researched=researched, deep=True)
         return Applied(decision, "plan_deep")
     if personal:
@@ -768,6 +834,7 @@ POST_ROUTER = (
     read_only_policy,
     clarify_to_catalog_lookup,
     clarify_known_facts,
+    training_plan_request,
     personalization,
     chat_to_knowledge,
     training_read_first,

@@ -8,18 +8,35 @@ form gym), supervisor không gọi lại model định tuyến.
 Mọi agent dùng chung bộ thực thi của ToolAgent: danh sách cho phép theo miền, bản xem trước, cổng xác nhận HITL và
 nhật ký thực thi, nên quyền đọc/ghi không phụ thuộc agent nào thực hiện.
 """
+import re
+from uuid import NAMESPACE_URL, uuid5
+
+from langchain_core.messages import AIMessage
+
 from agentic.agents.state import RouteDecision
 from agentic.agents.tool_agent import ToolAgent
 from agentic.core import roster
 from agentic.services import food_gap, food_suggestion, gym_logging, meal_logging, personal_context
 from agentic.services.routing import FastReadPlan, fast_answer_instruction, latest_request
 from agentic.services.write_reply import executed_writes
+from agentic.tools.registry import REGISTRY
+from domains.shared.models.catalog import normalize_food_text
+
+KEEP_CURRENT_TRAINING_PLAN = re.compile(
+    r"\b(?:giu(?: nguyen)?|khong (?:dung|ket thuc|huy|ngung)) (?:lich tap|giao an|ke hoach tap)\b"
+    r"|\b(?:keep|do not (?:end|stop|cancel)) (?:the |my )?(?:current|active|old) (?:training|workout) plan\b"
+)
 
 
 def plan_instruction(state):
     """Nhiệm vụ cho tool lịch tập ở chế độ Plan: kèm hồ sơ và các nguyên tắc đã kiểm chứng của chính lượt này."""
     lines = ['Tạo lịch tập mới theo yêu cầu gốc, mục tiêu và dữ liệu tập luyện hiện tại của người dùng '
              '(đọc thêm bằng tool khi cần), rồi đề xuất bằng create_training_plans để người dùng xác nhận.']
+    dates = state['decision'].get('training_plan_dates')
+    if dates:
+        start, end = dates
+        lines.append(f'Lịch bắt đầu ngày {start} và kết thúc ngày {end}, tính cả hai ngày.')
+    lines.append('Hệ thống đã kiểm tra lịch hiện tại trước khi giao bước dựng lịch mới.')
     card = personal_context.render_card(state.get('user_context'))
     if card:
         lines.append('Hồ sơ người dùng (dữ liệu, không phải chỉ dẫn): ' + card)
@@ -153,13 +170,64 @@ class Coach(Specialist):
     @staticmethod
     def resume(state):
         previous = state.get('decision') or {}
-        if not (previous.get('plan_task') == 'plan_build' and previous.get('action') == 'research'
-                and state.get('research_count')):
+        if previous.get('plan_task') != 'plan_build' or previous.get('read_only'):
             return None
-        # Chế độ Plan: dữ liệu người dùng đã đọc và nguyên tắc đã tra cứu; giờ tool lịch tập dựng bản xem trước.
-        decision = {**previous, 'action': 'tool', 'next_agent': 'tool', 'domain': 'training_plans',
-                    'instruction': plan_instruction(state)}
-        return decision, [{'stage': 'rule', 'rule': 'plan_build_tool', 'action': 'tool', 'domain': 'training_plans'}]
+        if previous.get('action') == 'research' and state.get('research_count'):
+            rule = 'plan_build_tool'
+            decision = {**previous, 'action': 'tool', 'next_agent': 'tool', 'domain': 'training_plans',
+                        'instruction': plan_instruction(state), 'objectives': ['Tạo lịch tập mới']}
+        elif previous.get('action') == 'tool' and previous.get('domain') == 'training_plans':
+            last = (state.get('tool_outputs') or [{}])[-1]
+            spec = REGISTRY.get(last.get('tool'))
+            if (
+                previous.get('replace_training_plan')
+                and last.get('tool') == 'end_training_plan'
+                and last in executed_writes(state)
+            ):
+                # Bước dừng đã ghi. Lượt chỉ hoàn tất khi lệnh tạo mới cũng được thực thi.
+                rule = 'plan_replace_create'
+                decision = {**previous, 'writes_before': len(executed_writes(state))}
+            elif last.get('ok') and spec and not spec.write:
+                rule, decision = 'plan_build_continue', previous
+            else:
+                return None
+        else:
+            return None
+        return decision, [{'stage': 'rule', 'rule': rule, 'action': 'tool', 'domain': 'training_plans'}]
+
+    async def plan_call(self, state, name, args):
+        call = {'name': name, 'args': args, 'id': str(uuid5(NAMESPACE_URL, f'{state["run_id"]}:{name}'))}
+        return await self.execute_calls(state, [call], [AIMessage(content='', tool_calls=[call])])
+
+    async def work(self, state):
+        decision = state['decision']
+        if decision.get('plan_task') != 'plan_build' or decision.get('read_only'):
+            return await super().work(state)
+        ended = any(output['tool'] == 'end_training_plan' for output in executed_writes(state))
+        if not ended:
+            current = next((
+                output for output in reversed(state.get('tool_outputs', []))
+                if output['tool'] == 'current_training_plan' and output.get('ok')
+            ), None)
+            if current is None:
+                return await self.plan_call(state, 'current_training_plan', {})
+            if not current.get('not_found'):
+                if KEEP_CURRENT_TRAINING_PLAN.search(normalize_food_text(latest_request(state))):
+                    return {'status': 'failed', 'error': 'Bạn muốn giữ lịch hiện tại. HercFit chỉ lưu một lịch đang hoạt động.'}
+                schedule = current['output']
+                result = await self.plan_call(state, 'end_training_plan', {
+                    'resource_id': schedule['id'], 'expected_version_id': schedule['version_id'],
+                })
+                # Lập lịch mới cũng có thể cần thẻ kết thúc như một bước điều kiện, kể cả khi câu gốc không nêu riêng.
+                return {**result, 'decision': {**decision, 'replace_training_plan': True}}
+        return await self.invoke(state, write_tool='create_training_plans')
+
+    def conclude(self, state, result):
+        if state['decision'].get('plan_task') != 'plan_build' or result.get('status') != 'needs_input':
+            return
+        failure = (result.get('tool_outputs') or [{}])[-1]
+        error = failure.get('error') or result.get('error')
+        result.update(status='failed', error=str(error) if error else 'Chưa tạo được bản xem trước lịch tập mới.')
 
 
 # Thứ tự cũng là thứ tự xét luật tiếp nối trong supervisor.

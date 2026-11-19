@@ -209,6 +209,8 @@ class RouteDecision(BaseModel):
     )
     create_distinct: SkipJsonSchema[bool] = False
     read_only: SkipJsonSchema[bool] = False
+    replace_training_plan: SkipJsonSchema[bool] = False
+    training_plan_dates: SkipJsonSchema[tuple[str, str] | None] = None
 
 
 class AgentState(TypedDict, total=False):

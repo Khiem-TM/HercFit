@@ -9,7 +9,7 @@ from copy import deepcopy
 from types import MappingProxyType
 
 from agentic.prompts.v1.answer import ANSWER_PROMPT
-from agentic.prompts.v1.jev import RESEARCH_QUESTIONS
+from agentic.prompts.v1.jev import RESEARCH_QUESTIONS, VERIFY_READ_QUESTIONS
 from agentic.prompts.v1.memory import SUMMARY_PROMPT
 from agentic.prompts.v1.notifications import ALERT_PROMPT, REVIEW_PROMPT
 from agentic.prompts.v1.nutrition import NUTRITION_LOOKUP_PROMPT
@@ -84,6 +84,7 @@ TEMPLATES = MappingProxyType(
 _QUESTIONS = {
     ("routing.jev", "v1"): JEV_ROUTING_QUESTIONS,
     ("routing.jev", "v2"): v2_routing.JEV_ROUTING_QUESTIONS,
+    ("routing.verify_read", "v1"): VERIFY_READ_QUESTIONS,
     **{("research." + phase, "v1"): questions for phase, questions in RESEARCH_QUESTIONS.items()},
 }
 

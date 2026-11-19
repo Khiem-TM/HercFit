@@ -9,9 +9,9 @@ from uuid import uuid4
 
 from psycopg.types.json import Jsonb
 
-from agentic.core.app.config import AgentSettings
+from agentic.core.app.config import JEV_READ_DEADLINE_SECONDS, JEV_READ_MODEL, AgentSettings
 from agentic.core.context import request_context
-from agentic.observability import observed
+from agentic.observability import annotate, observed, span
 from agentic.tools.integrations.jev import JevError, build_payload, encode_payload
 
 _SECRET_KEYS = frozenset(
@@ -131,21 +131,18 @@ class JevService:
 
     def phase_mode(self, mode, phase):
         """Một lượt chạy 'enforce' chỉ thay đổi quyết định ở các cổng trong JEV_ENFORCE_PHASES; cổng khác như 'shadow'."""
+        if phase not in self.settings.JEV_ENABLED_PHASES:
+            return "off"
         phases = self.settings.JEV_ENFORCE_PHASES
         return "shadow" if mode == "enforce" and phase not in phases else mode
 
     @observed("jev.evaluate", "tool", capture=("phase",), output=False)
     async def evaluate(self, state, phase, projection, questions):
-        result = await self._evaluate(state, phase, projection, questions)
-        # Một nguồn duy nhất cho số liệu sử dụng đo ở cấp node; state graph chẩn đoán không phải dữ liệu tính phí.
         from agentic.observability.telemetry import record_jev_result
 
-        record_jev_result(result)
-        return result
-
-    async def _evaluate(self, state, phase, projection, questions):
         started = time.monotonic()
         mode = self.phase_mode(self.selected_mode(state), phase)
+        verify_read = phase == "routing" and self.settings.JEV_ROUTING_PROFILE == "verify_read"
         result = {
             "status": "unknown",
             "answers": {},
@@ -159,17 +156,38 @@ class JevService:
             "duration_ms": 0,
             "cached": False,
             "attempted": False,
-            "policy_version": self.settings.JEV_POLICY_VERSION,
+            "policy_version": "verify-read-v1" if verify_read else self.settings.JEV_POLICY_VERSION,
         }
 
+        try:
+            async with asyncio.timeout(JEV_READ_DEADLINE_SECONDS if verify_read else None):
+                result = await self._evaluate(state, projection, questions, result, started)
+        except TimeoutError:
+            result.update(status="unknown", answers={}, reason="deadline")
+            result["duration_ms"] = round((time.monotonic() - started) * 1000, 3)
+        except asyncio.CancelledError:
+            result.update(status="unknown", answers={}, reason="cancelled")
+            result["duration_ms"] = round((time.monotonic() - started) * 1000, 3)
+            record_jev_result(result)
+            raise
+        # Một nguồn duy nhất cho số liệu sử dụng đo ở cấp node.
+        record_jev_result(result)
+        return result
+
+    async def _evaluate(self, state, projection, questions, result, started):
+        phase, mode = result["phase"], result["mode"]
+
         def unknown(reason):
-            result.update(reason=reason, duration_ms=round((time.monotonic() - started) * 1000, 3))
+            result.update(
+                status="unknown", answers={}, reason=reason,
+                duration_ms=round((time.monotonic() - started) * 1000, 3),
+            )
             return result
 
-        if mode == "off":
-            return unknown("disabled")
         if phase not in {"routing", "local", "final"}:
             return unknown("invalid_phase")
+        if mode == "off":
+            return unknown("disabled")
         if not all(
             isinstance(state.get(k), str) and state[k] for k in ("run_id", "user_id", "session_id")
         ):
@@ -210,10 +228,13 @@ class JevService:
         except JevError as exc:
             return unknown(exc.reason)
         result["fingerprint"] = fingerprint
-        try:
-            reservation = await self.ledger.reserve(state, phase, fingerprint, mode)
-        except Exception:
-            return unknown("ledger_unavailable")
+        with span("jev.ledger.reserve", jev_phase=phase):
+            try:
+                reservation = await self.ledger.reserve(state, phase, fingerprint, mode)
+            except Exception:
+                annotate(jev_ledger_status="unavailable")
+                return unknown("ledger_unavailable")
+            annotate(jev_ledger_status=reservation["status"])
         mode = self.phase_mode(reservation["mode"], phase)
         result.update(mode=mode, enforced=mode == "enforce")
         if reservation["status"] == "cached":
@@ -230,39 +251,40 @@ class JevService:
         if reservation["status"] != "reserved":
             return unknown(reservation["status"])
         result["attempted"] = True
-        try:
-            async with asyncio.timeout(self.settings.JEV_TIMEOUT_SECONDS):
-                decision = await self.client.evaluate(
-                    projection, questions, self.settings.JEV_MODEL
-                )
-            result.update(decision, status="ok", reason=None)
-            if result["cost"] is None and result["usage"] is not None:
-                inp = self.settings.JEV_INPUT_PRICE_PER_MILLION
-                out = self.settings.JEV_OUTPUT_PRICE_PER_MILLION
-                if inp is not None and out is not None:
-                    result["cost"] = (
-                        result["usage"]["input_tokens"] * inp
-                        + result["usage"]["output_tokens"] * out
-                    ) / 1_000_000
-        except JevError as exc:
-            unknown(exc.reason)
-        except TimeoutError:
-            unknown("timeout")
-        except asyncio.CancelledError:
-            # Nhà cung cấp có thể đã tính phí lần thử này dù không có phản hồi
-            # nào đến. Giữ khoản đặt trước ở trạng thái chờ, và ghi số liệu sử dụng là chưa biết.
-            from agentic.observability.telemetry import record_jev_result
-
-            record_jev_result(unknown("cancelled"))
-            raise
-        except Exception:
-            unknown("client_error")
+        with span("jev.gateway", "tool", jev_phase=phase):
+            try:
+                async with asyncio.timeout(self.settings.JEV_TIMEOUT_SECONDS):
+                    decision = await self.client.evaluate(
+                        projection, questions, self.settings.JEV_MODEL
+                    )
+                result.update(decision, status="ok", reason=None)
+                if result["policy_version"] == "verify-read-v1" and result["model"] != JEV_READ_MODEL:
+                    unknown("model_mismatch")
+                if result["cost"] is None and result["usage"] is not None:
+                    inp = self.settings.JEV_INPUT_PRICE_PER_MILLION
+                    out = self.settings.JEV_OUTPUT_PRICE_PER_MILLION
+                    if inp is not None and out is not None:
+                        result["cost"] = (
+                            result["usage"]["input_tokens"] * inp
+                            + result["usage"]["output_tokens"] * out
+                        ) / 1_000_000
+            except JevError as exc:
+                unknown(exc.reason)
+            except TimeoutError:
+                unknown("timeout")
+            except Exception:
+                unknown("client_error")
+            annotate(jev_status=result["status"], jev_fallback=result["reason"])
         # Request bị huỷ để lại một khoản đặt trước chờ bền vững để ngăn phát lại.
         result["duration_ms"] = round((time.monotonic() - started) * 1000, 3)
-        try:
-            await self.ledger.complete(result["evaluation_id"], result)
-        except Exception:
-            # Giữ một lần từ chối đã biết trong phản hồi/checkpoint này, kể cả khi
-            # ghi cache thất bại. Dòng chờ bền vững vẫn ngăn phát lại.
-            result["reason"] = "ledger_write_failed"
+        with span("jev.ledger.complete", jev_phase=phase):
+            try:
+                await self.ledger.complete(result["evaluation_id"], result)
+            except Exception:
+                # Giữ một lần từ chối đã biết trong phản hồi/checkpoint này, kể cả khi
+                # ghi cache thất bại. Dòng chờ bền vững vẫn ngăn phát lại.
+                result["reason"] = "ledger_write_failed"
+                annotate(jev_ledger_status="write_failed")
+            else:
+                annotate(jev_ledger_status="complete")
         return result
