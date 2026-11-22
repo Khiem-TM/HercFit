@@ -10,8 +10,8 @@ from typing import Any
 
 import httpx
 
-from agentic.core.providers.openrouter_policy import chat_options, response_metadata
 from agentic.observability import annotate
+from agentic.services.providers.openrouter_policy import chat_options, response_metadata
 
 BACKEND = Path(__file__).resolve().parents[2]
 CACHE = BACKEND / ".cache" / "catalog"
@@ -22,7 +22,7 @@ NIN_BASE = "https://viendinhduong.vn"
 
 def model_client() -> httpx.AsyncClient:
     """OpenRouter client shared by all catalog scripts; credentials never enter prompts."""
-    from agentic.core.app.config import agent_settings
+    from agentic.configs.settings import agent_settings
 
     key = agent_settings.OPENROUTER_API_KEY.get_secret_value()
     return httpx.AsyncClient(base_url=agent_settings.OPENROUTER_BASE_URL.rstrip("/") + "/", timeout=180,

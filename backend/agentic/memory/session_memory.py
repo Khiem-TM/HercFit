@@ -22,10 +22,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from redis.asyncio import Redis
 from redis.exceptions import WatchError
 
-from agentic.core.app.config import AgentSettings
-from agentic.observability import annotate, graph_config, observed
-from agentic.prompts.registry import get_prompt
-from agentic.services.memory.transcript import (
+from agentic.configs.settings import AgentSettings
+from agentic.memory.transcript import (
     LAST_MESSAGE_CHARS,
     TITLE_CHARS,
     entities_from_state,
@@ -37,6 +35,8 @@ from agentic.services.memory.transcript import (
     seed_turns,
     turn_from_state,
 )
+from agentic.observability import annotate, graph_config, observed
+from agentic.prompts.registry import get_prompt
 
 SUMMARY_PROMPT = get_prompt("memory.summary")
 

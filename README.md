@@ -4,13 +4,13 @@ Trợ lý AI về dinh dưỡng, tập luyện và sức khoẻ (khoá luận t�
 hoặc giao diện, xem tiến độ và hỏi tư vấn có trích nguồn. Bốn trụ cột kỹ thuật: kiến trúc multi-agent với model riêng
 từng agent, Knowledge Graph / Context Graph, RAG, Evaluation & Observability.
 
-Tài liệu kiến trúc, luồng dữ liệu, đánh giá và kịch bản demo (`docs/`) cùng bộ test và eval (`tests/`,
-`frontend/tests/`) chỉ giữ cục bộ, không có trong git.
+Tài liệu chi tiết, kịch bản demo (`docs/`) và bộ test, eval (`tests/`, `frontend/tests/`) được giữ cục bộ.
+Xem kiến trúc multi-agent và sơ đồ LangGraph trong [tài liệu Agentic](backend/agentic/README.md).
 
 | Thư mục | Nội dung |
 |---|---|
 | `backend/` | FastAPI :8080: `core/` (auth, DB, idempotency), `domains/` (nghiệp vụ), `integrations/google_health/`, `alembic/`, `worker.py` |
-| `backend/agentic/` | FastAPI :8081: LangGraph (`agents/`), `services/` (gồm `route_rules.py`), `tools/`, `knowledge_graph/`, `embedding/`, `observability/` |
+| `backend/agentic/` | FastAPI :8081, các agent trong `agents/`, điều phối LangGraph trong `orchestrators/`, luật và state trong `workflows/`, lưu trữ phiên trong `memory/` |
 | `backend/voice/` | Worker giọng nói LiveKit (STT/TTS tiếng Việt); chỉ là lớp vào/ra của trang chat |
 | `frontend/` | Vue 3 + TypeScript + Tailwind |
 

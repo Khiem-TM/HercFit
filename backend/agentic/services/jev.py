@@ -9,10 +9,10 @@ from uuid import uuid4
 
 from psycopg.types.json import Jsonb
 
-from agentic.core.app.config import JEV_READ_DEADLINE_SECONDS, JEV_READ_MODEL, AgentSettings
+from agentic.configs.settings import JEV_READ_DEADLINE_SECONDS, JEV_READ_MODEL, AgentSettings
 from agentic.core.context import request_context
 from agentic.observability import annotate, observed, span
-from agentic.tools.integrations.jev import JevError, build_payload, encode_payload
+from agentic.services.clients.jev import JevError, build_payload, encode_payload
 
 _SECRET_KEYS = frozenset(
     (

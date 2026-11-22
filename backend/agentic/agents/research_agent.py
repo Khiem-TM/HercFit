@@ -9,11 +9,7 @@ from datetime import datetime, timezone
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
-from agentic.agents.state import AgentState
-from agentic.components.context_filter import bounded_documents
-from agentic.components.hybrid_retriever import retrieve_knowledge
-from agentic.components.reranker import rank_sources, relevance
-from agentic.core.app.config import AgentSettings
+from agentic.configs.settings import AgentSettings
 from agentic.core.context import request_context
 from agentic.embedding.core import is_english
 from agentic.observability import annotate
@@ -26,6 +22,8 @@ from agentic.research.contracts import (
     ResearchStatus,
 )
 from agentic.research.evidence import audit
+from agentic.research.hybrid_retriever import retrieve_knowledge
+from agentic.research.reranker import rank_sources, relevance
 from agentic.research.sources import (
     AUTHORITATIVE_DOMAINS,
     authoritative,
@@ -48,7 +46,8 @@ from agentic.security.output_validation import (
     verified_claims,
     verify_claims,
 )
-from agentic.services import catalog_choice, mode, personal_context
+from agentic.services import catalog_choice, personal_context
+from agentic.services.clients.tavily import TavilyUnavailable, public_url
 from agentic.services.illustrations import find_illustrations
 from agentic.services.research_budget import (
     BudgetExceeded,
@@ -56,8 +55,10 @@ from agentic.services.research_budget import (
     reserve,
     reserve_documents,
 )
-from agentic.services.routing import latest_request
-from agentic.tools.integrations.tavily import TavilyUnavailable, public_url
+from agentic.workflows import mode
+from agentic.workflows.context_filter import bounded_documents
+from agentic.workflows.routing import latest_request
+from agentic.workflows.state import AgentState
 from domains.catalog.models.foods import normalize_food_text
 from domains.catalog.schemas.exercises import ExerciseCreate
 from domains.catalog.schemas.foods import FoodCreate

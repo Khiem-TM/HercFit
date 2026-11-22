@@ -10,9 +10,10 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
-# Giữ export hiện được dùng bởi baseline evaluation.
-from agentic.components.context_filter import model_graph_context as model_graph_context
 from agentic.tools.registry import REGISTRY
+
+# Giữ export hiện được dùng bởi baseline evaluation.
+from agentic.workflows.context_filter import model_graph_context as model_graph_context
 from domains.analytics.schemas.progress import ProgressRead
 from domains.shared.models.catalog import normalize_food_text
 
@@ -452,7 +453,7 @@ def fast_route(state, now=None):
     for template in FAST_TEMPLATES:
         if not template.pattern.fullmatch(text):
             continue
-        from agentic.agents.state import RouteDecision
+        from agentic.workflows.state import RouteDecision
 
         decision = RouteDecision(
             intent=template.intent,

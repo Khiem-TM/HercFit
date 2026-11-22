@@ -7,7 +7,7 @@ from time import perf_counter
 
 from langchain_core.callbacks import BaseCallbackHandler
 
-from agentic.core import roster
+from agentic.agents import roster
 from agentic.observability import graph_config
 from agentic.observability import metrics as ops
 
@@ -267,7 +267,7 @@ class _MeasuredModel:
     def __init__(self, model, price=None, *, agent=None, prices=None):
         self.model = model
         self.price = price
-        # Agent sở hữu lời gọi (core/roster.py) và bảng giá để tính phí theo model thật sự trả lời.
+        # Agent sở hữu lời gọi (agents/roster.py) và bảng giá để tính phí theo model thật sự trả lời.
         self.agent, self.prices = agent, prices
 
     def _wrap(self, model):

@@ -8,26 +8,19 @@ from zoneinfo import ZoneInfo
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from pydantic import ValidationError
 
-from agentic.components.context_filter import model_graph_context
-from agentic.core import roster
+from agentic.agents import roster
 from agentic.core.context import request_context
-from agentic.core.providers.tool_markup import strip_tool_markup
+from agentic.memory import decisions
 from agentic.observability import annotate, observed
 from agentic.observability import metrics as ops
 from agentic.prompts.layout import layout
 from agentic.prompts.registry import get_prompt
 from agentic.research.sources import rate
-from agentic.services import catalog_choice, food_gap, meal_logging, mode
-from agentic.services.memory import decisions
-from agentic.services.routing import (
-    fast_reads_enabled,
-    latest_request,
-    terminal_result,
-    verified_fast_plan,
-)
+from agentic.services import catalog_choice, food_gap, meal_logging
+from agentic.services.clients.backend_client import BackendError
+from agentic.services.clients.tavily import public_url
+from agentic.services.providers.tool_markup import strip_tool_markup
 from agentic.services.write_reply import executed_writes, repeats_write, write_reply
-from agentic.tools.integrations.backend_client import BackendError
-from agentic.tools.integrations.tavily import public_url
 from agentic.tools.output import CATALOG_LIMIT, clamp_catalog_query, compact_output, model_view
 from agentic.tools.policy import (
     CAPABILITY_GUIDANCE,
@@ -41,6 +34,14 @@ from agentic.tools.policy import (
     needs_catalog_handoff,
 )
 from agentic.tools.registry import HEALTH_TOOL_KINDS, PREVIEW_PATHS, REGISTRY
+from agentic.workflows import mode
+from agentic.workflows.context_filter import model_graph_context
+from agentic.workflows.routing import (
+    fast_reads_enabled,
+    latest_request,
+    terminal_result,
+    verified_fast_plan,
+)
 from domains.shared.models.catalog import normalize_food_text
 
 PROMPT = get_prompt("tool.call", "v7")
@@ -537,7 +538,7 @@ class ToolAgent:
             "resource_refs": [],
             "template_id": plan.template_id if plan else None,
             "template_version": plan.template_version if plan else None,
-            # Bộ nhớ quyết định: chỉ tham số có cấu trúc (services/memory/decisions.py), không văn bản tự do hay ID.
+            # Bộ nhớ quyết định: chỉ tham số có cấu trúc (memory/decisions.py), không văn bản tự do hay ID.
             "args": decisions.remembered_args(args),
             "outcome": None,
         }

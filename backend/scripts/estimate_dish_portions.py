@@ -31,8 +31,8 @@ import psycopg
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from agentic.core.app.config import agent_settings
-from agentic.core.llm import Models
+from agentic.configs.settings import agent_settings
+from agentic.services.llm import Models
 from core.database import get_postgres_connection_string
 from domains.shared.models.catalog import normalize_food_text
 

@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from agentic.agents.state import RouteDecision
 from agentic.services import meal_logging
+from agentic.workflows.state import RouteDecision
 
 INTENT = meal_logging.INTENT
 MAX_ITEMS = 5

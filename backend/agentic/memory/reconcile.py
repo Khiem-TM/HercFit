@@ -4,7 +4,7 @@ import logging
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-from agentic.services.memory.store import Store
+from agentic.memory.store import Store
 
 logger = logging.getLogger(__name__)
 

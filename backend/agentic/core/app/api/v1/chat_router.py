@@ -17,9 +17,9 @@ from agentic.observability.outcomes import (
     ChatSession,
     note_error,
 )
+from agentic.orchestrators.runtime import RunCancelled
 from agentic.security.input_guard import safe_query
 from agentic.services import nutrition_lookup, voice
-from agentic.services.runtime import RunCancelled
 from core.rate_limit import SlidingWindowLimiter
 
 router = APIRouter(prefix="/chat", tags=["agent-chat"])

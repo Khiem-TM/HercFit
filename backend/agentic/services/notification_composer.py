@@ -15,7 +15,7 @@ from typing import Any, Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, ValidationError
 
-from agentic.core import roster
+from agentic.agents import roster
 from agentic.prompts.registry import get_prompt
 
 logger = logging.getLogger(__name__)

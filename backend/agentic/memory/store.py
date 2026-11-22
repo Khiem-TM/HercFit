@@ -10,11 +10,11 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
+from agentic.memory.context_store import ContextStore
+from agentic.memory.history_store import HistoryStore
+from agentic.memory.turns import turn_record
 from agentic.observability import durable_context
 from agentic.observability.persistence import set_psycopg_context
-from agentic.services.memory.context_store import ContextStore
-from agentic.services.memory.history_store import HistoryStore
-from agentic.services.memory.turns import turn_record
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE
 
 

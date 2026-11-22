@@ -2,9 +2,9 @@
 
 import json
 
-from agentic.core.providers.tool_markup import strip_tool_markup
 from agentic.research.contracts import EvidenceClaim, ResearchDraft
 from agentic.research.quotes import numbers_supported, quote_found
+from agentic.services.providers.tool_markup import strip_tool_markup
 
 
 def parse_draft(message, labels):

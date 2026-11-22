@@ -11,8 +11,8 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from agentic.core.context import request_context
-from agentic.services.memory.store import payload_hash
-from agentic.tools.integrations.backend_client import BackendError
+from agentic.memory.store import payload_hash
+from agentic.services.clients.backend_client import BackendError
 from agentic.tools.registry import PREVIEW_PATHS, REGISTRY
 
 EDITABLE_TOOLS = frozenset({"create_training_plans", "update_training_plans"})

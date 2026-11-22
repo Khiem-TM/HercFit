@@ -1,6 +1,6 @@
 """Các agent chuyên trách của kiến trúc multi-agent.
 
-Mỗi agent sở hữu một nhóm miền nghiệp vụ (core/roster.py), model riêng (AGENT_MODELS), phần việc của nó và các luật
+Mỗi agent sở hữu một nhóm miền nghiệp vụ (agents/roster.py), model riêng (AGENT_MODELS), phần việc của nó và các luật
 tiếp nối việc nhiều bước của chính nó. Supervisor (orchestration_agent) phân loại yêu cầu một lần rồi giao cho agent
 sở hữu miền của quyết định; khi agent tiếp tục việc của mình (bữa ăn kế tiếp, lịch tập sau tra cứu, câu trả lời cho
 form gym), supervisor không gọi lại model định tuyến.
@@ -13,13 +13,13 @@ from uuid import NAMESPACE_URL, uuid5
 
 from langchain_core.messages import AIMessage
 
-from agentic.agents.state import RouteDecision
+from agentic.agents import roster
 from agentic.agents.tool_agent import ToolAgent
-from agentic.core import roster
 from agentic.services import food_gap, food_suggestion, gym_logging, meal_logging, personal_context
-from agentic.services.routing import FastReadPlan, fast_answer_instruction, latest_request
 from agentic.services.write_reply import executed_writes
 from agentic.tools.registry import REGISTRY
+from agentic.workflows.routing import FastReadPlan, fast_answer_instruction, latest_request
+from agentic.workflows.state import RouteDecision
 from domains.shared.models.catalog import normalize_food_text
 
 KEEP_CURRENT_TRAINING_PLAN = re.compile(

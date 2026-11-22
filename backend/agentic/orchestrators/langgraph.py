@@ -1,36 +1,34 @@
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 
-from agentic.agents.adaptive_router import verify_read_event
+from agentic.agents import roster
 from agentic.agents.orchestration_agent import OrchestrationAgent
 from agentic.agents.research_agent import ResearchV2
 from agentic.agents.specialists import SPECIALISTS
-from agentic.agents.state import AgentState
 from agentic.agents.tool_agent import ToolAgent
-from agentic.core import roster
 from agentic.core.context import request_context
 from agentic.knowledge_graph.context import pipeline as context_pipeline
 from agentic.knowledge_graph.context.graph import ContextGraph
 from agentic.observability import annotate, span
 from agentic.observability.execution import run_node
 from agentic.observability.telemetry import MeasuredModels
-from agentic.services import delegation, mode, personal_context
-from agentic.services.rag_pipeline import decision_domains, retrieve_graph_context
-from agentic.services.routing import (
-    FastReadPlan,
-    fast_answer_instruction,
+from agentic.services import personal_context
+from agentic.services.write_reply import executed_writes
+from agentic.workflows import delegation, mode
+from agentic.workflows.adaptive_router import verify_read_event
+from agentic.workflows.context import decision_domains, retrieve_graph_context
+from agentic.workflows.routing import (
     fast_reads_enabled,
     latest_request,
     make_fast_read_plan,
 )
-from agentic.services.write_reply import executed_writes
-from agentic.tools.policy import continue_catalog_lookup
+from agentic.workflows.specialist_graph import build_specialist_graph
+from agentic.workflows.state import AgentState
 
 
 def build_workflow(models, store, saver, tavily, settings, graph_context=None, jev=None):
     models = MeasuredModels(models)
     orchestrator = OrchestrationAgent(models, settings, jev=jev)
-    # Bộ thực thi dùng chung, không thuộc agent nào: cổng ghi HITL (execute) và các lần đọc ngữ cảnh cá nhân do code chọn.
     tool = ToolAgent(models, store, settings)
     specialists = {agent.name: agent(models, store, settings) for agent in SPECIALISTS}
     research = ResearchV2(models, tavily, store, settings, jev=jev)
@@ -42,8 +40,6 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
             return await run_node(fn, state, node, settings)
 
     async def decide_step(state):
-        # Không còn đọc graph theo từ khoá trước router (khớp nhầm "cần" → cân nặng, timeout lần đọc đầu): dữ liệu cá
-        # nhân đến từ context graph của câu hỏi sau khi router đã gọi tên ý định (nút context_graph).
         update = {}
         current = dict(state)
         policy = mode.policy(state)
@@ -52,22 +48,16 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
             and "card" in personal_context.sources(settings)
             and current.get("user_context_run_id") != current.get("run_id")
         ):
-            # Một lần mỗi lượt chạy: những gì HercFit đã biết về người dùng, để router đọc thay vì hỏi.
             ctx = request_context.get(None)
             card = await personal_context.load_card(ctx.backend, ctx.token) if ctx else None
             update = {**update, "user_context": card, "user_context_run_id": current.get("run_id")}
             current.update(update)
         result = await orchestrator.decide(current)
         if "fast_read_plan" in result:
-            # Lối tắt của supervisor (đọc nhanh, ghi đơn giản, gợi ý món) đã đặt tên lượt và kế hoạch đọc nhanh của nó:
-            # không đọc graph, không dựng lại kế hoạch.
             return {**update, **result}
         current.update(result)
         decision = result.get("decision") or {}
-        # Cách diễn đạt có thể không gọi tên miền graph nào ("pace 5K của tôi"): đọc ngay miền của router và
-        # chủ đề cá nhân, để câu trả lời, ngữ cảnh và tra cứu thấy được thẻ, không chỉ các lời gọi tool.
-        # Các miền bước này đã thử được để lại cho các bước sau (timeout không được thử lại ở đây).
-        # Lượt giao việc song song: đọc trước miền của mọi nhiệm vụ, để các nhánh dùng chung một ngữ cảnh graph.
+        # Nạp ngữ cảnh chung cho các nhánh song song trước khi giao việc.
         named = [
             d
             for task in [decision, *(decision.get("delegated_tasks") or [])]
@@ -167,7 +157,6 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
             }
         rejected = delegation.after_reject(state)
         if rejected:
-            # Lượt giao việc song song: thẻ kế tiếp, hoặc trả lời các phần còn lại.
             return {**rejected, "action_decision": "rejected"}
         from langchain_core.messages import AIMessage
 
@@ -187,93 +176,6 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         }
 
     graph.add_node("orchestrator", decide)
-
-    async def jev_read(agent, state, fast_plan):
-        decision = state["decision"]
-        with span("jev.read", "tool", domain=decision.get("domain")) as observation:
-            enabled = (
-                settings.JEV_MODE != "off"
-                and settings.JEV_ROUTING_PROFILE == "verify_read"
-                and "routing" in settings.JEV_ENABLED_PHASES
-                and fast_reads_enabled(settings)
-            )
-            result = await agent.invoke_fast(state) if enabled else None
-            if result is None:
-                annotate(
-                    jev_read_outcome="fallback",
-                    jev_read_reason="invalid_plan" if enabled else "disabled",
-                )
-                # Giữ turn hiện tại để router xử lý lại mà không gọi Jev lần nữa.
-                return {"fast_read_plan": None, "decision": {}}
-
-            plan = FastReadPlan.model_validate(fast_plan)
-            output = result["tool_outputs"][-1]
-            annotate(jev_template_id=plan.template_id, tool=plan.tool)
-            if result["fast_read_complete"]:
-                annotate(jev_read_outcome="empty" if output.get("not_found") else "ok")
-            else:
-                annotate(jev_read_outcome="failed", http_status=output.get("status_code"))
-                if observation:
-                    observation.add_metadata({"status": "failed"})
-                result["status"] = "failed"
-            result["decision"] = {
-                **decision,
-                "action": "answer",
-                "next_agent": "orchestrator",
-                "instruction": fast_answer_instruction(plan),
-            }
-            trace = {"stage": "agent", "agent": agent.name, "domain": decision.get("domain")}
-            result["route_trace"] = [*(state.get("route_trace") or []), trace]
-            return result
-
-    async def specialist_step(agent, state):
-        decision = state.get("decision", {})
-        domain = decision.get("domain")
-        fast_plan = state.get("fast_read_plan") or {}
-        if fast_plan.get("source") == "jev":
-            return await jev_read(agent, state, fast_plan)
-        # Lệnh ghi dựng sẵn (simple_writes) chạy không qua model, nên không ai đọc thẻ KG: bỏ lần đọc graph.
-        update = (
-            {}
-            if decision.get("code_call")
-            else await retrieve_graph_context(
-                state, [domain], settings=settings, graph_context=graph_context
-            )
-        )
-        # Vết định tuyến ghi agent nhận việc, một lần mỗi lần được giao (vòng tra catalog bên trong không ghi lại).
-        trace = state.get("route_trace") or []
-        entry = {"stage": "agent", "agent": agent.name, "domain": domain}
-        if trace[-1:] != [entry]:
-            update["route_trace"] = [*trace, entry]
-        current = {**state, **update}
-        if fast_reads_enabled(settings) and not current.get("fast_read_plan"):
-            plan = make_fast_read_plan(current)
-            if plan:
-                update["fast_read_plan"] = plan.model_dump(mode="json")
-                current.update(update)
-        result = await agent.act(current)
-        return {**update, **result}
-
-    def specialist(agent):
-        """Subgraph của một agent chuyên trách: làm việc, và tiếp tục ngay khi vừa tra catalog mà miền nhật ký phụ thuộc
-        (ví dụ tra món rồi ghi bữa ăn). Bản xem trước, câu trả lời và lần định tuyến tiếp theo thuộc graph chính."""
-
-        async def act(state):
-            return await guarded(
-                lambda current: specialist_step(agent, current), state, agent.name, agent.name
-            )
-
-        subgraph = StateGraph(AgentState)
-        subgraph.add_node("act", act)
-        subgraph.add_edge(START, "act")
-        subgraph.add_conditional_edges(
-            "act",
-            lambda s: "act" if not s.get("pending_action") and continue_catalog_lookup(s) else END,
-            ["act", END],
-        )
-        # Không checkpoint riêng: subgraph không có interrupt và runtime chỉ chạy tiếp tại confirmation/execute, nên
-        # checkpoint của graph chính sau node là đủ; không lưu thêm bản sao state (kèm tin nhắn) vào database.
-        return subgraph.compile(checkpointer=False)
 
     async def context_step(state):
         decision = state["decision"]
@@ -318,8 +220,7 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         )
 
     async def context_graph_step(state):
-        """G_C = f(G_K, q, u, t, i, s, p) cho câu hỏi này, một lần mỗi lượt chạy. Câu hỏi đọc mà graph không trả lời
-        được (lỗi, bị từ chối, chưa đồng bộ) chuyển sang đọc backend như trước, do code quyết định."""
+        """Truy vấn context graph cho lượt này, với đường đọc backend dự phòng."""
         decision = state["decision"]
         ctx = request_context.get(None)
         if ctx is None or ctx.user_id != state.get("user_id"):
@@ -372,10 +273,12 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         return await guarded(research.invoke, state, "research", roster.RESEARCH)
 
     async def execute(state):
-        # Lượt giao việc song song: sau mỗi lệnh ghi, bản xem trước kế tiếp trong hàng đợi lên thẻ.
         return delegation.next_card(state, await guarded(tool.execute, state, "execute"))
 
-    subgraphs = {name: specialist(agent) for name, agent in specialists.items()}
+    subgraphs = {
+        name: build_specialist_graph(agent, settings, graph_context, guarded)
+        for name, agent in specialists.items()
+    }
 
     async def delegate(state, config):
         """Một nhánh song song (Send): agent sở hữu miền của nhiệm vụ làm việc trên state riêng của nhánh."""
@@ -401,20 +304,18 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
     def after_orchestrator(s):
         decision = s["decision"]
         if needs_context_graph(s):
-            return "context_graph"  # dữ liệu đã lưu của chính câu hỏi trước mọi bước khác
+            return "context_graph"
         if (
             decision.get("personalize")
             and not s.get("personal_reads_done")
             and decision["action"] in {"research", "answer"}
         ):
-            return "context"  # dữ liệu của người dùng trước bước tra cứu hoặc trả lời
+            return "context"
         if decision["action"] == "delegate" and decision.get("delegated_tasks"):
-            # Tin nhắn nhiều ý: mỗi nhiệm vụ một nhánh song song trên state riêng; join gộp kết quả.
             return [
                 Send("delegate", delegation.branch(s, task)) for task in decision["delegated_tasks"]
             ]
         if decision["action"] == "tool":
-            # Supervisor giao việc cho agent chuyên trách sở hữu miền của quyết định.
             return roster.specialist_for(decision.get("domain")) or "answer"
         return "research" if decision["action"] == "research" else "answer"
 
@@ -444,7 +345,6 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
         {"research": "research", "answer": "answer"},
     )
 
-    # Câu trả lời do code viết (những gì lệnh ghi đã xác nhận đã lưu) kết thúc lượt mà không gọi định tuyến thêm.
     def after_specialist(s):
         if s.get("pending_action"):
             return "confirmation"
@@ -465,7 +365,6 @@ def build_workflow(models, store, saver, tavily, settings, graph_context=None, j
             name, after_specialist, ["confirmation", "answer", "orchestrator"]
         )
 
-    # Câu trả lời cá nhân hoá được viết từ dữ liệu của người dùng và bằng chứng tra cứu, dù tra cứu tìm được gì.
     def after_research(s):
         decision = s.get("decision") or {}
         if decision.get("plan_task") == "plan_build" and s.get("status") == "running":

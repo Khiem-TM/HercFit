@@ -6,7 +6,7 @@ from contextlib import nullcontext
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field
 
-from agentic.core import roster
+from agentic.agents import roster
 from agentic.prompts.registry import get_prompt
 
 from ..schema import describe

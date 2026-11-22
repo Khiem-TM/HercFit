@@ -6,27 +6,27 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from agentic.agents.workflow import build_workflow
+from agentic.configs.settings import AgentSettings, agent_settings
 from agentic.core.app.api.health import router as health_router
 from agentic.core.app.api.internal.notify_router import router as internal_notify_router
 from agentic.core.app.api.internal.users_router import router as internal_users_router
 from agentic.core.app.api.v1.chat_router import router
-from agentic.core.app.config import AgentSettings, agent_settings
-from agentic.core.llm import Models
 from agentic.knowledge_graph.service import GraphContextService
+from agentic.memory.checkpoints import persistence
 from agentic.observability import observer
 from agentic.observability.logs import configure_from_settings
 from agentic.observability.middleware import ObservabilityMiddleware
+from agentic.orchestrators.langgraph import build_workflow
+from agentic.orchestrators.runtime import Runtime
+from agentic.services.clients.backend_client import BackendClient
+from agentic.services.clients.jev import JevClient
+from agentic.services.clients.tavily import TavilyClient
 from agentic.services.jev import JevService
-from agentic.services.memory.checkpoints import persistence
-from agentic.services.runtime import Runtime
-from agentic.tools.integrations.backend_client import BackendClient
-from agentic.tools.integrations.jev import JevClient
-from agentic.tools.integrations.tavily import TavilyClient
+from agentic.services.llm import Models
 
 
 async def create_session_memory(settings: AgentSettings, models, stack: AsyncExitStack):
-    from agentic.services.memory.session_memory import SessionMemory
+    from agentic.memory.session_memory import SessionMemory
 
     memory = SessionMemory.connect(settings, models)
     stack.push_async_callback(memory.close)
@@ -42,7 +42,7 @@ async def manage_background_tasks(runtime, graph_context, store, settings: Agent
         tasks.append(asyncio.create_task(runtime.reconcile_forever()))
         # Store được tiêm cho evaluation có thể không dùng PostgreSQL.
         if settings.CONSENT_PURGE_ENABLED and hasattr(store, "pool"):
-            from agentic.services.consent_purge import purge_forever
+            from agentic.memory.consent_purge import purge_forever
 
             tasks.append(asyncio.create_task(purge_forever(runtime)))
         if graph_context is not None:

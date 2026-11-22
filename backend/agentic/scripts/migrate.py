@@ -6,7 +6,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
-from agentic.core.app.config import agent_settings
+from agentic.configs.settings import agent_settings
 from agentic.migrations.runner import migrate_pool
 
 

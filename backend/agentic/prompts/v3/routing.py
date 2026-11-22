@@ -1,4 +1,4 @@
-"""Phiên bản 3: định tuyến theo chế độ trò chuyện người dùng chọn (services/mode.py).
+"""Phiên bản 3: định tuyến theo chế độ trò chuyện người dùng chọn (workflows/mode.py).
 
 NORMAL_ROUTING_PROMPT là bản rút gọn của v2 cho chế độ ghi nhanh: giữ nguyên mọi quy tắc ghi nhật ký, catalog và
 research món/bài tập; bỏ các nhóm thuộc chế độ Plan (sức khoẻ thiết bị, hồ sơ, huấn luyện, lịch tập, câu hỏi kiến

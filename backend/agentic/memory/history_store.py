@@ -8,7 +8,7 @@ from hashlib import sha256
 
 from psycopg.types.json import Jsonb
 
-from agentic.services.memory.transcript import visible
+from agentic.memory.transcript import visible
 
 
 class HistoryStore:

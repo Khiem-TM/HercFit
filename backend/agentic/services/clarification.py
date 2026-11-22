@@ -119,11 +119,6 @@ def catalog_groups(state) -> list[dict]:
     return groups
 
 
-def catalog_index(state) -> dict[str, dict]:
-    """Bản ghi catalog do các lần gọi tool thành công trong lượt này trả về, theo id."""
-    return {record["id"]: record for group in catalog_groups(state) for record in group["records"]}
-
-
 ITEM = re.compile(r"^\s*(?:\d+[.)]|[-*•])\s+(.+)$")
 # "những bài nào", "món gì", "loại nào", "trong danh sách" (accents stripped): the user picks catalog records.
 PICK = re.compile(

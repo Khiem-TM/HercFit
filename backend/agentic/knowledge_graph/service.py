@@ -61,7 +61,6 @@ SECTIONS = {
     "sleep": ["sleep", "recovery"],
     "recovery": ["recovery", "sleep", "activity"],
 }
-DEVICE_KINDS = ("DailyHealth", "SleepSession", "DeviceWorkout")
 PILOT_DOMAINS = set(KINDS)
 # Các lượt được ghi nhật ký với miền router của quyết định đầu tiên.
 EPISODE_DOMAINS = {
@@ -168,11 +167,6 @@ def domains_for(message):
     """Mọi miền graph mà tin nhắn nhắc tới; chỉ là gợi ý truy hồi, không bao giờ dùng để định tuyến."""
     text = normalize(message)
     return [domain for domain, pattern in DOMAIN_PATTERNS if re.search(pattern, text)]
-
-
-def domain_for(message):
-    found = domains_for(message)
-    return found[0] if found else None
 
 
 def sections_for(domains):

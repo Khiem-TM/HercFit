@@ -1,11 +1,11 @@
 from langchain_core.runnables import RunnableLambda
 from langchain_openai import ChatOpenAI
 
-from agentic.core import roster
-from agentic.core.app.config import AgentSettings
-from agentic.core.providers.openrouter import OpenRouterChatOpenAI
-from agentic.core.providers.openrouter_policy import chat_options
-from agentic.services import mode
+from agentic.agents import roster
+from agentic.configs.settings import AgentSettings
+from agentic.services.providers.openrouter import OpenRouterChatOpenAI
+from agentic.services.providers.openrouter_policy import chat_options
+from agentic.workflows import mode
 
 ROLE_TIMEOUTS = {
     "decision": "ROUTING_TIMEOUT_SECONDS",

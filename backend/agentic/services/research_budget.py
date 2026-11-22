@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 
 from agentic.observability import annotate
-from agentic.services import mode
+from agentic.workflows import mode
 
 
 class BudgetExceeded(Exception):
@@ -54,7 +54,7 @@ async def research_lease(store, state):
 
 
 async def reserve(store, run_id, kind):
-    # Chế độ Plan cho thêm lượt tra cứu, lượt trích xuất và vòng tra cứu (services/mode.py).
+    # Chế độ Plan cho thêm lượt tra cứu, lượt trích xuất và vòng tra cứu (workflows/mode.py).
     limits = mode.policy().research_limits
     if kind not in limits:
         raise ValueError("Unknown budget")

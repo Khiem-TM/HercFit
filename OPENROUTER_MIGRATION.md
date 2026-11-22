@@ -19,7 +19,7 @@ phải tạo lại container (`docker compose up -d --no-deps agentic kg-worker 
 
 ## 2. Model và endpoint
 
-Mọi model phải có chính sách endpoint đã kiểm duyệt trong `backend/agentic/core/providers/openrouter_policy.py`;
+Mọi model phải có chính sách endpoint đã kiểm duyệt trong `backend/agentic/services/providers/openrouter_policy.py`;
 model lạ bị từ chối ngay khi dựng client, không bao giờ để OpenRouter tự chọn host mới. Mỗi request gửi
 `provider.only`, `provider.order`, `require_parameters: true`.
 
@@ -40,7 +40,7 @@ DeepInfra trả tool call có `arguments` rỗng ở 23/64 lần (cả khi tắt
 23/24 hợp lệ. Parasail, GMI, SiliconFlow không hỗ trợ `tool_choice` bắt buộc (404). Probe tái lập:
 `backend/eval_results/openrouter-migration/probe_route.py <n> [effort|-] [endpoint]`.
 
-## 3. Hành vi adapter (`core/providers/openrouter.py`)
+## 3. Hành vi adapter (`services/providers/openrouter.py`)
 
 - Chat Completions API tường minh; không viết lại payload kiểu FPT (gộp system, ép `required`, khôi phục DSML, quy
   đổi usage luỹ kế). Markup DSML lọt vào văn bản chỉ bị lọc khỏi câu trả lời (`tool_markup.py`), không bao giờ thực thi.

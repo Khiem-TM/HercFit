@@ -3,11 +3,11 @@ from typing import Literal
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import SettingsConfigDict
 
-from agentic.core.app.env_sources import JevDotEnvSettingsSource, canonical_source
-from agentic.core.paths import AGENTIC_ROOT, BACKEND_ROOT
-from agentic.core.providers.openrouter_policy import AGENT_MODELS, DEFAULT_MODEL
-from agentic.core.providers.settings import OpenRouterSettings
-from agentic.core.roster import AGENTS
+from agentic.agents.roster import AGENTS
+from agentic.configs.env_sources import JevDotEnvSettingsSource, canonical_source
+from agentic.configs.openrouter import OpenRouterSettings
+from agentic.configs.paths import AGENTIC_ROOT, BACKEND_ROOT
+from agentic.services.providers.openrouter_policy import AGENT_MODELS, DEFAULT_MODEL
 
 JEV_READ_MODEL = "typesafe/jev-1.14-20261014"
 JEV_READ_DEADLINE_SECONDS = 1.25
@@ -37,8 +37,6 @@ class AgentSettings(OpenRouterSettings):
     OPENAI_API_KEY: SecretStr | None = None
     MODEL_BASE_URL: str = "https://api.openai.com/v1"
     MODEL_TIMEOUT_SECONDS: float = 30
-    # Timeout theo vai trò: các lần gọi routing/tool/clarify trả về JSON nhỏ và nên
-    # chuyển dự phòng nhanh; trước đây một lần gọi bị treo tốn 30 s hai lần (đuôi ≈60 s).
     ROUTING_TIMEOUT_SECONDS: float = Field(default=30, gt=0)
     # Tool có thể dựng payload nhiều món trong 29–45 s; timeout ngắn gây thử lại lệnh đã duyệt.
     TOOL_TIMEOUT_SECONDS: float = Field(default=60, gt=0)
@@ -46,11 +44,9 @@ class AgentSettings(OpenRouterSettings):
     RESEARCH_TIMEOUT_SECONDS: float = Field(default=60, gt=0)
     MODEL_MAX_RETRIES: int = Field(default=2, ge=0, le=2)
     CLARIFY_MODEL: str | None = None
-    # Model riêng của từng agent, JSON {"nutrition": "google/gemma-4-26b-a4b-it", ...} (tên agent: core/roster.py). Agent vắng
-    # mặt dùng model của vai trò; lỗi, timeout hoặc output sai schema của model riêng nâng lên model của vai trò.
+    # Tên agent lấy từ roster. Khi thiếu cấu hình hoặc model riêng lỗi, dùng model theo vai trò.
     AGENT_MODELS: dict[str, str] = Field(default_factory=lambda: dict(AGENT_MODELS))
-    # Timeout của model riêng (trần, không bao giờ dài hơn timeout của vai trò): gemma-4-26B từng treo tới hết 60 s của
-    # vai trò tool với prompt coach ~16k token (ma trận 07/11); cắt sớm để nâng lên model của vai trò kịp thời.
+    # Trần timeout của model riêng, giới hạn thêm bởi timeout theo vai trò.
     AGENT_MODEL_TIMEOUT_SECONDS: float = Field(default=20, gt=0)
     # Tin nhắn nhiều ý (RouteDecision.tasks) chạy song song ở các agent chuyên trách; False: luôn tuần tự như trước.
     PARALLEL_AGENTS: bool = True
@@ -113,8 +109,6 @@ class AgentSettings(OpenRouterSettings):
     JEV_INPUT_PRICE_PER_MILLION: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     JEV_OUTPUT_PRICE_PER_MILLION: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     RAG_ENABLED: bool = False
-    # Knowledge graph luôn là một phần ngữ cảnh của agent; Neo4j không truy cập được
-    # chỉ hạ lượt chạy xuống dùng tool backend (KG_RETRIEVAL_TIMEOUT_MS, fail-open).
     # Mẫu toàn tin nhắn chặt chẽ cho các lệnh đọc phổ biến (tiến độ, mục tiêu hiện tại, số đo
     # gần nhất, hồ sơ, mục tiêu calo): một lần gọi trả lời thay vì bốn.
     FAST_READ_ENABLED: bool = True

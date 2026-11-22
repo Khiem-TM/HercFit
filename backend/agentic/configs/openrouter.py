@@ -3,8 +3,8 @@
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from agentic.core.paths import AGENTIC_ROOT, BACKEND_ROOT
-from agentic.core.providers.openrouter_policy import BASE_URL
+from agentic.configs.paths import AGENTIC_ROOT, BACKEND_ROOT
+from agentic.services.providers.openrouter_policy import BASE_URL
 
 
 class OpenRouterSettings(BaseSettings):

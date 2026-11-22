@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Kiến trúc multi-agent như đang chạy (backend/agentic/core/roster.py): supervisor phân loại một lần rồi giao cho agent
+ * Kiến trúc multi-agent (backend/agentic/agents/roster.py): supervisor phân loại rồi giao cho agent
  * sở hữu miền dữ liệu; research tra nguồn, synthesizer viết câu trả lời. Chỉ mô tả việc hệ thống làm, không số liệu.
  */
 const agents = [

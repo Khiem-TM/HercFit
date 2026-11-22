@@ -236,7 +236,7 @@ def cropped(key: str, candidate: dict) -> Path:
 
 
 async def search(items_path: Path, limit: int | None, concurrency: int) -> None:
-    from agentic.core.app.config import agent_settings
+    from agentic.configs.settings import agent_settings
 
     items = read_json(items_path)
     results = read_json(OUT) if OUT.exists() else {}

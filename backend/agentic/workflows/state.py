@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal, get_args
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from pydantic.json_schema import SkipJsonSchema  # Loại bỏ trường khỏi JSON schema
+from pydantic.json_schema import SkipJsonSchema
 from typing_extensions import TypedDict
 
 
@@ -27,6 +27,7 @@ Domain = Literal[
     "health",
 ]
 
+#Schema Validation for Agent Workflow State
 
 class MealLogItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -59,10 +60,8 @@ class MealLog(BaseModel):
     items: list[MealLogItem] = Field(default_factory=list, max_length=5)
 
 
+# Define domain-agent
 class AgentTask(BaseModel):
-    """Một phần độc lập của tin nhắn nhiều ý, giao cho agent chuyên trách sở hữu miền của nó (chạy song song).
-
-    Không ràng buộc nào ở đây được làm hỏng cả quyết định định tuyến: miền lạ thành None (lượt đi tuần tự)."""
 
     model_config = ConfigDict(extra="ignore")
     domain: Domain | None = None
@@ -123,7 +122,6 @@ class ContextNeed(BaseModel):
     end: str | None = Field(default=None, description="YYYY-MM-DD, same rule as start")
 
 
-# Điều phối response model trả về --> Hỗ trợ orschestration
 class RouteDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
     intent: str
@@ -214,7 +212,7 @@ class RouteDecision(BaseModel):
 
 
 class AgentState(TypedDict, total=False):
-    # Chế độ trò chuyện người dùng chọn ('normal' | 'plan'); vắng mặt ở checkpoint cũ (xem services/mode.py).
+    # Checkpoint cũ có thể thiếu mode. Workflow dùng chế độ full cho các lượt này.
     mode: str
     # Chế độ thường gặp câu hỏi tư vấn: mời người dùng hỏi lại ở chế độ này.
     suggested_mode: str | None
@@ -280,8 +278,7 @@ class AgentState(TypedDict, total=False):
     personal_reads_done: bool
     research_evidence: dict[str, Any] | None
     route_trace: list[dict[str, Any]]
-    # Giao việc song song (services/delegation.py): kết quả từng nhánh agent cộng dồn qua reducer, nút join gộp rồi
-    # đặt lại; các bản xem trước còn lại chờ thẻ xác nhận của chúng, từng thẻ một.
+    # Node join đặt lại kết quả đã gộp và xếp hàng các bản xem trước để xác nhận lần lượt.
     agent_results: Annotated[list[dict[str, Any]], collect_results]
     pending_queue: list[dict[str, Any]]
 
@@ -303,7 +300,7 @@ def initial_state(
 
     `previous` là state cuối của lượt trước trong phiên: chỉ thẻ người dùng đang trả lời (chọn bản ghi, món thiếu),
     cờ trả lời form và run_id của nó được mang sang; mọi trường khác bắt đầu trống."""
-    # services nhập agents.state, nên nhập trong hàm để không tạo vòng import.
+    # Import tại đây để tránh vòng import với các service xử lý thẻ.
     from agentic.services import catalog_choice, food_gap
 
     previous = previous or {}

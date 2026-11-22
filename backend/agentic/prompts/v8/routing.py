@@ -1,7 +1,7 @@
 """Phiên bản 8: câu hỏi xem/phân tích dữ liệu đã lưu đi qua context graph, không còn bắt buộc đọc backend.
 
 Router đặt action answer cùng context (focus, entities, start/end); HercFit truy vấn context graph rồi trả lời, và tự
-chuyển sang đọc backend khi graph thiếu hoặc chưa đồng bộ (agents/workflow.py). Phần còn lại giữ nguyên v6.
+chuyển sang đọc backend khi graph thiếu hoặc chưa đồng bộ (orchestrators/langgraph.py). Phần còn lại giữ nguyên v6.
 """
 
 from agentic.prompts.v6.routing import NORMAL_ROUTING_PROMPT as _V6_NORMAL

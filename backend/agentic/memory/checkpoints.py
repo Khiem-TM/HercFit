@@ -4,9 +4,9 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
-from agentic.core.app.config import AgentSettings
+from agentic.configs.settings import AgentSettings
+from agentic.memory.store import Store
 from agentic.migrations.runner import migrate_pool
-from agentic.services.memory.store import Store
 
 
 @asynccontextmanager

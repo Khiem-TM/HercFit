@@ -16,7 +16,7 @@ from time import perf_counter
 import httpx
 from dotenv import load_dotenv
 
-from agentic.core.providers.openrouter_policy import (
+from agentic.services.providers.openrouter_policy import (
     DEFAULT_MODEL,
     EMBEDDING_MODEL,
     ENDPOINTS,
@@ -31,8 +31,8 @@ async def preflight(args):
     # Load the candidate overlay before any module creates runtime settings.
     if args.env_file:
         load_dotenv(args.env_file, override=True)
-    from agentic.core.app.config import AgentSettings
-    from agentic.core.providers.settings import OpenRouterSettings
+    from agentic.configs.openrouter import OpenRouterSettings
+    from agentic.configs.settings import AgentSettings
 
     connection = OpenRouterSettings()
     key = connection.OPENROUTER_API_KEY
@@ -66,8 +66,8 @@ async def preflight(args):
         from PIL import Image, ImageDraw
         from pydantic import BaseModel
 
-        from agentic.core.llm import Models
         from agentic.embedding.core import EmbeddingClient, EmbeddingSettings, RerankClient
+        from agentic.services.llm import Models
 
         class Number(BaseModel):
             number: int

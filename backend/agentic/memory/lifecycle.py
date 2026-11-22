@@ -9,8 +9,8 @@ from uuid import uuid4
 
 from langchain_core.messages import AIMessage
 
-from agentic.agents.state import initial_state
-from agentic.services.memory.transcript import AGENT, visible
+from agentic.memory.transcript import AGENT, visible
+from agentic.workflows.state import initial_state
 
 
 class MemoryLifecycle:

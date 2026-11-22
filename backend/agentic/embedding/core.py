@@ -12,14 +12,14 @@ from time import monotonic
 import httpx
 from pydantic import Field, SecretStr, model_validator
 
-from agentic.core.providers.openrouter_policy import (
+from agentic.configs.openrouter import OpenRouterSettings
+from agentic.observability import annotate, observed
+from agentic.services.providers.openrouter_policy import (
     EMBEDDING_MODEL,
     RERANK_MODEL,
     provider_options,
     response_metadata,
 )
-from agentic.core.providers.settings import OpenRouterSettings
-from agentic.observability import annotate, observed
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 

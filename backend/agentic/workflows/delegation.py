@@ -8,7 +8,7 @@ Chỉ phần việc chuẩn bị chạy song song: đọc dữ liệu và dựng
 theo thứ tự nhiệm vụ. Nhánh cần hỏi thêm, cần tra cứu catalog/web, còn bữa ăn kế tiếp hoặc lỗi thì được làm tiếp tuần
 tự bằng đường định tuyến thường sau các thẻ, nên không phần nào của yêu cầu bị bỏ dở.
 """
-from agentic.core import roster
+from agentic.agents import roster
 from agentic.observability.telemetry import merge_branches
 from agentic.tools.registry import REGISTRY
 

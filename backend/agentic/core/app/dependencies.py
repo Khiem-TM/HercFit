@@ -7,7 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from agentic.core.context import RequestContext, request_context
 from agentic.observability import identify
-from agentic.tools.integrations.backend_client import BackendError
+from agentic.services.clients.backend_client import BackendError
 
 bearer = HTTPBearer(auto_error=False)
 # Danh tính đã kiểm chứng, khoá theo bản băm của token (không bao giờ là chính token).
@@ -33,7 +33,6 @@ async def _verified_user(request: Request, token: str):
     return user
 
 
-# Xác thực User thông qua Bearer JWT
 async def authenticated(
     request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(bearer)
 ):

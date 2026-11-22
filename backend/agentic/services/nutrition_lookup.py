@@ -15,7 +15,7 @@ import logging
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, ValidationError
 
-from agentic.core import roster
+from agentic.agents import roster
 from agentic.prompts.registry import get_prompt
 from agentic.services.notification_composer import numbers
 
@@ -81,7 +81,7 @@ def check(facts: NutritionFacts, sources: list[dict]) -> tuple[dict | None, str 
 
 async def suggest(models, tavily, name: str) -> dict | None:
     """4 số trên 100 g của món (chép từ nguồn hoặc ước tính), hoặc None khi tên không phải món ăn hay số không qua kiểm tra."""
-    from agentic.tools.integrations.tavily import TavilyUnavailable
+    from agentic.services.clients.tavily import TavilyUnavailable
     try:
         rows = await tavily.search(query(name), depth='basic')
     except TavilyUnavailable as exc:

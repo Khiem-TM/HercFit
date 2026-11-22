@@ -19,25 +19,24 @@ from datetime import timedelta
 from types import MappingProxyType
 from typing import Any, NamedTuple
 
+from agentic.agents import roster
 from agentic.agents.specialists import BY_NAME, SPECIALISTS
-from agentic.agents.state import RouteDecision
-from agentic.core import roster
 from agentic.core.context import request_context
 from agentic.observability import annotate
 from agentic.research.contracts import QA_INTENTS
 from agentic.security.input_guard import safe_query
 from agentic.services import (
     catalog_choice,
-    delegation,
     food_gap,
     food_suggestion,
-    mode,
     personal_context,
 )
-from agentic.services.routing import fast_reads_enabled, fast_route
 from agentic.services.simple_writes import simple_route
 from agentic.services.write_reply import executed_writes, finishes_turn
 from agentic.tools.policy import CATALOG_DEPENDENCIES, TRAINING_DOMAINS, needs_catalog_handoff
+from agentic.workflows import delegation, mode
+from agentic.workflows.routing import fast_reads_enabled, fast_route
+from agentic.workflows.state import RouteDecision
 from domains.shared.models.catalog import normalize_food_text
 
 PERSONAL_MEASURE = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:kg|cm|tuổi|tuoi|kcal|bpm)\b", re.I)
@@ -812,7 +811,7 @@ def fan_out(decision, ctx):
         and ctx.parallel
     ):
         return None
-    # Tin nhắn nhiều ý: mỗi phần giao cho agent sở hữu miền của nó, chạy song song (services/delegation.py).
+    # Tin nhắn nhiều ý: mỗi phần giao cho agent sở hữu miền của nó, chạy song song (workflows/delegation.py).
     delegated = delegation.plan(decision.model_dump(), ctx.policy)
     if delegated and any(asks_first(task, ctx.state, ctx.request) for task in delegated):
         delegated = None  # một phần cần người dùng chọn trước (form): đi đường tuần tự

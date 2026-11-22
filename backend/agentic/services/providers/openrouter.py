@@ -8,7 +8,7 @@ from langchain_core.runnables import RunnableLambda
 from langchain_openai import ChatOpenAI
 from openai import APIConnectionError, APIError, APIStatusError
 
-from agentic.core.providers.openrouter_policy import response_metadata
+from agentic.services.providers.openrouter_policy import response_metadata
 
 _stream_state = ContextVar("openrouter_stream_state", default=None)
 

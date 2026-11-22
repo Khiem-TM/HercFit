@@ -185,18 +185,18 @@ class Worker:
             yield pool
 
     async def reconcile(self, limit=50):
-        from agentic.services.memory.reconcile import reconcile_checkpoints
+        from agentic.memory.reconcile import reconcile_checkpoints
 
         async with self.agent_pool() as pool:
             return await reconcile_checkpoints(pool, limit=limit)
 
     async def snapshot(self):
-        from agentic.services.memory.store import Store
+        from agentic.memory.store import Store
 
         async with await AsyncConnection.connect(self.coordinator_dsn, autocommit=True) as conn:
             await conn.execute("SELECT kg_enqueue_snapshot()")
         async with self.agent_pool() as pool:
-            from agentic.services.memory.reconcile import reconcile_checkpoints
+            from agentic.memory.reconcile import reconcile_checkpoints
 
             await reconcile_checkpoints(pool, limit=100000)
             await Store(pool).enqueue_kg_snapshot()
@@ -465,7 +465,7 @@ async def main(args=None):
     options = parser.parse_args(args)
     if options.command == "rebuild" and not options.confirm_rebuild:
         parser.error("rebuild requires --confirm-rebuild; PostgreSQL source records are retained")
-    from agentic.core.app.config import AgentSettings
+    from agentic.configs.settings import AgentSettings
 
     settings = AgentSettings()
     worker = Worker(settings)

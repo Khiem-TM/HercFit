@@ -7,32 +7,15 @@ from zoneinfo import ZoneInfo
 from langchain_core.messages import AIMessage
 from langgraph.constants import TAG_NOSTREAM
 
-from agentic.agents.adaptive_router import (
-    JEV_READ_ROUTES,
-    JEV_ROUTING_QUESTIONS,
-    VERIFY_READ_QUESTIONS,
-    accepts_proposed_read,
-    jev_read_domain,
-    jev_routing_projection,
-    proposed_read,
-    verify_read_event,
-)
-from agentic.agents.state import GOAL_INTENTS, RouteDecision
-from agentic.components.context_filter import compact_evidence, model_graph_context
 from agentic.core.app.schemas.response import Clarification
-from agentic.core.providers.tool_markup import strip_tool_markup
 from agentic.observability import annotate, span
 from agentic.prompts.layout import layout
 from agentic.prompts.registry import get_prompt
 from agentic.security.content_filter import assess
-from agentic.services import (
-    mode,
-    personal_context,
-    route_rules,
-)
+from agentic.services import personal_context
 from agentic.services.clarification import build_clarification
 from agentic.services.failure_reply import failure_reply
-from agentic.services.routing import TEMPLATES_BY_ID, fast_reads_enabled, latest_request
+from agentic.services.providers.tool_markup import strip_tool_markup
 from agentic.services.write_reply import (
     claims_pending,
     executed_writes,
@@ -45,6 +28,20 @@ from agentic.tools.policy import (
     COACH_GUIDANCE,
     TRAINING_DOMAINS,
 )
+from agentic.workflows import mode, route_rules
+from agentic.workflows.adaptive_router import (
+    JEV_READ_ROUTES,
+    JEV_ROUTING_QUESTIONS,
+    VERIFY_READ_QUESTIONS,
+    accepts_proposed_read,
+    jev_read_domain,
+    jev_routing_projection,
+    proposed_read,
+    verify_read_event,
+)
+from agentic.workflows.context_filter import compact_evidence, model_graph_context
+from agentic.workflows.routing import TEMPLATES_BY_ID, fast_reads_enabled, latest_request
+from agentic.workflows.state import GOAL_INTENTS, RouteDecision
 
 GRAPH_CONTEXT_GUIDANCE = get_prompt("orchestration.graph_context", "v2")
 ANSWER_GRAPH_GUIDANCE = get_prompt("orchestration.graph_answer")
@@ -203,7 +200,7 @@ class OrchestrationAgent:
         verdict = assess(latest_request(state))
         first = (state.get("turn") or {}).get("run_id") != state.get("run_id")
         policy = mode.policy(state)
-        # Các luật code trước router, theo đúng thứ tự (services/route_rules.py): luật đầu tiên trả kết quả kết thúc bước.
+        # Các luật code trước router, theo đúng thứ tự (workflows/route_rules.py): luật đầu tiên trả kết quả kết thúc bước.
         pre = route_rules.PreContext(
             state=state,
             policy=policy,
@@ -311,7 +308,7 @@ class OrchestrationAgent:
             verdict=verdict,
             parallel=getattr(self.settings, "PARALLEL_AGENTS", True),
         )
-        # Các luật code sau router, theo đúng thứ tự (services/route_rules.py); mỗi luật có tác dụng ghi một mục vết.
+        # Các luật code sau router, theo đúng thứ tự (workflows/route_rules.py); mỗi luật có tác dụng ghi một mục vết.
         decision, steps, found = route_rules.run(route_rules.POST_ROUTER, decision, ctx)
         trace.extend(steps)
         delegated = found.get("delegated")

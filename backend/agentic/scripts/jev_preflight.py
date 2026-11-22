@@ -4,8 +4,8 @@ import argparse
 import asyncio
 import json
 
-from agentic.core.app.config import AgentSettings, agent_settings
-from agentic.tools.integrations.jev import JevClient, JevError
+from agentic.configs.settings import AgentSettings, agent_settings
+from agentic.services.clients.jev import JevClient, JevError
 
 
 def failure_report(exc):

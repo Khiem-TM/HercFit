@@ -10,10 +10,11 @@ from fastapi import HTTPException
 from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
 from langgraph.types import Command
 
-from agentic.agents.state import initial_state
-from agentic.core.app.config import AgentSettings
+from agentic.configs.settings import AgentSettings
 from agentic.core.app.schemas.response import ChatResponse, Clarification, FoodGap
-from agentic.core.providers.tool_markup import ToolMarkupFilter, strip_tool_markup
+from agentic.memory import decisions
+from agentic.memory.lifecycle import MemoryLifecycle
+from agentic.memory.transcript import visible
 from agentic.observability import (
     annotate,
     durable_context,
@@ -24,16 +25,15 @@ from agentic.observability import (
 )
 from agentic.observability import metrics as ops
 from agentic.observability.outcomes import note_error
-
-# 'modes', không phải 'mode': _run_stream có biến cục bộ mode (kiểu sự kiện stream).
-from agentic.services import mode as modes
 from agentic.services.clarification import catalog_groups, fallback_clarification, logs_training
 from agentic.services.failure_reply import NODE_ERROR, failure_reply
-from agentic.services.memory import decisions
-from agentic.services.memory.lifecycle import MemoryLifecycle
-from agentic.services.memory.transcript import visible
+from agentic.services.providers.tool_markup import ToolMarkupFilter, strip_tool_markup
 from agentic.services.write_reply import executed_writes
 from agentic.tools.output import carry_over
+
+# 'modes', không phải 'mode': _run_stream có biến cục bộ mode (kiểu sự kiện stream).
+from agentic.workflows import mode as modes
+from agentic.workflows.state import initial_state
 
 logger = logging.getLogger(__name__)
 MEMORY_PURGE_SECONDS = 300
@@ -198,7 +198,7 @@ class Runtime(MemoryLifecycle):
             await self.memory.record_run(values, getattr(snapshot, "created_at", None))
 
     async def reconcile_forever(self):
-        from agentic.services.memory.reconcile import reconcile_checkpoints
+        from agentic.memory.reconcile import reconcile_checkpoints
 
         purged_at = None
         if not self.settings.AGENT_BACKGROUND_TASKS:
@@ -233,7 +233,6 @@ class Runtime(MemoryLifecycle):
                     )
             await asyncio.sleep(self.settings.KG_RECONCILE_SECONDS)
 
-    # Trả response --> frontend
     def response(self, state):
         pending = state.get("pending_action")
         is_pending = state.get("status") == "pending_confirmation"
@@ -286,7 +285,7 @@ class Runtime(MemoryLifecycle):
 
     async def run(self, input, thread_id, emit=None, chat_mode=modes.FULL):
         annotate(business_run_id=thread_id, graph_thread_id=thread_id, chat_mode=chat_mode)
-        config = self.config(thread_id)  # Lấy cấu hình
+        config = self.config(thread_id)
         # Client model, ngân sách tra cứu và timeout của lượt chạy này đọc chế độ từ biến ngữ cảnh.
         marker = modes.current.set(chat_mode)
         try:

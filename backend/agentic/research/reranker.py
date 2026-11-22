@@ -65,19 +65,6 @@ TOPIC_TERMS = {
 }
 
 
-NUTRITION_FIELDS = frozenset(
-    {
-        "energy_kcal",
-        "protein_g",
-        "carbohydrate_g",
-        "fat_g",
-        "fiber_g",
-        "serving_size",
-        "portions",
-    }
-)
-
-
 def topical(domain, text):
     pattern = TOPIC_TERMS.get(domain)
     return bool(pattern and pattern.search(normalize_food_text(text)))

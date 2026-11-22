@@ -8,7 +8,7 @@ tên trong một lời gọi list_foods) rồi trả lời trực tiếp từ k�
 
 import re
 
-from agentic.agents.state import RouteDecision
+from agentic.workflows.state import RouteDecision
 
 INTENT = "FOOD_SUGGESTION"
 CATALOG_READS = frozenset({"list_foods", "get_foods"})

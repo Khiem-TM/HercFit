@@ -5,8 +5,8 @@ from time import perf_counter
 
 from openai import AuthenticationError
 
-from agentic.core import roster
-from agentic.core.app.config import AgentSettings
+from agentic.agents import roster
+from agentic.configs.settings import AgentSettings
 from agentic.observability import annotate
 from agentic.observability import metrics as ops
 from agentic.observability.outcomes import classify, note_error
