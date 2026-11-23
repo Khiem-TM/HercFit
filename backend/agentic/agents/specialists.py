@@ -20,7 +20,7 @@ from agentic.services.write_reply import executed_writes
 from agentic.tools.registry import REGISTRY
 from agentic.workflows.routing import FastReadPlan, fast_answer_instruction, latest_request
 from agentic.workflows.state import RouteDecision
-from domains.shared.models.catalog import normalize_food_text
+from domains.shared.models import normalize_food_text
 
 KEEP_CURRENT_TRAINING_PLAN = re.compile(
     r"\b(?:giu(?: nguyen)?|khong (?:dung|ket thuc|huy|ngung)) (?:lich tap|giao an|ke hoach tap)\b"

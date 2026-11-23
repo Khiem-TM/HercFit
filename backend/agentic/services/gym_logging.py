@@ -11,7 +11,7 @@ Form, nhãn và giá trị của nó do code quản lý, nên câu trả lời c
 
 import re
 
-from domains.catalog.models.foods import normalize_food_text
+from domains.catalog.models import normalize_food_text
 
 # Accents stripped: "tập tạ", "thể hình", "phòng tập"...
 GYM = re.compile(

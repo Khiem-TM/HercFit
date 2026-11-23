@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from domains.shared.models.catalog import normalize_food_text
+from domains.shared.models import normalize_food_text
 from scripts.catalog.common import CACHE, read_json
 
 BRANDS = (

@@ -9,25 +9,32 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field, create_model
 
 from agentic.research.contracts import ExerciseFinalization, ResolveQuery
-from domains.analytics.schemas.daily_health import DailyAssessmentRead
-from domains.analytics.schemas.progress import ProgressRead
-from domains.body.schemas.body_metrics import (
+from domains.analytics.schemas import DailyAssessmentRead, ProgressRead
+from domains.body.schemas import (
     BodyMetricCreate,
     BodyMetricQuery,
     BodyMetricRead,
     LatestBodyMetricQuery,
 )
-from domains.catalog.schemas.exercises import ExerciseCreate, ExerciseQuery, ExerciseRead
-from domains.catalog.schemas.foods import FoodCreate, FoodQuery, FoodRead
-from domains.goals_plans.schemas.goal import GoalCreate, GoalRead, GoalUpdateRequest
-from domains.goals_plans.schemas.plans import (
+from domains.catalog.schemas import (
+    ExerciseCreate,
+    ExerciseQuery,
+    ExerciseRead,
+    FoodCreate,
+    FoodQuery,
+    FoodRead,
+)
+from domains.goals_plans.schemas import (
+    GoalCreate,
+    GoalRead,
+    GoalUpdateRequest,
     PlanEnd,
     TrainingPlanCreate,
     TrainingPlanEntryRead,
     TrainingPlanRead,
     TrainingPlanReplace,
 )
-from domains.health_records.schemas.health import (
+from domains.health_records.schemas import (
     DailyHealthRead,
     DeviceWorkoutRead,
     HealthOverviewQuery,
@@ -37,18 +44,18 @@ from domains.health_records.schemas.health import (
     HealthSampleRead,
     SleepSessionRead,
 )
-from domains.identity.schemas.user import OnboardingInput, UserRead, UserUpdate
-from domains.nutrition.schemas.meals import MealCreate, MealRead, MealReplace
-from domains.nutrition.schemas.nutrition import NutritionTargetsRead
-from domains.shared.schemas.common import InputSchema, Pagination
-from domains.shared.schemas.tracking import (
+from domains.identity.schemas import OnboardingInput, UserRead, UserUpdate
+from domains.nutrition.schemas import MealCreate, MealRead, MealReplace, NutritionTargetsRead
+from domains.shared.schemas import (
     DEFAULT_TIMEZONE,
     DateRangeQuery,
+    InputSchema,
     JournalQuery,
+    Pagination,
     ScheduleEntryQuery,
     TimeZoneName,
 )
-from domains.training.schemas.training import (
+from domains.training.schemas import (
     AnalyticsQuery,
     InsightQuery,
     InsightsRead,
@@ -57,12 +64,14 @@ from domains.training.schemas.training import (
     StrengthProgressRead,
     StrengthRecordsRead,
     TemplateSummary,
+    TrainingCreate,
     TrainingLoadRead,
     TrainingProfile,
     TrainingProfileRead,
+    TrainingRead,
+    TrainingReplace,
     TrainingSummaryRead,
 )
-from domains.training.schemas.trainings import TrainingCreate, TrainingRead, TrainingReplace
 from integrations.google_health.records import HydrationInput, SleepInput, SportInput
 from integrations.google_health.schemas import HealthConnectionRead, HealthRecordRead
 
@@ -583,7 +592,7 @@ add(
     "ECG is the device classification only: report it, never diagnose.",
 )
 
-# Daily Health Intelligence (backend domains/analytics/services/daily_health): chỉ số hôm nay so với nền cá nhân,
+# Daily Health Intelligence (backend domains/analytics/daily_health.py): chỉ số hôm nay so với nền cá nhân,
 # xu hướng 7 ngày, tải tập và trạng thái sẵn sàng tất định kèm lý do có số liệu và độ tin cậy.
 
 

@@ -6,7 +6,7 @@ import re
 from agentic.prompts.registry import get_questions
 from agentic.prompts.v2 import JEV_READ_ROUTES
 from agentic.workflows.routing import TEMPLATE_ID, jev_fast_read_plan, latest_request
-from domains.catalog.models.foods import normalize_food_text
+from domains.catalog.models import normalize_food_text
 
 JEV_ROUTING_QUESTIONS = get_questions("routing.jev", "v2")
 VERIFY_READ_QUESTIONS = get_questions("routing.verify_read")

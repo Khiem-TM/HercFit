@@ -3,8 +3,8 @@ from typing import Any, Literal
 
 from pydantic import AwareDatetime, BaseModel
 
-from domains.health_records.schemas.health import HEALTH_PROVIDER, ConnectionStatus
-from domains.shared.schemas.common import InputSchema
+from domains.health_records.schemas import HEALTH_PROVIDER, ConnectionStatus
+from domains.shared.schemas import InputSchema
 
 
 class HealthConnectRequest(InputSchema):

@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from agentic.observability import annotate
-from domains.catalog.models.foods import normalize_food_text
+from domains.catalog.models import normalize_food_text
 
 CONTEXT_PATH = "/api/assistant/context"
 CARD_KEYS = frozenset(

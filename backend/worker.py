@@ -42,11 +42,11 @@ def loops():
         from integrations.google_health.scheduler import health_sync_loop
 
         selected.append(("google_health_sync", health_sync_loop))
-    from domains.notifications.services.loop import daily_briefing_loop
+    from domains.notifications.services import daily_briefing_loop
 
     selected.append(("daily_briefing", daily_briefing_loop))
     if settings.cloudinary_configured:
-        from domains.media.services.image_cleanup import cleanup_loop
+        from domains.media.services import cleanup_loop
 
         selected.append(("image_cleanup", cleanup_loop))
     selected.append(("idempotency_cleanup", idempotency_cleanup_loop))

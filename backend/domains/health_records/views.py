@@ -23,8 +23,8 @@ from uuid import UUID, uuid5
 
 from sqlalchemy import select, text
 
-from domains.health_records.models.health_points import HealthPoint
-from domains.health_records.schemas.health import (
+from domains.health_records.models import HealthPoint
+from domains.health_records.schemas import (
     HEALTH_PROVIDER,
     DailyHealthRead,
     DeviceWorkoutRead,
@@ -33,7 +33,7 @@ from domains.health_records.schemas.health import (
     SleepSessionRead,
 )
 from domains.health_records.types import number
-from domains.shared.schemas.tracking import DEFAULT_TIMEZONE
+from domains.shared.schemas import DEFAULT_TIMEZONE
 
 NAMESPACE = UUID("6f1d2c7e-3a7b-4f53-9f0e-2c4d6b8a9e10")
 # Khoảng hợp lý của từng chỉ số theo ngày; giá trị ngoài khoảng coi như không có.

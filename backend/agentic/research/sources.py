@@ -12,7 +12,7 @@ nên chỉ nguồn có phạm vi 'met' mới hỗ trợ được configuration.d
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-from domains.catalog.models.foods import normalize_food_text
+from domains.catalog.models import normalize_food_text
 
 TIER_RANK = {"primary": 0, "professional": 1, "secondary": 2, "unknown": 3}
 ALL = frozenset({"nutrition", "exercise", "qa"})

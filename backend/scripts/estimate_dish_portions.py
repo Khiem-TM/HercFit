@@ -34,7 +34,7 @@ from pydantic import BaseModel, Field
 from agentic.configs.settings import agent_settings
 from agentic.services.llm import Models
 from core.database import get_postgres_connection_string
-from domains.shared.models.catalog import normalize_food_text
+from domains.shared.models import normalize_food_text
 
 logger = logging.getLogger("estimate_dish_portions")
 OUT = Path(__file__).resolve().parents[1] / "alembic" / "data" / "dish_portions.json"

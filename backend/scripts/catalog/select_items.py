@@ -264,7 +264,7 @@ def ranked(items: list[dict]) -> list[dict]:
 def clean_aliases(items: list[dict]) -> list[str]:
     """Bỏ alias trùng tên mục khác hoặc trùng alias của mục khác (so không dấu, như khớp tên). Trả về cảnh báo
     tên trùng nhau khi bỏ dấu."""
-    from domains.shared.models.catalog import normalize_food_text
+    from domains.shared.models import normalize_food_text
 
     names: dict[str, list[str]] = {}
     for item in items:

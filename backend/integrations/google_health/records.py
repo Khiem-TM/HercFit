@@ -25,14 +25,12 @@ from fastapi import HTTPException
 from pydantic import AwareDatetime, Field, model_validator
 from sqlalchemy import select
 
-from domains.catalog.schemas.exercises import ExercisePerformance
-from domains.health_records.models.health_points import HealthPoint
+from domains.catalog.schemas import ExercisePerformance
+from domains.health_records.models import HealthPoint
 from domains.health_records.types import can_write, spec
-from domains.shared.models.activity import build_exercise_item
-from domains.shared.models.basemodel import uuid7
-from domains.shared.schemas.common import InputSchema
-from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName
-from domains.training.schemas.trainings import GYM_GENERAL_CODE
+from domains.shared.models import build_exercise_item, uuid7
+from domains.shared.schemas import DEFAULT_TIMEZONE, InputSchema, TimeZoneName
+from domains.training.schemas import GYM_GENERAL_CODE
 from integrations.google_health import kinds, tokens
 from integrations.google_health.client import (
     PERMISSION,
@@ -116,7 +114,7 @@ def exercise_type(snapshot: dict[str, Any]) -> str:
 
 
 async def _bodyweight(session, user_id: UUID) -> float | None:
-    from domains.body.models.body_metrics import BodyMetric
+    from domains.body.models import BodyMetric
 
     latest = await BodyMetric.get_latest_for_user(session, user_id=user_id, respect_consent=False)
     return float(latest.weight_kg) if latest is not None and latest.weight_kg is not None else None

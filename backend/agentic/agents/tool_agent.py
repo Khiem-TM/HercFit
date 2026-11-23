@@ -42,7 +42,7 @@ from agentic.workflows.routing import (
     terminal_result,
     verified_fast_plan,
 )
-from domains.shared.models.catalog import normalize_food_text
+from domains.shared.models import normalize_food_text
 
 PROMPT = get_prompt("tool.call", "v7")
 # Model đôi khi trả "Xem trước bữa ăn… bạn xác nhận để tôi ghi nhé?" bằng văn bản thay vì gọi lệnh ghi: frontend không có

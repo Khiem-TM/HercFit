@@ -14,7 +14,7 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Literal
 
-from domains.catalog.models.foods import normalize_food_text
+from domains.catalog.models import normalize_food_text
 
 EMERGENCY = "Nếu bạn đang gặp nguy hiểm hoặc có ý định làm hại bản thân, hãy gọi cấp cứu 115 hoặc đến cơ sở y tế gần nhất và báo cho người thân ngay."
 MIN_SAFE_KCAL = 1000  # dưới mức này chúng tôi không bao giờ giúp lập chế độ ăn không có giám sát

@@ -12,13 +12,12 @@ from sqlalchemy import func, select, text
 from core.crypto import TokenCipherUnavailable, decrypt_secret, encrypt_secret
 from core.security import generate_secure_token, pkce_pair
 from core.settings import settings
-from domains.health_records.models.health_points import HealthPoint
-from domains.health_records.schemas.health import HEALTH_PROVIDER
+from domains.health_records.models import HealthPoint
+from domains.health_records.schemas import HEALTH_PROVIDER
 from domains.health_records.types import SYNC_GROUPS
 from domains.identity import consent
-from domains.identity.models.oauth_account import OAuthAccount
-from domains.identity.models.user import User
-from domains.shared.services.common import UserService
+from domains.identity.models import OAuthAccount, User
+from domains.shared.services import UserService
 from integrations.google_health import oauth
 from integrations.google_health.client import GoogleHealthError
 from integrations.google_health.models import HealthConnection

@@ -22,7 +22,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core import principal as principals
-from domains.identity.models.consent import ConsentEvent, UserConsent
+from domains.identity.models import ConsentEvent, UserConsent
 
 PURPOSE = "assistant"
 # Thông báo chủ động (briefing buổi sáng, insight): người dùng tự bật, độc lập với quyền của trợ lý.

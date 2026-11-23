@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 from statistics import mean, median, pstdev
 from zoneinfo import ZoneInfo
 
-from domains.health_records.schemas.health import (
+from domains.health_records.schemas import (
     ACTIVITY_LABELS,
     ACTIVITY_ORDER,
     BMI_LABELS,

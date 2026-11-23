@@ -5,3 +5,7 @@ khi người dùng tự bật consent "proactive"; mỗi thông báo có dedup_k
 mỗi ngày cùng giờ yên lặng. Không có loại "khẩn cấp y khoa": trạng thái needs_review chỉ thành một
 briefing trung tính trỏ về bảng sức khoẻ.
 """
+
+# Nạp toàn bộ model ORM (domains.registry) trước mọi module của miền, để đích quan hệ và hook graph-outbox luôn
+# đầy đủ dù chỉ import một model.
+import domains.registry  # noqa: F401

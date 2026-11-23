@@ -21,7 +21,7 @@ from core.database import close_crud_db_pool, get_async_engine
 from core.media_limits import ImageUploadLimit
 from core.route_metrics import RouteMetricsMiddleware
 from core.settings import settings
-from domains.shared.services.common import request_validation_error
+from domains.shared.services import request_validation_error
 
 
 @asynccontextmanager
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
             pass
     cleanup_task = None
     if settings.IMAGE_CLEANUP_LOOP and settings.cloudinary_configured:
-        from domains.media.services.image_cleanup import cleanup_loop
+        from domains.media.services import cleanup_loop
         cleanup_task = asyncio.create_task(cleanup_loop())
     health_task = None
     if settings.google_health_configured and settings.GOOGLE_HEALTH_SYNC_LOOP:
@@ -50,11 +50,11 @@ async def lifespan(app: FastAPI):
         health_task = asyncio.create_task(health_sync_loop())
     briefing_task = None
     if settings.DAILY_BRIEFING_LOOP:
-        from domains.notifications.services.loop import daily_briefing_loop
+        from domains.notifications.services import daily_briefing_loop
         briefing_task = asyncio.create_task(daily_briefing_loop())
     stream_task = None
     if settings.NOTIFICATION_STREAM:
-        from domains.notifications.services.realtime import listen_loop
+        from domains.notifications.services import listen_loop
         stream_task = asyncio.create_task(listen_loop())
     metrics_stop, metrics_task = asyncio.Event(), None
     if settings.API_ROUTE_METRICS:

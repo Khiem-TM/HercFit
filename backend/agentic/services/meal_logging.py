@@ -17,8 +17,8 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from domains.catalog.services.catalog_search import accented
-from domains.shared.models.catalog import normalize_food_text
+from domains.catalog.services import accented
+from domains.shared.models import normalize_food_text
 
 INTENT = "LOG_FOOD"
 DOMAINS = {"meals", "foods"}

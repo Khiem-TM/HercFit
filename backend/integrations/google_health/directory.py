@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy import event, text
 
 from domains.health_records import ports
-from domains.health_records.schemas.health import HEALTH_PROVIDER
+from domains.health_records.schemas import HEALTH_PROVIDER
 from domains.health_records.types import TYPES, Read, disabled_types
 from integrations.google_health.models import HealthConnection
 

@@ -15,7 +15,7 @@ from agentic.memory.history_store import HistoryStore
 from agentic.memory.turns import turn_record
 from agentic.observability import durable_context
 from agentic.observability.persistence import set_psycopg_context
-from domains.shared.schemas.tracking import DEFAULT_TIMEZONE
+from domains.shared.schemas import DEFAULT_TIMEZONE
 
 
 def usage_day(now=None):

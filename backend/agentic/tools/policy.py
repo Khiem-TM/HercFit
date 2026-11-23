@@ -2,7 +2,7 @@ import re
 
 from agentic.prompts.registry import get_prompt
 from agentic.tools.registry import REGISTRY
-from domains.catalog.models.foods import normalize_food_text
+from domains.catalog.models import normalize_food_text
 
 COACH_GUIDANCE = get_prompt("training.coach", "v6")
 CAPABILITY_GUIDANCE = get_prompt("nutrition.capabilities", "v7")

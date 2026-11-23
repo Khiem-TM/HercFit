@@ -6,39 +6,28 @@ from fastapi import APIRouter
 
 from agentic.embedding.retrieval.router import router as embedding_router
 from api.dependencies import JournalServiceDep, PlanServiceDep
-from domains.analytics.routers.assistant_router import router as assistant_router
-from domains.analytics.routers.context_router import router as context_router
-from domains.analytics.routers.dashboard_router import router as dashboard_router
-from domains.analytics.routers.progress_router import router as progress_router
-from domains.body.routers.body_metrics_router import router as body_metrics_router
-from domains.catalog.routers.exercise_router import router as exercise_router
-from domains.catalog.routers.food_router import router as food_router
-from domains.goals_plans.models.plans import TrainingPlan
-from domains.goals_plans.routers.goal_router import router as goal_router
-from domains.goals_plans.routers.plan_router import router as plan_router
-from domains.goals_plans.routers.training_plan_router import router as training_plan_router
-from domains.goals_plans.schemas.plans import (
-    TrainingPlanCreate,
-    TrainingPlanRead,
-    TrainingPlanReplace,
+from domains.analytics.routers import (
+    assistant_router,
+    context_router,
+    dashboard_router,
+    progress_router,
 )
-from domains.health_records.routers.health_router import router as health_router
-from domains.health_records.routers.health_v2_router import router as health_v2_router
-from domains.identity.routers.auth_router import router as auth_router
-from domains.identity.routers.delegation_router import router as delegation_router
-from domains.identity.routers.privacy_router import router as privacy_router
-from domains.identity.routers.profile_router import router as profile_router
-from domains.media.routers.media_router import router as media_router
-from domains.notifications.routers.notifications_router import router as notifications_router
-from domains.nutrition.models.meals import Meal
-from domains.nutrition.routers.meal_router import router as meal_router
-from domains.nutrition.routers.nutrition_router import router as nutrition_router
-from domains.nutrition.schemas.meals import MealCreate, MealRead
-from domains.shared.services.common import require_found
-from domains.training.models.trainings import Training
-from domains.training.routers.training_analytics_router import router as training_analytics_router
-from domains.training.routers.training_router import router as training_router
-from domains.training.schemas.trainings import TrainingCreate, TrainingRead
+from domains.body.routers import body_metrics_router
+from domains.catalog.routers import exercise_router, food_router
+from domains.goals_plans.models import TrainingPlan
+from domains.goals_plans.routers import goal_router, plan_router, training_plan_router
+from domains.goals_plans.schemas import TrainingPlanCreate, TrainingPlanRead, TrainingPlanReplace
+from domains.health_records.routers import health_router, health_v2_router
+from domains.identity.routers import auth_router, delegation_router, privacy_router, profile_router
+from domains.media.routers import media_router
+from domains.notifications.routers import notifications_router
+from domains.nutrition.models import Meal
+from domains.nutrition.routers import meal_router, nutrition_router
+from domains.nutrition.schemas import MealCreate, MealRead
+from domains.shared.services import require_found
+from domains.training.models import Training
+from domains.training.routers import training_analytics_router, training_router
+from domains.training.schemas import TrainingCreate, TrainingRead
 from integrations.google_health.router import records_router as google_health_records_router
 from integrations.google_health.router import router as integration_router
 

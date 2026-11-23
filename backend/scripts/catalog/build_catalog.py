@@ -20,7 +20,7 @@ import csv
 import json
 import sys
 
-from domains.shared.models.catalog import normalize_food_text
+from domains.shared.models import normalize_food_text
 from scripts.catalog.candidates import (
     ATWATER_TOLERANCE,
     CATEGORY_EN,

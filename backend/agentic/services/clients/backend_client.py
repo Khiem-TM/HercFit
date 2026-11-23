@@ -12,7 +12,7 @@ from agentic.observability import metrics as ops
 from agentic.observability.propagation import outbound_headers
 from agentic.tools.registry import REGISTRY
 from core import service_auth
-from domains.identity.schemas.user import UserRead
+from domains.identity.schemas import UserRead
 
 
 class BackendError(Exception):

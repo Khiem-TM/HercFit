@@ -37,7 +37,7 @@ from agentic.tools.policy import CATALOG_DEPENDENCIES, TRAINING_DOMAINS, needs_c
 from agentic.workflows import delegation, mode
 from agentic.workflows.routing import fast_reads_enabled, fast_route
 from agentic.workflows.state import RouteDecision
-from domains.shared.models.catalog import normalize_food_text
+from domains.shared.models import normalize_food_text
 
 PERSONAL_MEASURE = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:kg|cm|tuổi|tuoi|kcal|bpm)\b", re.I)
 # Yêu cầu cá nhân hoá vẫn tra cứu tri thức: mỗi chủ đề một ý định QA cho kế hoạch tra cứu.

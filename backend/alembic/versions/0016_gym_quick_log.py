@@ -2,7 +2,7 @@
 
 Khi người dùng chỉ cần calo cho "tập gym" chứ không cần từng bài, set và
 mức tạ, buổi tập được ghi thành một mục SPORT của bản ghi này kèm thời lượng và
-cường độ. Năng lượng lấy từ domains.training.services.training_metrics.RESISTANCE_MET (2024 Adult
+cường độ. Năng lượng lấy từ domains.training.metrics.RESISTANCE_MET (2024 Adult
 Compendium 02054 / 02061 / 02050), chọn theo môn thể thao "resistance_training".
 """
 import json

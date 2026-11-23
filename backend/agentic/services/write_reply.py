@@ -12,7 +12,7 @@ from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
 from agentic.tools.registry import REGISTRY
-from domains.catalog.models.foods import normalize_food_text
+from domains.catalog.models import normalize_food_text
 
 TIMEZONE = "Asia/Ho_Chi_Minh"
 UNITS = {"G": "g", "ML": "ml", "SERVING": "suất"}

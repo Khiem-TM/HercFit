@@ -58,9 +58,8 @@ from agentic.workflows import mode
 from agentic.workflows.context_filter import bounded_documents
 from agentic.workflows.routing import latest_request
 from agentic.workflows.state import AgentState
-from domains.catalog.models.foods import normalize_food_text
-from domains.catalog.schemas.exercises import ExerciseCreate
-from domains.catalog.schemas.foods import FoodCreate
+from domains.catalog.models import normalize_food_text
+from domains.catalog.schemas import ExerciseCreate, FoodCreate
 
 PROMPT = get_prompt("research.extract")
 

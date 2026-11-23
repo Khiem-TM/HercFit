@@ -32,10 +32,10 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select, text, update
 
 from core.database import get_db_session
-from domains.health_records.models.health_points import HealthPoint
+from domains.health_records.models import HealthPoint
 from domains.health_records.types import can_write, spec
-from domains.nutrition.models.meals import Meal
-from domains.training.models.trainings import Training
+from domains.nutrition.models import Meal
+from domains.training.models import Training
 from integrations.google_health import fencing, kinds
 from integrations.google_health.client import (
     PERMISSION,

@@ -14,8 +14,8 @@ from agentic.tools.registry import REGISTRY
 
 # Giữ export hiện được dùng bởi baseline evaluation.
 from agentic.workflows.context_filter import model_graph_context as model_graph_context
-from domains.analytics.schemas.progress import ProgressRead
-from domains.shared.models.catalog import normalize_food_text
+from domains.analytics.schemas import ProgressRead
+from domains.shared.models import normalize_food_text
 
 TEMPLATE_ID = "progress.explicit_dates"
 TEMPLATE_VERSION = 1

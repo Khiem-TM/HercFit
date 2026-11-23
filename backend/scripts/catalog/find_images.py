@@ -120,7 +120,7 @@ async def tavily_images(client: httpx.AsyncClient, query: str) -> list[dict]:
 
 
 async def download(item_dir: Path, candidates: list[dict]) -> list[dict]:
-    from domains.media.services.remote_image import fetch_remote_image
+    from domains.media.services import fetch_remote_image
 
     item_dir.mkdir(parents=True, exist_ok=True)
     usable = []
@@ -289,7 +289,7 @@ def review() -> Path:
 
 async def upload() -> None:
     from core.settings import settings
-    from domains.media.services.cloudinary_images import CloudinaryImages, prepare_image
+    from domains.media.services import CloudinaryImages, prepare_image
 
     results = read_json(OUT)
     overrides = read_json(OVERRIDES) if OVERRIDES.exists() else {}

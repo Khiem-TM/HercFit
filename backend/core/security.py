@@ -161,7 +161,7 @@ async def get_current_user(
 ) -> Any:
     """Phụ thuộc FastAPI lấy model User đã xác thực và đặt principal."""
     from core import principal as principals
-    from domains.identity.models.user import User
+    from domains.identity.models import User
 
     payload, delegated = decode_bearer(http_auth.credentials)
     self_declared = request.headers.get(principals.AGENT_CLIENT_HEADER, "").lower() == "agent"

@@ -15,8 +15,8 @@ from pathlib import Path
 
 from agentic.services.meal_logging import measure, name_matches
 from core.database import get_session_factory
-from domains.catalog.models.foods import FoodItem
-from domains.catalog.schemas.foods import FoodRead
+from domains.catalog.models import FoodItem
+from domains.catalog.schemas import FoodRead
 from scripts.catalog.common import write_json
 
 PHRASES = (

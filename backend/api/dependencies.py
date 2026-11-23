@@ -10,25 +10,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
 from core.security import get_current_user
-from domains.body.schemas.body_metrics import BodyMetricQuery
-from domains.catalog.schemas.exercises import ExerciseKind, ExerciseQuery
-from domains.catalog.schemas.foods import FoodQuery
-from domains.catalog.services.catalog_service import CatalogService
-from domains.goals_plans.schemas.plans import PlanQuery, PlanStatus
-from domains.goals_plans.services.plan_service import PlanService
-from domains.identity.models.user import User
-from domains.identity.services.user_data_service import UserDataService
-from domains.shared.schemas.common import Pagination
-from domains.shared.schemas.enums import FoodItemType, FoodSourceType
-from domains.shared.schemas.tracking import (
+from domains.body.schemas import BodyMetricQuery
+from domains.catalog.schemas import ExerciseKind, ExerciseQuery, FoodQuery
+from domains.catalog.services import CatalogService
+from domains.goals_plans.schemas import PlanQuery, PlanStatus
+from domains.goals_plans.services import PlanService
+from domains.identity.models import User
+from domains.identity.services import UserDataService
+from domains.shared.schemas import (
     DateRangeQuery,
+    FoodItemType,
+    FoodSourceType,
     JournalQuery,
+    Pagination,
     ProgressRangeQuery,
     ScheduleEntryQuery,
     TimeZoneName,
 )
-from domains.shared.services.common import UserService, request_validation_error
-from domains.shared.services.journal_service import JournalService
+from domains.shared.services import JournalService, UserService, request_validation_error
 
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]

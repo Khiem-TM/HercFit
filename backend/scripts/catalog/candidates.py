@@ -37,7 +37,7 @@ BEVERAGES = ("nuoc ", "tra ", "ca phe", "sinh to", "bia", "ruou", "ca cao", "cac
 
 def unit_for(name: str) -> str:
     """ML cho đồ uống (1 g ≈ 1 ml), G cho mọi món ăn khác kể cả chè, kem, canh (như estimate_dish_portions)."""
-    from domains.shared.models.catalog import normalize_food_text
+    from domains.shared.models import normalize_food_text
 
     key = normalize_food_text(name) + " "
     if key.startswith(BEVERAGES) or (key.startswith("sua ") and not key.startswith(("sua chua ", "sua bot", "sua dac"))):

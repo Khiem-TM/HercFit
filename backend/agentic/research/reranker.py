@@ -3,7 +3,7 @@
 import re
 
 from agentic.research.sources import TIER_RANK, rate
-from domains.catalog.models.foods import normalize_food_text
+from domains.catalog.models import normalize_food_text
 
 GENERIC_WORDS = frozenset(
     {

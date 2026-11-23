@@ -16,7 +16,7 @@ import logging
 from collections import Counter
 from datetime import datetime, time, timedelta, timezone
 
-from domains.health_records.schemas.health import ACTIVITY_LABELS, BMI_LABELS
+from domains.health_records.schemas import ACTIVITY_LABELS, BMI_LABELS
 
 from .driver import create_driver, value
 from .intents import hub as intent_hub

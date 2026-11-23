@@ -24,7 +24,7 @@ from sqlalchemy import select, text
 
 from core.database import get_db_session
 from domains.health_records import views
-from domains.health_records.models.health_points import HealthPoint as HealthPointRow
+from domains.health_records.models import HealthPoint as HealthPointRow
 from domains.health_records.types import SELF_MARKED, DataType, Read, readable, spec
 from integrations.google_health import kinds
 from integrations.google_health.client import (

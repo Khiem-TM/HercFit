@@ -21,8 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
-from domains.health_records.schemas.health import HEALTH_PROVIDER
-from domains.shared.models.basemodel import BaseModel
+from domains.health_records.schemas import HEALTH_PROVIDER
+from domains.shared.models import BaseModel
 
 
 def _json():

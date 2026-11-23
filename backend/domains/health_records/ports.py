@@ -83,7 +83,7 @@ async def refresh(user_id: UUID, days: int = 2) -> bool:
 
 async def user_timezone(session: AsyncSession, user_id: UUID, requested: str | None = None) -> str:
     """Múi giờ dùng để chốt "hôm nay": tham số của request, rồi múi giờ nhà cung cấp, rồi mặc định."""
-    from domains.shared.schemas.tracking import DEFAULT_TIMEZONE
+    from domains.shared.schemas import DEFAULT_TIMEZONE
 
     if requested:
         return requested

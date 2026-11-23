@@ -36,7 +36,7 @@ JSON_COLUMNS = ("nutrition_information", "data_quality", "portions")
 
 
 def _normalize(value: str) -> str:
-    """Như domains.shared.models.catalog.normalize_food_text (migration không import code ứng dụng)."""
+    """Như domains.shared.models.normalize_food_text (migration không import code ứng dụng)."""
     value = unicodedata.normalize("NFD", value.lower().replace("đ", "d"))
     return " ".join("".join(char for char in value if not unicodedata.combining(char)).split())
 

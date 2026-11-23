@@ -5,9 +5,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agentic.research.evidence import audit
-from domains.catalog.models.foods import normalize_food_text
-from domains.catalog.schemas.exercises import ExerciseCreate, ExerciseRead
-from domains.catalog.schemas.foods import FoodCreate, FoodRead
+from domains.catalog.models import normalize_food_text
+from domains.catalog.schemas import ExerciseCreate, ExerciseRead, FoodCreate, FoodRead
 
 
 class StrictModel(BaseModel):

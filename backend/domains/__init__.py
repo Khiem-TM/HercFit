@@ -1,6 +1,5 @@
-"""Các miền nghiệp vụ.
+"""Các miền nghiệp vụ: mỗi miền có models.py, schemas.py, services.py, routers.py (và module riêng khi cần).
 
-Import bất kỳ package `domains.<name>.models` nào cũng đăng ký mọi model ORM trước
-(domains.registry). Schema vẫn import được
-mà không cần model SQLAlchemy, settings hay database.
+Package của mỗi miền có model (mọi miền trừ analytics) nạp domains.registry trước tiên, nên import bất kỳ module nào
+của miền đó cũng đăng ký đủ mọi model ORM (kể cả khi chỉ cần schema).
 """

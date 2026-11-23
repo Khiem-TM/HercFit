@@ -14,7 +14,7 @@ from agentic.core.context import request_context
 from agentic.research.attestation import sign
 from agentic.research.contracts import ExerciseFinalization, FoodFinalization
 from agentic.research.quotes import canon
-from domains.catalog.models.foods import normalize_food_text
+from domains.catalog.models import normalize_food_text
 
 FINALIZATIONS = {"foods": FoodFinalization, "exercises": ExerciseFinalization}
 # Một câu hỏi hay lời đồn không phải là ước tính ("có thật ... 1600 kcal không vậy").

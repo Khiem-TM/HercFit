@@ -28,7 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agentic.core.app.schemas.response import NUMBER_UNITS, Clarification
 from agentic.prompts.registry import get_prompt
-from domains.catalog.models.foods import normalize_food_text
+from domains.catalog.models import normalize_food_text
 
 logger = logging.getLogger(__name__)
 PROMPT = get_prompt("clarification.form", "v4")
