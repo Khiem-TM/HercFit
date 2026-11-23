@@ -3,8 +3,7 @@ import { computed, onUnmounted, shallowRef, watch } from 'vue'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-vue-next'
 import type { HeartRateHour } from '@/types/api'
 import { useAuth } from '@/composables/useAuth'
-import { createHealthApi } from '@/features/health-integration/api'
-import { refreshKnowledgeHealth } from '@/features/health-integration/knowledgeSync'
+import { createHealthApi, syncCancellable } from '@/features/health-integration/api'
 import BarChart from './charts/BarChart.vue'
 import { chart, distribution, hours, summary } from './heart'
 import { localDate, longDate, shift, TZ } from './format'
@@ -43,7 +42,7 @@ async function load() {
 
 watch(day, load, { immediate: true })
 // Dữ liệu đã lưu hiện ngay; lượt đồng bộ xong thì tải lại để thấy các giờ mới nhất.
-void refreshKnowledgeHealth(createHealthApi((url, init) => authFetch(url, init)), syncControl.signal)
+void syncCancellable(createHealthApi((url, init) => authFetch(url, init)), syncControl.signal)
   .then(synced => { if (synced) void load() })
   .catch(() => undefined)
   .finally(() => { syncing.value = false })

@@ -88,6 +88,36 @@ export async function syncAndWait(api: HealthApi, {
   return null
 }
 
+/** Một lượt đồng bộ huỷ được bằng `signal` (chờ tối đa 60 lượt); mỗi lần mở chi tiết nhịp tim yêu cầu một lượt. */
+export async function syncCancellable(api: HealthApi, signal: AbortSignal): Promise<HealthConnection | null> {
+  return syncAndWait(api, {
+    attempts: 60, signal,
+    sleep: ms => new Promise(resolve => {
+      const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve() }
+      const timer = setTimeout(finish, ms)
+      signal.addEventListener('abort', finish, { once: true })
+      if (signal.aborted) finish()
+    }),
+  })
+}
+
+let pendingOpenSync: Promise<HealthConnection | null> | null = null
+
+/**
+ * Tần suất đồng bộ "Khi mở ứng dụng": một lượt đồng bộ cho mỗi lần tải trang. Lời gọi sau dùng chung lượt đó;
+ * kết nối "hourly" (vòng nền) hoặc "manual" (chỉ khi bấm) không đồng bộ ở đây. Trả về kết nối mới khi đã đồng bộ.
+ */
+export function syncOnOpen(api: HealthApi): Promise<HealthConnection | null> {
+  if (!pendingOpenSync) {
+    pendingOpenSync = (async () => {
+      const connection = await api.connection()
+      if (connection.status !== 'ACTIVE' || connection.sync_frequency !== 'open') return null
+      return syncAndWait(api)
+    })().catch(() => null)
+  }
+  return pendingOpenSync
+}
+
 /** Nhãn tiếng Việt của các loại dữ liệu Google Health mà HercFit đọc. */
 export const TYPE_LABELS: Record<string, string> = {
   steps: 'Bước chân', distance: 'Quãng đường', floors: 'Số tầng', 'active-minutes': 'Phút vận động',

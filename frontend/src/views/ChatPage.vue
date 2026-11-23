@@ -19,8 +19,7 @@ import { useMobile } from '@/composables/useMobile'
 import { onArrival } from '@/composables/useNotifications'
 import { useThemeDefault } from '@/composables/useTheme'
 import { useVoice } from '@/composables/useVoice'
-import { createHealthApi } from '@/features/health-integration/api'
-import { syncOnOpen } from '@/features/health-integration/openSync'
+import { createHealthApi, syncOnOpen } from '@/features/health-integration/api'
 import type { ConfirmExtras } from '@/components/chat/cards/ConfirmationCard.vue'
 
 useThemeDefault('light')
