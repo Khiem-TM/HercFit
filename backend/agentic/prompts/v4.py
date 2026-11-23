@@ -1,12 +1,15 @@
-"""Phiên bản 4: Google Health là nguồn sự thật cho thể thao, số đo cơ thể và nước uống.
+"""Prompt phiên bản 4: Google Health là nguồn sự thật cho thể thao, số đo cơ thể và nước uống."""
 
-Nhật ký tập của HercFit chỉ còn buổi gym (create_trainings). Buổi thể thao được ghi thẳng lên
-Google bằng log_sport_session; nước uống bằng log_water. Calo tiêu hao do backend tính (total-calories
-của Google cộng các buổi ghi tay), trợ lý không cộng thêm.
-"""
+from agentic.prompts.v3 import COACH_GUIDANCE as _COACH_V3
+from agentic.prompts.v3 import HEALTH_GUIDANCE as _HEALTH_V3
 
-from agentic.prompts.v3.domains import COACH_GUIDANCE as _COACH_V3
-from agentic.prompts.v3.domains import HEALTH_GUIDANCE as _HEALTH_V3
+# --------------------------------------------------------------------------------------------------
+# Phiên bản 4: Google Health là nguồn sự thật cho thể thao, số đo cơ thể và nước uống.
+#
+# Nhật ký tập của HercFit chỉ còn buổi gym (create_trainings). Buổi thể thao được ghi thẳng lên
+# Google bằng log_sport_session; nước uống bằng log_water. Calo tiêu hao do backend tính (total-calories
+# của Google cộng các buổi ghi tay), trợ lý không cộng thêm.
+# --------------------------------------------------------------------------------------------------
 
 COACH_GUIDANCE = _COACH_V3.replace(
     "- Ghi nhanh buổi gym",

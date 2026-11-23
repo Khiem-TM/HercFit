@@ -1,12 +1,16 @@
-"""Phiên bản 6: món ăn không còn tra cứu web.
+"""Prompt phiên bản 6: món ăn không còn tra cứu web; catalog chưa có món thì hỏi bằng thẻ tìm món/tạo món riêng."""
 
-Catalog chưa có món cần ghi thì router vẫn giao cho agent dinh dưỡng (action tool, domain meals); HercFit hỏi người
-dùng bằng thẻ món thiếu (tìm món trong catalog hoặc tạo món riêng, services/food_gap.py). Research catalog chỉ còn cho
-bài tập. Phần còn lại giữ nguyên v2 (chế độ đầy đủ/Plan) và v3 (chế độ ghi nhanh); hai bản đó được giữ cố định.
-"""
-from agentic.prompts.v2.routing import ROUTING_PROMPT as _V2_ROUTING
-from agentic.prompts.v3.routing import NORMAL_ROUTING_PROMPT as _V3_NORMAL
+from agentic.prompts.v1 import CAPABILITY_GUIDANCE as _V1_CAPABILITY
+from agentic.prompts.v2 import ROUTING_PROMPT as _V2_ROUTING
+from agentic.prompts.v3 import NORMAL_ROUTING_PROMPT as _V3_NORMAL
 
+# --------------------------------------------------------------------------------------------------
+# Phiên bản 6: món ăn không còn tra cứu web.
+#
+# Catalog chưa có món cần ghi thì router vẫn giao cho agent dinh dưỡng (action tool, domain meals); HercFit hỏi người
+# dùng bằng thẻ món thiếu (tìm món trong catalog hoặc tạo món riêng, services/food_gap.py). Research catalog chỉ còn cho
+# bài tập. Phần còn lại giữ nguyên v2 (chế độ đầy đủ/Plan) và v3 (chế độ ghi nhanh); hai bản đó được giữ cố định.
+# --------------------------------------------------------------------------------------------------
 
 def _revise(text, changes):
     for old, new in changes:
@@ -39,3 +43,16 @@ FOOD_RULES = (
 
 ROUTING_PROMPT = _revise(_V2_ROUTING, FOOD_RULES)
 NORMAL_ROUTING_PROMPT = _revise(_V3_NORMAL, FOOD_RULES)
+
+
+# --------------------------------------------------------------------------------------------------
+# Phiên bản 6: hướng dẫn catalog cho tool model khi món ăn không còn tra cứu web (xem routing.py cùng phiên bản).
+# --------------------------------------------------------------------------------------------------
+
+CAPABILITY_GUIDANCE = _revise(_V1_CAPABILITY, (
+    ('Khi ghi meals, bạn được đọc list_foods/get_foods/resolve_foods.\n',
+     'Khi ghi meals, bạn được đọc list_foods/get_foods.\n'),
+    ('Catalog rỗng: chuyển Orchestrator sang research foods/exercises; nhiều biến thể thì hỏi bằng tên.\n',
+     'Catalog không có món ăn: dừng lại, không đoán món gần giống và không tra web (HercFit hiện thẻ tìm món/tạo món\n'
+     'riêng). Catalog không có bài tập: chuyển Orchestrator sang research exercises. Nhiều biến thể thì hỏi bằng tên.\n'),
+))

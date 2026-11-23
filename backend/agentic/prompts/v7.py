@@ -1,9 +1,14 @@
-"""Phiên bản 7: mọi món trong catalog tính theo 100 g hoặc 100 ml, không còn món theo suất (PORTION).
+"""Prompt phiên bản 7: mọi món tính theo 100 g hoặc 100 ml, không còn món theo suất (PORTION)."""
 
-"1 tô", "1 suất" được quy ra gam/ml bằng khẩu phần hộ gia đình (portions) của món; lượng ghi luôn là G hoặc ML.
-"""
-from agentic.prompts.v6.domains import CAPABILITY_GUIDANCE as _V6_CAPABILITY
-from agentic.prompts.v6.routing import _revise
+from agentic.prompts.v1 import TOOL_PROMPT as _V1_PROMPT
+from agentic.prompts.v6 import CAPABILITY_GUIDANCE as _V6_CAPABILITY
+from agentic.prompts.v6 import _revise
+
+# --------------------------------------------------------------------------------------------------
+# Phiên bản 7: mọi món trong catalog tính theo 100 g hoặc 100 ml, không còn món theo suất (PORTION).
+#
+# "1 tô", "1 suất" được quy ra gam/ml bằng khẩu phần hộ gia đình (portions) của món; lượng ghi luôn là G hoặc ML.
+# --------------------------------------------------------------------------------------------------
 
 CAPABILITY_GUIDANCE = _revise(_V6_CAPABILITY, (
     ('SERVING là đúng khẩu phần catalog: 1 tô/2 quả chỉ đổi thành 1/2 SERVING khi catalog xác định\n'
@@ -21,4 +26,17 @@ CAPABILITY_GUIDANCE = _revise(_V6_CAPABILITY, (
      'Ngoại lệ: cùng tên một bản không có portions và một bản có portions là hai cách đo của cùng món: người dùng nói\n'
      'gram/ml thì chọn bản không có portions, nói tô/bát/suất/đĩa thì chọn bản có portions và quy ra gam theo\n'
      'portions, không hỏi lại.\n'),
+))
+
+
+# --------------------------------------------------------------------------------------------------
+# Phiên bản 7: món riêng người dùng tự đưa số liệu luôn tính theo gam/ml (không còn serving_unit PORTION).
+# --------------------------------------------------------------------------------------------------
+
+TOOL_PROMPT = _revise(_V1_PROMPT, (
+    ('create_foods đúng số liệu đó (đồ uống/suất\n'
+     'không rõ gram dùng serving_unit PORTION), không bịa trường còn thiếu.',
+     'create_foods đúng số liệu đó: serving_size\n'
+     'là lượng gam/ml mà số liệu áp dụng (serving_unit G hoặc ML), khẩu phần như "1 ly" thì thêm vào portions; chưa rõ\n'
+     'gam/ml của suất thì hỏi lại, không bịa trường còn thiếu.'),
 ))

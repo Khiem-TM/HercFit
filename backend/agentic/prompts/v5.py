@@ -1,10 +1,14 @@
-"""Phiên bản 5: lịch tập lưu bằng một lệnh, không còn bước tạo kế hoạch cha riêng.
+"""Prompt phiên bản 5: lịch tập lưu bằng một lệnh, không còn bước tạo kế hoạch cha riêng."""
 
-create_training_plans tự gắn lịch vào kế hoạch đang hoạt động (hoặc tạo kế hoạch theo mục tiêu hiện tại);
-người dùng sửa lịch ngay trên thẻ xác nhận và tick từng buổi đã tập ở thanh bên Kế hoạch.
-"""
+from agentic.prompts.v4 import COACH_GUIDANCE as _COACH_V4
+from agentic.prompts.v4 import HEALTH_GUIDANCE as _HEALTH_V4
 
-from agentic.prompts.v4.domains import COACH_GUIDANCE as _COACH_V4
+# --------------------------------------------------------------------------------------------------
+# Phiên bản 5: lịch tập lưu bằng một lệnh, không còn bước tạo kế hoạch cha riêng.
+#
+# create_training_plans tự gắn lịch vào kế hoạch đang hoạt động (hoặc tạo kế hoạch theo mục tiêu hiện tại);
+# người dùng sửa lịch ngay trên thẻ xác nhận và tick từng buổi đã tập ở thanh bên Kế hoạch.
+# --------------------------------------------------------------------------------------------------
 
 _V4_PLAN = """- Lịch tập dùng prescription (khoảng reps, %1RM/RPE, bước interval theo vùng pace), không dùng performance.
   Có thể preview_training_template rồi gửi nguyên payload vào create_training_plans với id của current_plan.
@@ -41,7 +45,6 @@ COACH_GUIDANCE = _COACH_V4.replace(
 
 # health.guidance v5: Daily Health Intelligence. Câu hỏi về hôm nay/hồi phục/độ sẵn sàng đọc đánh giá tất định
 # của backend (get_health_assessment); mô hình chỉ diễn giải, không tính, không chẩn đoán.
-from agentic.prompts.v4.domains import HEALTH_GUIDANCE as _HEALTH_V4  # noqa: E402
 
 _V4_START = """- Bắt đầu bằng get_health_context (topic: overview/activity/sleep/recovery/body/nutrition, period 7d/28d/90d);"""
 assert _V4_START in _HEALTH_V4

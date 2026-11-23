@@ -4,7 +4,7 @@ import math
 import re
 
 from agentic.prompts.registry import get_questions
-from agentic.prompts.v2.routing import JEV_READ_ROUTES
+from agentic.prompts.v2 import JEV_READ_ROUTES
 from agentic.workflows.routing import TEMPLATE_ID, jev_fast_read_plan, latest_request
 from domains.catalog.models.foods import normalize_food_text
 
