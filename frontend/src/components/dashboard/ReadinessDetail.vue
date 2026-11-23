@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { ChevronLeft, TriangleAlert } from 'lucide-vue-next'
 import type { DailyAssessment, HealthConnection } from '@/types/api'
-import SleepLogForm from '@/components/knowledge/health/SleepLogForm.vue'
+import SleepLogForm from './SleepLogForm.vue'
 import { longDate, ddmmyyyy, stamp } from './format'
 import { metricRows, readinessView } from './today'
 

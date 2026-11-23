@@ -1,4 +1,4 @@
-import { num } from '@/components/knowledge/health/healthFormat'
+import { num } from './format'
 import type { ProgressDay } from '@/types/api'
 
 /** Hệ số "ít vận động": phần tiêu hao ngoài BMR và ngoài buổi tập (đi lại, tiêu hoá). Buổi tập được cộng riêng. */

@@ -48,9 +48,6 @@ export interface KnowledgeIntent {
   node_id: string
 }
 
-/** Các tab của thanh bên tri thức; "Kế hoạch" là checklist lịch tập đang chạy. */
-export type KnowledgeTab = 'overview' | 'map' | 'plan'
-
 export interface KnowledgeProfile {
   age: number | null
   height_cm: number | null

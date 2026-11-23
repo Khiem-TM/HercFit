@@ -2,12 +2,11 @@
 import { computed, defineAsyncComponent, shallowRef } from 'vue'
 import { Box, Pencil } from 'lucide-vue-next'
 import type { BodyMetricRead, GoalRead, HealthProfile, UserProfile } from '@/types/api'
-import { num } from '@/components/knowledge/health/healthFormat'
 import { goalChoices } from '@/features/onboarding/model'
 import BodyFigure from './BodyFigure.vue'
 import type { BodyMorph } from './bodyMorph'
 import { bmiCategory, bmiOf, bmiPosition } from './bodyShape'
-import { ddmm, localDate, vn } from './format'
+import { ddmm, localDate, num, vn } from './format'
 import { latestMeasures, type ReadinessView } from './today'
 
 const props = defineProps<{

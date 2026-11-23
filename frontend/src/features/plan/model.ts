@@ -66,21 +66,11 @@ export interface TrainingPlan {
   entries: PlanEntry[]
 }
 
-export interface PlanDay { date: string; entries: PlanEntry[] }
-
 export interface PlanProgress { done: number; total: number; due: number; missed: number; percent: number }
 
 /** Ngày địa phương YYYY-MM-DD theo múi giờ của lịch. */
 export function today(timezone: string, now = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
-}
-
-export function planDays(plan: TrainingPlan): PlanDay[] {
-  const days = new Map<string, PlanEntry[]>()
-  for (const entry of [...plan.entries].sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))) {
-    days.set(entry.scheduled_date, [...(days.get(entry.scheduled_date) || []), entry])
-  }
-  return [...days].map(([date, entries]) => ({ date, entries }))
 }
 
 /** done/overdue/cancelled khoá vĩnh viễn; chỉ buổi của hôm nay tick được (ghi buổi tập thật, không hoàn tác). */

@@ -3,18 +3,17 @@ import { computed, onUnmounted, shallowRef, watch } from 'vue'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-vue-next'
 import type { HeartRateHour } from '@/types/api'
 import { useAuth } from '@/composables/useAuth'
-import { dashboardTimezone, localDay, shiftDay } from '@/components/knowledge/dashboard/dashboardData'
 import { createHealthApi } from '@/features/health-integration/api'
 import { refreshKnowledgeHealth } from '@/features/health-integration/knowledgeSync'
 import BarChart from './charts/BarChart.vue'
 import { chart, distribution, hours, summary } from './heart'
-import { longDate } from './format'
+import { localDate, longDate, shift, TZ } from './format'
 
 /** Nhịp tim từng giờ của một ngày (rollUp theo giờ của Google Health). Mở trang là yêu cầu một lượt đồng bộ. */
 const emit = defineEmits<{ back: [] }>()
 const { authFetch } = useAuth()
 
-const today = localDay(new Date())
+const today = localDate(new Date())
 const day = shallowRef(today)
 const rows = shallowRef<HeartRateHour[]>([])
 const loading = shallowRef(true)
@@ -30,7 +29,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const query = new URLSearchParams({ date: day.value, timezone: dashboardTimezone })
+    const query = new URLSearchParams({ date: day.value, timezone: TZ })
     const response = await authFetch(`/api/health/heart-rate/hourly?${query}`, { signal: current.signal })
     if (!response.ok) throw new Error(String(response.status))
     rows.value = await response.json() as HeartRateHour[]
@@ -68,10 +67,10 @@ const title = computed(() => (day.value === today ? 'Hôm nay' : longDate(day.va
             <span v-if="syncing" class="hf-pill sync"><RefreshCw :size="12" aria-hidden="true" class="spin" />Đang đồng bộ</span>
           </div>
           <div class="days">
-            <button type="button" class="hf-btn icon" aria-label="Ngày trước" @click="day = shiftDay(day, -1)">
+            <button type="button" class="hf-btn icon" aria-label="Ngày trước" @click="day = shift(day, -1)">
               <ChevronLeft :size="18" aria-hidden="true" /></button>
             <span class="day">{{ title }}</span>
-            <button type="button" class="hf-btn icon" aria-label="Ngày sau" :disabled="day >= today" @click="day = shiftDay(day, 1)">
+            <button type="button" class="hf-btn icon" aria-label="Ngày sau" :disabled="day >= today" @click="day = shift(day, 1)">
               <ChevronRight :size="18" aria-hidden="true" /></button>
           </div>
           <div v-if="error" class="hf-err" role="alert"><span>{{ error }}</span>

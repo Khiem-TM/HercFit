@@ -2,9 +2,8 @@
 import { computed } from 'vue'
 import { ChevronLeft } from 'lucide-vue-next'
 import type { NutritionTargets } from '@/types/api'
-import { num } from '@/components/knowledge/health/healthFormat'
 import { goalChoices } from '@/features/onboarding/model'
-import { clockTime, vn } from './format'
+import { clockTime, num, vn } from './format'
 import type { MealRow } from './useDashboardData'
 
 /** Bữa ăn đã ghi hôm nay và mục tiêu ngày do backend tính từ hồ sơ. */

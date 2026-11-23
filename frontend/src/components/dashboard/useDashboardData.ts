@@ -6,10 +6,28 @@ import type {
   HealthSample, NutritionTargets, ProgressDay, SleepSession,
 } from '@/types/api'
 import type { CompletionResult, TrainingPlan } from '@/features/plan/model'
-import type { HealthData } from '@/components/knowledge/health/useHealthData'
 import { createHealthApi } from '@/features/health-integration/api'
 import { localDate, shift, TZ } from './format'
 import { repeatMealPayload } from './today'
+
+/** Dữ liệu sức khoẻ của khoảng ngày Dashboard đang xem, gom từ snapshot. */
+export interface HealthData {
+  start: string
+  end: string
+  days: string[]
+  connection: HealthConnection | null
+  profile: HealthProfile | null
+  overview: HealthOverview | null
+  daily: DailyHealth[]
+  sleep: SleepSession[]
+  workouts: DeviceWorkout[]
+  samples: HealthSample[]
+  progress: ProgressDay[]
+  /** Số đo cơ thể đồng bộ từ thiết bị (source GOOGLE_HEALTH). */
+  measurements: BodyMetricRead[]
+  /** Đánh giá hôm nay (độ sẵn sàng, giấc ngủ); backend tự chọn múi giờ của tài khoản. */
+  assessment: DailyAssessment | null
+}
 
 /** Bữa ăn như /api/meals trả về (chỉ các trường Dashboard dùng). */
 export interface MealRow {
@@ -50,7 +68,7 @@ export const HISTORY_DAYS = 90
 /** Kết quả một lần làm mới: đủ, thiếu một phần, hay không tải được gì. */
 export type RefreshOutcome = 'ok' | 'partial' | 'failed'
 
-/** GET /api/dashboard (backend/domains/analytics/routers/dashboard_router.py): mỗi phần null khi lỗi hoặc không được đọc. */
+/** GET /api/dashboard (backend/domains/analytics/routers.py): mỗi phần null khi lỗi hoặc không được đọc. */
 interface DashboardResponse {
   start_date: string
   end_date: string
@@ -146,7 +164,6 @@ export function useDashboardData() {
   const metrics = computed(() => snapshot.value?.metrics ?? [])
   const targets = computed(() => snapshot.value?.targets ?? null)
 
-  /** Cùng dạng useHealthData trả về, cho các thẻ sức khoẻ dùng chung. */
   const health = computed<HealthData | null>(() => {
     const data = snapshot.value
     if (!data) return null

@@ -1,5 +1,5 @@
 import type { DayRange } from '@/composables/useKnowledgeGraph'
-import { shiftDay } from './dashboard/dashboardData'
+import { shift } from '@/components/dashboard/format'
 
 /** Ngày là chuỗi `YYYY-MM-DD` theo giờ địa phương (Asia/Ho_Chi_Minh); khoảng tính cả hai đầu. */
 export const DEFAULT_WINDOW_DAYS = 15
@@ -22,23 +22,11 @@ export function sameRange(a?: DayRange, b?: DayRange): boolean {
 
 /** `days` ngày gần nhất tính tới `max`, không bao giờ trước `min`. */
 export function recentRange(min: string, max: string, days = DEFAULT_WINDOW_DAYS): DayRange {
-  return { start: clampDay(shiftDay(max, 1 - days), min, max), end: max }
-}
-
-/** Giữ độ dài khoảng và dời nó để `day` nằm ở giữa, trong giới hạn. */
-export function centreOn(range: DayRange, day: string, min: string, max: string): DayRange {
-  const span = Math.min(dayDiff(range.start, range.end), dayDiff(min, max))
-  let start = clampDay(shiftDay(day, -Math.floor(span / 2)), min, max)
-  let end = shiftDay(start, span)
-  if (end > max) {
-    end = max
-    start = shiftDay(max, -span)
-  }
-  return { start, end }
+  return { start: clampDay(shift(max, 1 - days), min, max), end: max }
 }
 
 /** Mọi ngày từ `min` tới `max`, tính cả hai. */
 export function daysBetween(min: string, max: string): string[] {
   const count = Math.max(0, dayDiff(min, max) + 1)
-  return Array.from({ length: count }, (_, i) => shiftDay(min, i))
+  return Array.from({ length: count }, (_, i) => shift(min, i))
 }

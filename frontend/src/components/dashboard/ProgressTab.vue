@@ -3,12 +3,11 @@ import { computed, shallowRef } from 'vue'
 import { motion } from 'motion-v'
 import { indicatorTransition } from '@/motion'
 import { useMobile } from '@/composables/useMobile'
-import { num } from '@/components/knowledge/health/healthFormat'
 import BarChart, { type BarColumn } from './charts/BarChart.vue'
 import DotChart, { type DotColumn } from './charts/DotChart.vue'
 import WeightChart from './charts/WeightChart.vue'
 import { ESTIMATE_METHOD, estimateOut } from './energyOut'
-import { ddmm, hoursMinutes, localDate, shift, signed, vn, WEEKDAY_LONG, weekday } from './format'
+import { ddmm, hoursMinutes, localDate, num, shift, signed, vn, weekday, WEEKDAY_LONG } from './format'
 import type { DashboardData } from './useDashboardData'
 
 /** Xu hướng theo khoảng 7 / 28 / 90 ngày. Ngày không có dữ liệu là trống, không bao giờ là 0. */

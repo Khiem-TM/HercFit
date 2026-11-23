@@ -4,7 +4,7 @@ import { Maximize, Minimize2, Minus, Plus, Scan } from 'lucide-vue-next'
 import ConstellationCanvas from '@/components/knowledge/ConstellationCanvas.vue'
 import KnowledgeInspector from '@/components/knowledge/KnowledgeInspector.vue'
 import TimeWindow from '@/components/knowledge/TimeWindow.vue'
-import { localDay, shiftDay } from '@/components/knowledge/dashboard/dashboardData'
+import { localDate, shift } from './format'
 import { ancestors, collapse, indexTree, visibleIds } from '@/components/knowledge/knowledgeTree'
 import { dayDiff, recentRange, sameRange } from '@/components/knowledge/timeWindow'
 import { useKnowledgeGraph, type DayRange } from '@/composables/useKnowledgeGraph'
@@ -15,9 +15,9 @@ const props = defineProps<{ busy: boolean; revision: number }>()
 const emit = defineEmits<{ ask: [text: string] }>()
 
 const hubs = Object.keys(hubTheme) as KnowledgeHub[]
-const today = localDay(new Date())
+const today = localDate(new Date())
 // Cho đến khi server báo lịch sử còn lưu, giả định mặc định là 90 ngày.
-const fallbackMin = shiftDay(today, -90)
+const fallbackMin = shift(today, -90)
 const NO_DENSITY = {}
 const range = shallowRef<DayRange>(recentRange(fallbackMin, today, 15))
 const { graph: atlas, loading, failed, refresh } = useKnowledgeGraph(() => range.value)
@@ -52,7 +52,7 @@ watch(range, value => {
 watch(() => atlas.value.window, (window, previous) => {
   if (!window || !sameRange(requested, range.value)) return
   if (previous && range.value.end === previous.max && window.max > previous.max) {
-    range.value = { start: shiftDay(range.value.start, dayDiff(previous.max, window.max)), end: window.max }
+    range.value = { start: shift(range.value.start, dayDiff(previous.max, window.max)), end: window.max }
     return
   }
   const drawn = { start: window.start, end: window.end }

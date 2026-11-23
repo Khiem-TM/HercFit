@@ -3,7 +3,7 @@ import { computed, shallowRef } from 'vue'
 import { MoonStar } from 'lucide-vue-next'
 import { useAuth } from '@/composables/useAuth'
 import { createHealthApi, HealthApiError } from '@/features/health-integration/api'
-import { dashboardTimezone, shiftDay } from '../dashboard/dashboardData'
+import { TZ, shift } from './format'
 
 /** Ghi tay giấc ngủ đêm qua (giờ đi ngủ – giờ thức dậy) khi thiết bị không ghi; lưu trong HercFit, đồng bộ Google khi đã kết nối. */
 const props = defineProps<{ day: string }>()
@@ -17,7 +17,7 @@ const message = shallowRef<string | null>(null)
 const failed = shallowRef(false)
 
 // Giờ đi ngủ từ 12:00 trở đi thuộc tối hôm trước; giờ thức dậy thuộc ngày được đánh giá.
-const startDay = computed(() => (Number(bedtime.value.slice(0, 2)) >= 12 ? shiftDay(props.day, -1) : props.day))
+const startDay = computed(() => (Number(bedtime.value.slice(0, 2)) >= 12 ? shift(props.day, -1) : props.day))
 const valid = computed(() => `${startDay.value}T${bedtime.value}` < `${props.day}T${wake.value}`)
 
 async function save() {
@@ -27,7 +27,7 @@ async function save() {
   try {
     await api.createRecord('sleep', {
       started_at: `${startDay.value}T${bedtime.value}:00+07:00`, ended_at: `${props.day}T${wake.value}:00+07:00`,
-      timezone: dashboardTimezone,
+      timezone: TZ,
     })
     failed.value = false
     message.value = 'Đã ghi giấc ngủ.'

@@ -14,7 +14,7 @@ import NotificationSettingsPanel from '@/components/notifications/NotificationSe
 import BodyFigure from '@/components/dashboard/BodyFigure.vue'
 import { bmiCategory, bmiOf } from '@/components/dashboard/bodyShape'
 import { vn } from '@/components/dashboard/format'
-import { num } from '@/components/knowledge/health/healthFormat'
+import { num } from '@/components/dashboard/format'
 
 type SettingsTab = 'profile' | 'integrations' | 'notifications' | 'account'
 

@@ -4,9 +4,7 @@
  */
 import type { BodyMetricRead, DailyAssessment, HealthConnection, MetricReading, NutritionTargets } from '@/types/api'
 import type { PlanEntry, TrainingPlan } from '@/features/plan/model'
-import { prescriptionSummary, type Prescription } from '@/features/plan/exercises'
-import { num } from '@/components/knowledge/health/healthFormat'
-import { ddmm, hoursMinutes, longDate, monday, shift, TZ, vn, WEEKDAY_LONG, WEEKDAY_SHORT, weekday } from './format'
+import { ddmm, hoursMinutes, longDate, monday, num, shift, TZ, vn, weekday, WEEKDAY_LONG, WEEKDAY_SHORT } from './format'
 import type { MealRow } from './useDashboardData'
 
 /* ---------------------------------------------------------------- sẵn sàng */
@@ -156,21 +154,6 @@ export function workoutView(plan: TrainingPlan | null, today: string): WorkoutVi
     mode: entry ? 'session' : 'rest', entry, others: todays.filter(item => item !== entry), overdue, next,
     done: !!entry && todays.every(item => item.completed_at),
   }
-}
-
-/** Mô tả ngắn một bài trong lịch: "Sức mạnh · 4 hiệp × 8–12 lần · 50 kg". */
-export function exerciseLine(item: Record<string, any>): string {
-  const p = item.prescription as Prescription | undefined
-  return p ? [exerciseKind(item), prescriptionSummary(p)].filter(Boolean).join(' · ') : ''
-}
-
-export function exerciseKind(item: Record<string, any>): string {
-  return ({ STRENGTH: 'Sức mạnh', ENDURANCE: 'Sức bền', SPORT: 'Thể thao' } as Record<string, string>)[item.prescription?.kind] ?? 'Bài tập'
-}
-
-export function exerciseName(item: Record<string, any>): string {
-  const snapshot = item.exercise_snapshot || {}
-  return String(snapshot.name_vi || snapshot.name || snapshot.name_en || 'Bài tập')
 }
 
 /* ---------------------------------------------------------------- dinh dưỡng */

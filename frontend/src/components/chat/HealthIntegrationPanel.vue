@@ -7,8 +7,7 @@ import type { SyncFrequency, SyncGroup } from '@/types/api'
 import { createHealthApi, HealthApiError, syncAndWait } from '@/features/health-integration/api'
 import HydrationCard from '@/features/health-integration/HydrationCard.vue'
 import SyncStatusCard from '@/features/health-integration/SyncStatusCard.vue'
-import { scopeLabel } from '@/components/knowledge/health/healthFormat'
-import { stamp } from '@/components/dashboard/format'
+import { scopeLabel, stamp } from '@/components/dashboard/format'
 
 const props = defineProps<{ result?: string | null }>()
 

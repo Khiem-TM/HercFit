@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { Info } from 'lucide-vue-next'
 import { calorieSource, fmt, minutes, when } from '@/features/chat/confirmation'
-import { exerciseLabel } from '@/components/knowledge/health/healthFormat'
+import { exerciseLabel } from '@/components/dashboard/format'
 
 /** Buổi thể thao sẽ lưu trong HercFit (đồng bộ Google Health khi đã kết nối): loại hoạt động, thời lượng và calo ước tính. */
 const props = defineProps<{ preview: Record<string, any>; timezone?: string }>()
