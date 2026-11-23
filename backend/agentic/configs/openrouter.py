@@ -1,10 +1,18 @@
-"""Shared OpenRouter credentials; local and Compose use backend then agent env."""
+"""Thư mục gốc cố định và thông tin xác thực OpenRouter dùng chung (local và Compose đọc .env của backend rồi của agent)."""
+
+from pathlib import Path
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from agentic.configs.paths import AGENTIC_ROOT, BACKEND_ROOT
 from agentic.services.providers.openrouter_policy import BASE_URL
+
+# --------------------------------------------------------------------------------------------------
+# Thư mục tài nguyên cố định, không phụ thuộc thư mục làm việc của tiến trình.
+# --------------------------------------------------------------------------------------------------
+
+AGENTIC_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_ROOT = AGENTIC_ROOT.parent
 
 
 class OpenRouterSettings(BaseSettings):

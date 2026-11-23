@@ -6,13 +6,12 @@ import unicodedata
 from collections import OrderedDict
 from functools import lru_cache
 from hashlib import sha256
-from pathlib import Path
 from time import monotonic
 
 import httpx
 from pydantic import Field, SecretStr, model_validator
 
-from agentic.configs.openrouter import OpenRouterSettings
+from agentic.configs.openrouter import BACKEND_ROOT, OpenRouterSettings
 from agentic.observability import annotate, observed
 from agentic.services.providers.openrouter_policy import (
     EMBEDDING_MODEL,
@@ -20,8 +19,6 @@ from agentic.services.providers.openrouter_policy import (
     provider_options,
     response_metadata,
 )
-
-BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 # Cache vector truy vấn theo văn bản chính xác (không phải cache ngữ nghĩa): câu hỏi lặp lại hoặc thử lại bỏ qua
 # lượt gọi nhà cung cấp. Các đoạn văn được worker tiếp nhận embed một lần và không bao giờ được cache.

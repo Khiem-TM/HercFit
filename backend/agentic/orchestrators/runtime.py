@@ -198,7 +198,7 @@ class Runtime(MemoryLifecycle):
             await self.memory.record_run(values, getattr(snapshot, "created_at", None))
 
     async def reconcile_forever(self):
-        from agentic.memory.reconcile import reconcile_checkpoints
+        from agentic.memory.checkpoints import reconcile_checkpoints
 
         purged_at = None
         if not self.settings.AGENT_BACKGROUND_TASKS:
@@ -289,10 +289,7 @@ class Runtime(MemoryLifecycle):
         # Client model, ngân sách tra cứu và timeout của lượt chạy này đọc chế độ từ biến ngữ cảnh.
         marker = modes.current.set(chat_mode)
         try:
-            from agentic.observability.node_span import span
-
-            with span("agent_run", thread_id):
-                return await self._run_stream(input, thread_id, config, emit)
+            return await self._run_stream(input, thread_id, config, emit)
         except Exception as exc:
             note_error(exc)
             outcome(

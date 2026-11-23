@@ -1,13 +1,43 @@
+"""Cấu hình của service agent; nguồn .env chuẩn hoá bí danh URL gateway JEV mà không đổi thứ tự ưu tiên."""
+
 from typing import Literal
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator
-from pydantic_settings import SettingsConfigDict
+from pydantic_settings import DotEnvSettingsSource, SettingsConfigDict
 
 from agentic.agents.roster import AGENTS
-from agentic.configs.env_sources import JevDotEnvSettingsSource, canonical_source
-from agentic.configs.openrouter import OpenRouterSettings
-from agentic.configs.paths import AGENTIC_ROOT, BACKEND_ROOT
+from agentic.configs.openrouter import AGENTIC_ROOT, BACKEND_ROOT, OpenRouterSettings
 from agentic.services.providers.openrouter_policy import AGENT_MODELS, DEFAULT_MODEL
+
+# --------------------------------------------------------------------------------------------------
+# Giải quyết bí danh URL gateway mà không đổi thứ tự ưu tiên của các nguồn settings.
+# --------------------------------------------------------------------------------------------------
+
+def canonical_jev_url(values, *, case_sensitive=True):
+    values = dict(values)
+    base, gateway = ("JEV_BASE_URL", "JEV_GATEWAY_URL")
+    if not case_sensitive:
+        base, gateway = base.lower(), gateway.lower()
+    if gateway in values:
+        values.setdefault(base, values.pop(gateway))
+    return values
+
+
+class JevDotEnvSettingsSource(DotEnvSettingsSource):
+    def _read_env_file(self, file_path):
+        # Chuẩn hoá từng file trước khi gộp: .env của agent phải ghi đè .env dùng chung
+        # kể cả khi hai bên đặt tên khác nhau cho cùng một thiết lập.
+        return canonical_jev_url(
+            super()._read_env_file(file_path), case_sensitive=self.case_sensitive
+        )
+
+
+def canonical_source(source):
+    def read():
+        return canonical_jev_url(source())
+
+    return read
+
 
 JEV_READ_MODEL = "typesafe/jev-1.14-20261014"
 JEV_READ_DEADLINE_SECONDS = 1.25

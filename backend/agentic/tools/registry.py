@@ -1,22 +1,14 @@
 """Các tool API trong danh sách cho phép. Kiểu đầu vào và đầu ra là hợp đồng thật của backend."""
 
+from dataclasses import dataclass
 from datetime import date as _date
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import Field, create_model
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field, create_model
 
 from agentic.research.contracts import ExerciseFinalization, ResolveQuery
-from agentic.tools.definitions.base import ToolSpec
-from agentic.tools.schemas.common import (
-    Empty,
-    InputSchema,
-    PersonalInfo,
-    Resource,
-    TemplatePreview,
-    TimezoneQuery,
-    VersionedResource,
-)
 from domains.analytics.schemas.daily_health import DailyAssessmentRead
 from domains.analytics.schemas.progress import ProgressRead
 from domains.body.schemas.body_metrics import (
@@ -48,8 +40,14 @@ from domains.health_records.schemas.health import (
 from domains.identity.schemas.user import OnboardingInput, UserRead, UserUpdate
 from domains.nutrition.schemas.meals import MealCreate, MealRead, MealReplace
 from domains.nutrition.schemas.nutrition import NutritionTargetsRead
-from domains.shared.schemas.common import Pagination
-from domains.shared.schemas.tracking import DateRangeQuery, JournalQuery, ScheduleEntryQuery
+from domains.shared.schemas.common import InputSchema, Pagination
+from domains.shared.schemas.tracking import (
+    DEFAULT_TIMEZONE,
+    DateRangeQuery,
+    JournalQuery,
+    ScheduleEntryQuery,
+    TimeZoneName,
+)
 from domains.training.schemas.training import (
     AnalyticsQuery,
     InsightQuery,
@@ -67,6 +65,80 @@ from domains.training.schemas.training import (
 from domains.training.schemas.trainings import TrainingCreate, TrainingRead, TrainingReplace
 from integrations.google_health.records import HydrationInput, SleepInput, SportInput
 from integrations.google_health.schemas import HealthConnectionRead, HealthRecordRead
+
+# --------------------------------------------------------------------------------------------------
+# Hợp đồng và khai báo tool của backend; việc thực thi luôn dùng ToolAgent.
+# --------------------------------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ToolSpec:
+    name: str
+    domain: str
+    method: str
+    path: str
+    schema: type[BaseModel]
+    output: Any
+    description: str
+    body: bool = False
+
+    @property
+    def write(self):
+        return self.method != "GET"
+
+    def normalize(self, args):
+        value = self.schema.model_validate(args)
+        # Chỉ điền giá trị mặc định cho lệnh tạo, để bản xem trước chứa đúng
+        # thời điểm/giá trị mặc định sẽ được gửi. PATCH/PUT giữ nguyên các trường bị bỏ trống.
+        return value.model_dump(mode="json", exclude_unset=self.method != "POST")
+
+    def request_parts(self, args):
+        args = dict(args)
+        resource_id = args.pop("resource_id", None)
+        path = self.path.format(resource_id=resource_id)
+        return path, ({} if self.body else args), (args if self.body else None)
+
+    def as_tool(self):
+        async def declaration(**kwargs):
+            raise RuntimeError("Tools must execute through the approval-aware adapter")
+
+        return StructuredTool.from_function(
+            coroutine=declaration,
+            name=self.name,
+            description=self.description,
+            args_schema=self.schema,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Lớp bọc request chỉ dành cho tool, quanh các schema chuẩn của backend.
+# --------------------------------------------------------------------------------------------------
+
+class Empty(InputSchema):
+    pass
+
+
+class Resource(InputSchema):
+    resource_id: UUID
+
+
+class VersionedResource(Resource):
+    expected_version_id: int = Field(ge=1, strict=True)
+
+
+class PersonalInfo(InputSchema):
+    personal_info: dict[str, Any]
+
+
+class TimezoneQuery(InputSchema):
+    timezone: TimeZoneName = DEFAULT_TIMEZONE
+
+
+class TemplatePreview(InputSchema):
+    resource_id: str = Field(description="Program template code from list_training_templates")
+    start_date: _date
+    weeks: int | None = Field(default=None, ge=1, le=16)
+    name: str | None = None
+
 
 REGISTRY: dict[str, ToolSpec] = {}
 

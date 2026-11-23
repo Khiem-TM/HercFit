@@ -27,10 +27,10 @@ async def run_node(fn, state, node, settings: AgentSettings):
     metrics = {}
     marker = active_metrics.set(metrics)
     try:
-        from agentic.observability.node_span import span
-
-        with span(node, state.get("run_id")):
-            result = await fn(state)
+        # Callback gốc của graph/model sở hữu span node thật; ở đây chỉ gắn run_id nghiệp vụ.
+        if state.get("run_id"):
+            annotate(business_run_id=state["run_id"])
+        result = await fn(state)
     except Exception as exc:
         # Exception có thể chứa body request phía trên. Chỉ lộ ra tên lớp;
         # không bao giờ ghi nội dung exception thô vào log vận hành.

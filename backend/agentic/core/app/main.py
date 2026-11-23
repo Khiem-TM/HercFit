@@ -8,8 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agentic.configs.settings import AgentSettings, agent_settings
 from agentic.core.app.api.health import router as health_router
-from agentic.core.app.api.internal.notify_router import router as internal_notify_router
-from agentic.core.app.api.internal.users_router import router as internal_users_router
+from agentic.core.app.api.internal import notify_router as internal_notify_router
+from agentic.core.app.api.internal import users_router as internal_users_router
 from agentic.core.app.api.v1.chat_router import router
 from agentic.knowledge_graph.service import GraphContextService
 from agentic.memory.checkpoints import persistence

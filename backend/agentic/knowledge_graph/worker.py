@@ -185,7 +185,7 @@ class Worker:
             yield pool
 
     async def reconcile(self, limit=50):
-        from agentic.memory.reconcile import reconcile_checkpoints
+        from agentic.memory.checkpoints import reconcile_checkpoints
 
         async with self.agent_pool() as pool:
             return await reconcile_checkpoints(pool, limit=limit)
@@ -196,7 +196,7 @@ class Worker:
         async with await AsyncConnection.connect(self.coordinator_dsn, autocommit=True) as conn:
             await conn.execute("SELECT kg_enqueue_snapshot()")
         async with self.agent_pool() as pool:
-            from agentic.memory.reconcile import reconcile_checkpoints
+            from agentic.memory.checkpoints import reconcile_checkpoints
 
             await reconcile_checkpoints(pool, limit=100000)
             await Store(pool).enqueue_kg_snapshot()
