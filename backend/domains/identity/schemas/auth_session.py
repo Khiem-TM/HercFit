@@ -5,8 +5,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field
 
-from domains.identity.schemas.user import UserRead
-from domains.shared.schemas.common import EntityRead, InputSchema
+from domains.shared.schemas.common import InputSchema
 
 
 class AuthSessionCreate(InputSchema):
@@ -19,19 +18,5 @@ class AuthSessionRevoke(InputSchema):
     replaced_by_session_id: UUID | None = None
 
 
-class AuthSessionRead(EntityRead):
-    user_id: UUID
-    expires_at: AwareDatetime
-    revoked_at: AwareDatetime | None
-    replaced_by_session_id: UUID | None
-
-
 class LogoutResponse(InputSchema):
     message: str = "Logged out successfully"
-
-
-class TokenResponse(InputSchema):
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int
-    user: UserRead

@@ -7,7 +7,7 @@ báo thành xung đột thay vì âm thầm tự giải quyết. Các dòng là 
 bất kỳ đối tượng nào có cùng thuộc tính (test dùng SimpleNamespace).
 """
 from collections import Counter
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from statistics import mean, median, pstdev
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
@@ -36,10 +36,6 @@ from domains.health_records.schemas.health import (
 
 MIN_WORN_DAYS_FOR_LEVEL = 7
 RHR_CONFLICT_BPM = 8
-
-
-def _f(value: Any) -> float | None:
-    return float(value) if value is not None else None
 
 
 def _avg(values: Iterable[Any], digits: int = 1) -> float | None:
@@ -132,14 +128,6 @@ def build_profile(*, today: date, zone: str, user, metrics, daily, connection=No
     if profile.activity_level is None and profile.observed_activity_level is None:
         profile.missing_fields.append("activity_level")
     return profile
-
-
-def effective_activity_level(profile: HealthProfileRead) -> str | None:
-    """Ưu tiên mức đã khai báo; mức thiết bị quan sát được điền vào khi chưa khai báo."""
-    for value in (profile.activity_level, profile.observed_activity_level):
-        if value is not None and value.value in ACTIVITY_ORDER:
-            return str(value.value)
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +243,3 @@ def build_overview(*, start: date, end: date, zone: str, connected: bool, age: i
                        {d.local_date: float(d.total_kcal) for d in daily if d.total_kcal is not None},
                        intake, weights, end),
     )
-
-
-def to_local_date(moment: datetime, zone: str) -> date:
-    return moment.astimezone(ZoneInfo(zone)).date()

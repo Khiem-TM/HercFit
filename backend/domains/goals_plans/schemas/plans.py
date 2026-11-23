@@ -65,10 +65,6 @@ class ManualPlanReplace(VersionedRequest, PlanInput):
     pass
 
 
-class PlanReplace(VersionedRequest, PlanCreate):
-    pass
-
-
 class PlanEnd(InputSchema):
     expected_version_id: Version
     reason: NonBlank = "USER_ENDED"

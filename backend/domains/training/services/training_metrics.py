@@ -114,9 +114,6 @@ def strength_metrics(performance: StrengthPerformance, *, e1rm_eligible: bool, b
 
 # --------------------------------------------------------------------------- sức bền
 
-def pace_seconds_per_km(duration_seconds: float, distance_meters: float) -> float:
-    return duration_seconds * 1000 / distance_meters
-
 
 def endurance_metrics(performance: EndurancePerformance) -> dict[str, Any]:
     return {

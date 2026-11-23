@@ -27,18 +27,6 @@ TIPS = {
     "recovery": "Ngày mai ưu tiên vận động nhẹ và nghỉ ngơi để cơ thể hồi phục.",
     "plan": "Sắp xếp lại buổi tập bị lỡ vào ngày trống gần nhất.",
 }
-METHOD = {
-    "nutrition": "Năng lượng ăn vào so với mục tiêu (±10% = 100, ±20% = 75, ±30% = 50, còn lại 25) × 0,6 + đạm so "
-                 "với mục tiêu (≥ 90% = 100, ≥ 75% = 75, ≥ 50% = 50, còn lại 25) × 0,4; cần ít nhất 2 bữa đã ghi",
-    "activity": "Lấy mức cao hơn giữa phút vùng tim so với 150 phút/tuần chia 7 (BYT 2892, WHO 2020; trẻ dưới 18 tuổi "
-                "60 phút/ngày) và bước chân so với 7.000 bước (Ding và cs., Lancet Public Health 2025)",
-    "sleep": "Đêm qua trong khoảng khuyến nghị theo tuổi = 100; thiếu ≤ 1 giờ hoặc dư > 1 giờ = 70; thiếu 1–2 giờ = 45; "
-             "thiếu hơn 2 giờ = 20 (NSF 2015)",
-    "recovery": "Điểm sẵn sàng của ngày (readiness v3)",
-    "plan": "Có buổi tập trong lịch: đã ghi nhận = 100, chưa = 0; ngày nghỉ không tính",
-    "overall": "Trung bình có trọng số (dinh dưỡng 0,30; vận động 0,25; giấc ngủ 0,25; hồi phục 0,10; lịch tập 0,10) "
-               "trên các mặt có dữ liệu; xếp loại Rất tốt ≥ 85, Tốt ≥ 70, Trung bình ≥ 50",
-}
 
 
 @dataclass(frozen=True)

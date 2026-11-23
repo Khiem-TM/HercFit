@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from core.catalog_lock import catalog_write
-from domains.catalog.schemas.foods import FoodCreate, FoodQuery, FoodUpdate, SystemFoodCreate
+from domains.catalog.schemas.foods import FoodCreate, FoodQuery, FoodUpdate
 from domains.shared.models.basemodel import BaseModel, uuid7
 from domains.shared.models.catalog import (
     SEARCH_CANDIDATES,
@@ -226,15 +226,6 @@ class FoodItem(CatalogMixin, BaseModel):
         if values.get("code") is None:
             values["code"] = str(uuid7())
         values.update(source_type=FoodSourceType.CUSTOM, owner_user_id=user_id)
-        return await cls.create(session, values)
-
-    @classmethod
-    @catalog_write
-    async def create_system(
-        cls, session: AsyncSession, *, payload: Mapping[str, Any],
-    ) -> FoodItem:
-        values = SystemFoodCreate.model_validate(payload).to_payload()
-        values.update(source_type=FoodSourceType.SYSTEM, owner_user_id=None)
         return await cls.create(session, values)
 
     @classmethod

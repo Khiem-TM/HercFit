@@ -27,8 +27,6 @@ from typing import Any
 import httpx
 
 logger = logging.getLogger(__name__)
-ROOT_URL = "https://health.googleapis.com"
-BASE_URL = f"{ROOT_URL}/v4"
 TIMEOUT = httpx.Timeout(20.0, connect=5.0)
 MAX_ATTEMPTS = 4
 BACKOFF_BASE = 1.0
@@ -108,11 +106,6 @@ def civil_date(day: date) -> dict[str, Any]:
 
 def _utc(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def field_path(data_type: str) -> str:
-    """Filter dùng đường dẫn trường snake_case; URL dùng id loại dạng kebab-case."""
-    return data_type.replace("-", "_")
 
 
 def _retry_after(response: httpx.Response) -> float | None:
@@ -255,10 +248,6 @@ class GoogleHealthClient:
         result.complete = False
         logger.warning("google_health_page_budget type=%s pages=%s", data_type, result.pages)
         return result
-
-    # -- lệnh ghi (mỗi lệnh trả về một google.longrunning Operation) -----------------------------
-    async def get_point(self, name: str) -> dict[str, Any]:
-        return await self._request("GET", name)
 
     async def create_point(self, data_type: str, point: dict[str, Any]) -> dict[str, Any]:
         """Không bao giờ thử lại: Google tự cấp id, POST lần hai có thể thành data point thứ hai."""

@@ -457,12 +457,3 @@ def register_metadata_hooks(metadata) -> None:
             install_backend_outbox(connection)
 
     event.listen(metadata, "after_create", install)
-
-
-def backend_snapshot_events(connection) -> int:
-    """Xếp hàng ảnh chụp nguồn; gọi bên trong transaction PostgreSQL của bên gọi.
-
-    Nhận một Connection đồng bộ của SQLAlchemy (AsyncConnection.run_sync cũng được).
-    Worker psycopg có thể chạy trực tiếp SELECT kg_enqueue_snapshot() thay thế.
-    """
-    return int(connection.exec_driver_sql("SELECT kg_enqueue_snapshot()").scalar_one())

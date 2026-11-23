@@ -5,7 +5,7 @@ dedup_key quyết định "đã báo chưa", nên gọi lại bao nhiêu lần c
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, time
+from datetime import datetime, time
 from typing import Any
 
 from domains.notifications.schemas.notification import NotificationPreferences
@@ -29,11 +29,6 @@ class Draft:
 def clock(value: str) -> time:
     hours, minutes = value.split(":")
     return time(int(hours), int(minutes))
-
-
-def iso_week(day: date) -> str:
-    year, week, _ = day.isocalendar()
-    return f"{year}-W{week:02d}"
 
 
 def quiet(prefs: NotificationPreferences, local_now: datetime) -> bool:

@@ -10,7 +10,6 @@ from pydantic import Field, model_validator
 from domains.shared.schemas.common import InputSchema, NonBlank, ReadSchema
 from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, TimeZoneName
 
-Discipline = Literal["STRENGTH", "ENDURANCE", "SPORT", "MIXED"]
 PaceSeconds = Annotated[float, Field(ge=120, le=1200, allow_inf_nan=False)]
 
 

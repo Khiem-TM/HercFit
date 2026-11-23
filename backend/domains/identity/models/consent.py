@@ -28,11 +28,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
 
-# assistant: trợ lý đọc dữ liệu; proactive: HercFit chủ động gửi thông báo (briefing, insight).
-PURPOSES = ("assistant", "proactive")
-DATA_GROUPS = ("device", "sensitive")
-ACTORS = ("USER", "SYSTEM", "MIGRATION")
-
 
 class UserConsent(Base):
     __tablename__ = "user_consents"

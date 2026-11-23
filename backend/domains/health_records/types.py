@@ -141,7 +141,6 @@ SYNC_GROUPS: dict[str, tuple[str, ...]] = {
               "total-calories", "sedentary-period"),
     "body": ("weight", "height", "body-fat"),
 }
-SYNC_FREQUENCIES = ("hourly", "open", "manual")
 
 
 def disabled_types(groups: dict[str, bool] | None) -> frozenset[str]:

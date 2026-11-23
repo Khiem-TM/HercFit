@@ -12,9 +12,6 @@ from domains.shared.schemas.tracking import DEFAULT_TIMEZONE, DateRangeQuery, Ti
 
 HEALTH_PROVIDER = "GOOGLE_HEALTH"
 
-MEASUREMENT_SOURCES = ("MANUAL", HEALTH_PROVIDER)
-
-MeasurementSource = Literal["MANUAL", "GOOGLE_HEALTH"]
 
 ConnectionStatus = Literal["ACTIVE", "NEEDS_REAUTH", "REVOKED", "ERROR"]
 

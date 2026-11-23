@@ -48,19 +48,6 @@ def bucket(elapsed_ms: float) -> int:
     return len(BUCKETS_MS)
 
 
-def percentile(buckets: list[int], q: float) -> float | None:
-    """Cận trên của bucket chứa phân vị q (None khi không có request, inf khi vượt cận cuối)."""
-    total = sum(buckets)
-    if not total:
-        return None
-    rank, seen = q * total, 0
-    for index, count in enumerate(buckets):
-        seen += count
-        if seen >= rank:
-            return float(BUCKETS_MS[index]) if index < len(BUCKETS_MS) else float("inf")
-    return float("inf")
-
-
 def _pattern(template: str) -> re.Pattern[str]:
     parts = re.split(r"(\{[^}]+\})", template)
     regex = "".join((".+" if part.endswith(":path}") else "[^/]+") if part.startswith("{") else re.escape(part)
@@ -197,5 +184,4 @@ async def flush_loop(stop: asyncio.Event, session_scope: Callable[[], Any],
             return
 
 
-__all__ = ["BUCKETS_MS", "ROUTE_METRICS", "RouteMetrics", "RouteMetricsMiddleware", "RouteTable", "flush_loop",
-           "percentile"]
+__all__ = ["BUCKETS_MS", "ROUTE_METRICS", "RouteMetrics", "RouteMetricsMiddleware", "RouteTable", "flush_loop"]

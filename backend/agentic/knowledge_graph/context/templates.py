@@ -6,12 +6,10 @@ không bao giờ chứa giá trị tham số (chủ sở hữu, ngày, từ kho�
 validator tự gắn phạm vi người dùng, như với truy vấn sinh ra.
 """
 
-import logging
 from dataclasses import dataclass
 
 from ..schema import SCHEMA_VERSION
 
-log = logging.getLogger(__name__)
 NUTRITION = frozenset({"meals", "foods", "progress"})
 TRAINING = frozenset({"trainings", "exercises", "coaching", "training_plans"})
 BODY = frozenset({"metrics", "profile"})

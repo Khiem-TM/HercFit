@@ -13,7 +13,7 @@ from agentic.observability.telemetry import active_metrics, merge_retrieval
 from agentic.services import personal_context
 from agentic.workflows.routing import latest_request
 
-# Các chủ đề ngữ cảnh cá nhân (services.personal_context.TOPICS) và miền graph chứa dữ liệu của chúng.
+# Các chủ đề ngữ cảnh cá nhân và miền graph chứa dữ liệu của chúng.
 TOPIC_DOMAINS = {
     "running": "trainings",
     "strength": "trainings",

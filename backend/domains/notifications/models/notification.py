@@ -26,8 +26,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from core.database import Base
 from domains.shared.models.basemodel import uuid7
 
-KINDS = ("briefing", "insight", "praise", "data_quality", "reminder", "summary", "proposal", "alert", "review")
-
 
 class UserNotification(Base):
     __tablename__ = "user_notifications"

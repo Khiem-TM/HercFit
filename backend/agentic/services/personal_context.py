@@ -29,16 +29,6 @@ SOURCES = ("card", "kg_facts", "context_graph", "backend_reads")
 # Mặc định từ E5 (2026-11-18, docs/evaluation/E5-context-sources.md): context graph thêm 9 ca đúng, 0 ca sai so với chỉ
 # đọc backend; kg_facts không thêm ca đúng nào (0/1) mà tốn thêm ~1.400 token vào mỗi lượt, nên tắt mặc định (code giữ).
 DEFAULT_SOURCES = ("card", "context_graph", "backend_reads")
-TOPICS = (
-    "running",
-    "strength",
-    "training",
-    "nutrition",
-    "body",
-    "recovery",
-    "wellbeing",
-    "general",
-)
 
 # Cách diễn đạt khiến yêu cầu nói về chính người dùng này (không dấu, chữ thường).
 FIRST_PERSON = re.compile(

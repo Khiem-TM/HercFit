@@ -102,7 +102,3 @@ SortDirection = Annotated[
 
 class OrderBy(RootModel[dict[str, SortDirection]]):
     pass
-
-
-class BulkWrite(InputSchema):
-    data: Annotated[list[dict[str, Any]], Field(min_length=1)]

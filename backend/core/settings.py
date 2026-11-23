@@ -14,20 +14,6 @@ class LogLevel(StrEnum):
     ERROR = "ERROR"
     CRITICAL = "CRITICAL"
 
-    def to_logging_level(self) -> int:
-        """Chuyển thành hằng số mức log của Python."""
-        import logging
-
-        mapping = {
-            LogLevel.DEBUG: logging.DEBUG,
-            LogLevel.INFO: logging.INFO,
-            LogLevel.WARNING: logging.WARNING,
-            LogLevel.ERROR: logging.ERROR,
-            LogLevel.CRITICAL: logging.CRITICAL,
-        }
-        return mapping[self]
-
-
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(

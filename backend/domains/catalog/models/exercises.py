@@ -37,7 +37,6 @@ from domains.catalog.schemas.exercises import (
     ExerciseQuery,
     ExerciseUpdateRequest,
     MuscleGroup,
-    SystemExerciseCreate,
     muscle_name,
 )
 from domains.shared.models.basemodel import BaseModel, uuid7
@@ -169,18 +168,6 @@ class Exercise(CatalogMixin, BaseModel):
                 raise HTTPException(status_code=404, detail="User not found")
             exercise = await cls.create(session, {
                 **values, "source_type": FoodSourceType.CUSTOM, "owner_user_id": user_id,
-            })
-        return exercise
-
-    @classmethod
-    @catalog_write
-    async def create_system(
-        cls, session: AsyncSession, *, payload: SystemExerciseCreate | Mapping[str, Any],
-    ) -> Exercise:
-        values = SystemExerciseCreate.model_validate(payload).model_dump(mode="json")
-        async with session.begin_nested():
-            exercise = await cls.create(session, {
-                **values, "source_type": FoodSourceType.SYSTEM, "owner_user_id": None,
             })
         return exercise
 

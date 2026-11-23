@@ -65,10 +65,6 @@ class FoodCreate(PartialSchema):
         return self
 
 
-class SystemFoodCreate(FoodCreate):
-    code: FoodCode
-
-
 class FoodUpdate(FoodCreate):
     non_nullable = frozenset({"name_vi", "code"})
     name_vi: FoodName | None = None

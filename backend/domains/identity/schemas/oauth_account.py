@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, ConfigDict, Field, SecretStr
 
-from domains.shared.schemas.common import EntityRead, InputSchema, Name, NonBlank
+from domains.shared.schemas.common import InputSchema, Name, NonBlank
 
 Provider = Annotated[NonBlank, Field(max_length=50)]
 
@@ -29,10 +29,3 @@ class OAuthAccountCreate(InputSchema):
             if values.get(field) is not None:
                 values[field] = values[field].get_secret_value()
         return values
-
-
-class OAuthAccountRead(EntityRead):
-    user_id: UUID
-    provider: str
-    provider_user_id: str
-    token_expires_at: AwareDatetime | None

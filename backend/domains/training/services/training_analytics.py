@@ -603,8 +603,3 @@ async def insights(session, user_id, options, *, profile: TrainingProfile, bodyw
     order = {"WARNING": 0, "NOTICE": 1, "POSITIVE": 2, "INFO": 3}
     found.sort(key=lambda item: order[item["severity"]])
     return {"end_date": end, "timezone": zone, "insights": found}
-
-
-async def daily_training_load(session, user_id, options) -> dict[date, Decimal]:
-    loads, _missing = await daily_loads(session, user_id, options.start_date, options.end_date, options.timezone)
-    return loads

@@ -185,10 +185,6 @@ class ExerciseCreate(InputSchema):
         return self
 
 
-class SystemExerciseCreate(ExerciseCreate):
-    code: ExerciseCode
-
-
 class ExerciseUpdateRequest(PartialSchema):
     """PATCH cannot alter category, source or owner; configuration replaces as a whole."""
 

@@ -22,9 +22,6 @@ from datetime import date
 from statistics import fmean
 from typing import Literal
 
-ActivityLevel = Literal["sedentary", "light", "moderate", "active", "very_active"]
-GoalType = Literal["fat_loss", "muscle_gain", "maintenance", "fitness"]
-
 ACTIVITY_FACTORS: dict[str, float] = {
     "sedentary": 1.2, "light": 1.375, "moderate": 1.55, "active": 1.725, "very_active": 1.9,
 }

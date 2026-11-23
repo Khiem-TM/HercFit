@@ -19,7 +19,7 @@ import re
 import unicodedata
 from collections.abc import Callable, Iterable, Sequence
 from difflib import SequenceMatcher
-from typing import Any, TypeVar
+from typing import TypeVar
 
 T = TypeVar("T")
 _WORD = re.compile(r"\w+", re.UNICODE)
@@ -97,8 +97,3 @@ def rank(query: str, items: Sequence[T], *, name: Callable[[T], str],
               for index, item in enumerate(items)]
     scored.sort(key=lambda row: (-row[0], row[1]))
     return [item for _score, _index, item in scored]
-
-
-def explain(query: str, items: Sequence[Any], *, name: Callable[[Any], str]) -> list[tuple[str, float]]:
-    """Hàm hỗ trợ gỡ lỗi: các cặp (tên, điểm) theo thứ tự xếp hạng."""
-    return [(name(item), round(score(query, name(item)), 2)) for item in rank(query, items, name=name)]
